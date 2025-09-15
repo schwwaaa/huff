@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Datamosh Lab</title>
+    <link rel="icon" href="data:,">
+    <style>
+         :root {
+            color-scheme: dark;
+        }
+        
+        html,
+        body {
+            margin: 0;
+            height: 100%;
+            background: #0b0c10;
+            color: #e8eaf0;
+            font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial
+        }
+        
+        canvas {
+            position: fixed;
+            inset: 0;
+            width: 100% !important;
+            height: 100% !important;
+            display: block
+        }
+        
+        header {
+            position: fixed;
+            top: 8px;
+            left: 8px;
+            right: 8px;
+            z-index: 10;
+            padding: 10px;
+            border: 1px solid #1f2430;
+            background: rgba(18, 21, 28, .92);
+            border-radius: 12px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+            backdrop-filter: blur(6px)
+        }
+        
+        .controls {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap
+        }
+        
+        .control {
+            background: #12151c;
+            border: 1px solid #1c2030;
+            padding: 6px 10px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px
+        }
+        
+        .control label {
+            font-size: 12px;
+            color: #aeb6cf
+        }
+        
+        input[type=range],
+        input[type=number],
+        select {
+            width: 120px
+        }
+        
+        .pill {
+            font-size: 12px;
+            padding: 6px 10px;
+            border-radius: 999px;
+            border: 1px solid #1c2030;
+            background: #151922
+        }
+        
+        .row {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap
+        }
+        
+        .muted {
+            opacity: .75
+        }
+        
+        button {
+            cursor: pointer
+        }
+    </style>
+
+    <!-- Keep HTML as source of truth -->
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const form = document.getElementById('controlsForm');
+            if (form) form.reset();
+        });
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/p5@1.9.3/lib/p5.min.js"></script>
+    <script defer src="newmosh19.js"></script>
+</head>
+
+<body>
+    <header>
+        <!-- SOURCE PICKER -->
+        <div class="row">
+            <div class="control">
+                <label for="inputMode">Input</label>
+                <select id="inputMode">
+          <option value="file" selected>File</option>
+          <option value="camera">Camera</option>
+        </select>
+            </div>
+
+            <!-- File controls -->
+            <label class="control" id="fileCtl">Load video
+        <input id="file" type="file" accept="video/*">
+      </label>
+
+            <!-- Camera controls -->
+            <div class="control" id="camCtl" style="display:none;">
+                <button id="refreshDevicesBtn" type="button">Update sources</button>
+                <select id="cameraSelect" disabled>
+          <option>— no cameras —</option>
+        </select>
+                <button id="startCamBtn" type="button" disabled>Start camera</button>
+                <button id="stopCamBtn" type="button" disabled>Stop</button>
+            </div>
+
+            <!-- Transport -->
+            <button id="playBtn" disabled>Play</button>
+            <button id="pauseBtn" disabled>Pause</button>
+            <button id="recBtn" disabled>● Record</button>
+            <button id="refreshBtn" disabled>↻ Refresh</button>
+            <button id="borderlessBtn" disabled class="muted" title="Desktop builds">⛶ Borderless</button>
+            <span class="pill" id="dim">–</span>
+        </div>
+
+        <!-- EFFECT CONTROLS (HTML owns the defaults) -->
+        <form id="controlsForm" class="controls" autocomplete="off" novalidate>
+            <!-- Quality -->
+            <div class="control"><label>Quality</label>
+                <input id="quality" type="range" min="0.25" max="1.00" step="0.05" value="1.00">
+                <span id="qualityVal">1.00</span>
+            </div>
+
+            <!-- Core -->
+            <div class="control"><label>Depth</label><input id="depth" type="range" min="0" max="1" step="0.01" value="0.5"><span id="depthVal">0.50</span></div>
+            <div class="control"><label>Corrupt on</label><input id="corruptOn" type="checkbox"></div>
+            <div class="control"><label>Corrupt %</label><input id="corrupt" type="range" min="0" max="1" step="0.01" value="0.30"><span id="corruptVal">0.30</span></div>
+            <div class="control"><label>Block (px)</label><input id="block" type="range" min="4" max="2000" step="2" value="32"><span id="blockVal">32</span></div>
+
+            <!-- Cadence -->
+            <div class="control"><label>Glitch speed</label><input id="glitchSpeed" type="range" min="0.05" max="5" step="0.005" value="0.8"><span id="glitchSpeedVal">0.80</span></div>
+            <div class="control"><label>Speed fine ×</label><input id="glitchSpeedFine" type="range" min="0.10" max="10" step="0.01" value="1.00"><span id="glitchSpeedFineVal">1.00</span></div>
+            <div class="control"><label>Glitch size</label><input id="glitchSize" type="range" min="1" max="250" step="1" value="20"><span id="glitchSizeVal">20</span></div>
+            <div class="control"><label>Glitch smear</label><input id="glitchSmear" type="range" min="0" max="50" step="1" value="6"><span id="glitchSmearVal">6</span></div>
+
+            <!-- Determinism -->
+            <div class="control"><label>Seed</label><input id="seed" type="number" value="1" step="1"></div>
+
+            <!-- Buffer evolution -->
+            <div class="control"><label>Feedback</label><input id="feedback" type="range" min="0" max="3" step="0.05" value="0.6"><span id="feedbackVal">0.60</span></div>
+            <div class="control"><label>Persistence</label><input id="persistence" type="range" min="0" max="10" step="0.05" value="0.7"><span id="persistenceVal">0.70</span></div>
+
+            <!-- Feedback XYZ + θ -->
+            <div class="control"><label>FB X</label><input id="fbX" type="range" min="-50" max="50" step="1" value="1"><span id="fbXVal">1</span></div>
+            <div class="control"><label>FB Y</label><input id="fbY" type="range" min="-50" max="50" step="1" value="1"><span id="fbYVal">1</span></div>
+            <div class="control"><label>FB Z</label><input id="fbZ" type="range" min="0.90" max="1.10" step="0.005" value="1.000"><span id="fbZVal">1.00</span></div>
+            <div class="control"><label>FB θ (deg)</label><input id="fbTheta" type="range" min="-180" max="180" step="1" value="0"><span id="fbThetaVal">0</span></div>
+
+            <!-- Auto FB + sub-toggles — ALL OFF -->
+            <div class="control"><label>FB Auto</label><input id="fbAuto" type="checkbox"></div>
+            <div class="control"><label>FB Speed</label><input id="fbSpeed" type="range" min="0.01" max="10" step="0.01" value="0.50"><span id="fbSpeedVal">0.50</span></div>
+            <div class="control"><label>Move X</label><input id="fbMoveX" type="checkbox"></div>
+            <div class="control"><label>Move Y</label><input id="fbMoveY" type="checkbox"></div>
+            <div class="control"><label>Move Z</label><input id="fbMoveZ" type="checkbox"></div>
+            <div class="control"><label>Rotate</label><input id="fbMoveTheta" type="checkbox"></div>
+
+            <!-- Spatialization + clusters — OFF -->
+            <div class="control"><label>Spatial gap (px)</label><input id="spatialGap" type="range" min="0" max="200" step="2" value="40"><span id="spatialGapVal">40</span></div>
+            <div class="control"><label>Clusters</label><input id="clusters" type="checkbox"></div>
+            <div class="control"><label>Cluster count</label><input id="clusterCount" type="range" min="1" max="12" step="1" value="3"><span id="clusterCountVal">3</span></div>
+            <div class="control"><label>Cluster radius</label><input id="clusterRadius" type="range" min="10" max="400" step="5" value="120"><span id="clusterRadiusVal">120</span></div>
+
+            <!-- Cycle + bursts — OFF -->
+            <div class="control"><label>Cycle on</label><input id="cycleOn" type="checkbox"></div>
+            <div class="control">
+                <label>Cycle shape</label>
+                <select id="cycleShape">
+          <option value="square">Square</option>
+          <option value="sine" selected>Sine</option>
+        </select>
+            </div>
+            <div class="control"><label>Burst</label><input id="burstOn" type="checkbox"></div>
+            <div class="control"><label>Burst length (s)</label><input id="burstLen" type="range" min="0.2" max="8" step="0.1" value="2"><span id="burstLenVal">2.0</span></div>
+            <div class="control"><label>Burst gap (s)</label><input id="burstGap" type="range" min="0.2" max="10" step="0.1" value="3"><span id="burstGapVal">3.0</span></div>
+            <div class="control"><label>Burst boost</label><input id="burstBoost" type="range" min="1" max="6" step="0.1" value="3"><span id="burstBoostVal">3.0</span></div>
+
+            <!-- Bloom — OFF -->
+            <div class="control"><label>Bloom on</label><input id="bloomOn" type="checkbox"></div>
+            <div class="control"><label>Bloom strength</label><input id="bloomStrength" type="range" min="0" max="2" step="0.05" value="0.8"><span id="bloomStrengthVal">0.80</span></div>
+            <div class="control"><label>Bloom radius</label><input id="bloomRadius" type="range" min="1" max="20" step="1" value="8"><span id="bloomRadiusVal">8</span></div>
+
+            <!-- Flow — OFF -->
+            <div class="control"><label>Flow on</label><input id="flowOn" type="checkbox"></div>
+            <div class="control"><label>Flow strength</label><input id="flowStrength" type="range" min="0" max="20" step="1" value="6"><span id="flowStrengthVal">6</span></div>
+            <div class="control"><label>Flow scale</label><input id="flowScale" type="range" min="20" max="200" step="5" value="80"><span id="flowScaleVal">80</span></div>
+
+            <!-- Base video — ON + 100% -->
+            <div class="control"><label>Show base video</label><input id="baseOn" type="checkbox" checked></div>
+            <div class="control"><label>Base mix</label><input id="baseMix" type="range" min="0" max="1" step="0.05" value="1.00"><span id="baseMixVal">1.00</span></div>
+
+            <!-- Keep these OFF by default -->
+            <div class="control"><label>Seed on load</label><input id="seedOnLoad" type="checkbox"></div>
+
+            <!-- (Pixel Sort block removed entirely) -->
+            <div class="control"><label>Colorizer</label><input id="colOn" type="checkbox"></div>
+            <div class="control"><label>Hue</label><input id="colHue" type="range" min="-180" max="180" step="1" value="20"><span id="colHueVal">20</span></div>
+            <div class="control"><label>Sat</label><input id="colSat" type="range" min="0" max="2" step="0.01" value="1.10"><span id="colSatVal">1.10</span></div>
+        </form>
+    </header>
+</body>
+
+</html>

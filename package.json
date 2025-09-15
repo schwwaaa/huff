@@ -1,0 +1,18 @@
+{
+    "name": "datamosh-desktop",
+    "private": true,
+    "version": "0.1.0",
+    "type": "module",
+    "scripts": {
+        "tauri": "tauri",
+        "build:mac-arm": "tauri build -- --target aarch64-apple-darwin --bundles app",
+        "build:mac-intel": "tauri build -- --target x86_64-apple-darwin --bundles app",
+        "build:mac-both": "npm run build:mac-arm && npm run build:mac-intel",
+        "build:universal": "node scripts/universal.cjs",
+        "build:mac-universal": "npm run build:mac-both && npm run build:universal"
+    },
+    "devDependencies": {
+        "@tauri-apps/cli": "^2.8.4",
+        "@tauri-apps/cli-darwin-arm64": "^2.8.4"
+    }
+}

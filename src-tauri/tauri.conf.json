@@ -1,0 +1,27 @@
+{
+    "productName": "datamosh-desktop",
+    "identifier": "com.yourorg.datamosh-desktop",
+    "version": "0.1.0",
+    "build": {
+        "beforeDevCommand": "",
+        "beforeBuildCommand": "",
+        "frontendDist": "../dist"
+    },
+    "app": {
+        "windows": [{
+            "title": "Datamosh Desktop",
+            "width": 1920,
+            "height": 1080,
+            "resizable": true,
+            "fullscreen": false,
+            "decorations": true
+        }],
+        "security": {
+            "csp": null
+        }
+    },
+    "bundle": {
+        "active": true,
+        "targets": "all"
+    }
+}
