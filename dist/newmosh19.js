@@ -1,5 +1,5 @@
-/* Datamosh Lab — Pixel Sort removed. HTML owns defaults (only Corrupt + Base ON). */
-let videoEl, currentBlobUrl = null, currentStream = null;
+/* Datamosh Lab — Stable file-only build (camera removed). HTML owns defaults. */
+let videoEl, currentBlobUrl = null;
 let gCur, gBuf, gWarp, gBloomWork, gTemp;
 let frameRing = [];
 let canvas, rec, chunks = [];
@@ -15,14 +15,26 @@ let fbPhaseX = 0, fbPhaseY = 100, fbPhaseR = 200, fbPhaseZ = 300;
 // burst state
 const burst = { on: false, inBurst: true, t: 0, len: 2, gap: 3, boost: 3 };
 
-// input source state
-let sourceMode = 'file';         // 'file' | 'camera'
-let selectedDeviceId = null;
-
-async function toggleBorderless() { /* no-op for web */ }
-
-// rVFC-driven copy from video/camera into gCur
+// rVFC-driven copy into gCur
 let lastMediaTime = -1;
+
+// Keep the <video> renderable (avoid display:none which can freeze in some embedders)
+function cloakVideo(p5Vid){
+  const v = p5Vid && (p5Vid.elt || p5Vid);
+  if (!v) return;
+  v.setAttribute('playsinline','');
+  if (typeof v.muted === 'boolean') v.muted = v.muted;
+  Object.assign(v.style, {
+    position: 'fixed',
+    left: '-10000px',
+    top: '0',
+    width: '1px',
+    height: '1px',
+    opacity: '0',
+    pointerEvents: 'none'
+  });
+}
+
 function blitVideoInto(target){
   target.imageMode(CORNER);
   const vw = videoEl?.elt?.videoWidth || width;
@@ -34,6 +46,7 @@ function blitVideoInto(target){
   target.clear();
   target.image(videoEl, dx, dy, dw, dh);
 }
+
 function pumpVideoFrames(){
   if (!videoEl?.elt?.requestVideoFrameCallback) return;
   videoEl.elt.requestVideoFrameCallback((_now, meta) => {
@@ -45,7 +58,7 @@ function pumpVideoFrames(){
   });
 }
 
-// p5 lifecycle
+/* ===================== p5 lifecycle ===================== */
 function setup() {
   canvas = createCanvas(windowWidth, windowHeight);
   pixelDensity(1);
@@ -94,9 +107,7 @@ function $(id){ return document.getElementById(id); }
 
 function hookUI() {
   [
-    'inputMode','fileCtl','camCtl','file',
-    'refreshDevicesBtn','cameraSelect','startCamBtn','stopCamBtn',
-    'playBtn','pauseBtn','recBtn','refreshBtn','borderlessBtn','dim',
+    'file','playBtn','pauseBtn','recBtn','refreshBtn','borderlessBtn','dim',
     'quality','qualityVal',
     'depth','depthVal','corruptOn','corrupt','corruptVal','block','blockVal',
     'glitchSpeed','glitchSpeedVal','glitchSpeedFine','glitchSpeedFineVal',
@@ -113,25 +124,8 @@ function hookUI() {
     'colOn','colHue','colHueVal','colSat','colSatVal'
   ].forEach(k => els[k] = $(k));
 
-  // source mode switch
-  els.inputMode.addEventListener('change', () => {
-    sourceMode = els.inputMode.value;
-    updateSourceUI();
-    if (sourceMode === 'camera') {
-      refreshDevices();
-    } else {
-      stopCamera();
-      enableTransport(false);
-    }
-  });
-
   // file loader
   els.file.addEventListener('change', onFile);
-
-  // camera controls
-  els.refreshDevicesBtn.addEventListener('click', refreshDevices);
-  els.startCamBtn.addEventListener('click', startCamera);
-  els.stopCamBtn.addEventListener('click', stopCamera);
 
   // transport
   els.playBtn.addEventListener('click', async () => {
@@ -145,7 +139,7 @@ function hookUI() {
       try { videoEl.elt.muted = true; await videoEl.elt.play(); } catch {}
     }
     pumpVideoFrames();
-    if (videoEl.loop) videoEl.loop(); // harmless for camera
+    videoEl.loop();
     playing = true;
   });
 
@@ -160,7 +154,7 @@ function hookUI() {
   els.refreshBtn.addEventListener('click', refreshGlitch);
   if (els.borderlessBtn) els.borderlessBtn.addEventListener('click', toggleBorderless);
 
-  // labels only; NO default flipping here
+  // labels only
   els.seed.addEventListener('change', setSeedFromUI);
   ['quality','depth','corrupt','block','glitchSpeed','glitchSpeedFine','glitchSize','glitchSmear',
    'feedback','persistence','fbX','fbY','fbZ','fbTheta','fbSpeed',
@@ -171,19 +165,7 @@ function hookUI() {
   ['cycleShape'].forEach(id => els[id].addEventListener('change', updateLabels));
   els.baseOn.addEventListener('change', () => { els.baseMix.disabled = !els.baseOn.checked; updateLabels(); });
 
-  updateSourceUI();
   updateDim();
-}
-function enableTransport(enabled){
-  ['playBtn','pauseBtn','recBtn','refreshBtn','borderlessBtn'].forEach(id=>{
-    const b = els[id]; if (b) b.disabled = !enabled;
-  });
-}
-function updateSourceUI(){
-  const camMode = sourceMode === 'camera';
-  els.fileCtl.style.display = camMode ? 'none' : '';
-  els.camCtl.style.display  = camMode ? '' : 'none';
-  els.file.disabled = camMode;
 }
 
 function updateDim(){ if (els.dim) els.dim.textContent = `${width}×${height}`; }
@@ -223,12 +205,11 @@ function updateLabels() {
 
 function setSeedFromUI(){ baseSeed = parseInt(els.seed.value || '1', 10); if (isNaN(baseSeed)) baseSeed = 1; noiseSeed(baseSeed); }
 
-// FILE MODE
+/* ===================== FILE MODE ===================== */
 function onFile(ev){
   const file = ev.target.files?.[0]; if (!file) return;
-  sourceMode = 'file'; els.inputMode.value = 'file'; updateSourceUI();
-  stopCamera();
 
+  // cleanup previous
   if (videoEl) { try { videoEl.remove(); } catch {} videoEl = null; }
   if (currentBlobUrl) { try { URL.revokeObjectURL(currentBlobUrl); } catch {} currentBlobUrl = null; }
 
@@ -238,7 +219,7 @@ function onFile(ev){
   videoEl = createVideo([url], () => enableTransport(true));
   videoEl.attribute('preload','metadata');
   videoEl.attribute('playsinline','');
-  videoEl.hide();
+  cloakVideo(videoEl); // keep renderable; avoids hidden-video throttling
   videoEl.elt.muted = false;
   videoEl.elt.volume = 1.0;
 
@@ -263,113 +244,13 @@ function onFile(ev){
   if (videoEl.elt.requestVideoFrameCallback) videoEl.elt.requestVideoFrameCallback(() => prime());
 }
 
-// CAMERA MODE
-async function refreshDevices(){
-  try {
-    const needProbe = await labelsLikelyHidden();
-    if (needProbe) {
-      const probe = await navigator.mediaDevices.getUserMedia({ video: true, audio: false }).catch(()=>null);
-      if (probe) probe.getTracks().forEach(t=>t.stop());
-    }
-
-    const devices = (await navigator.mediaDevices.enumerateDevices())
-      .filter(d => d.kind === 'videoinput');
-
-    els.cameraSelect.innerHTML = '';
-    if (!devices.length) {
-      els.cameraSelect.innerHTML = '<option>— no cameras —</option>';
-      els.cameraSelect.disabled = true;
-      els.startCamBtn.disabled = true;
-      els.stopCamBtn.disabled = true;
-      return;
-    }
-
-    devices.forEach((d,i) => {
-      const opt = document.createElement('option');
-      opt.value = d.deviceId;
-      opt.textContent = d.label || `Camera ${i+1}`;
-      els.cameraSelect.appendChild(opt);
-    });
-
-    els.cameraSelect.disabled = false;
-    els.startCamBtn.disabled = false;
-    els.stopCamBtn.disabled  = false;
-
-    if (selectedDeviceId) {
-      const idx = [...els.cameraSelect.options].findIndex(o => o.value === selectedDeviceId);
-      els.cameraSelect.selectedIndex = idx >= 0 ? idx : 0;
-    } else {
-      els.cameraSelect.selectedIndex = 0;
-    }
-    selectedDeviceId = els.cameraSelect.value;
-    els.cameraSelect.addEventListener('change', () => selectedDeviceId = els.cameraSelect.value, { once: true });
-  } catch (err) {
-    console.error('refreshDevices failed:', err);
-    els.cameraSelect.innerHTML = '<option>— error enumerating —</option>';
-    els.cameraSelect.disabled = true;
-    els.startCamBtn.disabled = true;
-  }
-}
-async function labelsLikelyHidden(){
-  try { const devs = await navigator.mediaDevices.enumerateDevices();
-    return devs.filter(d=>d.kind==='videoinput').some(d => !d.label);
-  } catch { return true; }
-}
-async function startCamera(){
-  sourceMode = 'camera'; els.inputMode.value = 'camera'; updateSourceUI();
-  stopCamera();
-  if (videoEl) { try{ videoEl.remove(); }catch{} videoEl = null; }
-
-  const constraints = {
-    audio: false,
-    video: selectedDeviceId ? { deviceId: { exact: selectedDeviceId } } : { facingMode: 'user' }
-  };
-
-  try {
-    const cap = createCapture(constraints, () => enableTransport(true));
-    cap.attribute('playsinline','');
-    cap.hide();
-    cap.elt.muted = true;
-    videoEl = cap;
-
-    let primed = false;
-    const prime = async () => {
-      if (primed) return;
-      if (videoEl?.elt?.videoWidth > 0 && videoEl?.elt?.videoHeight > 0) {
-        primed = true;
-        currentStream = videoEl.elt.srcObject || null;
-        clearAll(); updateDim();
-        try { await videoEl.elt.play(); } catch {}
-        pumpVideoFrames();
-        playing = true;
-      }
-    };
-    if (videoEl.elt.readyState >= 2) { prime(); }
-    else { videoEl.elt.addEventListener('loadedmetadata', prime, { once:true }); }
-  } catch (err) {
-    console.error('startCamera failed:', err);
-    enableTransport(false);
-  }
-}
-function stopCamera(){
-  try {
-    const v = videoEl?.elt;
-    const stream = currentStream || v?.srcObject;
-    if (stream && typeof stream.getTracks === 'function') {
-      stream.getTracks().forEach(t => { try{ t.stop(); }catch{} });
-    }
-  } catch {}
-  currentStream = null;
-  if (videoEl) {
-    try { videoEl.remove(); } catch {}
-    videoEl = null;
-  }
-  playing = false;
-  lastMediaTime = -1;
-  clearAll();
+function enableTransport(enabled){
+  ['playBtn','pauseBtn','recBtn','refreshBtn','borderlessBtn'].forEach(id=>{
+    const b = els[id]; if (b) b.disabled = !enabled;
+  });
 }
 
-// DRAW
+/* ===================== DRAW ===================== */
 function draw() {
   background(0);
   if (!videoEl) { drawWaiting(); return; }
@@ -377,6 +258,7 @@ function draw() {
   randomSeed(baseSeed + frameCount);
   noiseSeed(baseSeed);
 
+  // If rVFC is missing, pull a frame in draw
   if (!videoEl.elt.requestVideoFrameCallback) blitVideoInto(gCur);
 
   if (!seededOnce && els.seedOnLoad.checked) {
@@ -439,12 +321,14 @@ function draw() {
     gBuf.pop();
   }
 
+  // Flow
   const flowS = parseInt(els.flowStrength.value, 10);
   if (els.flowOn.checked && flowS > 0 && (frameCount % everyN === 0)) {
     applyFlowWarp(gBuf, gWarp, flowS, parseInt(els.flowScale.value, 10));
     const t = gBuf; gBuf = gWarp; gWarp = t;
   }
 
+  // Bloom
   const bloomK = parseFloat(els.bloomStrength.value);
   const bloomR = parseInt(els.bloomRadius.value, 10);
   if (els.bloomOn.checked && bloomK > 0 && bloomR > 0 && (frameCount % everyN === 0)) {
@@ -457,6 +341,7 @@ function draw() {
     gBuf.image(gBloomWork, 0, 0, gBuf.width, gBuf.height); gBuf.pop();
   }
 
+  // Colorizer
   if (els.colOn && els.colOn.checked) {
     applyColorizer(gBuf, gTemp,
       parseInt(els.colHue.value, 10),
@@ -464,11 +349,13 @@ function draw() {
     const t = gBuf; gBuf = gTemp; gTemp = t;
   }
 
+  // Base composite
   if (els.baseOn.checked && parseFloat(els.baseMix.value) > 0) {
     push(); tint(255, parseFloat(els.baseMix.value) * 255); image(gCur, 0, 0, width, height); pop();
   }
   image(gBuf, 0, 0, width, height);
 
+  // ring for depth sampling
   const ringCap = Math.round(60 * (parseFloat(els.quality.value) * 2));
   frameRing.push(gCur.get());
   if (frameRing.length > ringCap) frameRing.shift();
@@ -588,6 +475,7 @@ function applyGlitch(density = 1){
   gBuf.pop();
 }
 
+/* ===================== FX helpers ===================== */
 function applyFlowWarp(src, dst, strength = 6, scale = 80) {
   dst.clear();
   const cell = Math.max(8, scale | 0);
@@ -628,6 +516,9 @@ function applyColorizer(src, dst, hueDeg=20, sat=1.1) {
   dst.updatePixels();
 }
 
+/* ===================== Recording & misc ===================== */
+async function toggleBorderless() { /* no-op for web */ }
+
 function toggleRecord(){
   if (rec && rec.state === 'recording') { rec.stop(); els.recBtn.textContent = '● Record'; return; }
   chunks = [];
@@ -655,7 +546,5 @@ function refreshGlitch(){
 function drawWaiting(){
   noStroke(); fill(255,20); rect(0,0,width,height);
   fill(220); textAlign(CENTER,CENTER); textSize(14);
-  text(sourceMode === 'camera'
-       ? 'Camera: click “Update sources” then “Start camera”'
-       : 'File: choose a video. P: toggle UI • F: fullscreen', width/2, height/2);
+  text('File: choose a video. P: toggle UI • F: fullscreen', width/2, height/2);
 }
