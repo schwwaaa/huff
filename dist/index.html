@@ -4,7 +4,8 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Datamosh Lab</title>
+    <title>p5.js Datamosh Lab — Always-On Melt</title>
+    <!-- silence favicon 404 -->
     <link rel="icon" href="data:,">
     <style>
          :root {
@@ -14,41 +15,47 @@
         html,
         body {
             margin: 0;
+            padding: 0;
+            width: 100%;
             height: 100%;
+            overflow: hidden;
+            /* kill scrollbars */
             background: #0b0c10;
             color: #e8eaf0;
-            font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial
+            font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
         }
+        /* Fullscreen canvas behind everything */
         
         canvas {
             position: fixed;
             inset: 0;
             width: 100% !important;
             height: 100% !important;
-            display: block
+            display: block;
         }
+        /* Controls as overlay so they don't constrain canvas */
         
         header {
             position: fixed;
             top: 8px;
             left: 8px;
             right: 8px;
-            z-index: 10;
             padding: 10px;
             border: 1px solid #1f2430;
-            background: rgba(18, 21, 28, .92);
+            background: rgba(18, 21, 28, 0.92);
             border-radius: 12px;
             display: flex;
             gap: 10px;
             align-items: center;
             flex-wrap: wrap;
-            backdrop-filter: blur(6px)
+            z-index: 10;
+            backdrop-filter: blur(6px);
         }
         
         .controls {
             display: flex;
             gap: 10px;
-            flex-wrap: wrap
+            flex-wrap: wrap;
         }
         
         .control {
@@ -58,18 +65,18 @@
             border-radius: 10px;
             display: flex;
             align-items: center;
-            gap: 8px
+            gap: 8px;
         }
         
         .control label {
             font-size: 12px;
-            color: #aeb6cf
+            color: #aeb6cf;
         }
         
         input[type=range],
         input[type=number],
         select {
-            width: 120px
+            width: 120px;
         }
         
         .pill {
@@ -77,72 +84,89 @@
             padding: 6px 10px;
             border-radius: 999px;
             border: 1px solid #1c2030;
-            background: #151922
+            background: #151922;
         }
         
-        .muted {
-            opacity: .75
+        .hint {
+            position: fixed;
+            left: 8px;
+            right: 8px;
+            bottom: 8px;
+            color: #93a1c6;
+            font-size: 12px;
+            padding: 8px 12px;
+            background: rgba(10, 12, 18, 0.7);
+            border: 1px solid #1c2030;
+            border-radius: 10px;
+            z-index: 5;
+            backdrop-filter: blur(4px);
         }
         
         button {
-            cursor: pointer
+            cursor: pointer;
         }
     </style>
+    <script src="p5.min.js"></script>
+    <script defer src="newmosh16.js"></script>
+    <script defer>
+document.addEventListener('DOMContentLoaded', () => {
+  const vol   = document.getElementById('vol');
+  const volVal= document.getElementById('volVal');
+  const mute  = document.getElementById('mute');
+  const play  = document.getElementById('playBtn');
+  const file  = document.getElementById('file');
 
-    <!-- Prevent Enter from refreshing -->
-    <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            const form = document.getElementById('controlsForm');
-            if (!form) return;
-            form.reset();
-            form.addEventListener('submit', e => e.preventDefault());
-            form.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter' && (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement)) {
-                    e.preventDefault();
-                    e.target.blur();
-                }
-            });
-        });
-    </script>
+  const clamp01 = v => Math.max(0, Math.min(1, v));
 
-    <script src="https://cdn.jsdelivr.net/npm/p5@1.9.3/lib/p5.min.js"></script>
-    <script defer src="newmosh19.js"></script>
+  function applyVolume() {
+    if (!window.videoEl || !videoEl.elt) return;
+    const v = clamp01(parseFloat(vol?.value || '1'));
+    videoEl.elt.volume = v;
+    videoEl.elt.muted  = !!mute?.checked;
+    if (volVal) volVal.textContent = v.toFixed(2);
+  }
+
+  // Keep label in sync and update live
+  ['input','change'].forEach(ev => {
+    vol?.addEventListener(ev, applyVolume);
+    mute?.addEventListener(ev, applyVolume);
+  });
+
+  // Ensure audio plays when you click Play (user gesture = allowed audio)
+  play?.addEventListener('click', async () => {
+    if (!window.videoEl || !videoEl.elt) return;
+    try {
+      applyVolume();                 // set volume + muted based on UI
+      videoEl.elt.setAttribute('playsinline','');
+      await videoEl.elt.play();      // should succeed with sound after click
+    } catch (err) {
+      // As a last resort, retry muted to satisfy autoplay policies
+      console.warn('Play (unmuted) failed, retrying muted:', err);
+      if (mute) mute.checked = true;
+      applyVolume();
+      try { await videoEl.elt.play(); } catch {}
+    }
+  }, { capture: true });
+
+  // When a new file is chosen, apply the current volume immediately
+  file?.addEventListener('change', () => setTimeout(applyVolume, 0));
+});
+</script>
 </head>
 
 <body>
     <header>
-        <!-- File input (camera-free) -->
-        <label class="control">Load video
-      <input id="file" type="file" accept="video/*">
-    </label>
-
-        <!-- Transport -->
+        <label>Load video <input id="file" type="file" accept="video/*"></label>
         <button id="playBtn" disabled>Play</button>
         <button id="pauseBtn" disabled>Pause</button>
         <button id="recBtn" disabled>● Record</button>
         <button id="refreshBtn" disabled>↻ Refresh</button>
-        <button id="borderlessBtn" disabled class="muted" title="Desktop builds">⛶ Borderless</button>
         <span class="pill" id="dim">–</span>
 
-        <!-- Controls -->
-        <form id="controlsForm" class="controls" autocomplete="off" novalidate>
-            <!-- Quality / cadence / FPS -->
-            <div class="control"><label>Quality</label>
-                <input id="quality" type="range" min="0.25" max="1.00" step="0.05" value="1.00">
-                <span id="qualityVal">1.00</span>
-            </div>
-            <div class="control"><label>FX cadence (×)</label>
-                <input id="fxEvery" type="range" min="1" max="8" step="1" value="2">
-                <span id="fxEveryVal">2</span>
-            </div>
-            <div class="control"><label>Target FPS</label>
-                <input id="fps" type="range" min="1" max="240" step="1" value="60">
-                <span id="fpsVal">60</span>
-            </div>
-
+        <div class="controls">
             <!-- Core -->
             <div class="control"><label>Depth</label><input id="depth" type="range" min="0" max="1" step="0.01" value="0.5"><span id="depthVal">0.50</span></div>
-            <div class="control"><label>Corrupt on</label><input id="corruptOn" type="checkbox" checked></div>
+            <div class="control"><label>Corrupt on</label><input id="corruptOn" type="checkbox"></div>
             <div class="control"><label>Corrupt %</label><input id="corrupt" type="range" min="0" max="1" step="0.01" value="0.30"><span id="corruptVal">0.30</span></div>
             <div class="control"><label>Block (px)</label><input id="block" type="range" min="4" max="2000" step="2" value="32"><span id="blockVal">32</span></div>
 
@@ -155,7 +179,7 @@
             <!-- Determinism -->
             <div class="control"><label>Seed</label><input id="seed" type="number" value="1" step="1"></div>
 
-            <!-- Feedback -->
+            <!-- Buffer evolution -->
             <div class="control"><label>Feedback</label><input id="feedback" type="range" min="0" max="3" step="0.05" value="0.6"><span id="feedbackVal">0.60</span></div>
             <div class="control"><label>Persistence</label><input id="persistence" type="range" min="0" max="10" step="0.05" value="0.7"><span id="persistenceVal">0.70</span></div>
 
@@ -165,102 +189,77 @@
             <div class="control"><label>FB Z</label><input id="fbZ" type="range" min="0.90" max="1.10" step="0.005" value="1.000"><span id="fbZVal">1.00</span></div>
             <div class="control"><label>FB θ (deg)</label><input id="fbTheta" type="range" min="-180" max="180" step="1" value="0"><span id="fbThetaVal">0</span></div>
 
-            <!-- Auto FB -->
-            <div class="control"><label>FB Auto</label><input id="fbAuto" type="checkbox"></div>
+            <!-- Auto FB + per-axis toggles -->
+            <div class="control"><label>FB Auto</label><input id="fbAuto" type="checkbox" checked></div>
             <div class="control"><label>FB Speed</label><input id="fbSpeed" type="range" min="0.01" max="10" step="0.01" value="0.50"><span id="fbSpeedVal">0.50</span></div>
-            <div class="control"><label>Move X</label><input id="fbMoveX" type="checkbox"></div>
-            <div class="control"><label>Move Y</label><input id="fbMoveY" type="checkbox"></div>
-            <div class="control"><label>Move Z</label><input id="fbMoveZ" type="checkbox"></div>
-            <div class="control"><label>Rotate</label><input id="fbMoveTheta" type="checkbox"></div>
+            <div class="control"><label>Move X</label><input id="fbMoveX" type="checkbox" checked></div>
+            <div class="control"><label>Move Y</label><input id="fbMoveY" type="checkbox" checked></div>
+            <div class="control"><label>Move Z</label><input id="fbMoveZ" type="checkbox" checked></div>
+            <div class="control"><label>Rotate</label><input id="fbMoveTheta" type="checkbox" checked></div>
 
-            <!-- Spatialization -->
+            <!-- Spatialization + clusters -->
             <div class="control"><label>Spatial gap (px)</label><input id="spatialGap" type="range" min="0" max="200" step="2" value="40"><span id="spatialGapVal">40</span></div>
             <div class="control"><label>Clusters</label><input id="clusters" type="checkbox"></div>
             <div class="control"><label>Cluster count</label><input id="clusterCount" type="range" min="1" max="12" step="1" value="3"><span id="clusterCountVal">3</span></div>
             <div class="control"><label>Cluster radius</label><input id="clusterRadius" type="range" min="10" max="400" step="5" value="120"><span id="clusterRadiusVal">120</span></div>
 
             <!-- Cycle + bursts -->
-            <div class="control"><label>Cycle on</label><input id="cycleOn" type="checkbox"></div>
+            <div class="control"><label>Cycle on</label><input id="cycleOn" type="checkbox" checked></div>
             <div class="control">
                 <label>Cycle shape</label>
-                <select id="cycleShape"><option value="square">Square</option><option value="sine" selected>Sine</option></select>
+                <select id="cycleShape">
+          <option value="square">Square</option>
+          <option value="sine" selected>Sine</option>
+        </select>
             </div>
             <div class="control"><label>Burst</label><input id="burstOn" type="checkbox"></div>
             <div class="control"><label>Burst length (s)</label><input id="burstLen" type="range" min="0.2" max="8" step="0.1" value="2"><span id="burstLenVal">2.0</span></div>
             <div class="control"><label>Burst gap (s)</label><input id="burstGap" type="range" min="0.2" max="10" step="0.1" value="3"><span id="burstGapVal">3.0</span></div>
             <div class="control"><label>Burst boost</label><input id="burstBoost" type="range" min="1" max="6" step="0.1" value="3"><span id="burstBoostVal">3.0</span></div>
 
-            <!-- Bloom -->
-            <div class="control"><label>Bloom on</label><input id="bloomOn" type="checkbox"></div>
+            <!-- Bloom + Flow -->
+            <div class="control"><label>Bloom on</label><input id="bloomOn" type="checkbox" checked></div>
             <div class="control"><label>Bloom strength</label><input id="bloomStrength" type="range" min="0" max="2" step="0.05" value="0.8"><span id="bloomStrengthVal">0.80</span></div>
             <div class="control"><label>Bloom radius</label><input id="bloomRadius" type="range" min="1" max="20" step="1" value="8"><span id="bloomRadiusVal">8</span></div>
 
-            <!-- Flow -->
-            <div class="control"><label>Flow on</label><input id="flowOn" type="checkbox"></div>
+            <div class="control"><label>Flow on</label><input id="flowOn" type="checkbox" checked></div>
             <div class="control"><label>Flow strength</label><input id="flowStrength" type="range" min="0" max="20" step="1" value="6"><span id="flowStrengthVal">6</span></div>
             <div class="control"><label>Flow scale</label><input id="flowScale" type="range" min="20" max="200" step="5" value="80"><span id="flowScaleVal">80</span></div>
 
-            <!-- Base -->
+            <!-- Base visibility -->
             <div class="control"><label>Show base video</label><input id="baseOn" type="checkbox" checked></div>
-            <div class="control"><label>Base mix</label><input id="baseMix" type="range" min="0" max="1" step="0.05" value="1.00"><span id="baseMixVal">1.00</span></div>
+            <div class="control"><label>Base mix</label><input id="baseMix" type="range" min="0" max="1" step="0.05" value="0.15"><span id="baseMixVal">0.15</span></div>
+            <div class="control"><label>Seed on load</label><input id="seedOnLoad" type="checkbox" checked></div>
+
+            <!-- Pixel Sort -->
+            <div class="control"><label>Pixel sort</label><input id="psOn" type="checkbox"></div>
+            <div class="control">
+                <label>Direction</label>
+                <select id="psDir">
+          <option value="h">Horizontal</option>
+          <option value="v">Vertical</option>
+        </select>
+            </div>
+            <div class="control"><label>PS window</label><input id="psWin" type="range" min="4" max="256" step="2" value="48"><span id="psWinVal">48</span></div>
+            <div class="control"><label>PS threshold</label><input id="psThresh" type="range" min="0" max="255" step="1" value="140"><span id="psThreshVal">140</span></div>
+            <div class="control">
+                <label>PS channel</label>
+                <select id="psChan">
+          <option value="luma" selected>Luma</option>
+          <option value="r">R</option>
+          <option value="g">G</option>
+          <option value="b">B</option>
+        </select>
+            </div>
 
             <!-- Colorizer -->
             <div class="control"><label>Colorizer</label><input id="colOn" type="checkbox"></div>
-            <div class="control">
-                <label>Driver</label>
-                <select id="colDriver">
-          <option value="luma" selected>Luma</option>
-          <option value="r">Red</option>
-          <option value="g">Green</option>
-          <option value="b">Blue</option>
-          <option value="avg">Average</option>
-          <option value="max">Max</option>
-        </select>
-            </div>
             <div class="control"><label>Hue</label><input id="colHue" type="range" min="-180" max="180" step="1" value="20"><span id="colHueVal">20</span></div>
-            <div class="control"><label>Sat</label><input id="colSat" type="range" min="0" max="3" step="0.01" value="1.40"><span id="colSatVal">1.40</span></div>
-            <div class="control"><label>Luma preserve</label><input id="colLuma" type="range" min="0" max="1" step="0.01" value="1.00"><span id="colLumaVal">1.00</span></div>
-            <div class="control"><label>Vibrance</label><input id="colVibe" type="range" min="0" max="2" step="0.01" value="0.75"><span id="colVibeVal">0.75</span></div>
-            <div class="control"><label>Tint</label><input id="colTint" type="color" value="#ff00ff"></div>
-            <div class="control"><label>Tint amt</label><input id="colTintAmt" type="range" min="0" max="1" step="0.01" value="0.25"><span id="colTintAmtVal">0.25</span></div>
-
-            <!-- Pixel Sorting -->
-            <div class="control"><label>Pixel Sort</label><input id="psOn" type="checkbox"></div>
-            <div class="control">
-                <label>Dir</label>
-                <select id="psDir"><option value="rows" selected>Rows</option><option value="cols">Cols</option></select>
-            </div>
-            <div class="control">
-                <label>Mode</label>
-                <select id="psMode"><option value="luma" selected>Luma</option><option value="chroma">Chroma</option></select>
-            </div>
-            <div class="control"><label>PS thr</label><input id="psThr" type="range" min="0" max="1" step="0.01" value="0.60"><span id="psThrVal">0.60</span></div>
-            <div class="control"><label>PS hue</label><input id="psHue" type="range" min="-180" max="180" step="1" value="180"><span id="psHueVal">180</span></div>
-            <div class="control"><label>PS hue width</label><input id="psHueWidth" type="range" min="0" max="180" step="1" value="30"><span id="psHueWidthVal">30</span></div>
-            <div class="control"><label>PS sat min</label><input id="psSatMin" type="range" min="0" max="1" step="0.01" value="0.10"><span id="psSatMinVal">0.10</span></div>
-            <div class="control"><label>PS color</label><input id="psColor" type="color" value="#00ffff"></div>
-            <div class="control"><label>PS seg min</label><input id="psSegMin" type="range" min="2" max="400" step="1" value="24"><span id="psSegMinVal">24</span></div>
-            <div class="control">
-                <label>Order</label>
-                <select id="psOrder"><option value="asc">Asc</option><option value="desc" selected>Desc</option></select>
-            </div>
-            <div class="control"><label>PS mix</label><input id="psMix" type="range" min="0" max="1" step="0.01" value="1.00"><span id="psMixVal">1.00</span></div>
-
-            <!-- MELT -->
-            <div class="control"><label>Melt on</label><input id="meltOn" type="checkbox"></div>
-            <div class="control">
-                <label>Melt dir</label>
-                <select id="meltDir"><option value="rows" selected>Rows</option><option value="cols">Cols</option></select>
-            </div>
-            <div class="control"><label>Melt back</label><input id="meltBack" type="range" min="0" max="180" step="1" value="40"><span id="meltBackVal">40</span></div>
-            <div class="control"><label>Melt scale</label><input id="meltScale" type="range" min="2" max="80" step="1" value="16"><span id="meltScaleVal">16</span></div>
-            <div class="control"><label>Melt speed</label><input id="meltSpeed" type="range" min="0" max="5" step="0.01" value="0.80"><span id="meltSpeedVal">0.80</span></div>
-            <div class="control"><label>Melt mix</label><input id="meltMix" type="range" min="0" max="1" step="0.01" value="0.5"><span id="meltMixVal">0.50</span></div>
-
-            <div class="control"><label>Smear down</label><input id="smearDown" type="range" min="0" max="200" step="1" value="40"><span id="smearDownVal">40</span></div>
-            <div class="control"><label>Smear blur</label><input id="smearBlur" type="range" min="0" max="20" step="1" value="6"><span id="smearBlurVal">6</span></div>
-        </form>
+            <div class="control"><label>Sat</label><input id="colSat" type="range" min="0" max="2" step="0.01" value="1.10"><span id="colSatVal">1.10</span></div>
+        </div>
     </header>
+
+
 </body>
 
 </html>
