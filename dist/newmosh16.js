@@ -710,29 +710,81 @@ function refreshGlitch() {
     burstState.inBurst = true;
 }
 
+// function toggleRecord() {
+//     if (rec && rec.state === 'recording') {
+//         rec.stop();
+//         document.getElementById('recBtn').textContent = '● Record';
+//         return;
+//     }
+//     chunks = [];
+//     const stream = canvas.elt.captureStream(30);
+//     try { rec = new MediaRecorder(stream, { mimeType: 'video/mp4;codecs=avc1.42E01E,mp4a.40.2' }); } catch (e) { rec = new MediaRecorder(stream); }
+//     // try { rec = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9' }); } catch (e) { rec = new MediaRecorder(stream); }
+//     rec.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+//     rec.onstop = () => {
+//         const blob = new Blob(chunks, { type: 'video/webm' });
+//         const url = URL.createObjectURL(blob);
+//         const a = document.createElement('a');
+//         a.href = url;
+//         a.download = 'moshed.webm';
+//         a.click();
+//         URL.revokeObjectURL(url);
+//     };
+//     rec.start();
+//     document.getElementById('recBtn').textContent = '⏹ Stop';
+// }
+
+
 function toggleRecord() {
-    if (rec && rec.state === 'recording') {
-        rec.stop();
-        document.getElementById('recBtn').textContent = '● Record';
-        return;
-    }
-    chunks = [];
-    const stream = canvas.elt.captureStream(30);
-    try { rec = new MediaRecorder(stream, { mimeType: 'video/mp4;codecs=avc1.42E01E,mp4a.40.2' }); } catch (e) { rec = new MediaRecorder(stream); }
-    // try { rec = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9' }); } catch (e) { rec = new MediaRecorder(stream); }
-    rec.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
-    rec.onstop = () => {
-        const blob = new Blob(chunks, { type: 'video/webm' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'moshed.webm';
-        a.click();
-        URL.revokeObjectURL(url);
-    };
-    rec.start();
-    document.getElementById('recBtn').textContent = '⏹ Stop';
+// Highest-quality recording defaults without changing any UI
+  if (rec && rec.state === 'recording') {
+    try { rec.stop(); } catch (e) {}
+    const btn = document.getElementById('recBtn');
+    if (btn) btn.textContent = '● Record';
+    return;
+  }
+  const REC_FPS = 60;
+  const VIDEO_BPS = 24_000_000;
+  const AUDIO_BPS = 192_000;
+  const stream = canvas.elt.captureStream(REC_FPS);
+
+  // Try to include audio from the source video
+  try {
+    const vs = videoEl?.elt?.captureStream?.();
+    const atr = vs?.getAudioTracks?.()[0];
+    if (atr) stream.addTrack(atr);
+  } catch (e) {}
+
+  const prefs = [
+    { mimeType: 'video/webm;codecs=vp9', videoBitsPerSecond: VIDEO_BPS, audioBitsPerSecond: AUDIO_BPS },
+    { mimeType: 'video/webm;codecs=vp8', videoBitsPerSecond: Math.max(16_000_000, VIDEO_BPS), audioBitsPerSecond: 160_000 },
+    { mimeType: 'video/webm',            videoBitsPerSecond: Math.max(10_000_000, VIDEO_BPS), audioBitsPerSecond: 160_000 },
+    {}
+  ];
+  let opts = prefs.find(o => { try { return !o.mimeType || MediaRecorder.isTypeSupported(o.mimeType); } catch { return false; } }) || {};
+  let chunksLocal = [];
+  try { rec = new MediaRecorder(stream, opts); } catch (e) { rec = new MediaRecorder(stream); }
+  rec.ondataavailable = (e) => { if (e.data && e.data.size) chunksLocal.push(e.data); };
+  rec.onstop = () => {
+    const mime = opts.mimeType || 'video/webm';
+    const blob = new Blob(chunksLocal, { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const w = canvas.width || 0, h = canvas.height || 0;
+    a.href = url; a.download = `capture_${w}x${h}_${REC_FPS}fps_${(VIDEO_BPS/1e6|0)}mbps.webm`;
+    a.click(); URL.revokeObjectURL(url);
+  };
+  try {
+    const s = stream.getVideoTracks()[0].getSettings();
+    console.log('Capture settings:', s);
+  } catch (e) {}
+  rec.start();
+  const btn = document.getElementById('recBtn');
+  if (btn) btn.textContent = '⏹ Stop';
 }
+
+
+
 
 function drawWaiting() {
     noStroke();

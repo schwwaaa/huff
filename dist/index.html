@@ -173,7 +173,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <!-- Cadence -->
             <div class="control"><label>Glitch speed</label><input id="glitchSpeed" type="range" min="0.05" max="5" step="0.005" value="0.8"><span id="glitchSpeedVal">0.80</span></div>
             <div class="control"><label>Speed fine ×</label><input id="glitchSpeedFine" type="range" min="0.10" max="10" step="0.01" value="1.00"><span id="glitchSpeedFineVal">1.00</span></div>
-            <div class="control"><label>Glitch size</label><input id="glitchSize" type="range" min="1" max="250" step="1" value="20"><span id="glitchSizeVal">20</span></div>
+            <div class="control"><label>Glitch size</label><input id="glitchSize" type="range" min="1" max="20" step="0.005" value="10"><span id="glitchSizeVal">20</span></div>
             <div class="control"><label>Glitch smear</label><input id="glitchSmear" type="range" min="0" max="50" step="1" value="6"><span id="glitchSmearVal">6</span></div>
 
             <!-- Determinism -->
@@ -184,8 +184,8 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="control"><label>Persistence</label><input id="persistence" type="range" min="0" max="10" step="0.05" value="0.7"><span id="persistenceVal">0.70</span></div>
 
             <!-- Feedback XYZ + θ -->
-            <div class="control"><label>FB X</label><input id="fbX" type="range" min="-50" max="50" step="1" value="1"><span id="fbXVal">1</span></div>
-            <div class="control"><label>FB Y</label><input id="fbY" type="range" min="-50" max="50" step="1" value="1"><span id="fbYVal">1</span></div>
+            <div class="control"><label>FB X</label><input id="fbX" type="range" min="-10" max="10" step="0.005" value="1"><span id="fbXVal">1</span></div>
+            <div class="control"><label>FB Y</label><input id="fbY" type="range" min="-10" max="10" step="0.005" value="1"><span id="fbYVal">1</span></div>
             <div class="control"><label>FB Z</label><input id="fbZ" type="range" min="0.90" max="1.10" step="0.005" value="1.000"><span id="fbZVal">1.00</span></div>
             <div class="control"><label>FB θ (deg)</label><input id="fbTheta" type="range" min="-180" max="180" step="1" value="0"><span id="fbThetaVal">0</span></div>
 
@@ -223,12 +223,12 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="control"><label>Bloom radius</label><input id="bloomRadius" type="range" min="1" max="20" step="1" value="8"><span id="bloomRadiusVal">8</span></div>
 
             <div class="control"><label>Flow on</label><input id="flowOn" type="checkbox" checked></div>
-            <div class="control"><label>Flow strength</label><input id="flowStrength" type="range" min="0" max="20" step="1" value="6"><span id="flowStrengthVal">6</span></div>
-            <div class="control"><label>Flow scale</label><input id="flowScale" type="range" min="20" max="200" step="5" value="80"><span id="flowScaleVal">80</span></div>
+            <div class="control"><label>Flow strength</label><input id="flowStrength" type="range" min="0" max="30" step="0.005" value="6"><span id="flowStrengthVal">6</span></div>
+            <div class="control"><label>Flow scale</label><input id="flowScale" type="range" min="20" max="250" step="0.005" value="80"><span id="flowScaleVal">80</span></div>
 
             <!-- Base visibility -->
             <div class="control"><label>Show base video</label><input id="baseOn" type="checkbox" checked></div>
-            <div class="control"><label>Base mix</label><input id="baseMix" type="range" min="0" max="1" step="0.05" value="0.15"><span id="baseMixVal">0.15</span></div>
+            <div class="control"><label>Base mix</label><input id="baseMix" type="range" min="0" max="1" step="0.05" value="1"><span id="baseMixVal">0.15</span></div>
             <div class="control"><label>Seed on load</label><input id="seedOnLoad" type="checkbox" checked></div>
 
             <!-- Pixel Sort -->
