@@ -1,8 +1,8 @@
-VOL_NAME="datamosh-desktop"
+VOL_NAME="huff-v2"
 OUT="artifacts"
 STAGE="$OUT/dmg-stage"
-UNI_APP="$OUT/universal-app/datamosh-desktop.app"
-DMG="$OUT/datamosh-desktop-universal.dmg"
+UNI_APP="$OUT/universal-app/huff-v2.app"
+DMG="$OUT/huff-v2-universal.dmg"
 
 rm -rf "$STAGE"
 mkdir -p "$STAGE"

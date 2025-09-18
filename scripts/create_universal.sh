@@ -1,5 +1,5 @@
 # variables (no spaces)
-APP="datamosh-desktop.app"
+APP="huff-v2.app"
 ARM="src-tauri/target/aarch64-apple-darwin/release/bundle/macos/$APP"
 X64="src-tauri/target/x86_64-apple-darwin/release/bundle/macos/$APP"
 
@@ -7,7 +7,7 @@ OUT_DIR="artifacts/universal-app"
 OUT_APP="$OUT_DIR/$APP"
 
 # the executable inside .app also uses the productName
-BIN_REL="Contents/MacOS/datamosh-desktop"
+BIN_REL="Contents/MacOS/huff-v2"
 
 # make output + copy one bundle as base
 rm -rf "$OUT_DIR"
