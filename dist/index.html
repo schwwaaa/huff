@@ -113,7 +113,7 @@
         });
     </script>
 
-    <script src="https://cdn.jsdelivr.net/npm/p5@1.9.3/lib/p5.min.js"></script>
+    <script src="p5.js"></script>
     <script defer src="newmosh19.js"></script>
 </head>
 
@@ -136,13 +136,13 @@
         <form id="controlsForm" class="controls" autocomplete="off" novalidate>
             <!-- Quality -->
             <div class="control"><label>Quality</label>
-                <input id="quality" type="range" min="0.25" max="1.00" step="0.05" value="1.00">
+                <input id="quality" type="range" min="0" max="3.00" step="0.05" value="1.00">
                 <span id="qualityVal">1.00</span>
             </div>
 
             <!-- Core -->
             <div class="control"><label>Depth</label><input id="depth" type="range" min="0" max="1" step="0.01" value="0.5"><span id="depthVal">0.50</span></div>
-            <div class="control"><label>Corrupt on</label><input id="corruptOn" type="checkbox" checked></div>
+            <div class="control"><label>Corrupt on</label><input id="corruptOn" type="checkbox"></div>
             <div class="control"><label>Corrupt %</label><input id="corrupt" type="range" min="0" max="1" step="0.01" value="0.30"><span id="corruptVal">0.30</span></div>
             <div class="control"><label>Block (px)</label><input id="block" type="range" min="4" max="2000" step="2" value="32"><span id="blockVal">32</span></div>
 
@@ -174,10 +174,10 @@
             <div class="control"><label>Rotate</label><input id="fbMoveTheta" type="checkbox"></div>
 
             <!-- Spatialization + clusters -->
-            <div class="control"><label>Spatial gap (px)</label><input id="spatialGap" type="range" min="0" max="200" step="2" value="40"><span id="spatialGapVal">40</span></div>
+            <div class="control"><label>Spatial gap (px)</label><input id="spatialGap" type="range" min="0" max="200" step="1" value="40"><span id="spatialGapVal">40</span></div>
             <div class="control"><label>Clusters</label><input id="clusters" type="checkbox"></div>
-            <div class="control"><label>Cluster count</label><input id="clusterCount" type="range" min="1" max="12" step="1" value="3"><span id="clusterCountVal">3</span></div>
-            <div class="control"><label>Cluster radius</label><input id="clusterRadius" type="range" min="10" max="400" step="5" value="120"><span id="clusterRadiusVal">120</span></div>
+            <div class="control"><label>Cluster count</label><input id="clusterCount" type="range" min="1" max="50" step="1" value="3"><span id="clusterCountVal">3</span></div>
+            <div class="control"><label>Cluster radius</label><input id="clusterRadius" type="range" min="1" max="20" step="0.01" value="10"><span id="clusterRadiusVal">120</span></div>
 
             <!-- Cycle + bursts -->
             <div class="control"><label>Cycle on</label><input id="cycleOn" type="checkbox"></div>

@@ -1,2 +1,2 @@
-cd ~/Desktop/datamosh-desktop
+cd ~/Movies/huff
 rm -rf src-tauri/target artifacts

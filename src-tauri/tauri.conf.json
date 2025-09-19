@@ -1,6 +1,6 @@
 {
-    "productName": "datamosh-desktop",
-    "identifier": "com.yourorg.datamosh-desktop",
+    "productName": "huff-v2",
+    "identifier": "com.yourorg.huff-v2",
     "version": "0.1.0",
     "build": {
         "beforeDevCommand": "",
@@ -9,7 +9,7 @@
     },
     "app": {
         "windows": [{
-            "title": "Datamosh Desktop",
+            "title": "huff-v2",
             "width": 1920,
             "height": 1080,
             "resizable": true,
@@ -22,6 +22,7 @@
     },
     "bundle": {
         "active": true,
-        "targets": "all"
+        "targets": "all",
+        "icon": ["icons/icon.png"]
     }
 }
