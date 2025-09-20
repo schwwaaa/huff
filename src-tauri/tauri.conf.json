@@ -9,7 +9,7 @@
     },
     "app": {
         "windows": [{
-            "title": "huff-v2",
+            "title": "huff",
             "width": 1920,
             "height": 1080,
             "resizable": true,
