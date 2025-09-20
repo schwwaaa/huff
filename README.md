@@ -1,5 +1,5 @@
 <p align="center">
-  <img width="15%" height="15%" src="https://github.com/vondas-network/huff/blob/v1-stable/src-tauri/icons/Square310x310Logo.png?raw=true"/>  
+  <img width="25%" height="25%" src="https://github.com/vondas-network/huff/blob/v1-stable/src-tauri/icons/Square310x310Logo.png?raw=true"/>  
 </p>
 
 <p align="center"><em>click & huff; find the trail</em></p> 
