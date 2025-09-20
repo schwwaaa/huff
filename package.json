@@ -12,7 +12,6 @@
         "build:mac-universal": "npm run build:mac-both && npm run build:universal"
     },
     "devDependencies": {
-        "@tauri-apps/cli": "^2.8.4",
-        "@tauri-apps/cli-darwin-arm64": "^2.8.4"
+        "@tauri-apps/cli": "^2.8.4"
     }
 }
