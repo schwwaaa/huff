@@ -2,8 +2,7 @@
 window.$  = window.$  || (id  => document.getElementById(id));
 window.$$ = window.$$ || (sel => document.querySelector(sel));
 console.log('[init] helpers ready');
-window.$ = window.$ || (id => document.getElementById(id));
-window.$$ = window.$$ || (sel => document.querySelector(sel));
+
 // canvas.js — p5 lifecycle + buffers + UI
 /* Datamosh Lab — Stable file-only build (camera removed). HTML owns defaults. */
 let videoEl, currentBlobUrl = null;
@@ -26,12 +25,10 @@ const burst = { on: false, inBurst: true, t: 0, len: 2, gap: 3, boost: 3 };
 let lastMediaTime = -1;
 
 // Keep the <video> renderable (avoid display:none which can freeze in some embedders)
-
 function cloakVideo(p5Vid){
   const v = p5Vid && (p5Vid.elt || p5Vid);
   if (!v) return;
   v.setAttribute('playsinline','');
-  if (typeof v.muted === 'boolean') v.muted = v.muted;
   Object.assign(v.style, {
     position: 'fixed',
     left: '-10000px',
@@ -45,16 +42,6 @@ function cloakVideo(p5Vid){
 
 function blitVideoInto(target){
   target.imageMode(CORNER);
-  
-  
-   // cover
-  
-  
-  
-  target.clear();
-  target.clear();
-  if (videoEl) { try { target.image(videoEl, 0, 0, target.width, target.height); } catch(e){} }
-
   target.clear();
   if (videoEl) { try { target.image(videoEl, 0, 0, target.width, target.height); } catch(e){} }
 }
@@ -80,6 +67,7 @@ function setup() {
   updateLabels();
   setSeedFromUI();
 
+  // UI toggle + fullscreen
   window.addEventListener('keydown', (e) => {
     if (e.key === 'p' || e.key === 'P') {
       const header = document.querySelector('header');
@@ -92,7 +80,14 @@ function setup() {
       e.preventDefault();
     }
   }, true);
+
+  // Resume if WebKit pauses video on FS toggle
+  document.addEventListener('fullscreenchange', () => {
+    const v = videoEl?.elt;
+    if (v && playing && v.paused) { v.play().catch(()=>{}); }
+  });
 }
+window.setup = setup;
 
 function allocBuffers() {
   gCur = createGraphics(width, height);
@@ -108,6 +103,7 @@ function windowResized() {
   clearAll();
   updateDim();
 }
+window.windowResized = windowResized;
 
 function clearAll() {
   [gBuf, gWarp, gBloomWork, gTemp].forEach(g => g.clear());
@@ -213,44 +209,92 @@ function updateLabels() {
   els.colSatVal.textContent = (+els.colSat.value).toFixed(2);
 }
 
-function setSeedFromUI(){ baseSeed = parseInt(els.seed.value || '1', 10); if (isNaN(baseSeed)) baseSeed = 1; noiseSeed(baseSeed); }
+function setSeedFromUI(){
+  baseSeed = parseInt(els.seed.value || '1', 10);
+  if (isNaN(baseSeed)) baseSeed = 1;
+  noiseSeed(baseSeed);
+}
 
+// ---------- FIXED: robust first-load + immediate autoplay ----------
 function onFile(ev){
-  const file = ev.target.files?.[0]; if (!file) return;
+  const input = ev.target;
+  const file = input.files?.[0]; if (!file) return;
 
-  // cleanup previous
+  // Allow re-selecting the SAME file later
+  queueMicrotask(() => { try { input.value = ''; } catch {} });
+
+  // Cleanup previous
   if (videoEl) { try { videoEl.remove(); } catch {} videoEl = null; }
   if (currentBlobUrl) { try { URL.revokeObjectURL(currentBlobUrl); } catch {} currentBlobUrl = null; }
 
   const url = URL.createObjectURL(file);
   currentBlobUrl = url;
 
+  // Create hidden <video> via p5
   videoEl = createVideo([url], () => enableTransport(true));
-  videoEl.attribute('preload','metadata');
+  videoEl.attribute('preload','auto');          // was 'metadata' — make it eager
   videoEl.attribute('playsinline','');
-  cloakVideo(videoEl); // keep renderable; avoids hidden-video throttling
-  videoEl.elt.muted = false;
-  videoEl.elt.volume = 1.0;
+  cloakVideo(videoEl);
+
+  const v = videoEl.elt;
+  v.muted = true;                                // start muted so autoplay is allowed
+  v.volume = 1.0;
 
   let primed = false;
-  const prime = async () => {
+  const primeOnce = () => {
     if (primed) return;
-    if (videoEl.elt.videoWidth > 0 && videoEl.elt.videoHeight > 0) {
+    if (v.readyState >= 1 && v.videoWidth > 0 && v.videoHeight > 0) {
       primed = true;
+
+      // seed buffers + initial frame so UI updates immediately
       clearAll(); updateDim();
-      try {
-        videoEl.elt.muted = false; videoEl.elt.volume = 1.0; videoEl.elt.setAttribute('playsinline','');
-        await videoEl.elt.play();
-      } catch (e) {
-        try { videoEl.elt.muted = true; await videoEl.elt.play(); } catch {}
-      }
-      pumpVideoFrames();
-      videoEl.loop();
-      playing = true;
+      try { blitVideoInto(gCur); } catch {}
+
+      // reset to start for a clean first play
+      try { v.currentTime = 0; } catch {}
+
+      // Attempt immediate autoplay (muted), then unmute on first gesture
+      (async () => {
+        try {
+          v.setAttribute('playsinline','');
+          await v.play();
+          pumpVideoFrames();
+          videoEl.loop();
+          playing = true;
+
+          const unmuteOnce = () => {
+            try { v.muted = false; v.volume = 1.0; } catch {}
+            window.removeEventListener('pointerdown', unmuteOnce, true);
+            window.removeEventListener('keydown',  unmuteOnce, true);
+          };
+          window.addEventListener('pointerdown', unmuteOnce, true);
+          window.addEventListener('keydown',  unmuteOnce, true);
+        } catch {
+          // If muted autoplay still blocked (rare), fall back to user gesture
+          const gesture = async () => {
+            try { await v.play(); pumpVideoFrames(); videoEl.loop(); playing = true; } catch {}
+            window.removeEventListener('pointerdown', gesture, true);
+            window.removeEventListener('keydown',  gesture, true);
+          };
+          window.addEventListener('pointerdown', gesture, true);
+          window.addEventListener('keydown',  gesture, true);
+        }
+      })();
+
+      enableTransport(true);
     }
   };
-  videoEl.elt.addEventListener('loadeddata', prime, { once: true });
-  if (videoEl.elt.requestVideoFrameCallback) videoEl.elt.requestVideoFrameCallback(() => prime());
+
+  // Prime via multiple reliable paths (Safari/WebKit friendly)
+  v.addEventListener('loadedmetadata', primeOnce, { once: true });
+  v.addEventListener('loadeddata',     primeOnce, { once: true });
+  if (v.requestVideoFrameCallback) v.requestVideoFrameCallback(() => primeOnce());
+  setTimeout(primeOnce, 80); // final nudge for edge-cases
+
+  v.addEventListener('error', (e) => {
+    console.warn('[video] error', e);
+    enableTransport(true);
+  }, { once: true });
 }
 
 function enableTransport(enabled){
@@ -398,7 +442,6 @@ function drawWaiting(){
   fill(220); textAlign(CENTER,CENTER); textSize(14);
   text('File: choose a video. P: toggle UI • F: fullscreen', width/2, height/2);
 }
-
 
 // Ensure hookUI runs after DOM is ready (safety)
 if (document.readyState === 'loading') {
