@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Canvas Viewer</title>
+  <style>
+    html,body{ margin:0; width:100vw; height:100vh; background:#000; overflow:hidden; }
+    #mirror{ position:fixed; inset:0; width:100vw; height:100vh; display:block; }
+    * { user-select:none; }
+  </style>
+</head>
+<body>
+  <canvas id="mirror"></canvas>
+  <script>
+    function qs(name){ const q = new URLSearchParams(location.search); return q.get(name); }
+    const wsURL  = qs('ws') || (location.protocol==='https:' ? 'wss://127.0.0.1:8787' : 'ws://127.0.0.1:8787');
+    const autofs = qs('autofs') === '1';
+
+    const cvs = document.getElementById('mirror');
+    const ctx = cvs.getContext('2d', { alpha:false, desynchronized:true });
+
+    function fit(){
+      const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+      const w = Math.floor(innerWidth  * dpr);
+      const h = Math.floor(innerHeight * dpr);
+      if (cvs.width !== w || cvs.height !== h){ cvs.width = w; cvs.height = h; }
+    }
+    addEventListener('resize', fit, { passive:true }); fit();
+
+    function isFullscreen(){ return !!(document.fullscreenElement || document.webkitFullscreenElement); }
+    async function goFullscreen(){
+      try{
+        const el = document.documentElement;
+        if (el.requestFullscreen) await el.requestFullscreen();
+        else if (el.webkitRequestFullscreen) await el.webkitRequestFullscreen();
+      }catch(e){}
+    }
+    function toggleFS(){
+      if (isFullscreen()) {
+        const ex = document.exitFullscreen || document.webkitExitFullscreen;
+        if (ex) ex.call(document);
+      } else {
+        goFullscreen();
+      }
+    }
+    document.addEventListener('dblclick', toggleFS);
+    document.addEventListener('keydown', e => { if (e.key==='f' || e.key==='F') toggleFS(); });
+    document.addEventListener('fullscreenchange', fit);
+    document.addEventListener('webkitfullscreenchange', fit);
+    if (autofs) setTimeout(()=>{ goFullscreen(); }, 120);
+
+    const ws = new WebSocket(wsURL);
+    ws.binaryType = 'arraybuffer';
+    ws.onopen = () => {
+      try { ws.send(JSON.stringify({ type:'hello', role:'canvas' })); } catch(e){}
+    };
+    ws.onmessage = async (ev) => {
+      if (typeof ev.data === 'string') return;
+      try {
+        const blob = new Blob([ev.data]);
+        const bmp  = await createImageBitmap(blob, { imageOrientation:'none', premultiplyAlpha:'premultiply' });
+        const dw = cvs.width, dh = cvs.height;
+        // STRETCH to fill the window (no crop, no letterbox)
+        ctx.clearRect(0,0,dw,dh);
+        ctx.drawImage(bmp, 0, 0, dw, dh);
+        bmp.close?.();
+      } catch(e){ /* ignore */ }
+    };
+  </script>
+</body>
+</html>

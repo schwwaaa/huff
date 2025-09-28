@@ -1,0 +1,16 @@
+{
+    "$schema": "../gen/schemas/desktop-schema.json",
+    "identifier": "network",
+    "description": "Allow local WS relay",
+    "windows": ["main", "controls"],
+    "permissions": [
+        "core:default",
+        {
+            "identifier": "network:allow",
+            "allow": {
+                "listen": ["tcp:127.0.0.1:8787", "tcp:[::1]:8787"],
+                "connect": ["tcp:127.0.0.1:8787", "tcp:[::1]:8787"]
+            }
+        }
+    ]
+}

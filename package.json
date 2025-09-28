@@ -1,18 +1,30 @@
 {
-    "name": "huff-v2",
-    "private": true,
-    "version": "0.1.0",
-    "type": "module",
-    "scripts": {
-        "tauri": "tauri",
-        "build:mac-arm": "tauri build -- --target aarch64-apple-darwin --bundles app",
-        "build:mac-intel": "tauri build -- --target x86_64-apple-darwin --bundles app",
-        "build:mac-both": "npm run build:mac-arm && npm run build:mac-intel",
-        "build:universal": "node scripts/universal.cjs",
-        "build:mac-universal": "npm run build:mac-both && npm run build:universal"
-    },
-    "devDependencies": {
-        "@tauri-apps/cli": "^2.8.4",
-        "@tauri-apps/cli-darwin-arm64": "^2.8.4"
-    }
+  "name": "tauri-two-windows-ws-relay",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "tauri": "tauri"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^1.6.3"
+  },
+  "main": "index.js",
+  "dependencies": {
+    "semver": "^7.7.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/schwwaaa/huff.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/schwwaaa/huff/issues"
+  },
+  "homepage": "https://github.com/schwwaaa/huff#readme",
+  "description": ""
 }

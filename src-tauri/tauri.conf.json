@@ -1,28 +1,42 @@
 {
+  "build": {
+    "beforeBuildCommand": "",
+    "beforeDevCommand": "",
+    "devPath": "../src",
+    "distDir": "../src"
+  },
+  "package": {
     "productName": "huff-v2",
-    "identifier": "com.yourorg.huff-v2",
-    "version": "0.1.0",
-    "build": {
-        "beforeDevCommand": "",
-        "beforeBuildCommand": "",
-        "frontendDist": "../dist"
-    },
-    "app": {
-        "windows": [{
-            "title": "huff",
-            "width": 1920,
-            "height": 1080,
-            "resizable": true,
-            "fullscreen": false,
-            "decorations": true
-        }],
-        "security": {
-            "csp": null
-        }
-    },
+    "version": "0.1.0"
+  },
+  "tauri": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "win",
+        "url": "canvas.html",
+        "width": 1024,
+        "height": 768,
+        "resizable": true,
+        "decorations": true
+      },
+      {
+        "label": "controls",
+        "title": "ctrl",
+        "url": "controls.html",
+        "width": 800,
+        "height": 770,
+        "resizable": false,
+        "decorations": true
+      }
+    ],
     "bundle": {
-        "active": true,
-        "targets": "all",
-        "icon": ["icons/icon.ico", "icons/icon.png"]
+      "active": true,
+      "identifier": "com.example.tauri-two-windows-ws",
+      "icon": [
+        "icons/icon.icns",
+        "icons/icon.png"
+      ]
     }
+  }
 }
