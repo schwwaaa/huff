@@ -1,380 +1,449 @@
-/**
- * canvas.js — Controls window logic (FULL FILE)
- * - Ensures #stage exists before p5 attaches (fixes parent() null)
- * - Robust first-load + autoplay (muted, then unmute on gesture)
- * - rVFC pump drives render cadence
- * - Keeps playback running when page is hidden/unfocused (temporarily mutes)
- * - ADDED: Volume slider (0..1 step 0.01); 0 => muted, >0 => unmuted; applies live
- */
+/* bootstrap helpers (placed first) */
+window.$  = window.$  || (id  => document.getElementById(id));
+window.$$ = window.$$ || (sel => document.querySelector(sel));
+console.log('[init] helpers ready');
 
-(() => {
-  const $ = (sel) => document.querySelector(sel);
+// canvas.js — p5 lifecycle + buffers + UI
+/* Datamosh Lab — Stable file-only build (camera removed). HTML owns defaults. */
+let videoEl, currentBlobUrl = null;
+let gCur, gBuf, gWarp, gBloomWork, gTemp;
+let frameRing = [];
+let canvas, rec, chunks = [];
+let playing = false;
 
-  // Gather key elements (others are queried inside hookUI())
-  const els = {
-    file:     $('#file'),
-    playBtn:  $('#playBtn'),
-    pauseBtn: $('#pauseBtn'),
-    status:   $('#status'),
-  };
-  const setStatus = (t) => { if (els.status) els.status.textContent = t; };
+const els = {};
+let baseSeed = 1, seededOnce = false;
 
-  // Will be created dynamically if not present:
-  let volumeSlider = null;
-  let volumeVal    = null;
+// smear phases
+let nPhaseX = 0, nPhaseY = 1000;
+// auto-feedback phases
+let fbPhaseX = 0, fbPhaseY = 100, fbPhaseR = 200, fbPhaseZ = 300;
+// burst state
+const burst = { on: false, inBurst: true, t: 0, len: 2, gap: 3, boost: 3 };
 
-  // p5 / video state
-  let gCur, gBuf, gWarp, gBloomWork, gTemp;
-  let playing = false;
-  let videoEl = null;         // p5.MediaElement
-  let currentBlobUrl = null;
+// rVFC-driven copy into gCur
+let lastMediaTime = -1;
 
-  function setup() {
-    // --- FIX: Ensure a container exists and pass the element to parent()
-    let stageEl = document.getElementById('stage');
-    if (!stageEl) {
-      stageEl = document.createElement('div');
-      stageEl.id = 'stage';
-      stageEl.style.width = '100%';
-      stageEl.style.height = '100%';
-      document.body.appendChild(stageEl);
-    }
-
-    const cnv = createCanvas(windowWidth, windowHeight);
-    cnv.parent(stageEl); // pass the actual element
-    pixelDensity(1);
-    background(0);
-
-    gCur       = createGraphics(width, height);
-    gBuf       = createGraphics(width, height);
-    gWarp      = createGraphics(width, height);
-    gBloomWork = createGraphics(width, height);
-    gTemp      = createGraphics(width, height);
-
-    hookUI();
-
-    // FS hotkey + resume if paused during FS transition (WK quirk)
-    window.addEventListener('keydown', (e) => {
-      if (e.key === 'f' || e.key === 'F') {
-        if (!document.fullscreenElement) document.documentElement.requestFullscreen();
-        else document.exitFullscreen();
-        e.preventDefault();
-      }
-    }, true);
-
-    document.addEventListener('fullscreenchange', () => {
-      const v = videoEl?.elt;
-      if (v && playing && v.paused) v.play().catch(()=>{});
-    });
-  }
-  window.setup = setup;
-
-  function windowResized(){
-    resizeCanvas(windowWidth, windowHeight);
-    gCur       = createGraphics(width, height);
-    gBuf       = createGraphics(width, height);
-    gWarp      = createGraphics(width, height);
-    gBloomWork = createGraphics(width, height);
-    gTemp      = createGraphics(width, height);
-    background(0);
-  }
-  window.windowResized = windowResized;
-
-  function draw(){
-    background(0);
-    if (videoEl && !videoEl.elt.ended) blitVideoInto(gCur);
-    image(gCur, 0, 0, width, height);
-  }
-  window.draw = draw;
-
-  // ---------- helpers ----------
-  function cloakVideo(el){
-    try { el.addClass('hidden'); } catch {}
-    try { el.hide(); } catch {}
-  }
-  function blitVideoInto(target){
-    const v = videoEl?.elt;
-    if (!v || !v.videoWidth || !v.videoHeight) return;
-    target.clear();
-    target.image(videoEl, 0, 0, target.width, target.height);
-  }
-  function clearAll(){
-    try { gCur.clear(); gBuf.clear(); gWarp.clear(); gBloomWork.clear(); gTemp.clear(); } catch {}
-    background(0);
-  }
-  function enableTransport(enable){
-    if (els.playBtn)  els.playBtn.disabled  = !enable;
-    if (els.pauseBtn) els.pauseBtn.disabled = !enable;
-  }
-
-  // rVFC pump
-  function pumpVideoFrames(){
-    const v = videoEl?.elt;
-    if (!v) return;
-
-    const tick = () => { try { blitVideoInto(gCur); } catch {} };
-
-    if (typeof v.requestVideoFrameCallback === 'function') {
-      const step = () => {
-        if (!videoEl || videoEl.elt !== v) return;
-        tick();
-        try { v.requestVideoFrameCallback(step); } catch {}
-      };
-      try { v.requestVideoFrameCallback(step); } catch {}
-    } else {
-      const loop = () => {
-        if (!videoEl || videoEl.elt !== v) return;
-        tick();
-        requestAnimationFrame(loop);
-      };
-      requestAnimationFrame(loop);
-    }
-  }
-
-  function armAutoplayFallbackOnce() {
-    const handler = async () => {
-      const v = videoEl?.elt; if (!v) return cleanup();
-      try {
-        await v.play();
-        // Honor slider on first gesture
-        const vol = getSliderVolume();
-        try { v.volume = vol; v.muted = (vol === 0); } catch {}
-        pumpVideoFrames(); playing = true;
-      } catch {}
-      cleanup();
-    };
-    const cleanup = () => {
-      window.removeEventListener('pointerdown', handler, true);
-      window.removeEventListener('keydown', handler, true);
-    };
-    window.addEventListener('pointerdown', handler, true);
-    window.addEventListener('keydown',  handler, true);
-  }
-
-  // ---------- UI ----------
-  function hookUI(){
-    // Inject a volume slider into the header/tool area if not present
-    installVolumeUI();
-
-    // wire file input if present
-    els.file = els.file || $('#file');
-    els.file?.addEventListener('change', onFile);
-
-    els.playBtn = els.playBtn || $('#playBtn');
-    els.pauseBtn = els.pauseBtn || $('#pauseBtn');
-
-    els.playBtn?.addEventListener('click', async () => {
-      if (!videoEl) return;
-      const v = videoEl.elt;
-      const vol = getSliderVolume();
-      try {
-        v.volume = vol;
-        v.muted  = (vol === 0);
-        v.setAttribute('playsinline','');
-        await v.play();
-      } catch {
-        try { v.muted = true; await v.play(); } catch {}
-      }
-      pumpVideoFrames(); playing = true;
-      try { videoEl.loop(); } catch {}
-    });
-
-    els.pauseBtn?.addEventListener('click', () => {
-      const v = videoEl?.elt; if (!v) return;
-      v.pause(); playing = false;
-    });
-  }
-
-  // Creates <label><span id="volumeVal">…</span></label><input id="volumeSlider">
-  function installVolumeUI(){
-    // Prefer an existing header; otherwise, make a small toolbar
-    let host = document.querySelector('header');
-    if (!host) {
-      host = document.createElement('div');
-      host.style.position = 'fixed';
-      host.style.left = '8px';
-      host.style.top = '8px';
-      host.style.zIndex = '9999';
-      host.style.background = 'rgba(0,0,0,0.4)';
-      host.style.backdropFilter = 'blur(4px)';
-      host.style.padding = '6px 10px';
-      host.style.borderRadius = '8px';
-      document.body.appendChild(host);
-    }
-
-    // If they already exist, reuse
-    volumeSlider = document.querySelector('#volumeSlider');
-    volumeVal    = document.querySelector('#volumeVal');
-
-    if (!volumeSlider) {
-      const label = document.createElement('label');
-      label.setAttribute('for', 'volumeSlider');
-      label.style.marginLeft = '12px';
-      label.style.marginRight = '6px';
-      label.style.fontFamily = 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto';
-      label.style.fontSize = '12px';
-      label.style.color = '#ddd';
-      label.textContent = 'Volume: ';
-
-      volumeVal = document.createElement('span');
-      volumeVal.id = 'volumeVal';
-      volumeVal.textContent = '100%';
-      label.appendChild(volumeVal);
-
-      volumeSlider = document.createElement('input');
-      volumeSlider.id = 'volumeSlider';
-      volumeSlider.type = 'range';
-      volumeSlider.min = '0';
-      volumeSlider.max = '1';
-      volumeSlider.step = '0.01';
-      volumeSlider.value = '1';
-      volumeSlider.style.verticalAlign = 'middle';
-      volumeSlider.style.marginLeft = '6px';
-      volumeSlider.style.width = '140px';
-
-      host.appendChild(label);
-      host.appendChild(volumeSlider);
-    }
-
-    // Initialize label
-    if (volumeVal) volumeVal.textContent = formatVol(volumeSlider.value);
-
-    // Live volume handler
-    volumeSlider.addEventListener('input', () => {
-      const v = videoEl?.elt;
-      const vol = getSliderVolume();
-      if (volumeVal) volumeVal.textContent = formatVol(vol);
-      if (!v) return;
-
-      try { v.volume = vol; } catch {}
-      try {
-        if (vol > 0) {
-          v.muted = false;
-          if (v.paused) v.play().catch(()=>{});
-        } else {
-          v.muted = true;
-        }
-      } catch {}
-    });
-  }
-
-  function getSliderVolume(){
-    const raw = volumeSlider?.value ?? '1';
-    const vol = parseFloat(raw);
-    return Number.isFinite(vol) ? Math.max(0, Math.min(1, vol)) : 1;
-  }
-  function formatVol(v){ return Math.round((+v || 0) * 100) + '%'; }
-
-  // ---------- Robust first-load + autoplay ----------
-  async function onFile(ev){
-    const input = ev.target;
-    const file = input.files && input.files[0];
-    if (!file) return;
-
-    // allow same-file reselect later
-    queueMicrotask(() => { try { input.value = ''; } catch {} });
-
-    // cleanup previous
-    if (videoEl) { try { videoEl.remove(); } catch {} videoEl = null; }
-    if (currentBlobUrl) { try { URL.revokeObjectURL(currentBlobUrl); } catch {} currentBlobUrl = null; }
-
-    const url = URL.createObjectURL(file);
-    currentBlobUrl = url;
-
-    videoEl = createVideo([url], () => {});
-    videoEl.attribute('preload', 'auto');
-    videoEl.attribute('playsinline', '');
-    cloakVideo(videoEl);
-    const v = videoEl.elt;
-
-    // Apply slider volume now; start muted to satisfy autoplay
-    try { v.volume = getSliderVolume(); } catch {}
-    v.muted = true;
-
-    let primed = false;
-    const primeOnce = () => {
-      if (primed) return;
-      if (v.readyState >= 1 && v.videoWidth > 0 && v.videoHeight > 0) {
-        primed = true;
-        clearAll();
-        try { blitVideoInto(gCur); } catch {}
-        enableTransport(true);
-
-        try { v.currentTime = 0; } catch {}
-
-        (async () => {
-          try {
-            v.setAttribute('playsinline','');
-            await v.play();                   // muted autoplay
-            pumpVideoFrames();
-            try { videoEl.loop(); } catch {}
-            playing = true;
-
-            // After playback starts, honor slider: unmute if >0
-            const vol = getSliderVolume();
-            try { v.volume = vol; v.muted = (vol === 0); } catch {}
-
-            // Also unmute on first gesture if still muted
-            const unmuteOnce = () => {
-              const vol2 = getSliderVolume();
-              try { v.muted = (vol2 === 0) ? true : false; v.volume = vol2; } catch {}
-              window.removeEventListener('pointerdown', unmuteOnce, true);
-              window.removeEventListener('keydown',  unmuteOnce, true);
-            };
-            window.addEventListener('pointerdown', unmuteOnce, true);
-            window.addEventListener('keydown',  unmuteOnce, true);
-          } catch {
-            // If muted autoplay blocked (rare), gesture fallback
-            armAutoplayFallbackOnce();
-          }
-        })();
-      }
-    };
-
-    v.addEventListener('loadedmetadata', primeOnce, { once: true });
-    v.addEventListener('loadeddata',     primeOnce, { once: true });
-    if (v.requestVideoFrameCallback) v.requestVideoFrameCallback(() => primeOnce());
-    setTimeout(primeOnce, 80);
-
-    v.addEventListener('error', (e) => {
-      console.warn('[video] error', e);
-      enableTransport(true);
-    }, { once: true });
-  }
-
-  // ----- Keep playback running when page hidden/unfocused
-  let restoreMute = null;
-
-  function goBackground(){
-    const v = videoEl?.elt; if (!v) return;
-    try {
-      if (restoreMute === null) restoreMute = v.muted;
-      v.muted = true; // background-safe
-      v.setAttribute('playsinline','');
-      if (v.paused) v.play().catch(()=>{});
-    } catch {}
-  }
-  function goForeground(){
-    const v = videoEl?.elt; if (!v) { restoreMute = null; return; }
-    try {
-      const vol = getSliderVolume();
-      v.volume = vol;
-      v.muted  = (vol === 0); // slider governs when we return
-    } catch {}
-    restoreMute = null;
-  }
-
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden) goBackground(); else goForeground();
+// Keep the <video> renderable (avoid display:none which can freeze in some embedders)
+function cloakVideo(p5Vid){
+  const v = p5Vid && (p5Vid.elt || p5Vid);
+  if (!v) return;
+  v.setAttribute('playsinline','');
+  Object.assign(v.style, {
+    position: 'fixed',
+    left: '-10000px',
+    top: '0',
+    width: '1px',
+    height: '1px',
+    opacity: '0',
+    pointerEvents: 'none'
   });
-  window.addEventListener('blur',  goBackground);
-  window.addEventListener('focus', goForeground);
-  window.addEventListener('pagehide', goBackground);
-  window.addEventListener('pageshow', goForeground);
+}
 
-  // expose (optional)
-  window.__controls__ = {
-    get video(){ return videoEl?.elt || null; },
-    isPlaying(){ return !!playing; },
+function blitVideoInto(target){
+  target.imageMode(CORNER);
+  target.clear();
+  if (videoEl) { try { target.image(videoEl, 0, 0, target.width, target.height); } catch(e){} }
+}
+
+function pumpVideoFrames(){
+  if (!videoEl?.elt?.requestVideoFrameCallback) return;
+  videoEl.elt.requestVideoFrameCallback((_now, meta) => {
+    if (meta?.mediaTime !== undefined && meta.mediaTime !== lastMediaTime) {
+      lastMediaTime = meta.mediaTime;
+      blitVideoInto(gCur);
+    }
+    if (!videoEl.elt.paused && !videoEl.elt.ended) pumpVideoFrames();
+  });
+}
+
+function setup() {
+  canvas = createCanvas(windowWidth, windowHeight);
+  try{canvas.hide();}catch(e){console.warn("[setup] canvas hide failed", e);}
+  pixelDensity(1);
+  allocBuffers();
+  clearAll();
+  hookUI();
+  updateLabels();
+  setSeedFromUI();
+
+  // UI toggle + fullscreen
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'p' || e.key === 'P') {
+      const header = document.querySelector('header');
+      header.style.display = header.style.display === 'none' ? '' : 'none';
+      e.preventDefault();
+    }
+    if (e.key === 'f' || e.key === 'F') {
+      if (!document.fullscreenElement) document.documentElement.requestFullscreen();
+      else document.exitFullscreen();
+      e.preventDefault();
+    }
+  }, true);
+
+  // Resume if WebKit pauses video on FS toggle
+  document.addEventListener('fullscreenchange', () => {
+    const v = videoEl?.elt;
+    if (v && playing && v.paused) { v.play().catch(()=>{}); }
+  });
+}
+window.setup = setup;
+
+function allocBuffers() {
+  gCur = createGraphics(width, height);
+  gBuf = createGraphics(width, height);
+  gWarp = createGraphics(width, height);
+  gBloomWork = createGraphics(width, height);
+  gTemp = createGraphics(width, height);
+}
+
+function windowResized() {
+  resizeCanvas(windowWidth, windowHeight);
+  allocBuffers();
+  clearAll();
+  updateDim();
+}
+window.windowResized = windowResized;
+
+function clearAll() {
+  [gBuf, gWarp, gBloomWork, gTemp].forEach(g => g.clear());
+  frameRing.length = 0;
+  seededOnce = false;
+}
+
+function hookUI() {
+  [
+    'file','playBtn','pauseBtn','recBtn','refreshBtn','borderlessBtn','dim',
+    'quality','qualityVal',
+    'depth','depthVal','corruptOn','corrupt','corruptVal','block','blockVal',
+    'glitchSpeed','glitchSpeedVal','glitchSpeedFine','glitchSpeedFineVal',
+    'glitchSize','glitchSizeVal','glitchSmear','glitchSmearVal',
+    'seed','feedback','feedbackVal','persistence','persistenceVal',
+    'fbX','fbXVal','fbY','fbYVal','fbZ','fbZVal','fbTheta','fbThetaVal',
+    'fbAuto','fbSpeed','fbSpeedVal','fbMoveX','fbMoveY','fbMoveZ','fbMoveTheta',
+    'spatialGap','spatialGapVal','clusters','clusterCount','clusterCountVal','clusterRadius','clusterRadiusVal',
+    'cycleOn','cycleShape',
+    'burstOn','burstLen','burstLenVal','burstGap','burstGapVal','burstBoost','burstBoostVal',
+    'bloomOn','bloomStrength','bloomStrengthVal','bloomRadius','bloomRadiusVal',
+    'flowOn','flowStrength','flowStrengthVal','flowScale','flowScaleVal',
+    'baseOn','baseMix','baseMixVal','seedOnLoad',
+    'colOn','colHue','colHueVal','colSat','colSatVal'
+  ].forEach(k => els[k] = $(k));
+
+  // file loader
+  els.file.addEventListener('change', onFile);
+
+  // transport
+  els.playBtn.addEventListener('click', async () => {
+    if (!videoEl) return;
+    try {
+      videoEl.elt.muted = false;
+      videoEl.elt.volume = 1.0;
+      videoEl.elt.setAttribute('playsinline','');
+      await videoEl.elt.play();
+    } catch (e) {
+      try { videoEl.elt.muted = true; await videoEl.elt.play(); } catch {}
+    }
+    pumpVideoFrames();
+    videoEl.loop();
+    playing = true;
+  });
+
+  els.pauseBtn.addEventListener('click', () => {
+    if (!videoEl) return;
+    try { videoEl.elt.pause(); } catch {}
+    if (videoEl.pause) videoEl.pause();
+    playing = false;
+  });
+
+  els.recBtn.addEventListener('click', toggleRecord);
+  els.refreshBtn.addEventListener('click', refreshGlitch);
+  if (els.borderlessBtn) els.borderlessBtn.addEventListener('click', toggleBorderless);
+
+  // labels only
+  els.seed.addEventListener('change', setSeedFromUI);
+  ['quality','depth','corrupt','block','glitchSpeed','glitchSpeedFine','glitchSize','glitchSmear',
+   'feedback','persistence','fbX','fbY','fbZ','fbTheta','fbSpeed',
+   'spatialGap','clusterCount','clusterRadius',
+   'burstLen','burstGap','burstBoost',
+   'bloomStrength','bloomRadius','flowStrength','flowScale',
+   'baseMix','colHue','colSat'].forEach(id => els[id].addEventListener('input', updateLabels));
+  ['cycleShape'].forEach(id => els[id].addEventListener('change', updateLabels));
+  els.baseOn.addEventListener('change', () => { els.baseMix.disabled = !els.baseOn.checked; updateLabels(); });
+
+  updateDim();
+}
+
+function updateDim(){ if (els.dim) els.dim.textContent = `${width}×${height}`; }
+
+function updateLabels() {
+  const f2 = v => (+v).toFixed(2);
+  if (els.quality) els.qualityVal.textContent = f2(els.quality.value);
+  els.depthVal.textContent = f2(els.depth.value);
+  els.corruptVal.textContent = f2(els.corrupt.value);
+  els.blockVal.textContent = els.block.value;
+  els.glitchSpeedVal.textContent = f2(els.glitchSpeed.value);
+  els.glitchSpeedFineVal.textContent = f2(els.glitchSpeedFine.value);
+  els.glitchSizeVal.textContent = els.glitchSize.value;
+  els.glitchSmearVal.textContent = els.glitchSmear.value;
+  els.feedbackVal.textContent = f2(els.feedback.value);
+  els.persistenceVal.textContent = f2(els.persistence.value);
+  els.fbXVal.textContent = els.fbX.value;
+  els.fbYVal.textContent = els.fbY.value;
+  els.fbZVal.textContent = (+els.fbZ.value).toFixed(2);
+  els.fbThetaVal.textContent = els.fbTheta.value;
+  els.fbSpeedVal.textContent = f2(els.fbSpeed.value);
+  els.spatialGapVal.textContent = els.spatialGap.value;
+  els.clusterCountVal.textContent = els.clusterCount.value;
+  els.clusterRadiusVal.textContent = els.clusterRadius.value;
+  els.burstLenVal.textContent = f2(els.burstLen.value);
+  els.burstGapVal.textContent = f2(els.burstGap.value);
+  els.burstBoostVal.textContent = f2(els.burstBoost.value);
+  els.bloomStrengthVal.textContent = f2(els.bloomStrength.value);
+  els.bloomRadiusVal.textContent = els.bloomRadius.value;
+  els.flowStrengthVal.textContent = els.flowStrength.value;
+  els.flowScaleVal.textContent = els.flowScale.value;
+  els.baseMixVal.textContent = f2(els.baseMix.value);
+  els.baseMix.disabled = !els.baseOn.checked;
+  els.colHueVal.textContent = els.colHue.value;
+  els.colSatVal.textContent = (+els.colSat.value).toFixed(2);
+}
+
+function setSeedFromUI(){
+  baseSeed = parseInt(els.seed.value || '1', 10);
+  if (isNaN(baseSeed)) baseSeed = 1;
+  noiseSeed(baseSeed);
+}
+
+// ---------- FIXED: robust first-load + immediate autoplay ----------
+function onFile(ev){
+  const input = ev.target;
+  const file = input.files?.[0]; if (!file) return;
+
+  // Allow re-selecting the SAME file later
+  queueMicrotask(() => { try { input.value = ''; } catch {} });
+
+  // Cleanup previous
+  if (videoEl) { try { videoEl.remove(); } catch {} videoEl = null; }
+  if (currentBlobUrl) { try { URL.revokeObjectURL(currentBlobUrl); } catch {} currentBlobUrl = null; }
+
+  const url = URL.createObjectURL(file);
+  currentBlobUrl = url;
+
+  // Create hidden <video> via p5
+  videoEl = createVideo([url], () => enableTransport(true));
+  videoEl.attribute('preload','auto');          // was 'metadata' — make it eager
+  videoEl.attribute('playsinline','');
+  cloakVideo(videoEl);
+
+  const v = videoEl.elt;
+  v.muted = true;                                // start muted so autoplay is allowed
+  v.volume = 1.0;
+
+  let primed = false;
+  const primeOnce = () => {
+    if (primed) return;
+    if (v.readyState >= 1 && v.videoWidth > 0 && v.videoHeight > 0) {
+      primed = true;
+
+      // seed buffers + initial frame so UI updates immediately
+      clearAll(); updateDim();
+      try { blitVideoInto(gCur); } catch {}
+
+      // reset to start for a clean first play
+      try { v.currentTime = 0; } catch {}
+
+      // Attempt immediate autoplay (muted), then unmute on first gesture
+      (async () => {
+        try {
+          v.setAttribute('playsinline','');
+          await v.play();
+          pumpVideoFrames();
+          videoEl.loop();
+          playing = true;
+
+          const unmuteOnce = () => {
+            try { v.muted = false; v.volume = 1.0; } catch {}
+            window.removeEventListener('pointerdown', unmuteOnce, true);
+            window.removeEventListener('keydown',  unmuteOnce, true);
+          };
+          window.addEventListener('pointerdown', unmuteOnce, true);
+          window.addEventListener('keydown',  unmuteOnce, true);
+        } catch {
+          // If muted autoplay still blocked (rare), fall back to user gesture
+          const gesture = async () => {
+            try { await v.play(); pumpVideoFrames(); videoEl.loop(); playing = true; } catch {}
+            window.removeEventListener('pointerdown', gesture, true);
+            window.removeEventListener('keydown',  gesture, true);
+          };
+          window.addEventListener('pointerdown', gesture, true);
+          window.addEventListener('keydown',  gesture, true);
+        }
+      })();
+
+      enableTransport(true);
+    }
   };
-})();
+
+  // Prime via multiple reliable paths (Safari/WebKit friendly)
+  v.addEventListener('loadedmetadata', primeOnce, { once: true });
+  v.addEventListener('loadeddata',     primeOnce, { once: true });
+  if (v.requestVideoFrameCallback) v.requestVideoFrameCallback(() => primeOnce());
+  setTimeout(primeOnce, 80); // final nudge for edge-cases
+
+  v.addEventListener('error', (e) => {
+    console.warn('[video] error', e);
+    enableTransport(true);
+  }, { once: true });
+}
+
+function enableTransport(enabled){
+  ['playBtn','pauseBtn','recBtn','refreshBtn','borderlessBtn'].forEach(id=>{
+    const b = els[id]; if (b) b.disabled = !enabled;
+  });
+}
+
+function draw() {
+  background(0);
+  if (!videoEl) { drawWaiting(); return; }
+
+  randomSeed(baseSeed + frameCount);
+  noiseSeed(baseSeed);
+
+  // If rVFC is missing, pull a frame in draw
+  if (!videoEl.elt.requestVideoFrameCallback) blitVideoInto(gCur);
+
+  if (!seededOnce && els.seedOnLoad.checked) {
+    gBuf.image(gCur, 0, 0, gBuf.width, gBuf.height);
+    seededOnce = true;
+  }
+
+  // persistence decay
+  const pers = parseFloat(els.persistence.value);
+  if (pers < 1) {
+    gBuf.push();
+    gBuf.noStroke();
+    gBuf.drawingContext.globalCompositeOperation = 'destination-out';
+    const decay = map(1.0 - pers, 0, 1, 1, 20);
+    gBuf.fill(0, 0, 0, decay);
+    gBuf.rect(0, 0, gBuf.width, gBuf.height);
+    gBuf.pop();
+    gBuf.drawingContext.globalCompositeOperation = 'source-over';
+  }
+
+  const coarse = parseFloat(els.glitchSpeed.value);
+  const fine   = parseFloat(els.glitchSpeedFine.value || 1);
+  const density = coarse * fine;
+  nPhaseX += density * 0.01;
+  nPhaseY += density * 0.011;
+
+  updateBurstState();
+
+  const Q = parseFloat(els.quality.value);
+  const everyN  = Q >= 0.9 ? 1 : Q >= 0.7 ? 2 : Q >= 0.5 ? 3 : 4;
+
+  applyGlitch(density);
+
+  // Feedback transforms
+  const fb = parseFloat(els.feedback.value);
+  if (fb > 0) {
+    let fx = parseFloat(els.fbX.value) || 0;
+    let fy = parseFloat(els.fbY.value) || 0;
+    let fz = parseFloat(els.fbZ.value) || 1;
+    let ft = radians(parseFloat(els.fbTheta.value) || 0);
+
+    if (els.fbAuto.checked) {
+      const sp = parseFloat(els.fbSpeed.value);
+      fbPhaseX += sp * 0.005; fbPhaseY += sp * 0.006; fbPhaseR += sp * 0.004; fbPhaseZ += sp * 0.003;
+      if (els.fbMoveX.checked)      fx += map(noise(fbPhaseX), 0, 1, -20, 20);
+      if (els.fbMoveY.checked)      fy += map(noise(fbPhaseY), 0, 1, -20, 20);
+      if (els.fbMoveTheta.checked)  ft += radians(map(noise(fbPhaseR), 0, 1, -10, 10));
+      if (els.fbMoveZ.checked)      fz *= (1.0 + map(noise(fbPhaseZ), 0, 1, -0.01, 0.01));
+    }
+
+    const tmp = gBuf.get();
+    gBuf.clear();
+    gBuf.push();
+    gBuf.tint(255, fb * 255);
+    gBuf.imageMode(CENTER);
+    gBuf.translate(gBuf.width/2, gBuf.height/2);
+    gBuf.rotate(ft);
+    gBuf.scale(fz);
+    gBuf.image(tmp, fx, fy, gBuf.width, gBuf.height);
+    gBuf.pop();
+  }
+
+  // Flow
+  const flowS = parseInt(els.flowStrength.value, 10);
+  if (els.flowOn.checked && flowS > 0 && (frameCount % everyN === 0)) {
+    applyFlowWarp(gBuf, gWarp, flowS, parseInt(els.flowScale.value, 10));
+    const t = gBuf; gBuf = gWarp; gWarp = t;
+  }
+
+  // Bloom
+  const bloomK = parseFloat(els.bloomStrength.value);
+  const bloomR = parseInt(els.bloomRadius.value, 10);
+  if (els.bloomOn.checked && bloomK > 0 && bloomR > 0 && (frameCount % everyN === 0)) {
+    gBloomWork.clear();
+    gBloomWork.imageMode(CORNER);
+    gBloomWork.image(gBuf, 0, 0, gBloomWork.width, gBloomWork.height);
+    gBloomWork.filter(BLUR, bloomR);
+    gBuf.push(); gBuf.imageMode(CORNER); gBuf.blendMode(ADD);
+    gBuf.tint(255, Math.min(2, bloomK) * 255);
+    gBuf.image(gBloomWork, 0, 0, gBuf.width, gBuf.height); gBuf.pop();
+  }
+
+  // Colorizer
+  if (els.colOn && els.colOn.checked) {
+    applyColorizer(gBuf, gTemp,
+      parseInt(els.colHue.value, 10),
+      parseFloat(els.colSat.value));
+    const t = gBuf; gBuf = gTemp; gTemp = t;
+  }
+
+  // Base composite
+  if (els.baseOn.checked && parseFloat(els.baseMix.value) > 0) {
+    push(); tint(255, parseFloat(els.baseMix.value) * 255); image(gCur, 0, 0, width, height); pop();
+  }
+  image(gBuf, 0, 0, width, height);
+
+  // ring for depth sampling
+  const ringCap = Math.round(60 * (parseFloat(els.quality.value) * 2));
+  frameRing.push(gCur.get());
+  if (frameRing.length > ringCap) frameRing.shift();
+}
+
+function toggleRecord(){
+  if (rec && rec.state === 'recording') { rec.stop(); els.recBtn.textContent = '● Record'; return; }
+  chunks = [];
+  const stream = canvas.elt.captureStream(30);
+  let opts; try { opts = { mimeType: 'video/webm;codecs=vp9' }; } catch {}
+  try { rec = new MediaRecorder(stream, opts); } catch { rec = new MediaRecorder(stream); }
+  rec.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+  rec.onstop = () => {
+    const blob = new Blob(chunks, { type: 'video/webm' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'moshed.webm'; a.click();
+    URL.revokeObjectURL(url);
+  };
+  rec.start();
+  els.recBtn.textContent = '⏹ Stop';
+}
+
+function refreshGlitch(){
+  clearAll();
+  nPhaseX = 0; nPhaseY = 1000;
+  fbPhaseX = 0; fbPhaseY = 100; fbPhaseR = 200; fbPhaseZ = 300;
+  burst.t = 0; burst.inBurst = true;
+}
+
+function drawWaiting(){
+  noStroke(); fill(255,20); rect(0,0,width,height);
+  fill(220); textAlign(CENTER,CENTER); textSize(14);
+  text('File: choose a video. P: toggle UI • F: fullscreen', width/2, height/2);
+}
+
+// Ensure hookUI runs after DOM is ready (safety)
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => { try { hookUI && hookUI(); } catch(e){ console.warn('[hookUI] deferred failed:', e); } });
+} else { try { hookUI && hookUI(); } catch(e){ console.warn('[hookUI] immediate failed:', e); } }

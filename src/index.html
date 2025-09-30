@@ -128,49 +128,24 @@
             });
         });
     </script>
-    <style id="ws-mirror-style">
-         :root {
-            color-scheme: dark;
-        }
-        
-        .pill {
-            position: fixed;
-            top: 8px;
-            right: 8px;
-            z-index: 9999;
-            background: #151922;
-            color: #e8eaf0;
-            border: 1px solid #1c2030;
-            border-radius: 999px;
-            padding: 6px 10px;
-            font: 12px ui-sans-serif, system-ui;
-        }
-        
-        #openCanvasBtn {
-            position: fixed;
-            top: 8px;
-            right: 122px;
-            z-index: 9999;
-            background: #202434;
-            color: #e8eaf0;
-            border: 1px solid #1c2030;
-            border-radius: 8px;
-            padding: 6px 10px;
-            font: 12px ui-sans-serif, system-ui;
-            cursor: pointer;
-        }
-    </style>
+<style id="ws-mirror-style">
+  :root { color-scheme: dark; }
+  .pill{ position:fixed; top:8px; right:8px; z-index:9999; background:#151922; color:#e8eaf0;
+         border:1px solid #1c2030; border-radius:999px; padding:6px 10px; font:12px ui-sans-serif,system-ui; }
+  #openCanvasBtn{ position:fixed; top:8px; right:122px; z-index:9999; background:#202434; color:#e8eaf0;
+         border:1px solid #1c2030; border-radius:8px; padding:6px 10px; font:12px ui-sans-serif,system-ui; cursor:pointer; }
+</style>
 
-    <script>
-        // Optional: force a specific relay URL
-        // window.WS_MIRROR_URL = 'ws://127.0.0.1:8787';
-        function __getWSURL__(port = 8787) {
-            const isSecure = location.protocol === 'https:';
-            const proto = isSecure ? 'wss://' : 'ws://';
-            const host = location.hostname || '127.0.0.1';
-            return (window.WS_MIRROR_URL || (proto + host + ':' + port));
-        }
-    </script>
+<script>
+  // Optional: force a specific relay URL
+  // window.WS_MIRROR_URL = 'ws://127.0.0.1:8787';
+  function __getWSURL__(port=8787){
+    const isSecure = location.protocol === 'https:';
+    const proto = isSecure ? 'wss://' : 'ws://';
+    const host  = location.hostname || '127.0.0.1';
+    return (window.WS_MIRROR_URL || (proto + host + ':' + port));
+  }
+</script>
 
 </head>
 
@@ -191,21 +166,10 @@
 
         <!-- EFFECT CONTROLS (HTML owns the defaults) -->
         <form id="controlsForm" class="controls" autocomplete="off" novalidate>
-            <div class="control">
-
-                <label>SYSTEM</label><input id="corruptOn" type="checkbox">
-
-                <div id="audioControls" style="margin-top: 8px;">
-                    <label for="volumeSlider">
-                <!-- <span id="volumeVal">100%</span> -->
-            </label>
-                    <input id="volumeSlider" type="range" min="0" max="1" step="0.01" value="1" style="width: 140px; margin-left: 6px;" />
-                </div>
-
-            </div>
-            <!-- Inside your controls toolbar -->
-
+            <div class="control"><label>SYSTEM</label><input id="corruptOn" type="checkbox"></div>
             <!-- Quality -->
+
+
             <!-- Core -->
 
             <div class="control"><label>QUALITY</label>
@@ -288,16 +252,16 @@
         </form>
     </header>
 
-    <!-- <button id="openCanvasBtn" type="button" title="Open mirrored canvas window">Open Canvas Window</button> -->
-    <span class="pill" id="status">WS: …</span>
+<!-- <button id="openCanvasBtn" type="button" title="Open mirrored canvas window">Open Canvas Window</button> -->
+<span class="pill" id="status">WS: …</span>
 
 
 
 
-    <script defer src="p5.js"></script>
-    <script defer src="effects.js"></script>
-    <script defer src="canvas.js"></script>
-    <script defer src="ws-mirror.js"></script>
+<script defer src="p5.js"></script>
+<script defer src="effects.js"></script>
+<script defer src="canvas.js"></script>
+<script defer src="ws-mirror.js"></script>
 
 </body>
 
