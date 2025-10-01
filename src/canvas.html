@@ -20,32 +20,32 @@
 
   <script>
     // --- HARD FIX: audio keepalive in the VIEWER (prevents macOS background throttling) ---
-    (function keepAliveAudio(){
-      // 1) WebAudio oscillator (tiny but audible) — most reliable once we have any user gesture
-      const AC = window.AudioContext || window.webkitAudioContext;
-      let ctx, osc, gain;
-      function startWebAudio(){
-        if (!AC) return;
-        if (ctx && ctx.state !== 'closed') return;
-        ctx = new AC();
-        osc = ctx.createOscillator();
-        gain = ctx.createGain();
-        gain.gain.value = 0.004; // tiny but non-zero (0 kills the "audio active" hint)
-        osc.connect(gain).connect(ctx.destination);
-        try { osc.start(); } catch {}
-      }
+    // (function keepAliveAudio(){
+    //   // 1) WebAudio oscillator (tiny but audible) — most reliable once we have any user gesture
+    //   const AC = window.AudioContext || window.webkitAudioContext;
+    //   let ctx, osc, gain;
+    //   function startWebAudio(){
+    //     if (!AC) return;
+    //     if (ctx && ctx.state !== 'closed') return;
+    //     ctx = new AC();
+    //     osc = ctx.createOscillator();
+    //     gain = ctx.createGain();
+    //     gain.gain.value = 0.004; // tiny but non-zero (0 kills the "audio active" hint)
+    //     osc.connect(gain).connect(ctx.destination);
+    //     try { osc.start(); } catch {}
+    //   }
 
-      // 2) HTMLAudio fallback — muted initially so autoplay isn’t blocked; unmute on first gesture/fullscreen
-      // silent 1-second MP3 (data URI)
-      const SILENT_MP3 = "data:audio/mp3;base64,//uQZAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAACcQCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
-      const au = document.createElement('audio');
-      au.src = SILENT_MP3;
-      au.loop = true;
-      au.muted = true;       // allow autoplay
-      au.volume = 0.01;      // we will unmute later
-      au.playsInline = true;
-      document.body.appendChild(au);
-      au.play().catch(()=>{}); // try immediately; will succeed once user gestures
+    //   // 2) HTMLAudio fallback — muted initially so autoplay isn’t blocked; unmute on first gesture/fullscreen
+    //   // silent 1-second MP3 (data URI)
+    //   const SILENT_MP3 = "data:audio/mp3;base64,//uQZAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAACcQCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+    //   const au = document.createElement('audio');
+    //   au.src = SILENT_MP3;
+    //   au.loop = true;
+    //   au.muted = true;       // allow autoplay
+    //   au.volume = 0.01;      // we will unmute later
+    //   au.playsInline = true;
+    //   document.body.appendChild(au);
+    //   au.play().catch(()=>{}); // try immediately; will succeed once user gestures
 
       function resumeAll(){
         try { startWebAudio(); ctx && ctx.resume(); } catch {}
