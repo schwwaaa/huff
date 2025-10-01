@@ -52,18 +52,14 @@ function pumpVideoFrames(){
     if (meta?.mediaTime !== undefined && meta.mediaTime !== lastMediaTime) {
       lastMediaTime = meta.mediaTime;
       blitVideoInto(gCur);
-    try { window.__mirrorKick && window.__mirrorKick(); } catch(e){}; }
+    }
     if (!videoEl.elt.paused && !videoEl.elt.ended) pumpVideoFrames();
   });
 }
 
 function setup() {
   canvas = createCanvas(windowWidth, windowHeight);
-  // keep canvas visible to avoid display:none throttling
-  try {
-    canvas.elt.style.opacity = '0.001';
-    canvas.elt.style.pointerEvents = 'none';
-  } catch(e){ console.warn("[setup] style tweak failed", e); }
+  try{canvas.hide();}catch(e){console.warn("[setup] canvas hide failed", e);}
   pixelDensity(1);
   allocBuffers();
   clearAll();

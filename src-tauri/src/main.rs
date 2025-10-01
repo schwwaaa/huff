@@ -275,43 +275,7 @@ async fn handle_ws(stream: tokio::net::TcpStream, peer_addr: SocketAddr) -> Resu
   Ok(())
 }
 
-
-#[cfg(target_os = "macos")]
-mod appnap {
-    use objc::{class, msg_send, sel, sel_impl};
-    use objc::runtime::Object;
-    use objc_foundation::{INSString, NSString};
-    use objc_id::Id;
-    use std::sync::OnceLock;
-
-    // Keep the activity token alive for the entire app lifetime
-    static TOKEN: OnceLock<Id<Object>> = OnceLock::new();
-
-    /// Prevent macOS App Nap by declaring a latency‑sensitive activity.
-    pub fn prevent() {
-        unsafe {
-            let nsprocess: *mut Object = msg_send![class!(NSProcessInfo), processInfo];
-            // Options suitable for realtime playback
-            let NSActivityUserInitiated: u64 = 0x0010_0000;
-            let NSActivityIdleDisplaySleepDisabled: u64 = 0x1000_0000;
-            let NSActivityLatencyCritical: u64 = 0x2000_0000;
-            let options = NSActivityUserInitiated
-                | NSActivityIdleDisplaySleepDisabled
-                | NSActivityLatencyCritical;
-
-            let reason = NSString::from_str("Realtime video playback - prevent App Nap");
-            let token: Id<Object> = msg_send![nsprocess, beginActivityWithOptions: options reason: reason];
-            let _ = TOKEN.set(token); // hold the token for the lifetime of the process
-        }
-    }
-}
-
-#[cfg(target_os = "macos")]
-fn prevent_app_nap() { appnap::prevent(); }
-#[cfg(not(target_os = "macos"))]
-fn prevent_app_nap() {}
 fn main() {
-    prevent_app_nap();
   tauri::Builder::default()
     .setup(|_app| {
       // Start BOTH loopback listeners so 127.0.0.1 / localhost / ::1 all work
