@@ -2,71 +2,120 @@
 <html lang="en">
 <head>
   <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' data: blob: filesystem:; img-src 'self' data: blob:; media-src 'self' blob: data:; connect-src ws: wss: http: https:;"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>Canvas Viewer</title>
   <style>
-    html,body{ margin:0; width:100vw; height:100vh; background:#000; overflow:hidden; }
-    #mirror{ position:fixed; inset:0; width:100vw; height:100vh; display:block; }
-    * { user-select:none; }
+    html, body { margin:0; height:100%; background:#000; overflow:hidden; }
+    #status {
+      position:fixed; left:10px; top:10px; color:#0f0; font:12px/1.2 monospace;
+      background:rgba(0,0,0,.45); padding:6px 8px; border-radius:6px; pointer-events:none; z-index:10;
+    }
+    canvas { display:block; width:100vw; height:100vh; }
   </style>
 </head>
 <body>
-  <canvas id="mirror"></canvas>
+  <div id="status">viewer: init…</div>
+  <canvas id="cv"></canvas>
+
   <script>
-    function qs(name){ const q = new URLSearchParams(location.search); return q.get(name); }
-    const wsURL  = qs('ws') || (location.protocol==='https:' ? 'wss://127.0.0.1:8787' : 'ws://127.0.0.1:8787');
-    const autofs = qs('autofs') === '1';
-
-    const cvs = document.getElementById('mirror');
-    const ctx = cvs.getContext('2d', { alpha:false, desynchronized:true });
-
-    function fit(){
-      const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
-      const w = Math.floor(innerWidth  * dpr);
-      const h = Math.floor(innerHeight * dpr);
-      if (cvs.width !== w || cvs.height !== h){ cvs.width = w; cvs.height = h; }
-    }
-    addEventListener('resize', fit, { passive:true }); fit();
-
-    function isFullscreen(){ return !!(document.fullscreenElement || document.webkitFullscreenElement); }
-    async function goFullscreen(){
-      try{
-        const el = document.documentElement;
-        if (el.requestFullscreen) await el.requestFullscreen();
-        else if (el.webkitRequestFullscreen) await el.webkitRequestFullscreen();
-      }catch(e){}
-    }
-    function toggleFS(){
-      if (isFullscreen()) {
-        const ex = document.exitFullscreen || document.webkitExitFullscreen;
-        if (ex) ex.call(document);
-      } else {
-        goFullscreen();
+    // --- HARD FIX: audio keepalive in the VIEWER (prevents macOS background throttling) ---
+    (function keepAliveAudio(){
+      // 1) WebAudio oscillator (tiny but audible) — most reliable once we have any user gesture
+      const AC = window.AudioContext || window.webkitAudioContext;
+      let ctx, osc, gain;
+      function startWebAudio(){
+        if (!AC) return;
+        if (ctx && ctx.state !== 'closed') return;
+        ctx = new AC();
+        osc = ctx.createOscillator();
+        gain = ctx.createGain();
+        gain.gain.value = 0.004; // tiny but non-zero (0 kills the "audio active" hint)
+        osc.connect(gain).connect(ctx.destination);
+        try { osc.start(); } catch {}
       }
-    }
-    document.addEventListener('dblclick', toggleFS);
-    document.addEventListener('keydown', e => { if (e.key==='f' || e.key==='F') toggleFS(); });
-    document.addEventListener('fullscreenchange', fit);
-    document.addEventListener('webkitfullscreenchange', fit);
-    if (autofs) setTimeout(()=>{ goFullscreen(); }, 120);
 
-    const ws = new WebSocket(wsURL);
-    ws.binaryType = 'arraybuffer';
-    ws.onopen = () => {
-      try { ws.send(JSON.stringify({ type:'hello', role:'canvas' })); } catch(e){}
-    };
-    ws.onmessage = async (ev) => {
-      if (typeof ev.data === 'string') return;
-      try {
-        const blob = new Blob([ev.data]);
-        const bmp  = await createImageBitmap(blob, { imageOrientation:'none', premultiplyAlpha:'premultiply' });
-        const dw = cvs.width, dh = cvs.height;
-        // STRETCH to fill the window (no crop, no letterbox)
-        ctx.clearRect(0,0,dw,dh);
-        ctx.drawImage(bmp, 0, 0, dw, dh);
-        bmp.close?.();
-      } catch(e){ /* ignore */ }
-    };
+      // 2) HTMLAudio fallback — muted initially so autoplay isn’t blocked; unmute on first gesture/fullscreen
+      // silent 1-second MP3 (data URI)
+      const SILENT_MP3 = "data:audio/mp3;base64,//uQZAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAACcQCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+      const au = document.createElement('audio');
+      au.src = SILENT_MP3;
+      au.loop = true;
+      au.muted = true;       // allow autoplay
+      au.volume = 0.01;      // we will unmute later
+      au.playsInline = true;
+      document.body.appendChild(au);
+      au.play().catch(()=>{}); // try immediately; will succeed once user gestures
+
+      function resumeAll(){
+        try { startWebAudio(); ctx && ctx.resume(); } catch {}
+        // unmute the HTMLAudio once we have *any* gesture so it counts as active media
+        try { au.muted = false; au.play().catch(()=>{}); } catch {}
+      }
+
+      document.addEventListener('visibilitychange', resumeAll);
+      window.addEventListener('focus', resumeAll);
+      document.addEventListener('fullscreenchange', resumeAll);
+      window.addEventListener('mousedown', resumeAll);
+      window.addEventListener('keydown', resumeAll);
+
+      // kick it at boot too
+      startWebAudio();
+    })();
+  </script>
+
+  <script>
+    // --- existing viewer logic: WS->bitmap->canvas blit ---
+    const qs = new URL(location.href).searchParams;
+    const wsUrl = qs.get('ws') || 'ws://127.0.0.1:8787';
+    const mode  = (qs.get('mode') || 'cover'); // cover | contain | stretch
+    const autofs = qs.get('autofs') === '1';
+
+    const cv = document.getElementById('cv');
+    const cx = cv.getContext('2d', { alpha:false, desynchronized:true });
+    const status = (t)=>{ const el=document.getElementById('status'); if(el) el.textContent=t; };
+
+    function fit(w, h, W, H, mode){
+      if (mode === 'stretch') return { x:0,y:0,w:W,h:H };
+      const s = mode === 'cover' ? Math.max(W/w, H/h) : Math.min(W/w, H/h);
+      const tw = Math.round(w*s), th = Math.round(h*s);
+      return { x: (W-tw)>>1, y: (H-th)>>1, w: tw, h: th };
+    }
+    function resize(){ cv.width = innerWidth; cv.height = innerHeight; }
+    addEventListener('resize', resize, { passive:true }); resize();
+
+    let ws, open = false;
+    function connect(){
+      ws = new WebSocket(wsUrl);
+      ws.binaryType = 'arraybuffer';
+      ws.onopen = () => {
+        open = true;
+        // status('viewer: connected');
+        try{ ws.send(JSON.stringify({type:'hello', role:'canvas'})); }catch(e){}
+        if (autofs) setTimeout(()=>document.documentElement.requestFullscreen().catch(()=>{}), 150);
+      };
+      ws.onclose = () => { open = false; status('viewer: reconnecting…'); setTimeout(connect, 1000); };
+      ws.onmessage = async (ev) => {
+        if (typeof ev.data === 'string') return; // ignore control text
+        const blob = new Blob([ev.data]); // JPEG/WEBP
+        try{
+          const ib = await createImageBitmap(blob);
+          const r = fit(ib.width, ib.height, cv.width, cv.height, mode);
+          cx.clearRect(0,0,cv.width,cv.height);
+          cx.drawImage(ib, r.x, r.y, r.w, r.h);
+          ib.close && ib.close();
+        }catch(e){ /* ignore decode errors */ }
+      };
+    }
+    connect();
+
+    // F toggles fullscreen
+    addEventListener('keydown', (e) => {
+      if (e.key.toLowerCase() === 'f') {
+        if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(()=>{});
+        else document.exitFullscreen().catch(()=>{});
+      }
+    });
   </script>
 </body>
 </html>

@@ -1821,6 +1821,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "objc-foundation"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1add1b659e36c9607c7aab864a76c7a4c2760cd0cd2e120f3fb8b952c7e22bf9"
+dependencies = [
+ "block",
+ "objc",
+ "objc_id",
+]
+
+[[package]]
 name = "objc_exception"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3088,6 +3099,9 @@ name = "tauri-two-windows-ws-relay"
 version = "0.1.0"
 dependencies = [
  "futures-util",
+ "objc",
+ "objc-foundation",
+ "objc_id",
  "once_cell",
  "serde",
  "serde_json",
