@@ -46,15 +46,27 @@ function blitVideoInto(target){
   if (videoEl) { try { target.image(videoEl, 0, 0, target.width, target.height); } catch(e){} }
 }
 
+// >>> CHANGED: continuous pump so camera never freezes <<<
 function pumpVideoFrames(){
-  if (!videoEl?.elt?.requestVideoFrameCallback) return;
-  videoEl.elt.requestVideoFrameCallback((_now, meta) => {
-    if (meta?.mediaTime !== undefined && meta.mediaTime !== lastMediaTime) {
-      lastMediaTime = meta.mediaTime;
-      blitVideoInto(gCur);
-    }
-    if (!videoEl.elt.paused && !videoEl.elt.ended) pumpVideoFrames();
-  });
+  const v = videoEl && videoEl.elt;
+  if (!v) return;
+
+  if (typeof v.requestVideoFrameCallback === 'function') {
+    v.requestVideoFrameCallback((_now, _meta) => {
+      try { blitVideoInto(gCur); } catch {}
+      // keep pumping as long as this element is still active
+      if (videoEl && videoEl.elt === v) pumpVideoFrames();
+    });
+    return;
+  }
+
+  // Fallback: RAF blitter (engines without rVFC)
+  const vRef = v;
+  function tick(){
+    try { blitVideoInto(gCur); } catch {}
+    if (videoEl && videoEl.elt === vRef) requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
 }
 
 function setup() {
@@ -127,7 +139,9 @@ function hookUI() {
     'bloomOn','bloomStrength','bloomStrengthVal','bloomRadius','bloomRadiusVal',
     'flowOn','flowStrength','flowStrengthVal','flowScale','flowScaleVal',
     'baseOn','baseMix','baseMixVal','seedOnLoad',
-    'colOn','colHue','colHueVal','colSat','colSatVal'
+    'colOn','colHue','colHueVal','colSat','colSatVal',
+    // CAMERA (added)
+    'camStartBtn','camStopBtn','camRefreshBtn','cams'
   ].forEach(k => els[k] = $(k));
 
   // file loader
@@ -171,7 +185,24 @@ function hookUI() {
   ['cycleShape'].forEach(id => els[id].addEventListener('change', updateLabels));
   els.baseOn.addEventListener('change', () => { els.baseMix.disabled = !els.baseOn.checked; updateLabels(); });
 
+  // CAMERA wiring (added)
+  if (els.camStartBtn)  els.camStartBtn.addEventListener('click', () => {
+    const id = (els.cams && els.cams.value) || null;
+    startCamera(id);
+  });
+  if (els.camStopBtn)   els.camStopBtn.addEventListener('click', stopCamera);
+  if (els.camRefreshBtn) els.camRefreshBtn.addEventListener('click', listCameras);
+  if (els.cams) els.cams.addEventListener('change', () => {
+    try {
+      const active = videoEl && videoEl.elt && videoEl.elt.srcObject;
+      if (active) startCamera(els.cams.value || null);
+    } catch {}
+  });
+
   updateDim();
+
+  // Try to populate device list up front
+  try { listCameras(); } catch {}
 }
 
 function updateDim(){ if (els.dim) els.dim.textContent = `${width}×${height}`; }
@@ -223,7 +254,12 @@ function onFile(ev){
   // Allow re-selecting the SAME file later
   queueMicrotask(() => { try { input.value = ''; } catch {} });
 
-  // Cleanup previous
+  // Cleanup previous (also stop camera tracks if any)
+  try {
+    if (videoEl && videoEl.elt && videoEl.elt.srcObject) {
+      videoEl.elt.srcObject.getTracks().forEach(t => { try{t.stop();}catch{} });
+    }
+  } catch {}
   if (videoEl) { try { videoEl.remove(); } catch {} videoEl = null; }
   if (currentBlobUrl) { try { URL.revokeObjectURL(currentBlobUrl); } catch {} currentBlobUrl = null; }
 
@@ -232,12 +268,12 @@ function onFile(ev){
 
   // Create hidden <video> via p5
   videoEl = createVideo([url], () => enableTransport(true));
-  videoEl.attribute('preload','auto');          // was 'metadata' — make it eager
+  videoEl.attribute('preload','auto');
   videoEl.attribute('playsinline','');
   cloakVideo(videoEl);
 
   const v = videoEl.elt;
-  v.muted = true;                                // start muted so autoplay is allowed
+  v.muted = true;
   v.volume = 1.0;
 
   let primed = false;
@@ -246,14 +282,11 @@ function onFile(ev){
     if (v.readyState >= 1 && v.videoWidth > 0 && v.videoHeight > 0) {
       primed = true;
 
-      // seed buffers + initial frame so UI updates immediately
       clearAll(); updateDim();
       try { blitVideoInto(gCur); } catch {}
 
-      // reset to start for a clean first play
       try { v.currentTime = 0; } catch {}
 
-      // Attempt immediate autoplay (muted), then unmute on first gesture
       (async () => {
         try {
           v.setAttribute('playsinline','');
@@ -270,7 +303,6 @@ function onFile(ev){
           window.addEventListener('pointerdown', unmuteOnce, true);
           window.addEventListener('keydown',  unmuteOnce, true);
         } catch {
-          // If muted autoplay still blocked (rare), fall back to user gesture
           const gesture = async () => {
             try { await v.play(); pumpVideoFrames(); videoEl.loop(); playing = true; } catch {}
             window.removeEventListener('pointerdown', gesture, true);
@@ -285,11 +317,10 @@ function onFile(ev){
     }
   };
 
-  // Prime via multiple reliable paths (Safari/WebKit friendly)
   v.addEventListener('loadedmetadata', primeOnce, { once: true });
   v.addEventListener('loadeddata',     primeOnce, { once: true });
   if (v.requestVideoFrameCallback) v.requestVideoFrameCallback(() => primeOnce());
-  setTimeout(primeOnce, 80); // final nudge for edge-cases
+  setTimeout(primeOnce, 80);
 
   v.addEventListener('error', (e) => {
     console.warn('[video] error', e);
@@ -447,3 +478,80 @@ function drawWaiting(){
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', () => { try { hookUI && hookUI(); } catch(e){ console.warn('[hookUI] deferred failed:', e); } });
 } else { try { hookUI && hookUI(); } catch(e){ console.warn('[hookUI] immediate failed:', e); } }
+
+/* ===================== CAMERA HELPERS (added) ===================== */
+
+// Enumerate cameras (labels appear after first permission grant)
+async function listCameras(){
+  try {
+    const devs = await navigator.mediaDevices.enumerateDevices();
+    const vids = devs.filter(d => d.kind === 'videoinput');
+    if (!els.cams) return vids.length;
+    const prev = els.cams.value;
+    els.cams.innerHTML = '';
+    vids.forEach((d,i) => {
+      const o = document.createElement('option');
+      o.value = d.deviceId || '';
+      o.textContent = d.label || `Camera ${i+1}`;
+      els.cams.appendChild(o);
+    });
+    if (prev && Array.from(els.cams.options).some(o => o.value === prev)) els.cams.value = prev;
+    return vids.length;
+  } catch(e){
+    console.warn('enumerateDevices failed:', e);
+    return 0;
+  }
+}
+
+// Build constraints that NEVER ask for mic (avoid mic permission conflicts)
+function cameraConstraints(deviceId){
+  const video = deviceId && deviceId.length
+    ? { deviceId: { exact: deviceId } }
+    : { facingMode: { ideal: 'user' } };
+  return { video, audio: false }; // video-only
+}
+
+function stopCamera(){
+  try {
+    if (videoEl && videoEl.elt && videoEl.elt.srcObject) {
+      videoEl.elt.srcObject.getTracks().forEach(t => { try{ t.stop(); } catch{} });
+    }
+  } catch {}
+  try { if (videoEl) videoEl.remove(); } catch {}
+  videoEl = null;
+  playing = false;
+  try { enableTransport(false); } catch {}
+}
+
+function startCamera(deviceId){
+  // Stop any existing (file or camera)
+  stopCamera();
+
+  const cons = cameraConstraints(deviceId || null);
+  try {
+    videoEl = createCapture(cons, () => {
+      try { enableTransport(true); } catch {}
+      listCameras();  // labels/ids populate after first allow
+
+      const v = videoEl.elt;
+      try { v.setAttribute('playsinline',''); } catch {}
+      try { v.setAttribute('muted',''); v.muted = true; } catch {}
+
+      const kick = () => {
+        try { v.play().catch(()=>{}); } catch {}
+        try { pumpVideoFrames(); } catch {}
+      };
+      if (v.readyState >= 1) kick();
+      else v.addEventListener('loadedmetadata', kick, { once:true });
+    });
+
+    // Keep the element out of layout but renderable (no display:none)
+    try { cloakVideo(videoEl); } catch {}
+
+    playing = true;
+  } catch(e){
+    console.warn('startCamera error:', e);
+    try { enableTransport(true); } catch {}
+  }
+}
+/* =================== end CAMERA HELPERS (added) =================== */

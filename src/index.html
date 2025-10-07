@@ -151,7 +151,7 @@
 
 <body>
     <header>
-        <!-- File input only (camera removed) -->
+        <!-- File input -->
         <label class="control">
       <input id="file" type="file" accept="video/*">
         <!-- Transport -->
@@ -159,10 +159,18 @@
         <button id="pauseBtn" disabled>Pause</button>
         <button id="recBtn" disabled>● Record</button>
         <button id="refreshBtn" disabled>↻ Refresh</button>
-        <!-- <span class="pill" id="dim">–</span> -->
     </label>
 
-
+        <!-- Camera controls (added) -->
+        <label class="control">
+          <button id="camStartBtn" class="control2">Start Camera</button>
+          <button id="camStopBtn"  class="control2">Stop Cam</button>
+          <button id="camRefreshBtn" class="control2">Refresh Cams</button>
+          <span class="row">
+            <span>Camera</span>
+            <select id="cams"></select>
+          </span>
+        </label>
 
         <!-- EFFECT CONTROLS (HTML owns the defaults) -->
         <form id="controlsForm" class="controls" autocomplete="off" novalidate>
