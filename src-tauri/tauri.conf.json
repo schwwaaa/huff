@@ -36,7 +36,10 @@
       "icon": [
         "icons/icon.icns",
         "icons/icon.png"
-      ]
+      ],
+      "macOS": {
+        "entitlements": "src-tauri/entitlements.plist"
+      }
     }
   }
 }

@@ -46,6 +46,20 @@ function blitVideoInto(target){
   if (videoEl) { try { target.image(videoEl, 0, 0, target.width, target.height); } catch(e){} }
 }
 
+let __camPrimed = false;
+async function primeCameraPermissionOnce() {
+  if (__camPrimed) return;
+  try {
+    const s = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+    s.getTracks().forEach(t => { try { t.stop(); } catch {} });
+    __camPrimed = true;
+  } catch (e) {
+    // If the system blocked it, Info.plist / entitlements are still missing.
+    console.warn('primeCameraPermissionOnce failed:', e);
+  }
+}
+
+
 // >>> CHANGED: continuous pump so camera never freezes <<<
 function pumpVideoFrames(){
   const v = videoEl && videoEl.elt;
@@ -484,6 +498,7 @@ if (document.readyState === 'loading') {
 // Enumerate cameras (labels appear after first permission grant)
 async function listCameras(){
   try {
+    await primeCameraPermissionOnce();          // ← added
     const devs = await navigator.mediaDevices.enumerateDevices();
     const vids = devs.filter(d => d.kind === 'videoinput');
     if (!els.cams) return vids.length;
@@ -502,6 +517,7 @@ async function listCameras(){
     return 0;
   }
 }
+
 
 // Build constraints that NEVER ask for mic (avoid mic permission conflicts)
 function cameraConstraints(deviceId){
