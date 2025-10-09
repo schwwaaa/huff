@@ -8,9 +8,26 @@
     html,body{ margin:0; width:100vw; height:100vh; background:#000; overflow:hidden; }
     #mirror{ position:fixed; inset:0; width:100vw; height:100vh; display:block; }
     * { user-select:none; }
+
+    .custom-titlebar {
+      width: 100%;
+      height: 32px; /* Adjust height as needed */
+      background: #333; /* Optional: style for visibility */
+      -webkit-app-region: no-drag; /* Prevent browser drag behavior */
+    }
   </style>
+<script type="module">
+    // Optional: Import Tauri's JS API for window controls
+    import { appWindow } from '@tauri-apps/api/window';
+    // Example: Add custom window controls if needed
+    document.getElementById('close-btn')?.addEventListener('click', () => appWindow.close());
+  </script>
 </head>
 <body>
+  <div data-tauri-drag-region class="custom-titlebar">
+    <!-- Draggable area; can contain content like a title or buttons -->
+    <span>Your App</span>
+  </div>
   <canvas id="mirror"></canvas>
   <script>
     function qs(name){ const q = new URLSearchParams(location.search); return q.get(name); }
