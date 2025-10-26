@@ -140,6 +140,7 @@ function clearAll() {
 function hookUI() {
   [
     'file','playBtn','pauseBtn','recBtn','refreshBtn','borderlessBtn','dim',
+    'bgMode',
     'quality','qualityVal',
     'depth','depthVal','corruptOn','corrupt','corruptVal','block','blockVal',
     'glitchSpeed','glitchSpeedVal','glitchSpeedFine','glitchSpeedFineVal',
@@ -190,15 +191,27 @@ function hookUI() {
   if (els.borderlessBtn) els.borderlessBtn.addEventListener('click', toggleBorderless);
 
   // labels only
+  // els.seed.addEventListener('change', setSeedFromUI);
+  // ['quality','depth','corrupt','block','glitchSpeed','glitchSpeedFine','glitchSize','glitchSmear',
+  //  'feedback','persistence','fbX','fbY','fbZ','fbTheta','fbSpeed',
+  //  'spatialGap','clusterCount','clusterRadius',
+  //  'burstLen','burstGap','burstBoost',
+  //  'bloomStrength','bloomRadius','flowStrength','flowScale',
+  //  'baseMix','colHue','colSat'].forEach(id => els[id].addEventListener('input', updateLabels));
+  // ['cycleShape'].forEach(id => els[id].addEventListener('change', updateLabels));
+  // els.baseOn.addEventListener('change', () => { els.baseMix.disabled = !els.baseOn.checked; updateLabels(); });
+
   els.seed.addEventListener('change', setSeedFromUI);
   ['quality','depth','corrupt','block','glitchSpeed','glitchSpeedFine','glitchSize','glitchSmear',
-   'feedback','persistence','fbX','fbY','fbZ','fbTheta','fbSpeed',
+   'feedback','persistence',
+  //  'fbX','fbY','fbZ','fbTheta','fbSpeed',
    'spatialGap','clusterCount','clusterRadius',
    'burstLen','burstGap','burstBoost',
    'bloomStrength','bloomRadius','flowStrength','flowScale',
-   'baseMix','colHue','colSat'].forEach(id => els[id].addEventListener('input', updateLabels));
+   'baseMix','symPos'].forEach(id => els[id].addEventListener('input', updateLabels));
   ['cycleShape'].forEach(id => els[id].addEventListener('change', updateLabels));
   els.baseOn.addEventListener('change', () => { els.baseMix.disabled = !els.baseOn.checked; updateLabels(); });
+
 
   // CAMERA wiring (added)
   if (els.camStartBtn)  els.camStartBtn.addEventListener('click', () => {
@@ -238,22 +251,30 @@ function updateLabels() {
   els.fbYVal.textContent = els.fbY.value;
   els.fbZVal.textContent = (+els.fbZ.value).toFixed(2);
   els.fbThetaVal.textContent = els.fbTheta.value;
-  els.fbSpeedVal.textContent = f2(els.fbSpeed.value);
+  // els.fbSpeedVal.textContent = f2(els.fbSpeed.value);
   els.spatialGapVal.textContent = els.spatialGap.value;
+
   els.clusterCountVal.textContent = els.clusterCount.value;
   els.clusterRadiusVal.textContent = els.clusterRadius.value;
+
   els.burstLenVal.textContent = f2(els.burstLen.value);
   els.burstGapVal.textContent = f2(els.burstGap.value);
   els.burstBoostVal.textContent = f2(els.burstBoost.value);
+
   els.bloomStrengthVal.textContent = f2(els.bloomStrength.value);
   els.bloomRadiusVal.textContent = els.bloomRadius.value;
+
   els.flowStrengthVal.textContent = els.flowStrength.value;
   els.flowScaleVal.textContent = els.flowScale.value;
+
   els.baseMixVal.textContent = f2(els.baseMix.value);
   els.baseMix.disabled = !els.baseOn.checked;
-  els.colHueVal.textContent = els.colHue.value;
-  els.colSatVal.textContent = (+els.colSat.value).toFixed(2);
+
   if (els.symPos) els.symPosVal.textContent = (+els.symPos.value).toFixed(2);
+
+  // Colorizer
+  // els.colHueVal.textContent = els.colHue.value;
+  // els.colSatVal.textContent = (+els.colSat.value).toFixed(2);
 
 }
 
@@ -352,7 +373,14 @@ function enableTransport(enabled){
 }
 
 function draw() {
-  background(0);
+  // background(0);
+
+  let bg = (els.bgMode && els.bgMode.value) || 'black';
+  if (bg === 'white')      background(255);
+  else if (bg === 'green') background(0, 255, 0);   // chroma green
+  else if (bg === 'blue')  background(0, 0, 255);   // chroma blue
+  else                     background(0);           // black (default)
+
   if (!videoEl) { drawWaiting(); return; }
 
   randomSeed(baseSeed + frameCount);
@@ -400,14 +428,14 @@ function draw() {
     let fz = parseFloat(els.fbZ.value) || 1;
     let ft = radians(parseFloat(els.fbTheta.value) || 0);
 
-    if (els.fbAuto.checked) {
-      const sp = parseFloat(els.fbSpeed.value);
-      fbPhaseX += sp * 0.005; fbPhaseY += sp * 0.006; fbPhaseR += sp * 0.004; fbPhaseZ += sp * 0.003;
-      if (els.fbMoveX.checked)      fx += map(noise(fbPhaseX), 0, 1, -20, 20);
-      if (els.fbMoveY.checked)      fy += map(noise(fbPhaseY), 0, 1, -20, 20);
-      if (els.fbMoveTheta.checked)  ft += radians(map(noise(fbPhaseR), 0, 1, -10, 10));
-      if (els.fbMoveZ.checked)      fz *= (1.0 + map(noise(fbPhaseZ), 0, 1, -0.01, 0.01));
-    }
+    // if (els.fbAuto.checked) {
+    //   const sp = parseFloat(els.fbSpeed.value);
+    //   fbPhaseX += sp * 0.005; fbPhaseY += sp * 0.006; fbPhaseR += sp * 0.004; fbPhaseZ += sp * 0.003;
+    //   if (els.fbMoveX.checked)      fx += map(noise(fbPhaseX), 0, 1, -20, 20);
+    //   if (els.fbMoveY.checked)      fy += map(noise(fbPhaseY), 0, 1, -20, 20);
+    //   if (els.fbMoveTheta.checked)  ft += radians(map(noise(fbPhaseR), 0, 1, -10, 10));
+    //   if (els.fbMoveZ.checked)      fz *= (1.0 + map(noise(fbPhaseZ), 0, 1, -0.01, 0.01));
+    // }
 
     const tmp = gBuf.get();
     gBuf.clear();
