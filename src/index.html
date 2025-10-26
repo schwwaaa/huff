@@ -200,10 +200,14 @@
         <!-- EFFECT CONTROLS (HTML owns the defaults) -->
         <form id="controlsForm" class="controls" autocomplete="off" novalidate>
             <div class="control"><label>SYSTEM</label><input id="corruptOn" type="checkbox"></div>
+            <!-- Base video -->
+            <div class="control"><label>BASE VIDEO</label><input id="baseOn" type="checkbox" checked></div>
+            <div class="control"><label>BASE MIX</label><input id="baseMix" type="range" min="0" max="1" step="0.05" value="1.00"><span id="baseMixVal">1.00</span></div>
+
             <!-- Quality -->
 
             <div class="control">
-            <label>BG</label>
+            <label>BASE BG</label>
             <select id="bgMode">
                 <option value="black" selected>Black</option>
                 <option value="green">Green</option>
@@ -212,6 +216,15 @@
             </select>
             </div>
 
+            <!-- Buffer evolution -->
+            <div class="control2"><label>FEEDBACK</label><input id="feedback" type="range" min="0" max="3" step="0.05" value="0.6"><span id="feedbackVal">0.60</span></div>
+            <div class="control2"><label>PERSISTENCE</label><input id="persistence" type="range" min="0" max="10" step="0.05" value="0.7"><span id="persistenceVal">0.70</span></div>
+
+            <div class="control">
+            <label>RING DELAY (ms)</label>
+            <input id="ringDelay" type="range" min="0" max="1000" step="10" value="0">
+            <span id="ringDelayVal">0</span>
+            </div>            
             <!-- Core -->
 
             <div class="control"><label>QUALITY</label>
@@ -230,10 +243,6 @@
 
             <!-- Determinism -->
             <div class="control"><label>SEED</label><input id="seed" type="number" value="912831" step="1"></div>
-
-            <!-- Buffer evolution -->
-            <div class="control2"><label>FEEDBACK</label><input id="feedback" type="range" min="0" max="3" step="0.05" value="0.6"><span id="feedbackVal">0.60</span></div>
-            <div class="control2"><label>PERSISTENCE</label><input id="persistence" type="range" min="0" max="10" step="0.05" value="0.7"><span id="persistenceVal">0.70</span></div>
 
             <!-- Feedback XYZ + θ -->
             <div class="control"><label>FB X</label><input id="fbX" type="range" min="-50" max="50" step="1" value="1"><span id="fbXVal">1</span></div>
@@ -291,9 +300,6 @@
 
             <div class="control"><label>SYM POS</label><input id="symPos" type="range" min="0" max="1" step="0.001" value="0.5"><span id="symPosVal">0.50</span></div>            
 
-            <!-- Base video -->
-            <div class="control"><label>BASE VIDEO</label><input id="baseOn" type="checkbox" checked></div>
-            <div class="control"><label>BASE MIX</label><input id="baseMix" type="range" min="0" max="1" step="0.05" value="1.00"><span id="baseMixVal">1.00</span></div>
 
             <!-- Keep these OFF by default -->
             <div class="control"><label>Seed on load</label><input id="seedOnLoad" type="checkbox" checked></div>

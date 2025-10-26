@@ -10,6 +10,8 @@ let gCur, gBuf, gWarp, gBloomWork, gTemp;
 let frameRing = [];
 let canvas, rec, chunks = [];
 let playing = false;
+let ringDelayAccum = 0;
+
 
 const els = {};
 let baseSeed = 1, seededOnce = false;
@@ -157,7 +159,9 @@ function hookUI() {
     'colOn','colHue','colHueVal','colSat','colSatVal',
     // CAMERA (added)
     'camStartBtn','camStopBtn','camRefreshBtn','cams',
-    'symOn','symMode','symPos','symPosVal'
+    'symOn','symMode','symPos','symPosVal',
+    'ringDelay','ringDelayVal'
+
   ].forEach(k => els[k] = $(k));
 
   // file loader
@@ -204,11 +208,12 @@ function hookUI() {
   els.seed.addEventListener('change', setSeedFromUI);
   ['quality','depth','corrupt','block','glitchSpeed','glitchSpeedFine','glitchSize','glitchSmear',
    'feedback','persistence',
-  //  'fbX','fbY','fbZ','fbTheta','fbSpeed',
+   'fbX','fbY','fbZ','fbTheta',
+  //  'fbSpeed',
    'spatialGap','clusterCount','clusterRadius',
    'burstLen','burstGap','burstBoost',
    'bloomStrength','bloomRadius','flowStrength','flowScale',
-   'baseMix','symPos'].forEach(id => els[id].addEventListener('input', updateLabels));
+   'baseMix','symPos','ringDelay','ringDelayVal'].forEach(id => els[id].addEventListener('input', updateLabels));
   ['cycleShape'].forEach(id => els[id].addEventListener('change', updateLabels));
   els.baseOn.addEventListener('change', () => { els.baseMix.disabled = !els.baseOn.checked; updateLabels(); });
 
@@ -269,6 +274,9 @@ function updateLabels() {
 
   els.baseMixVal.textContent = f2(els.baseMix.value);
   els.baseMix.disabled = !els.baseOn.checked;
+
+  // inside updateLabels()
+  if (els.ringDelay) els.ringDelayVal.textContent = (els.ringDelay.value|0);
 
   if (els.symPos) els.symPosVal.textContent = (+els.symPos.value).toFixed(2);
 
@@ -491,10 +499,25 @@ if (els.symOn && els.symOn.checked) {
   }
   image(gBuf, 0, 0, width, height);
 
-  // ring for depth sampling
+  // // ring for depth sampling
+  // const ringCap = Math.round(60 * (parseFloat(els.quality.value) * 2));
+  // frameRing.push(gCur.get());
+  // if (frameRing.length > ringCap) frameRing.shift();
+
   const ringCap = Math.round(60 * (parseFloat(els.quality.value) * 2));
+
+// accumulate elapsed time (p5's deltaTime is ms)
+ringDelayAccum += (typeof deltaTime === 'number' ? deltaTime : 16.6);
+const ringDelayMs = parseInt(els.ringDelay?.value || '0', 10);
+
+// only capture a new frame when enough time has passed
+if (ringDelayAccum >= ringDelayMs) {
   frameRing.push(gCur.get());
   if (frameRing.length > ringCap) frameRing.shift();
+  ringDelayAccum = 0;
+}
+
+
 }
 
 function toggleRecord(){
