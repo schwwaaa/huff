@@ -152,3 +152,52 @@ function applyColorizer(src, dst, hueDeg=20, sat=1.1) {
   }
   dst.updatePixels();
 }
+
+// --- Symmetry helper (vertical / horizontal / both) with axis position ---
+// pos ∈ [0,1] controls the mirror axis: vertical uses x = pos*w, horizontal uses y = pos*h
+function applySymmetry(src, dst, mode = 'v', pos = 0.5) {
+  const w = dst.width, h = dst.height;
+  const x0 = Math.max(0, Math.min(w, Math.round(w * pos)));
+  const y0 = Math.max(0, Math.min(h, Math.round(h * pos)));
+
+  dst.clear();
+  dst.imageMode(CORNER);
+
+  // draw the original frame once
+  dst.image(src, 0, 0, w, h);
+
+  const ctx = dst.drawingContext; // p5's 2D context
+  if (!ctx) return;
+
+  if (mode === 'v' || mode === 'hv') {
+    // Overwrite the RIGHT side with a mirror of the LEFT across x = x0
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x0, 0, w - x0, h); // keep only right side of the mirrored draw
+    ctx.clip();
+
+    dst.push();
+    dst.translate(2 * x0, 0);
+    dst.scale(-1, 1);
+    dst.image(src, 0, 0, w, h);
+    dst.pop();
+
+    ctx.restore();
+  }
+
+  if (mode === 'h' || mode === 'hv') {
+    // Overwrite the BOTTOM side with a mirror of the TOP across y = y0
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, y0, w, h - y0); // keep only bottom side of the mirrored draw
+    ctx.clip();
+
+    dst.push();
+    dst.translate(0, 2 * y0);
+    dst.scale(1, -1);
+    dst.image(src, 0, 0, w, h);
+    dst.pop();
+
+    ctx.restore();
+  }
+}

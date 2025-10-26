@@ -18,14 +18,14 @@
         "width": 1024,
         "height": 768,
         "resizable": true,
-        "decorations": false
+        "decorations": true
       },
       {
         "label": "controls",
         "title": "ctrl",
         "url": "controls.html",
         "width": 800,
-        "height": 770,
+        "height": 870,
         "resizable": false,
         "decorations": true
       }

@@ -155,7 +155,8 @@ function hookUI() {
     'baseOn','baseMix','baseMixVal','seedOnLoad',
     'colOn','colHue','colHueVal','colSat','colSatVal',
     // CAMERA (added)
-    'camStartBtn','camStopBtn','camRefreshBtn','cams'
+    'camStartBtn','camStopBtn','camRefreshBtn','cams',
+    'symOn','symMode','symPos','symPosVal'
   ].forEach(k => els[k] = $(k));
 
   // file loader
@@ -252,6 +253,8 @@ function updateLabels() {
   els.baseMix.disabled = !els.baseOn.checked;
   els.colHueVal.textContent = els.colHue.value;
   els.colSatVal.textContent = (+els.colSat.value).toFixed(2);
+  if (els.symPos) els.symPosVal.textContent = (+els.symPos.value).toFixed(2);
+
 }
 
 function setSeedFromUI(){
@@ -445,6 +448,14 @@ function draw() {
       parseFloat(els.colSat.value));
     const t = gBuf; gBuf = gTemp; gTemp = t;
   }
+
+  // Symmetry
+if (els.symOn && els.symOn.checked) {
+  const mode = (els.symMode && els.symMode.value) || 'v'; // 'v'|'h'|'hv'
+  applySymmetry(gBuf, gTemp, mode, parseFloat(els.symPos?.value || '0.5'));
+  const tS = gBuf; gBuf = gTemp; gTemp = tS;
+}
+
 
   // Base composite
   if (els.baseOn.checked && parseFloat(els.baseMix.value) > 0) {
