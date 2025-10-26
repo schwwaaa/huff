@@ -140,29 +140,64 @@ function clearAll() {
 }
 
 function hookUI() {
-  [
-    'file','playBtn','pauseBtn','recBtn','refreshBtn','borderlessBtn','dim',
-    'bgMode',
-    'quality','qualityVal',
-    'depth','depthVal','corruptOn','corrupt','corruptVal','block','blockVal',
-    'glitchSpeed','glitchSpeedVal','glitchSpeedFine','glitchSpeedFineVal',
-    'glitchSize','glitchSizeVal','glitchSmear','glitchSmearVal',
-    'seed','feedback','feedbackVal','persistence','persistenceVal',
-    'fbX','fbXVal','fbY','fbYVal','fbZ','fbZVal','fbTheta','fbThetaVal',
-    'fbAuto','fbSpeed','fbSpeedVal','fbMoveX','fbMoveY','fbMoveZ','fbMoveTheta',
-    'spatialGap','spatialGapVal','clusters','clusterCount','clusterCountVal','clusterRadius','clusterRadiusVal',
-    'cycleOn','cycleShape',
-    'burstOn','burstLen','burstLenVal','burstGap','burstGapVal','burstBoost','burstBoostVal',
-    'bloomOn','bloomStrength','bloomStrengthVal','bloomRadius','bloomRadiusVal',
-    'flowOn','flowStrength','flowStrengthVal','flowScale','flowScaleVal',
-    'baseOn','baseMix','baseMixVal','seedOnLoad',
-    'colOn','colHue','colHueVal','colSat','colSatVal',
-    // CAMERA (added)
-    'camStartBtn','camStopBtn','camRefreshBtn','cams',
-    'symOn','symMode','symPos','symPosVal',
-    'ringDelay','ringDelayVal'
+[
+  // transport + camera
+  'file','playBtn','pauseBtn','recBtn','refreshBtn',
+  'camStartBtn','camStopBtn','camRefreshBtn','cams',
 
-  ].forEach(k => els[k] = $(k));
+  // core
+  'quality','qualityVal','depth','depthVal','corrupt','corruptVal','block','blockVal',
+
+  // cadence
+  'glitchSpeed','glitchSpeedVal','glitchSpeedFine','glitchSpeedFineVal','glitchSize','glitchSizeVal','glitchSmear','glitchSmearVal',
+  'glitchBaseX','glitchBaseXVal','glitchBaseY','glitchBaseYVal',
+
+  // determinism
+  'seed',
+
+  // buffer evolution
+  'feedback','feedbackVal','persistence','persistenceVal',
+
+  // feedback xyz + theta
+  'fbX','fbXVal','fbY','fbYVal','fbZ','fbZVal','fbTheta','fbThetaVal',
+
+  // auto fb + toggles
+  'fbAuto','fbSpeed','fbSpeedVal','fbMoveX','fbMoveY','fbMoveZ','fbMoveTheta',
+
+  // spatialization + clusters
+  'clusters','clusterCount','clusterCountVal','clusterRadius','clusterRadiusVal','spatialGap','spatialGapVal',
+
+  // cycle + bursts
+  'cycleOn','cycleShape','burstOn','burstLen','burstLenVal','burstGap','burstGapVal','burstBoost','burstBoostVal',
+
+  // bloom
+  'bloomOn','bloomStrength','bloomStrengthVal','bloomRadius','bloomRadiusVal',
+
+  // flow
+  'flowOn','flowStrength','flowStrengthVal','flowScale','flowScaleVal',
+  'flowPulse','flowPulseVal','flowImpl','flowImplVal',
+
+  // base video
+  'baseOn','baseMix','baseMixVal',
+
+  // seed on load
+  'seedOnLoad',
+
+  // colorizer
+  'colOn','colHue','colHueVal','colSat','colSatVal',
+  'colR','colRVal','colG','colGVal','colB','colBVal',
+  'colFB','colFBMix','colFBMixVal','colStyle',
+
+  // symmetry
+  'symOn','symMode','symPos','symPosVal',
+
+  // background
+  'bgMode',
+
+  // frame-ring delay
+  'ringDelay','ringDelayVal'
+].forEach(k => els[k] = $(k));
+
 
   // file loader
   els.file.addEventListener('change', onFile);
@@ -206,13 +241,13 @@ function hookUI() {
   // els.baseOn.addEventListener('change', () => { els.baseMix.disabled = !els.baseOn.checked; updateLabels(); });
 
   els.seed.addEventListener('change', setSeedFromUI);
-  ['quality','depth','corrupt','block','glitchSpeed','glitchSpeedFine','glitchSize','glitchSmear',
+  ['quality','depth','corrupt','block','glitchSpeed','glitchSpeedFine','glitchSize','glitchSmear','glitchBaseX','glitchBaseY',
    'feedback','persistence',
    'fbX','fbY','fbZ','fbTheta',
   //  'fbSpeed',
    'spatialGap','clusterCount','clusterRadius',
    'burstLen','burstGap','burstBoost',
-   'bloomStrength','bloomRadius','flowStrength','flowScale',
+   'bloomStrength','bloomRadius','flowStrength','flowScale','flowPulse','flowImpl',
    'baseMix','symPos','ringDelay','ringDelayVal'].forEach(id => els[id].addEventListener('input', updateLabels));
   ['cycleShape'].forEach(id => els[id].addEventListener('change', updateLabels));
   els.baseOn.addEventListener('change', () => { els.baseMix.disabled = !els.baseOn.checked; updateLabels(); });
@@ -274,6 +309,13 @@ function updateLabels() {
 
   els.baseMixVal.textContent = f2(els.baseMix.value);
   els.baseMix.disabled = !els.baseOn.checked;
+
+  // inside updateLabels()
+  if (els.flowPulse) els.flowPulseVal.textContent = (els.flowPulse.value|0);
+  if (els.flowImpl)  els.flowImplVal.textContent  = (+els.flowImpl.value).toFixed(2);
+
+if (els.glitchBaseX) els.glitchBaseXVal.textContent = (els.glitchBaseX.value|0);
+if (els.glitchBaseY) els.glitchBaseYVal.textContent = (els.glitchBaseY.value|0);
 
   // inside updateLabels()
   if (els.ringDelay) els.ringDelayVal.textContent = (els.ringDelay.value|0);
@@ -426,7 +468,11 @@ function draw() {
   const Q = parseFloat(els.quality.value);
   const everyN  = Q >= 0.9 ? 1 : Q >= 0.7 ? 2 : Q >= 0.5 ? 3 : 4;
 
-  applyGlitch(density);
+applyGlitch(
+  density,
+  parseInt(els.glitchBaseX?.value || '0', 10),
+  parseInt(els.glitchBaseY?.value || '0', 10)
+);
 
   // Feedback transforms
   const fb = parseFloat(els.feedback.value);
@@ -460,9 +506,23 @@ function draw() {
   // Flow
   const flowS = parseInt(els.flowStrength.value, 10);
   if (els.flowOn.checked && flowS > 0 && (frameCount % everyN === 0)) {
-    applyFlowWarp(gBuf, gWarp, flowS, parseInt(els.flowScale.value, 10));
+    applyFlowWarp(gBuf, gWarp, flowS, parseInt(els.flowScale.value, 10),parseInt(els.flowPulse?.value || '0', 100),parseFloat(els.flowImpl?.value || '0') );
     const t = gBuf; gBuf = gWarp; gWarp = t;
   }
+// Flow
+// const flowS = parseInt(els.flowStrength.value, 10);
+// if (els.flowOn.checked && flowS > 0 && (frameCount % everyN === 0)) {
+//   applyFlowWarp(
+//     gBuf, gWarp,
+//     flowS,
+//     parseInt(els.flowScale.value, 10),
+//     parseInt(els.flowPulse?.value || '0', 10),       // NEW pulse spacing
+//     parseFloat(els.flowImpl?.value || '0')           // NEW implosion
+//   );
+//   const t = gBuf; gBuf = gWarp; gWarp = t;
+// }
+
+
 
   // Bloom
   const bloomK = parseFloat(els.bloomStrength.value);

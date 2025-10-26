@@ -225,6 +225,19 @@
             <input id="ringDelay" type="range" min="0" max="1000" step="10" value="0">
             <span id="ringDelayVal">0</span>
             </div>            
+
+            <div class="control"><label>SYMM</label><input id="symOn" type="checkbox"></div>
+            <div class="control">
+            <label>MODE</label>
+            <select id="symMode">
+                <option value="v">vertical mirror</option>
+                <option value="h">horizontal mirror</option>
+                <option value="hv">horizontal + vertical</option>
+            </select>
+            </div>
+
+            <div class="control"><label>SYM POS</label><input id="symPos" type="range" min="0" max="1" step="0.001" value="0.5"><span id="symPosVal">0.50</span></div>            
+
             <!-- Core -->
 
             <div class="control"><label>QUALITY</label>
@@ -240,6 +253,15 @@
             <div class="control"><label>FINE SPEED</label><input id="glitchSpeedFine" type="range" min="0.001" max="10" step="0.001" value="1.00"><span id="glitchSpeedFineVal">1.00</span></div>
             <div class="control"><label>GLITCH SIZE</label><input id="glitchSize" type="range" min="1" max="60" step="0.01" value="10"><span id="glitchSizeVal">20</span></div>
             <div class="control"><label>GLITCH SMEAR</label><input id="glitchSmear" type="range" min="0" max="20" step="1" value="6"><span id="glitchSmearVal">6</span></div>
+
+            <div class="control"><label>GLITCH X</label>
+            <input id="glitchBaseX" type="range" min="-400" max="400" step="1" value="0">
+            <span id="glitchBaseXVal">0</span>
+            </div>
+            <div class="control"><label>GLITCH Y</label>
+            <input id="glitchBaseY" type="range" min="-400" max="400" step="1" value="0">
+            <span id="glitchBaseYVal">0</span>
+            </div>
 
             <!-- Determinism -->
             <div class="control"><label>SEED</label><input id="seed" type="number" value="912831" step="1"></div>
@@ -288,17 +310,17 @@
             <div class="control"><label>STRENGTH</label><input id="flowStrength" type="range" min="0" max="20" step="1" value="6"><span id="flowStrengthVal">6</span></div>
             <div class="control"><label>SCALE</label><input id="flowScale" type="range" min="20" max="200" step="5" value="80"><span id="flowScaleVal">80</span></div>
 
-            <div class="control"><label>SYMM</label><input id="symOn" type="checkbox"></div>
-            <div class="control">
-            <label>MODE</label>
-            <select id="symMode">
-                <option value="v">vertical mirror</option>
-                <option value="h">horizontal mirror</option>
-                <option value="hv">horizontal + vertical</option>
-            </select>
+            <!-- NEW: Flow pulse spacing (frames back) -->
+            <div class="control"><label>PULSE</label>
+            <input id="flowPulse" type="range" min="0" max="200" step="1" value="0">
+            <span id="flowPulseVal">0</span>
             </div>
 
-            <div class="control"><label>SYM POS</label><input id="symPos" type="range" min="0" max="1" step="0.001" value="0.5"><span id="symPosVal">0.50</span></div>            
+            <!-- NEW: Implosion amount -->
+            <div class="control"><label>IMPLODE</label>
+            <input id="flowImpl" type="range" min="0" max="1" step="0.01" value="0">
+            <span id="flowImplVal">0.00</span>
+            </div>
 
 
             <!-- Keep these OFF by default -->

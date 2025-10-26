@@ -7,7 +7,7 @@ function updateBurstState(){
   else if (!burst.inBurst && burst.t >= burst.gap) { burst.inBurst = true; burst.t = 0; }
 }
 
-function applyGlitch(density = 1){
+function applyGlitch(density = 1, baseDX = 0, baseDY = 0){
   if (els.corruptOn && !els.corruptOn.checked) return;
 
   const block    = parseInt(els.block.value, 10);
@@ -90,6 +90,10 @@ function applyGlitch(density = 1){
     cx = (cx + ox + width) % width;
     cy = (cy + oy + height) % height;
 
+    // apply user base offsets (manual XY control)
+    cx = Math.max(0, Math.min(width  - 1, cx + baseDX));
+    cy = Math.max(0, Math.min(height - 1, cy + baseDY));    
+
     const w = Math.min(block * (size / 20), width - cx);
     const h = Math.min(block * (size / 20), height - cy);
     if (w <= 0 || h <= 0) continue;
@@ -103,8 +107,8 @@ function applyGlitch(density = 1){
 
       if (smearLen > 0) {
         for (let s = 1; s <= smearLen; s++) {
-          const sx = Math.max(0, Math.min(width - w, cx + Math.round(dxUnit * s)));
-          const sy = Math.max(0, Math.min(height - h, cy + Math.round(dyUnit * s)));
+        const sx = Math.max(0, Math.min(width  - w, cx + Math.round(dxUnit * s) + baseDX));
+        const sy = Math.max(0, Math.min(height - h, cy + Math.round(dyUnit * s) + baseDY));
           gBuf.image(tile, sx, sy, w, h);
         }
       }
@@ -113,26 +117,76 @@ function applyGlitch(density = 1){
   gBuf.pop();
 }
 
-function applyFlowWarp(src, dst, strength = 6, scale = 80) {
+// function applyFlowWarp(src, dst, strength = 6, scale = 80) {
+//   dst.clear();
+//   const cell = Math.max(8, scale | 0);
+//   const off  = strength;
+//   const t = frameCount * 0.005;
+//   dst.imageMode(CORNER);
+//   for (let y = 0; y < height; y += cell) {
+//     for (let x = 0; x < width; x += cell) {
+//       const nx = (x + 0.5 * cell) / width * 2.0;
+//       const ny = (y + 0.5 * cell) / height * 2.0;
+//       const a = noise(nx * 0.9 + t, ny * 0.9) * TWO_PI * 2.0;
+//       const dx = Math.cos(a) * off;
+//       const dy = Math.sin(a) * off;
+
+//       const tileW = Math.min(cell, width - x);
+//       const tileH = Math.min(cell, height - y);
+//       const sx = Math.max(0, Math.min(width - tileW, Math.floor(x + dx)));
+//       const sy = Math.max(0, Math.min(height - tileH, Math.floor(y + dy)));
+
+//       const tile = src.get(sx, sy, tileW, tileH);
+//       dst.image(tile, x, y, tileW, tileH);
+//     }
+//   }
+// }
+
+function applyFlowWarp(src, dst, strength = 6, scale = 80, pulse = 0, implode = 0) {
   dst.clear();
+
+  // Select source frame with pulse spacing (0 = current)
+  let srcFrame = src;
+  if (pulse > 0 && Array.isArray(frameRing) && frameRing.length > pulse) {
+    srcFrame = frameRing[frameRing.length - 1 - pulse];
+  }
+
   const cell = Math.max(8, scale | 0);
   const off  = strength;
   const t = frameCount * 0.005;
+
+  const w = width, h = height;
+  const cx = w * 0.5, cy = h * 0.5;
+
   dst.imageMode(CORNER);
-  for (let y = 0; y < height; y += cell) {
-    for (let x = 0; x < width; x += cell) {
-      const nx = (x + 0.5 * cell) / width * 2.0;
-      const ny = (y + 0.5 * cell) / height * 2.0;
+  for (let y = 0; y < h; y += cell) {
+    for (let x = 0; x < w; x += cell) {
+      // base flow direction from noise
+      const nx = (x + 0.5 * cell) / w * 2.0;
+      const ny = (y + 0.5 * cell) / h * 2.0;
       const a = noise(nx * 0.9 + t, ny * 0.9) * TWO_PI * 2.0;
-      const dx = Math.cos(a) * off;
-      const dy = Math.sin(a) * off;
 
-      const tileW = Math.min(cell, width - x);
-      const tileH = Math.min(cell, height - y);
-      const sx = Math.max(0, Math.min(width - tileW, Math.floor(x + dx)));
-      const sy = Math.max(0, Math.min(height - tileH, Math.floor(y + dy)));
+      let dx = Math.cos(a) * off;
+      let dy = Math.sin(a) * off;
 
-      const tile = src.get(sx, sy, tileW, tileH);
+      // add implosion (inward) component toward center
+      if (implode > 0) {
+        const px = x + 0.5 * cell, py = y + 0.5 * cell;
+        const vx = cx - px,        vy = cy - py;          // inward vector
+        const L  = Math.hypot(vx, vy) || 1;
+        // normalize, scale by strength and implode amount
+        const k  = off * implode;
+        dx += (vx / L) * k;
+        dy += (vy / L) * k;
+      }
+
+      const tileW = Math.min(cell, w - x);
+      const tileH = Math.min(cell, h - y);
+
+      const sx = Math.max(0, Math.min(w - tileW, Math.floor(x + dx)));
+      const sy = Math.max(0, Math.min(h - tileH, Math.floor(y + dy)));
+
+      const tile = srcFrame.get(sx, sy, tileW, tileH);
       dst.image(tile, x, y, tileW, tileH);
     }
   }
