@@ -103,6 +103,22 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0){
       const src = frameRing[Math.max(0, back)];
       const tile = src.get(cx, cy, w, h);
 
+    // --- temporal smoothing: blend neighbor frame toward current tile ---
+    let interp = 0.35; // fallback
+    try {
+      if (typeof ringDelayAccum !== 'undefined') {
+        const delay = parseInt(els.ringDelay?.value || '0', 10) || 0;
+        if (delay > 0) interp = Math.min(1, ringDelayAccum / delay);
+      }
+    } catch {}
+    if (back > 0 && interp > 0) {
+      const src2  = frameRing[Math.max(0, back - 1)];
+      const tile2 = src2.get(cx, cy, w, h);
+      gBuf.push(); gBuf.tint(255, Math.floor(interp * 255));
+      gBuf.image(tile2, cx, cy, w, h);
+      gBuf.pop();
+    }      
+
       gBuf.image(tile, cx, cy, w, h);
 
       if (smearLen > 0) {
@@ -186,8 +202,29 @@ function applyFlowWarp(src, dst, strength = 6, scale = 80, pulse = 0, implode = 
       const sx = Math.max(0, Math.min(w - tileW, Math.floor(x + dx)));
       const sy = Math.max(0, Math.min(h - tileH, Math.floor(y + dy)));
 
-      const tile = srcFrame.get(sx, sy, tileW, tileH);
-      dst.image(tile, x, y, tileW, tileH);
+      // const tile = srcFrame.get(sx, sy, tileW, tileH);
+      // dst.image(tile, x, y, tileW, tileH);
+const tile = srcFrame.get(sx, sy, tileW, tileH);
+dst.image(tile, x, y, tileW, tileH);
+
+    // --- temporal smoothing if we’re using frameRing via pulse ---
+    if (pulse > 0 && Array.isArray(frameRing) && frameRing.length > pulse + 1) {
+      let interp = 0.35; // fallback
+      try {
+        if (typeof ringDelayAccum !== 'undefined') {
+          const delay = parseInt(els.ringDelay?.value || '0', 10) || 0;
+          if (delay > 0) interp = Math.min(1, ringDelayAccum / delay);
+        }
+      } catch {}
+      if (interp > 0) {
+        const srcPrev  = frameRing[frameRing.length - 1 - (pulse + 1)];
+        const tilePrev = srcPrev.get(sx, sy, tileW, tileH);
+        dst.push(); dst.tint(255, Math.floor(interp * 255));
+        dst.image(tilePrev, x, y, tileW, tileH);
+        dst.pop();
+      }
+    }
+
     }
   }
 }

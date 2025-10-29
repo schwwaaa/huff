@@ -145,6 +145,9 @@ function hookUI() {
   'file','playBtn','pauseBtn','recBtn','refreshBtn',
   'camStartBtn','camStopBtn','camRefreshBtn','cams',
 
+  // SYSTEM
+  'corruptOn',
+
   // core
   'quality','qualityVal','depth','depthVal','corrupt','corruptVal','block','blockVal',
 
@@ -565,6 +568,7 @@ if (els.symOn && els.symOn.checked) {
   // if (frameRing.length > ringCap) frameRing.shift();
 
   const ringCap = Math.round(60 * (parseFloat(els.quality.value) * 2));
+  
 
 // accumulate elapsed time (p5's deltaTime is ms)
 ringDelayAccum += (typeof deltaTime === 'number' ? deltaTime : 16.6);
