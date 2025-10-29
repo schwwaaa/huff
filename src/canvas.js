@@ -155,6 +155,8 @@ function hookUI() {
   'glitchSpeed','glitchSpeedVal','glitchSpeedFine','glitchSpeedFineVal','glitchSize','glitchSizeVal','glitchSmear','glitchSmearVal',
   'glitchBaseX','glitchBaseXVal','glitchBaseY','glitchBaseYVal',
 
+  'glitchSpeedMul','glitchSpeedMulVal',
+
   // determinism
   'seed',
 
@@ -198,7 +200,9 @@ function hookUI() {
   'bgMode',
 
   // frame-ring delay
-  'ringDelay','ringDelayVal'
+  'ringDelay','ringDelayVal',
+
+  'glitchSpeedMul','glitchSpeedMulVal'
 ].forEach(k => els[k] = $(k));
 
 
@@ -251,7 +255,7 @@ function hookUI() {
    'spatialGap','clusterCount','clusterRadius',
    'burstLen','burstGap','burstBoost',
    'bloomStrength','bloomRadius','flowStrength','flowScale','flowPulse','flowImpl',
-   'baseMix','symPos','ringDelay','ringDelayVal'].forEach(id => els[id].addEventListener('input', updateLabels));
+   'baseMix','symPos','ringDelay','ringDelayVal','glitchSpeedMul'].forEach(id => els[id].addEventListener('input', updateLabels));
   ['cycleShape'].forEach(id => els[id].addEventListener('change', updateLabels));
   els.baseOn.addEventListener('change', () => { els.baseMix.disabled = !els.baseOn.checked; updateLabels(); });
 
@@ -319,11 +323,15 @@ function updateLabels() {
 
 if (els.glitchBaseX) els.glitchBaseXVal.textContent = (els.glitchBaseX.value|0);
 if (els.glitchBaseY) els.glitchBaseYVal.textContent = (els.glitchBaseY.value|0);
-
+  if (els.glitchSpeedMul) els.glitchSpeedMulVal.textContent = (+els.glitchSpeedMul.value).toFixed(2);
+  
   // inside updateLabels()
   if (els.ringDelay) els.ringDelayVal.textContent = (els.ringDelay.value|0);
 
   if (els.symPos) els.symPosVal.textContent = (+els.symPos.value).toFixed(2);
+
+
+
 
   // Colorizer
   // els.colHueVal.textContent = els.colHue.value;
@@ -460,8 +468,11 @@ function draw() {
     gBuf.drawingContext.globalCompositeOperation = 'source-over';
   }
 
-  const coarse = parseFloat(els.glitchSpeed.value);
-  const fine   = parseFloat(els.glitchSpeedFine.value || 1);
+  const mul    = parseFloat(els.glitchSpeedMul?.value || '1');
+  const coarse = parseFloat(els.glitchSpeed.value)      * mul;    
+  const fine   = parseFloat(els.glitchSpeedFine.value)  * mul;
+  // const coarse = parseFloat(els.glitchSpeed.value);
+  // const fine   = parseFloat(els.glitchSpeedFine.value || 1);
   const density = coarse * fine;
   nPhaseX += density * 0.01;
   nPhaseY += density * 0.011;
