@@ -232,7 +232,7 @@ function hookUI() {
     playing = false;
   });
 
-  els.recBtn.addEventListener('click', toggleRecord);
+  // els.recBtn.addEventListener('click', toggleRecord);
   els.refreshBtn.addEventListener('click', refreshGlitch);
   if (els.borderlessBtn) els.borderlessBtn.addEventListener('click', toggleBorderless);
 
@@ -255,7 +255,8 @@ function hookUI() {
    'spatialGap','clusterCount','clusterRadius',
    'burstLen','burstGap','burstBoost',
    'bloomStrength','bloomRadius','flowStrength','flowScale','flowPulse','flowImpl',
-   'baseMix','symPos','ringDelay','ringDelayVal','glitchSpeedMul'].forEach(id => els[id].addEventListener('input', updateLabels));
+   'baseMix','symPos','ringDelay','ringDelayVal','glitchSpeedMul',
+    'colHue', 'colSat', 'colR','colG','colB'].forEach(id => els[id].addEventListener('input', updateLabels));
   ['cycleShape'].forEach(id => els[id].addEventListener('change', updateLabels));
   els.baseOn.addEventListener('change', () => { els.baseMix.disabled = !els.baseOn.checked; updateLabels(); });
 
@@ -334,8 +335,11 @@ if (els.glitchBaseY) els.glitchBaseYVal.textContent = (els.glitchBaseY.value|0);
 
 
   // Colorizer
-  // els.colHueVal.textContent = els.colHue.value;
-  // els.colSatVal.textContent = (+els.colSat.value).toFixed(2);
+  els.colHueVal.textContent = els.colHue.value;
+  els.colSatVal.textContent = (+els.colSat.value).toFixed(2);
+  // els.colRVal.textContent = els.colR.value;
+  // els.colGVal.textContent = els.colR.value;
+  // els.colVal.textContent = els.colR.value;
 
 }
 
@@ -555,7 +559,10 @@ applyGlitch(
   if (els.colOn && els.colOn.checked) {
     applyColorizer(gBuf, gTemp,
       parseInt(els.colHue.value, 10),
-      parseFloat(els.colSat.value));
+      parseFloat(els.colSat.value),
+      parseFloat(els.colR.value),
+      parseFloat(els.colG.value),
+      parseFloat(els.colB.value));
     const t = gBuf; gBuf = gTemp; gTemp = t;
   }
 
@@ -568,30 +575,43 @@ if (els.symOn && els.symOn.checked) {
 
 
   // Base composite
+  // Base composite
   if (els.baseOn.checked && parseFloat(els.baseMix.value) > 0) {
-    push(); tint(255, parseFloat(els.baseMix.value) * 255); image(gCur, 0, 0, width, height); pop();
+    push();
+    tint(255, parseFloat(els.baseMix.value) * 255);
+    image(gCur, 0, 0, width, height);
+    pop();
   }
   image(gBuf, 0, 0, width, height);
 
-  // // ring for depth sampling
-  // const ringCap = Math.round(60 * (parseFloat(els.quality.value) * 2));
-  // frameRing.push(gCur.get());
-  // if (frameRing.length > ringCap) frameRing.shift();
+  // --- ring for depth sampling (memory-safe) ---
 
-  const ringCap = Math.round(60 * (parseFloat(els.quality.value) * 2));
-  
+  // Approx bytes per frame (RGBA)
+  const bytesPerFrame = width * height * 4;
 
-// accumulate elapsed time (p5's deltaTime is ms)
-ringDelayAccum += (typeof deltaTime === 'number' ? deltaTime : 16.6);
-const ringDelayMs = parseInt(els.ringDelay?.value || '0', 10);
+  // Hard memory budget for the ring buffer (tune as needed)
+  const maxRingBytes = 256 * 1024 * 1024; // 256 MB
 
-// only capture a new frame when enough time has passed
-if (ringDelayAccum >= ringDelayMs) {
-  frameRing.push(gCur.get());
-  if (frameRing.length > ringCap) frameRing.shift();
-  ringDelayAccum = 0;
-}
+  // Ideal cap from QUALITY slider
+  const q = parseFloat(els.quality.value) || 1;
+  let ringCap = Math.round(60 * (q * 2)); // same formula you had
 
+  // Max frames allowed within the memory budget
+  const maxFramesByMem = Math.max(1, Math.floor(maxRingBytes / bytesPerFrame));
+
+  // Final cap: respect QUALITY but never exceed memory budget
+  ringCap = Math.max(1, Math.min(ringCap, maxFramesByMem));
+
+  // accumulate elapsed time (p5's deltaTime is ms)
+  ringDelayAccum += (typeof deltaTime === 'number' ? deltaTime : 16.6);
+  const ringDelayMs = parseInt(els.ringDelay?.value || '0', 10);
+
+  // only capture a new frame when enough time has passed
+  if (ringDelayAccum >= ringDelayMs) {
+    frameRing.push(gCur.get());
+    if (frameRing.length > ringCap) frameRing.shift();
+    ringDelayAccum = 0;
+  }
 
 }
 

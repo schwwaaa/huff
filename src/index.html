@@ -182,7 +182,7 @@
         <!-- Transport -->
         <button id="playBtn" disabled>Play</button>
         <button id="pauseBtn" disabled>Pause</button>
-        <button id="recBtn" disabled>● Record</button>
+        <!-- <button id="recBtn" disabled>● Record</button> -->
         <button id="refreshBtn" disabled>↻ Refresh</button>
     </label>
 
@@ -222,7 +222,7 @@
 
             <div class="control">
                 <label>RING DELAY (ms)</label>
-                <input id="ringDelay" type="range" min="0" max="1000" step="10" value="0">
+                <input id="ringDelay" type="range" min="0" max="10000" step="10" value="0">
                 <span id="ringDelayVal">0</span>
             </div>
 
@@ -240,19 +240,16 @@
 
             <!-- Core -->
 
-            <div class="control"><label>QUALITY</label>
-                <input id="quality" type="range" min="0" max="3.00" step="0.05" value="1.00">
-                <span id="qualityVal">1.00</span>
-            </div>
+
             <div class="control"><label>DEPTH</label><input id="depth" type="range" min="0" max="0.5" step="0.01" value="0.5"><span id="depthVal">0.50</span></div>
-            <div class="control"><label>CORRUPT %</label><input id="corrupt" type="range" min="0" max="2" step="0.01" value="0.30"><span id="corruptVal">0.30</span></div>
-            <div class="control"><label>PIXEL SIZE</label><input id="block" type="range" min="4" max="2000" step="2" value="1000"><span id="blockVal">32</span></div>
+            <div class="control"><label>CORRUPT %</label><input id="corrupt" type="range" min="0" max="7" step="0.01" value="0.30"><span id="corruptVal">0.30</span></div>
+            <div class="control"><label>PIXEL SIZE</label><input id="block" type="range" min="150" max="2000" step="2" value="1000"><span id="blockVal">32</span></div>
 
             <!-- Cadence -->
             <div class="control"><label>GLITCH SPEED</label><input id="glitchSpeed" type="range" min="0" max="5" step="0.005" value="0.8"><span id="glitchSpeedVal">0.80</span></div>
             <div class="control"><label>FINE SPEED</label><input id="glitchSpeedFine" type="range" min="0" max="10" step="0.001" value="1.00"><span id="glitchSpeedFineVal">1.00</span></div>
             <div class="control"><label>GLITCH SIZE</label><input id="glitchSize" type="range" min="1" max="60" step="0.01" value="10"><span id="glitchSizeVal">20</span></div>
-            <div class="control"><label>GLITCH SMEAR</label><input id="glitchSmear" type="range" min="0" max="200" step="0.01" value="6"><span id="glitchSmearVal">6</span></div>
+            <div class="control"><label>SMEAR</label><input id="glitchSmear" type="range" min="0" max="200" step="0.01" value="6"><span id="glitchSmearVal">6</span></div>
             <div class="control"><label>GLITCH MULT</label><input id="glitchSpeedMul" type="range" min="0" max="10" step="0.1" value="1.00"><span id="glitchSpeedMulVal">1.00</span></div>
 
             <div class="control"><label>GLITCH X</label>
@@ -268,10 +265,10 @@
             <div class="control"><label>SEED</label><input id="seed" type="number" value="912831" step="1"></div>
 
             <!-- Feedback XYZ + θ -->
-            <div class="control"><label>FB X</label><input id="fbX" type="range" min="-50" max="5" step="0.1" value="1"><span id="fbXVal">1</span></div>
-            <div class="control"><label>FB Y</label><input id="fbY" type="range" min="-50" max="5" step="0.1" value="1"><span id="fbYVal">1</span></div>
-            <div class="control"><label>FB Z</label><input id="fbZ" type="range" min="0.90" max="1.10" step="0.005" value="1.000"><span id="fbZVal">1.00</span></div>
-            <div class="control"><label>FB θ</label><input id="fbTheta" type="range" min="-179" max="180" step="1" value="0.01"><span id="fbThetaVal">0</span></div>
+            <div class="control"><label>FB X</label><input id="fbX" type="range" min="-1" max="1" step="0.001" value="1"><span id="fbXVal">1</span></div>
+            <div class="control"><label>FB Y</label><input id="fbY" type="range" min="-1" max="1" step="0.001" value="1"><span id="fbYVal">1</span></div>
+            <div class="control"><label>FB Z</label><input id="fbZ" type="range" min="0.98" max="1.03" step="0.005" value="1.000"><span id="fbZVal">1.00</span></div>
+            <div class="control"><label>FB θ</label><input id="fbTheta" type="range" min="-2.0" max="2.0" step="0.005" value="0.01"><span id="fbThetaVal">0</span></div>
 
             <!-- Auto FB + sub-toggles -->
             <!-- <div class="control"><label>FB Auto</label><input id="fbAuto" type="checkbox"></div>
@@ -309,7 +306,11 @@
             <!-- Flow -->
             <div class="control"><label>FLOW</label><input id="flowOn" type="checkbox"></div>
             <div class="control"><label>STRENGTH</label><input id="flowStrength" type="range" min="0" max="20" step="1" value="6"><span id="flowStrengthVal">6</span></div>
-            <div class="control"><label>SCALE</label><input id="flowScale" type="range" min="20" max="200" step="5" value="80"><span id="flowScaleVal">80</span></div>
+            <div class="control"><label>QUALITY</label>
+                <input id="quality" type="range" min="0" max="3.00" step="0.05" value="1.00">
+                <span id="qualityVal">1.00</span>
+            </div>
+            <div class="control"><label>SCALE</label><input id="flowScale" type="range" min="40" max="200" step="0.001" value="80"><span id="flowScaleVal">80</span></div>
 
             <!-- NEW: Flow pulse spacing (frames back) -->
             <div class="control"><label>PULSE</label>
@@ -328,13 +329,13 @@
             <div class="control"><label>Seed on load</label><input id="seedOnLoad" type="checkbox" checked></div>
 
             <!-- Colorizer (existing) -->
-            <!-- <div class="control"><label>COLORIZER</label><input id="colOn" type="checkbox"></div>
+            <div class="control"><label>COLORIZER</label><input id="colOn" type="checkbox"></div>
             <div class="control"><label>HUE</label><input id="colHue" type="range" min="-180" max="180" step="1" value="20"><span id="colHueVal">20</span></div>
             <div class="control"><label>SAT</label><input id="colSat" type="range" min="0" max="2" step="0.01" value="1.10"><span id="colSatVal">1.10</span></div>
 
-            <div class="control"><label>R</label><input id="colR" type="range" min="0" max="2" step="0.01" value="1.00"><span id="colRVal">1.00</span></div>
-            <div class="control"><label>G</label><input id="colG" type="range" min="0" max="2" step="0.01" value="1.00"><span id="colGVal">1.00</span></div>
-            <div class="control"><label>B</label><input id="colB" type="range" min="0" max="2" step="0.01" value="1.00"><span id="colBVal">1.00</span></div>
+            <div class="control"><label>R</label><input id="colR" type="range" min="0" max="255" step="0.01" value="1.00"><span id="colRVal">1.00</span></div>
+            <div class="control"><label>G</label><input id="colG" type="range" min="0" max="255" step="0.01" value="1.00"><span id="colGVal">1.00</span></div>
+            <div class="control"><label>B</label><input id="colB" type="range" min="0" max="255" step="0.01" value="1.00"><span id="colBVal">1.00</span></div>
 
             <div class="control"><label>COL FB</label><input id="colFB" type="checkbox"></div>
             <div class="control"><label>AMT</label><input id="colFBMix" type="range" min="0" max="1" step="0.01" value="0.50"><span id="colFBMixVal">0.25</span></div>
@@ -347,7 +348,7 @@
                     <option value="posterize">Posterize</option>
                     <option value="duotone">Duotone</option>
                 </select>
-            </div> -->
+            </div>
 
         </form>
     </header>
