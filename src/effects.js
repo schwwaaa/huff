@@ -1,58 +1,4 @@
-// effects.js — extracted effect helpers (true content)
-
-// Snapshot held during a burst for CVI-style strobe/echo
-let _burstSnap = null;
-let _burstSnapAge = 0;
-
-function updateBurstState(){
-  burst.on = !!els.burstOn.checked;
-  if (!burst.on) {
-    _burstSnap = null;
-    return;
-  }
-  burst.t += (deltaTime || 16.6) / 1000.0;
-
-  const wasInBurst = burst.inBurst;
-
-  if (burst.inBurst && burst.t >= burst.len) {
-    burst.inBurst = false;
-    burst.t = 0;
-    _burstSnap = null;
-  } else if (!burst.inBurst && burst.t >= burst.gap) {
-    burst.inBurst = true;
-    burst.t = 0;
-    _burstSnapAge = 0;
-  }
-
-  // Capture gBuf snapshot on the first frame of each burst
-  if (burst.inBurst && !wasInBurst) {
-    try { _burstSnap = gBuf.get(); } catch(e) { _burstSnap = null; }
-  }
-}
-
-// Apply burst echo back into gBuf — after applyGlitch, before feedback
-function applyBurstEcho(){
-  if (!burst.on || !burst.inBurst || !_burstSnap) return;
-
-  _burstSnapAge++;
-
-  const kick    = parseFloat(els.burstBoost?.value  || '1.0');  // zoom strength
-  const ghost   = parseFloat(els.burstGhost?.value  || '0.6');  // user-controlled opacity
-
-  // Optional: fade slightly over burst duration, but ghost drives the base level
-  const progress = Math.min(1, burst.t / Math.max(0.01, burst.len));
-  const opacity  = Math.floor(ghost * (1.0 - progress * 0.25) * 255); // fades 25% over duration
-
-  const zoomScale = 1.0 + (kick - 1.0) * 0.04;
-
-  gBuf.push();
-  gBuf.imageMode(CENTER);
-  gBuf.tint(255, opacity);
-  gBuf.translate(gBuf.width * 0.5, gBuf.height * 0.5);
-  gBuf.scale(zoomScale);
-  gBuf.image(_burstSnap, 0, 0, gBuf.width, gBuf.height);
-  gBuf.pop();
-}
+// effects.js — extracted effect helpers
 
 function applyGlitch(density = 1, baseDX = 0, baseDY = 0){
   if (els.corruptOn && !els.corruptOn.checked) return;
@@ -70,14 +16,6 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0){
   const maxBack = Math.max(1, Math.floor((frameRing.length - 1) * depth));
 
   let count = Math.max(1, Math.floor(total * corrupt * (0.5 + density)));
-
-  if (els.cycleOn.checked) {
-    if (els.cycleShape.value === 'sine') {
-      const cyc = 0.2 + 0.8 * ((Math.sin(frameCount * 0.1) + 1) * 0.5);
-      count = Math.max(1, Math.floor(count * cyc));
-    }
-  }
-  if (burst.on) count = Math.max(1, Math.floor(count * (burst.inBurst ? burst.boost : 0.2)));
 
   const dxUnit = map(noise(nPhaseX), 0, 1, -1, 1);
   const dyUnit = map(noise(nPhaseY), 0, 1, -1, 1);
@@ -294,6 +232,27 @@ dst.image(tile, x, y, tileW, tileH);
 
     }
   }
+}
+
+// --- Solarize: CVI-style luminance threshold inversion ---
+// Pixels whose luminance exceeds `thresh` get their RGB inverted.
+// `amount` blends between the original and solarized result.
+function applySolarize(buf, thresh = 0.5, amount = 1.0) {
+  buf.loadPixels();
+  const pix = buf.pixels;
+  const t   = thresh * 255;
+  const a   = Math.max(0, Math.min(1, amount));
+  for (let i = 0; i < pix.length; i += 4) {
+    const r = pix[i], g = pix[i+1], b = pix[i+2];
+    // perceived luminance
+    const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+    if (lum > t) {
+      pix[i]   = Math.round(r + (255 - r - r) * a);
+      pix[i+1] = Math.round(g + (255 - g - g) * a);
+      pix[i+2] = Math.round(b + (255 - b - b) * a);
+    }
+  }
+  buf.updatePixels();
 }
 
 // --- Symmetry helper (vertical / horizontal / both) with axis position ---

@@ -20,9 +20,6 @@ let baseSeed = 1, seededOnce = false;
 let nPhaseX = 0, nPhaseY = 1000;
 // auto-feedback phases
 let fbPhaseX = 0, fbPhaseY = 100, fbPhaseR = 200, fbPhaseZ = 300;
-// burst state
-const burst = { on: false, inBurst: true, t: 0, len: 2, gap: 3, boost: 3 };
-
 // rVFC-driven copy into gCur
 let lastMediaTime = -1;
 
@@ -171,9 +168,6 @@ function hookUI() {
   // spatialization + clusters
   'clusters','clusterCount','clusterCountVal','clusterRadius','clusterRadiusVal','spatialGap','spatialGapVal',
 
-  // cycle + bursts
-  'cycleOn','cycleShape','burstOn','burstLen','burstLenVal','burstGap','burstGapVal','burstBoost','burstBoostVal','burstGhost','burstGhostVal',
-
   // flow
   'flowOn','flowStrength','flowStrengthVal','flowScale','flowScaleVal',
   'flowPulse','flowPulseVal','flowImpl','flowImplVal',
@@ -186,6 +180,9 @@ function hookUI() {
 
   // symmetry
   'symOn','symMode','symPos','symPosVal',
+
+  // solarize
+  'solarizeOn','solarizeThresh','solarizeThreshVal','solarizeAmt','solarizeAmtVal',
 
   // background
   'bgMode',
@@ -228,15 +225,6 @@ function hookUI() {
   if (els.borderlessBtn) els.borderlessBtn.addEventListener('click', toggleBorderless);
 
   // labels only
-  // els.seed.addEventListener('change', setSeedFromUI);
-  // ['quality','depth','corrupt','block','glitchSpeed','glitchSpeedFine','glitchSize','glitchSmear',
-  //  'feedback','persistence','fbX','fbY','fbZ','fbTheta','fbSpeed',
-  //  'spatialGap','clusterCount','clusterRadius',
-  //  'burstLen','burstGap','burstBoost',
-  //  'bloomStrength','bloomRadius','flowStrength','flowScale',
-  //  'baseMix','colHue','colSat'].forEach(id => els[id].addEventListener('input', updateLabels));
-  // ['cycleShape'].forEach(id => els[id].addEventListener('change', updateLabels));
-  // els.baseOn.addEventListener('change', () => { els.baseMix.disabled = !els.baseOn.checked; updateLabels(); });
 
   els.seed.addEventListener('change', setSeedFromUI);
   ['quality','depth','corrupt','block','glitchSpeed','glitchSpeedFine','glitchSize','glitchSmear','glitchBaseX','glitchBaseY',
@@ -244,10 +232,9 @@ function hookUI() {
    'fbX','fbY','fbZ','fbTheta',
   //  'fbSpeed',
    'spatialGap','clusterCount','clusterRadius',
-   'burstLen','burstGap','burstBoost','burstGhost',
    'flowStrength','flowScale','flowPulse','flowImpl',
-   'baseMix','symPos','ringDelay','ringDelayVal','glitchSpeedMul'].forEach(id => els[id].addEventListener('input', updateLabels));
-  ['cycleShape'].forEach(id => els[id].addEventListener('change', updateLabels));
+   'baseMix','symPos','ringDelay','ringDelayVal','glitchSpeedMul',
+   'solarizeThresh','solarizeAmt'].forEach(id => els[id].addEventListener('input', updateLabels));
   els.baseOn.addEventListener('change', () => { els.baseMix.disabled = !els.baseOn.checked; updateLabels(); });
 
 
@@ -295,11 +282,6 @@ function updateLabels() {
   els.clusterCountVal.textContent = els.clusterCount.value;
   els.clusterRadiusVal.textContent = els.clusterRadius.value;
 
-  els.burstLenVal.textContent = f2(els.burstLen.value);
-  els.burstGapVal.textContent = f2(els.burstGap.value);
-  els.burstBoostVal.textContent = f2(els.burstBoost.value);
-  if (els.burstGhost) els.burstGhostVal.textContent = f2(els.burstGhost.value);
-
   els.flowStrengthVal.textContent = els.flowStrength.value;
   els.flowScaleVal.textContent = els.flowScale.value;
 
@@ -318,6 +300,9 @@ if (els.glitchBaseY) els.glitchBaseYVal.textContent = (els.glitchBaseY.value|0);
   if (els.ringDelay) els.ringDelayVal.textContent = (els.ringDelay.value|0);
 
   if (els.symPos) els.symPosVal.textContent = (+els.symPos.value).toFixed(2);
+
+  if (els.solarizeThresh) els.solarizeThreshVal.textContent = (+els.solarizeThresh.value).toFixed(2);
+  if (els.solarizeAmt)    els.solarizeAmtVal.textContent    = (+els.solarizeAmt.value).toFixed(2);
 
 
 
@@ -462,19 +447,14 @@ function draw() {
   nPhaseX += density * 0.01;
   nPhaseY += density * 0.011;
 
-  updateBurstState();
-
   const Q = parseFloat(els.quality.value);
-  const everyN  = Q >= 0.9 ? 1 : Q >= 0.7 ? 2 : Q >= 0.5 ? 3 : 4;
+  const everyN = Q >= 0.9 ? 1 : Q >= 0.7 ? 2 : Q >= 0.5 ? 3 : 4;
 
-applyGlitch(
+  applyGlitch(
   density,
   parseInt(els.glitchBaseX?.value || '0', 10),
   parseInt(els.glitchBaseY?.value || '0', 10)
 );
-
-  // Burst echo — CVI-style strobe/freeze re-injection into buffer
-  applyBurstEcho();
 
   // Feedback transforms
   const fb = parseFloat(els.feedback.value);
@@ -533,6 +513,13 @@ if (els.symOn && els.symOn.checked) {
   const tS = gBuf; gBuf = gTemp; gTemp = tS;
 }
 
+
+  // Solarize — CVI luminance inversion above threshold
+  if (els.solarizeOn && els.solarizeOn.checked) {
+    applySolarize(gBuf,
+      parseFloat(els.solarizeThresh?.value || '0.5'),
+      parseFloat(els.solarizeAmt?.value    || '1.0'));
+  }
 
   // Base composite
   // Base composite
@@ -596,7 +583,6 @@ function refreshGlitch(){
   clearAll();
   nPhaseX = 0; nPhaseY = 1000;
   fbPhaseX = 0; fbPhaseY = 100; fbPhaseR = 200; fbPhaseZ = 300;
-  burst.t = 0; burst.inBurst = true;
 }
 
 function drawWaiting(){
