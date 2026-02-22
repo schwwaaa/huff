@@ -278,13 +278,13 @@
             <div class="control"><label>MV Z</label><input id="fbMoveZ" type="checkbox"></div>
             <div class="control"><label>ROTATE</label><input id="fbMoveTheta" type="checkbox"></div> -->
 
-            <!-- Echo Nodes (CVI-style localized trail vortices) -->
-            <div class="control"><label>SCANLINES</label><input id="clusters" type="checkbox"></div>
-            <div class="control"><label>BANDS</label><input id="clusterCount" type="range" min="1" max="50" step="1" value="3"><span id="clusterCountVal">3</span></div>
-            <div class="control"><label>THICKNESS</label><input id="clusterRadius" type="range" min="1" max="20" step="0.01" value="10"><span id="clusterRadiusVal">120</span></div>
+            <!-- Spatialization + clusters -->
+            <div class="control"><label>CLUSTERS</label><input id="clusters" type="checkbox"></div>
+            <div class="control"><label>COUNT</label><input id="clusterCount" type="range" min="1" max="50" step="1" value="3"><span id="clusterCountVal">3</span></div>
+            <div class="control"><label>RADIUS</label><input id="clusterRadius" type="range" min="1" max="20" step="0.01" value="10"><span id="clusterRadiusVal">120</span></div>
             <div class="control"><label>SPATIAL GAP</label><input id="spatialGap" type="range" min="0" max="200" step="1" value="40"><span id="spatialGapVal">40</span></div>
 
-            <!-- Cycle + Burst Strobe -->
+            <!-- Cycle + bursts -->
             <div class="control"><label>CYCLE</label><input id="cycleOn" type="checkbox"></div>
             <div class="control">
                 <label>SHAPE</label>
@@ -296,8 +296,12 @@
             <div class="control"><label>BURST</label><input id="burstOn" type="checkbox"></div>
             <div class="control"><label>LENGTH</label><input id="burstLen" type="range" min="0.2" max="5" step="0.01" value="2"><span id="burstLenVal">2.0</span></div>
             <div class="control"><label>GAPS</label><input id="burstGap" type="range" min="0.2" max="5" step="0.01" value="1"><span id="burstGapVal">3.0</span></div>
-            <div class="control"><label>KICK</label><input id="burstBoost" type="range" min="1" max="10" step="0.01" value="3"><span id="burstBoostVal">3.0</span></div>
-            <div class="control"><label>GHOST</label><input id="burstGhost" type="range" min="0" max="1" step="0.01" value="0.6"><span id="burstGhostVal">0.60</span></div>
+            <div class="control"><label>BOOST</label><input id="burstBoost" type="range" min="1" max="10" step="0.01" value="3"><span id="burstBoostVal">3.0</span></div>
+
+            <!-- Bloom -->
+            <div class="control"><label>Bloom on</label><input id="bloomOn" type="checkbox"></div>
+            <div class="control"><label>Bloom strength</label><input id="bloomStrength" type="range" min="0" max="2" step="0.05" value="0.8"><span id="bloomStrengthVal">0.80</span></div>
+            <div class="control"><label>Bloom radius</label><input id="bloomRadius" type="range" min="1" max="20" step="1" value="8"><span id="bloomRadiusVal">8</span></div>
 
             <!-- Flow -->
             <div class="control"><label>FLOW</label><input id="flowOn" type="checkbox"></div>
@@ -323,6 +327,28 @@
 
             <!-- Keep these OFF by default -->
             <div class="control"><label>Seed on load</label><input id="seedOnLoad" type="checkbox" checked></div>
+
+            <!-- Colorizer (existing) -->
+            <div class="control"><label>COLORIZER</label><input id="colOn" type="checkbox"></div>
+            <div class="control"><label>HUE</label><input id="colHue" type="range" min="-180" max="180" step="1" value="20"><span id="colHueVal">20</span></div>
+            <div class="control"><label>SAT</label><input id="colSat" type="range" min="0" max="2" step="0.01" value="1.10"><span id="colSatVal">1.10</span></div>
+
+            <div class="control"><label>R</label><input id="colR" type="range" min="0" max="255" step="0.01" value="1.00"><span id="colRVal">1.00</span></div>
+            <div class="control"><label>G</label><input id="colG" type="range" min="0" max="255" step="0.01" value="1.00"><span id="colGVal">1.00</span></div>
+            <div class="control"><label>B</label><input id="colB" type="range" min="0" max="255" step="0.01" value="1.00"><span id="colBVal">1.00</span></div>
+
+            <div class="control"><label>COL FB</label><input id="colFB" type="checkbox"></div>
+            <div class="control"><label>AMT</label><input id="colFBMix" type="range" min="0" max="1" step="0.01" value="0.50"><span id="colFBMixVal">0.25</span></div>
+
+            <div class="control">
+                <label>STYLE</label>
+                <select id="colStyle">
+                    <option value="classic" selected>Classic</option>
+                    <option value="triad">Triad</option>
+                    <option value="posterize">Posterize</option>
+                    <option value="duotone">Duotone</option>
+                </select>
+            </div>
 
         </form>
     </header>

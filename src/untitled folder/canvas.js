@@ -6,7 +6,7 @@ console.log('[init] helpers ready');
 // canvas.js — p5 lifecycle + buffers + UI
 /* Datamosh Lab — Stable file-only build (camera removed). HTML owns defaults. */
 let videoEl, currentBlobUrl = null;
-let gCur, gBuf, gWarp, gTemp;
+let gCur, gBuf, gWarp, gBloomWork, gTemp;
 let frameRing = [];
 let canvas, rec, chunks = [];
 let playing = false;
@@ -121,6 +121,7 @@ function allocBuffers() {
   gCur = createGraphics(width, height);
   gBuf = createGraphics(width, height);
   gWarp = createGraphics(width, height);
+  gBloomWork = createGraphics(width, height);
   gTemp = createGraphics(width, height);
 }
 
@@ -133,7 +134,7 @@ function windowResized() {
 window.windowResized = windowResized;
 
 function clearAll() {
-  [gBuf, gWarp, gTemp].forEach(g => g.clear());
+  [gBuf, gWarp, gBloomWork, gTemp].forEach(g => g.clear());
   frameRing.length = 0;
   seededOnce = false;
 }
@@ -172,7 +173,10 @@ function hookUI() {
   'clusters','clusterCount','clusterCountVal','clusterRadius','clusterRadiusVal','spatialGap','spatialGapVal',
 
   // cycle + bursts
-  'cycleOn','cycleShape','burstOn','burstLen','burstLenVal','burstGap','burstGapVal','burstBoost','burstBoostVal','burstGhost','burstGhostVal',
+  'cycleOn','cycleShape','burstOn','burstLen','burstLenVal','burstGap','burstGapVal','burstBoost','burstBoostVal',
+
+  // bloom
+  'bloomOn','bloomStrength','bloomStrengthVal','bloomRadius','bloomRadiusVal',
 
   // flow
   'flowOn','flowStrength','flowStrengthVal','flowScale','flowScaleVal',
@@ -183,6 +187,11 @@ function hookUI() {
 
   // seed on load
   'seedOnLoad',
+
+  // colorizer
+  'colOn','colHue','colHueVal','colSat','colSatVal',
+  'colR','colRVal','colG','colGVal','colB','colBVal',
+  'colFB','colFBMix','colFBMixVal','colStyle',
 
   // symmetry
   'symOn','symMode','symPos','symPosVal',
@@ -244,9 +253,10 @@ function hookUI() {
    'fbX','fbY','fbZ','fbTheta',
   //  'fbSpeed',
    'spatialGap','clusterCount','clusterRadius',
-   'burstLen','burstGap','burstBoost','burstGhost',
-   'flowStrength','flowScale','flowPulse','flowImpl',
-   'baseMix','symPos','ringDelay','ringDelayVal','glitchSpeedMul'].forEach(id => els[id].addEventListener('input', updateLabels));
+   'burstLen','burstGap','burstBoost',
+   'bloomStrength','bloomRadius','flowStrength','flowScale','flowPulse','flowImpl',
+   'baseMix','symPos','ringDelay','ringDelayVal','glitchSpeedMul',
+    'colHue', 'colSat', 'colR','colG','colB'].forEach(id => els[id].addEventListener('input', updateLabels));
   ['cycleShape'].forEach(id => els[id].addEventListener('change', updateLabels));
   els.baseOn.addEventListener('change', () => { els.baseMix.disabled = !els.baseOn.checked; updateLabels(); });
 
@@ -298,7 +308,9 @@ function updateLabels() {
   els.burstLenVal.textContent = f2(els.burstLen.value);
   els.burstGapVal.textContent = f2(els.burstGap.value);
   els.burstBoostVal.textContent = f2(els.burstBoost.value);
-  if (els.burstGhost) els.burstGhostVal.textContent = f2(els.burstGhost.value);
+
+  els.bloomStrengthVal.textContent = f2(els.bloomStrength.value);
+  els.bloomRadiusVal.textContent = els.bloomRadius.value;
 
   els.flowStrengthVal.textContent = els.flowStrength.value;
   els.flowScaleVal.textContent = els.flowScale.value;
@@ -321,6 +333,13 @@ if (els.glitchBaseY) els.glitchBaseYVal.textContent = (els.glitchBaseY.value|0);
 
 
 
+
+  // Colorizer
+  els.colHueVal.textContent = els.colHue.value;
+  els.colSatVal.textContent = (+els.colSat.value).toFixed(2);
+  // els.colRVal.textContent = els.colR.value;
+  // els.colGVal.textContent = els.colR.value;
+  // els.colVal.textContent = els.colR.value;
 
 }
 
@@ -473,9 +492,6 @@ applyGlitch(
   parseInt(els.glitchBaseY?.value || '0', 10)
 );
 
-  // Burst echo — CVI-style strobe/freeze re-injection into buffer
-  applyBurstEcho();
-
   // Feedback transforms
   const fb = parseFloat(els.feedback.value);
   if (fb > 0) {
@@ -525,6 +541,30 @@ applyGlitch(
 // }
 
 
+
+  // Bloom
+  const bloomK = parseFloat(els.bloomStrength.value);
+  const bloomR = parseInt(els.bloomRadius.value, 10);
+  // if (els.bloomOn.checked && bloomK > 0 && bloomR > 0 && (frameCount % everyN === 0)) {
+  //   gBloomWork.clear();
+  //   gBloomWork.imageMode(CORNER);
+  //   gBloomWork.image(gBuf, 0, 0, gBloomWork.width, gBloomWork.height);
+  //   gBloomWork.filter(BLUR, bloomR);
+  //   gBuf.push(); gBuf.imageMode(CORNER); gBuf.blendMode(ADD);
+  //   gBuf.tint(255, Math.min(2, bloomK) * 255);
+  //   gBuf.image(gBloomWork, 0, 0, gBuf.width, gBuf.height); gBuf.pop();
+  // }
+
+  // Colorizer
+  if (els.colOn && els.colOn.checked) {
+    // applyColorizer(gBuf, gTemp,
+    //   parseInt(els.colHue.value, 10),
+    //   parseFloat(els.colSat.value),
+    //   parseFloat(els.colR.value),
+    //   parseFloat(els.colG.value),
+    //   parseFloat(els.colB.value));
+    const t = gBuf; gBuf = gTemp; gTemp = t;
+  }
 
   // Symmetry
 if (els.symOn && els.symOn.checked) {

@@ -1,57 +1,10 @@
 // effects.js — extracted effect helpers (true content)
-
-// Snapshot held during a burst for CVI-style strobe/echo
-let _burstSnap = null;
-let _burstSnapAge = 0;
-
 function updateBurstState(){
   burst.on = !!els.burstOn.checked;
-  if (!burst.on) {
-    _burstSnap = null;
-    return;
-  }
+  if (!burst.on) return;
   burst.t += (deltaTime || 16.6) / 1000.0;
-
-  const wasInBurst = burst.inBurst;
-
-  if (burst.inBurst && burst.t >= burst.len) {
-    burst.inBurst = false;
-    burst.t = 0;
-    _burstSnap = null;
-  } else if (!burst.inBurst && burst.t >= burst.gap) {
-    burst.inBurst = true;
-    burst.t = 0;
-    _burstSnapAge = 0;
-  }
-
-  // Capture gBuf snapshot on the first frame of each burst
-  if (burst.inBurst && !wasInBurst) {
-    try { _burstSnap = gBuf.get(); } catch(e) { _burstSnap = null; }
-  }
-}
-
-// Apply burst echo back into gBuf — after applyGlitch, before feedback
-function applyBurstEcho(){
-  if (!burst.on || !burst.inBurst || !_burstSnap) return;
-
-  _burstSnapAge++;
-
-  const kick    = parseFloat(els.burstBoost?.value  || '1.0');  // zoom strength
-  const ghost   = parseFloat(els.burstGhost?.value  || '0.6');  // user-controlled opacity
-
-  // Optional: fade slightly over burst duration, but ghost drives the base level
-  const progress = Math.min(1, burst.t / Math.max(0.01, burst.len));
-  const opacity  = Math.floor(ghost * (1.0 - progress * 0.25) * 255); // fades 25% over duration
-
-  const zoomScale = 1.0 + (kick - 1.0) * 0.04;
-
-  gBuf.push();
-  gBuf.imageMode(CENTER);
-  gBuf.tint(255, opacity);
-  gBuf.translate(gBuf.width * 0.5, gBuf.height * 0.5);
-  gBuf.scale(zoomScale);
-  gBuf.image(_burstSnap, 0, 0, gBuf.width, gBuf.height);
-  gBuf.pop();
+  if (burst.inBurst && burst.t >= burst.len) { burst.inBurst = false; burst.t = 0; }
+  else if (!burst.inBurst && burst.t >= burst.gap) { burst.inBurst = true; burst.t = 0; }
 }
 
 function applyGlitch(density = 1, baseDX = 0, baseDY = 0){
@@ -99,52 +52,32 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0){
 
   randomSeed(baseSeed + frameCount);
 
-  // --- Scanline Band Displacement (CLUSTERS) ---
-  // Divides the frame into N horizontal bands; each band is independently
-  // sampled from a different depth in the ring buffer and blitted in-place.
-  // Produces the characteristic CVI horizontal-band time-offset / tear look.
-  if (useCl && k > 0 && frameRing.length > 1) {
-    const bandHeight = Math.max(4, Math.floor(radius * 3)); // SPREAD controls band thickness
-    const depth      = parseFloat(els.depth.value);
-    const maxBack    = Math.max(1, Math.floor((frameRing.length - 1) * depth));
-
-    // Generate k band positions, spread across the frame height
-    const bandAlpha = 220;
-    for (let n = 0; n < k; n++) {
-      // Each band drifts slowly via noise so it's animated, not static
-      const driftY = noise(n * 4.1 + nPhaseY * 0.4) * height;
-      const bandY  = Math.floor(driftY);
-      const bTop   = Math.max(0, bandY);
-      const bBot   = Math.min(height, bTop + bandHeight);
-      const bH     = bBot - bTop;
-      if (bH <= 0) continue;
-
-      // Each band gets its own ring depth — creates temporal offset between bands
-      const bandDepth = Math.floor(random(1, maxBack + 1));
-      const back      = frameRing.length - 1 - bandDepth;
-      const src       = frameRing[Math.max(0, back)];
-
-      // Horizontal shift per band (noise-driven, can push the band left/right)
-      const shiftX = Math.floor(map(noise(n * 2.3 + nPhaseX * 0.5), 0, 1, -width * 0.12, width * 0.12));
-      const srcX   = Math.max(0, Math.min(width - 1, shiftX < 0 ? -shiftX : 0));
-      const dstX   = Math.max(0, shiftX > 0 ? shiftX : 0);
-      const bW     = width - Math.abs(shiftX);
-      if (bW <= 0) continue;
-
-      const strip = src.get(srcX, bTop, bW, bH);
-
-      gBuf.push();
-      gBuf.imageMode(CORNER);
-      gBuf.tint(255, bandAlpha);
-      gBuf.image(strip, dstX, bTop, bW, bH);
-      gBuf.pop();
+  if (useCl && k > 0) {
+    const centers = [];
+    for (let i = 0; i < k; i++) centers.push([Math.floor(random(cols))*block + (block>>1), Math.floor(random(rows))*block + (block>>1)]);
+    const per = Math.max(1, Math.floor(count / k));
+    for (const c of centers) {
+      for (let i = 0; i < per && targets.length < count; i++) {
+        const ang = random(TWO_PI), r = random(radius);
+        const x = (c[0] + Math.cos(ang)*r + width) % width;
+        const y = (c[1] + Math.sin(ang)*r + height) % height;
+        let ok = tryAdd(Math.floor(x), Math.floor(y)), tries = 0;
+        while (!ok && tries++ < 6) {
+          const a2 = random(TWO_PI), r2 = random(radius);
+          ok = tryAdd(Math.floor((c[0] + Math.cos(a2)*r2 + width) % width),
+                      Math.floor((c[1] + Math.sin(a2)*r2 + height) % height));
+        }
+      }
     }
-  }
-
-  // Scatter glitch tiles
-  let attempts = 0;
-  while (targets.length < count && attempts++ < count * 8) {
-    tryAdd(Math.floor(random(cols))*block, Math.floor(random(rows))*block);
+    let guard = 0;
+    while (targets.length < count && guard++ < count * 4) {
+      tryAdd(Math.floor(random(cols))*block, Math.floor(random(rows))*block);
+    }
+  } else {
+    let attempts = 0;
+    while (targets.length < count && attempts++ < count * 8) {
+      tryAdd(Math.floor(random(cols))*block, Math.floor(random(rows))*block);
+    }
   }
 
   gBuf.push();
@@ -294,6 +227,21 @@ dst.image(tile, x, y, tileW, tileH);
 
     }
   }
+}
+
+function applyColorizer(src, dst, hueDeg=20, sat=1.1) {
+  dst.clear(); dst.imageMode(CORNER); dst.image(src, 0, 0, dst.width, dst.height); dst.loadPixels();
+  const pix = dst.pixels; const H = (((hueDeg % 360) + 360) % 360) / 60, C = sat, u = 0.787, w = 0.213;
+  for (let i = 0; i < pix.length; i += 4) {
+    const r = pix[i]/255, g = pix[i+1]/255, b = pix[i+2]/255;
+    const nr = r + H * (-w*r - u*g + (1-u)*b);
+    const ng = g + H * ((1-u)*r - w*g - u*b);
+    const nb = b + H * (u*r + (1-u)*g - w*b);
+    pix[i]   = Math.round(Math.min(1, Math.max(0, nr*C)) * 255);
+    pix[i+1] = Math.round(Math.min(1, Math.max(0, ng*C)) * 255);
+    pix[i+2] = Math.round(Math.min(1, Math.max(0, nb*C)) * 255);
+  }
+  dst.updatePixels();
 }
 
 // --- Symmetry helper (vertical / horizontal / both) with axis position ---
