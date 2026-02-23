@@ -151,6 +151,8 @@ function hookUI() {
   'glitchBaseX','glitchBaseXVal','glitchBaseY','glitchBaseYVal',
   'glitchSpeedMul','glitchSpeedMulVal',
   'glitchAlpha','glitchAlphaVal','glitchJitter','glitchJitterVal','glitchSmearAngle','glitchSmearAngleVal',
+
+  // determinism
   'seed',
 
   // buffer evolution
@@ -183,17 +185,19 @@ function hookUI() {
   'solarizeOn','solarizeThresh','solarizeThreshVal','solarizeAmt','solarizeAmtVal',
   'solarizeR','solarizeRVal','solarizeG','solarizeGVal','solarizeB','solarizeBVal',
 
+  // trail (removed)
+
   // scanline spatialization
   'scanAlpha','scanAlphaVal','scanShift','scanShiftVal','scanDrift','scanDriftVal',
 
   // depth + corrupt dynamics
   'depthScatter','depthScatterVal','corruptDrift','corruptDriftVal',
 
-  // trail accordion
-  'trailLayers','trailLayersVal','trailDepth','trailDepthVal',
-
   // background
-  'bgMode'
+  'bgMode',
+
+  // frame-ring delay
+  'glitchSpeedMul','glitchSpeedMulVal'
 ].forEach(k => els[k] = $(k));
 
 
@@ -239,7 +243,7 @@ function hookUI() {
    'glitchAlpha','glitchJitter','glitchSmearAngle',
    'flowStrength','flowScale','flowPulse','flowImpl',
    'baseMix','symPos','glitchSpeedMul',
-   'depthScatter','corruptDrift','trailLayers','trailDepth',
+   'depthScatter','corruptDrift',
    'solarizeThresh','solarizeAmt','solarizeR','solarizeG','solarizeB'].forEach(id => els[id].addEventListener('input', updateLabels));
   els.baseOn.addEventListener('change', () => { els.baseMix.disabled = !els.baseOn.checked; updateLabels(); });
 
@@ -313,8 +317,6 @@ function updateLabels() {
   if (els.scanDrift)  els.scanDriftVal.textContent  = (+els.scanDrift.value).toFixed(2);
   if (els.depthScatter)  els.depthScatterVal.textContent  = (+els.depthScatter.value).toFixed(2);
   if (els.corruptDrift)  els.corruptDriftVal.textContent  = (+els.corruptDrift.value).toFixed(2);
-  if (els.trailLayers)  els.trailLayersVal.textContent  = (els.trailLayers.value|0);
-  if (els.trailDepth)   els.trailDepthVal.textContent   = (+els.trailDepth.value).toFixed(2);
   if (els.symPos) els.symPosVal.textContent = (+els.symPos.value).toFixed(2);
 
   if (els.solarizeThresh) els.solarizeThreshVal.textContent = (+els.solarizeThresh.value).toFixed(2);
@@ -453,9 +455,11 @@ function draw() {
     gBuf.drawingContext.globalCompositeOperation = 'source-over';
   }
 
-  const mul     = parseFloat(els.glitchSpeedMul?.value || '1');
-  const coarse  = parseFloat(els.glitchSpeed.value) * mul;
-  const fine    = parseFloat(els.glitchSpeedFine.value) * mul;
+  const mul    = parseFloat(els.glitchSpeedMul?.value || '1');
+  const coarse = parseFloat(els.glitchSpeed.value)      * mul;    
+  const fine   = parseFloat(els.glitchSpeedFine.value)  * mul;
+  // const coarse = parseFloat(els.glitchSpeed.value);
+  // const fine   = parseFloat(els.glitchSpeedFine.value || 1);
   const density = coarse * fine;
   nPhaseX += density * 0.01;
   nPhaseY += density * 0.011;
@@ -469,13 +473,23 @@ function draw() {
   parseInt(els.glitchBaseY?.value || '0', 10)
 );
 
-  // Feedback
+  // Feedback transforms
   const fb = parseFloat(els.feedback.value);
   if (fb > 0) {
-    const fx = parseFloat(els.fbX.value) || 0;
-    const fy = parseFloat(els.fbY.value) || 0;
-    const fz = parseFloat(els.fbZ.value) || 1;
-    const ft = radians(parseFloat(els.fbTheta.value) || 0);
+    let fx = parseFloat(els.fbX.value) || 0;
+    let fy = parseFloat(els.fbY.value) || 0;
+    let fz = parseFloat(els.fbZ.value) || 1;
+    let ft = radians(parseFloat(els.fbTheta.value) || 0);
+
+    // if (els.fbAuto.checked) {
+    //   const sp = parseFloat(els.fbSpeed.value);
+    //   fbPhaseX += sp * 0.005; fbPhaseY += sp * 0.006; fbPhaseR += sp * 0.004; fbPhaseZ += sp * 0.003;
+    //   if (els.fbMoveX.checked)      fx += map(noise(fbPhaseX), 0, 1, -20, 20);
+    //   if (els.fbMoveY.checked)      fy += map(noise(fbPhaseY), 0, 1, -20, 20);
+    //   if (els.fbMoveTheta.checked)  ft += radians(map(noise(fbPhaseR), 0, 1, -10, 10));
+    //   if (els.fbMoveZ.checked)      fz *= (1.0 + map(noise(fbPhaseZ), 0, 1, -0.01, 0.01));
+    // }
+
     const tmp = gBuf.get();
     gBuf.clear();
     gBuf.push();
@@ -491,9 +505,21 @@ function draw() {
   // Flow
   const flowS = parseInt(els.flowStrength.value, 10);
   if (els.flowOn.checked && flowS > 0 && (frameCount % everyN === 0)) {
-    applyFlowWarp(gBuf, gWarp, flowS, parseInt(els.flowScale.value, 10), parseInt(els.flowPulse?.value || '0', 10), parseFloat(els.flowImpl?.value || '0'));
+    applyFlowWarp(gBuf, gWarp, flowS, parseInt(els.flowScale.value, 10),parseInt(els.flowPulse?.value || '0', 100),parseFloat(els.flowImpl?.value || '0') );
     const t = gBuf; gBuf = gWarp; gWarp = t;
   }
+// Flow
+// const flowS = parseInt(els.flowStrength.value, 10);
+// if (els.flowOn.checked && flowS > 0 && (frameCount % everyN === 0)) {
+//   applyFlowWarp(
+//     gBuf, gWarp,
+//     flowS,
+//     parseInt(els.flowScale.value, 10),
+//     parseInt(els.flowPulse?.value || '0', 10),       // NEW pulse spacing
+//     parseFloat(els.flowImpl?.value || '0')           // NEW implosion
+//   );
+//   const t = gBuf; gBuf = gWarp; gWarp = t;
+// }
 
 
 
@@ -515,6 +541,7 @@ if (els.symOn && els.symOn.checked) {
       parseFloat(els.solarizeB?.value      || '1.0'));
   }
 
+  // Base composite
   // Base composite
   if (els.baseOn.checked && parseFloat(els.baseMix.value) > 0) {
     push();
