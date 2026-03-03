@@ -1,8 +1,8 @@
-# huff
+<p align="center">
+  <img width="300px" height="950px" src="https://github.com/schwwaaa/huff/blob/beta/src-tauri/icons/icon.png?raw=true"/>  
+</p>
 
-A real-time datamosh / glitch-art desktop application built with [Tauri v1](https://tauri.app/) + p5.js.
-
-Load a video file or plug in a webcam, then sculpt live datamoshing, feedback loops, flow warps, symmetry, solarise, scanline corruption, and more — all streamed in real time to a separate fullscreen canvas window via an embedded WebSocket relay.
+<p align="center"><em>A real-time datamosh / glitch-art desktop application built with Tauri + p5.js.</em></p>
 
 ---
 
@@ -27,6 +27,8 @@ Load a video file or plug in a webcam, then sculpt live datamoshing, feedback lo
 - [Troubleshooting](#troubleshooting)
 
 ---
+
+Load a video file or plug in a webcam, then sculpt live datamoshing, feedback loops, flow warps, symmetry, solarise, scanline corruption, and more — all streamed in real time to a separate fullscreen canvas window via an embedded WebSocket relay.
 
 ## Features
 
