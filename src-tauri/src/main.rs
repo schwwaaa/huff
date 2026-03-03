@@ -142,23 +142,33 @@ async fn handle_ws(
 }
 
 fn main() {
-  tauri::Builder::default()
-    .setup(|_app| {
+tauri::Builder::default()
+  .setup(|_app| {
+      const PORT: u16 = 8787;
+
+      println!("[ws-relay] setup: starting listeners on 127.0.0.1:{PORT} and [::1]:{PORT}");
+
       let clients_v4 = Arc::clone(&CLIENTS);
       let clients_v6 = Arc::clone(&CLIENTS);
 
       tauri::async_runtime::spawn(async move {
-        if let Err(e) = run_listener(format!("127.0.0.1:{PORT}"), clients_v4).await {
-          eprintln!("[ws-relay] failed IPv4 bind: {e}");
-        }
+          let addr = format!("127.0.0.1:{PORT}");
+          println!("[ws-relay] trying IPv4 bind on {}", addr);
+          if let Err(e) = run_listener(addr, clients_v4).await {
+              eprintln!("[ws-relay] IPv4 listener error: {e}");
+          }
       });
+
       tauri::async_runtime::spawn(async move {
-        if let Err(e) = run_listener(format!("[::1]:{PORT}"), clients_v6).await {
-          eprintln!("[ws-relay] failed IPv6 bind: {e}");
-        }
+          let addr = format!("[::1]:{PORT}");
+          println!("[ws-relay] trying IPv6 bind on {}", addr);
+          if let Err(e) = run_listener(addr, clients_v6).await {
+              eprintln!("[ws-relay] IPv6 listener error: {e}");
+          }
       });
+
       Ok(())
-    })
-    .run(tauri::generate_context!())
-    .expect("error while running tauri application");
+  })
+  .run(tauri::generate_context!())
+  .expect("error while running tauri app");
 }

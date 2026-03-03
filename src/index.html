@@ -161,16 +161,22 @@
         }
     </style>
 
-    <script>
-        // Optional: force a specific relay URL
-        // window.WS_MIRROR_URL = 'ws://127.0.0.1:8787';
-        function __getWSURL__(port = 8787) {
-            const isSecure = location.protocol === 'https:';
-            const proto = isSecure ? 'wss://' : 'ws://';
-            const host = location.hostname || '127.0.0.1';
-            return (window.WS_MIRROR_URL || (proto + host + ':' + port));
+<script>
+    // Optional: force a specific relay URL from outside (for debug / overrides)
+    // window.WS_MIRROR_URL = 'ws://127.0.0.1:8787';
+
+    function __getWSURL__(port = 8787) {
+        // In Tauri we always talk to a localhost relay; avoid playing games with
+        // location.protocol / hostname which can be 'tauri:' etc.
+        const fallback = `ws://127.0.0.1:${port}`;
+
+        if (typeof window !== 'undefined' && typeof window.WS_MIRROR_URL === 'string' && window.WS_MIRROR_URL.length > 0) {
+            return window.WS_MIRROR_URL;
         }
-    </script>
+
+        return fallback;
+    }
+</script>
 
 </head>
 

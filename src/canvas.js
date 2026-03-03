@@ -602,14 +602,37 @@ function startCamera(deviceId) {
 
   let ws = null, connected = false, sending = false;
 
-  function ensureWS() {
-    if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
-    ws = new WebSocket(wsUrl);
-    ws.binaryType = 'arraybuffer';
-    ws.onopen  = () => { connected = true;  setWSStatus('WS: connected');    try { ws.send(JSON.stringify({ type: 'hello', role: 'index' })); } catch {} };
-    ws.onclose = () => { connected = false; setWSStatus('WS: disconnected'); setTimeout(ensureWS, 1500); };
-  }
-  ensureWS();
+function ensureWS() {
+  if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
+
+  console.log('[ws] connecting to', wsUrl);
+  ws = new WebSocket(wsUrl);
+  ws.binaryType = 'arraybuffer';
+
+  ws.onopen  = () => {
+    connected = true;
+    setWSStatus('WS: connected');
+    console.log('[ws] connected');
+
+    try {
+      ws.send(JSON.stringify({ type: 'hello', role: 'index' }));
+    } catch (err) {
+      console.error('[ws] error sending hello', err);
+    }
+  };
+
+  ws.onerror = (ev) => {
+    console.error('[ws] error event', ev);
+  };
+
+  ws.onclose = (ev) => {
+    connected = false;
+    setWSStatus('WS: disconnected');
+    console.warn('[ws] closed', ev.code, ev.reason);
+    setTimeout(ensureWS, 1500);
+  };
+}
+ensureWS();
 
   async function sendFrameNow(cnv) {
     if (!connected || !ws || ws.readyState !== 1 || sending) return;
