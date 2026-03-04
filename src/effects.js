@@ -1,40 +1,16 @@
 // effects.js
-// Optimizations:
-//  - frameRing now stores ImageData; getRingFrame() renders into a temp canvas
-//    only when needed, avoiding p5 Graphics.get() (which allocates + copies every call)
-//  - Reusable _tempCanvas / _tempCtx for ring frame extraction
-//  - applyFlowWarp reuses a single offscreen canvas for tile blitting
-//  - applySolarize uses typed-array math with fewer object allocations
+// Perf notes:
+//  - frameRing stores ImageData; drawRingRegion uses a single shared canvas
+//  - applySolarize downsamples to max 640px wide before pixel math (big Windows win)
+//  - applyTrails runs independently — not nested inside tile loop
+//  - Scanlines skip on everyN like solarize
+//  - applyFlowWarp uses native drawImage throughout
 
 // ─── Ring frame helpers ────────────────────────────────────────────────────
-// frameRing entries are now ImageData objects (set in canvas.js draw loop).
-// These helpers convert them back to something p5 can draw (createImage).
 
 let _ringCanvas = null;
 let _ringCtx    = null;
 
-/**
- * Returns a p5.Image wrapping the given ImageData ring frame.
- * Reuses a single offscreen canvas to avoid per-frame allocations.
- */
-function ringFrameToImage(imgData) {
-  if (!_ringCanvas) {
-    _ringCanvas = document.createElement('canvas');
-    _ringCtx    = _ringCanvas.getContext('2d');
-  }
-  if (_ringCanvas.width !== imgData.width || _ringCanvas.height !== imgData.height) {
-    _ringCanvas.width  = imgData.width;
-    _ringCanvas.height = imgData.height;
-  }
-  _ringCtx.putImageData(imgData, 0, 0);
-  // Wrap the canvas element so p5's image() accepts it
-  return _ringCanvas;
-}
-
-/**
- * Draws a region from a ring-frame ImageData directly into a p5.Graphics target.
- * sx, sy, sw, sh — source rect; dx, dy, dw, dh — destination rect.
- */
 function drawRingRegion(target, imgData, sx, sy, sw, sh, dx, dy, dw, dh) {
   if (!_ringCanvas) {
     _ringCanvas = document.createElement('canvas');
@@ -44,21 +20,47 @@ function drawRingRegion(target, imgData, sx, sy, sw, sh, dx, dy, dw, dh) {
     _ringCanvas.width  = imgData.width;
     _ringCanvas.height = imgData.height;
     _ringCtx.putImageData(imgData, 0, 0);
-  } else {
-    // Only re-upload when the frame changes (tracked via a sentinel)
-    if (_ringCanvas._lastFrame !== imgData) {
-      _ringCtx.putImageData(imgData, 0, 0);
-      _ringCanvas._lastFrame = imgData;
-    }
+    _ringCanvas._lastFrame = imgData;
+  } else if (_ringCanvas._lastFrame !== imgData) {
+    _ringCtx.putImageData(imgData, 0, 0);
+    _ringCanvas._lastFrame = imgData;
   }
-  // Use native drawImage for the crop — skips p5 overhead
   target.drawingContext.drawImage(_ringCanvas, sx, sy, sw, sh, dx, dy, dw, dh);
+}
+
+// ─── Trails (independent full-frame ghost pass) ────────────────────────────
+// Runs before the tile pass so ghosts sit under tiles.
+// Requires: frameRing.length > 1, trailLayers > 0, trailDepth > 0
+
+function applyTrails() {
+  const trailLayers = parseInt(els.trailLayers?.value ?? '0', 10);
+  const trailDepth  = parseFloat(els.trailDepth?.value ?? '0');
+  if (trailLayers <= 0 || trailDepth <= 0 || frameRing.length < 2) return;
+
+  const maxBack = Math.max(1, Math.floor((frameRing.length - 1) * trailDepth));
+  const step    = Math.max(1, Math.floor(maxBack / trailLayers));
+  const ctx     = gBuf.drawingContext;
+
+  for (let g = 1; g <= trailLayers; g++) {
+    const back  = Math.min(frameRing.length - 1, g * step);
+    const src   = frameRing[frameRing.length - 1 - back];
+    if (!src) continue;
+    // Fade from opaque at g=1 to near-transparent at g=trailLayers
+    const alpha = (1 - (g - 1) / trailLayers) * 0.65;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    drawRingRegion(gBuf, src, 0, 0, width, height, 0, 0, width, height);
+    ctx.restore();
+  }
 }
 
 // ─── Glitch ────────────────────────────────────────────────────────────────
 
 function applyGlitch(density = 1, baseDX = 0, baseDY = 0) {
   if (els.corruptOn && !els.corruptOn.checked) return;
+
+  // Run trails before tiles so they appear underneath
+  applyTrails();
 
   const block     = parseInt(els.block.value, 10);
   const size      = parseInt(els.glitchSize.value, 10);
@@ -92,7 +94,6 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0) {
   const corruptDrift = parseFloat(els.corruptDrift?.value ?? '0');
   const driftMod     = corruptDrift > 0 ? (noise(nPhaseX * 0.08, nPhaseY * 0.08) * 2 - 1) : 0;
   const corruptMul   = Math.max(0.05, 1.0 + corruptDrift * driftMod);
-
   let count = Math.max(1, Math.floor(total * corrupt * corruptMul));
 
   const gap         = parseInt(els.spatialGap.value, 10);
@@ -115,7 +116,7 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0) {
 
   randomSeed(baseSeed + frameCount);
 
-  // Scanline band displacement
+  // ── Scanlines (band displacement) ───────────────────────────────────────
   if (useScan && scanBands > 0 && frameRing.length > 1) {
     const bandHeight = Math.max(4, Math.floor(scanRadius * 3));
     const maxBackSc  = Math.max(1, Math.floor((frameRing.length - 1) * depth));
@@ -123,6 +124,7 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0) {
     const shiftScale = parseFloat(els.scanShift?.value ?? '0.12');
     const driftSpeed = parseFloat(els.scanDrift?.value ?? '1.0');
 
+    const ctx = gBuf.drawingContext;
     for (let n = 0; n < scanBands; n++) {
       const driftY = noise(n * 4.1 + nPhaseY * 0.4 * driftSpeed) * height;
       const bTop   = Math.max(0, Math.floor(driftY));
@@ -138,15 +140,14 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0) {
       const bW     = width - Math.abs(shiftX);
       if (bW <= 0) continue;
 
-      gBuf.push();
-      gBuf.drawingContext.globalAlpha = bandAlpha / 255;
+      ctx.save();
+      ctx.globalAlpha = bandAlpha / 255;
       drawRingRegion(gBuf, src, srcX, bTop, bW, bH, dstX, bTop, bW, bH);
-      gBuf.drawingContext.globalAlpha = 1;
-      gBuf.pop();
+      ctx.restore();
     }
   }
 
-  // Tile placement: radial cluster or random scatter
+  // ── Tile placement ───────────────────────────────────────────────────────
   if (useCluTiles && cluCenters > 0) {
     const centers = [];
     for (let i = 0; i < cluCenters; i++) {
@@ -180,7 +181,9 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0) {
       tryAdd(Math.floor(random(cols)) * block, Math.floor(random(rows)) * block);
   }
 
-  // Blit tiles using drawRingRegion (no per-tile p5 Graphics allocation)
+  // ── Blit tiles ───────────────────────────────────────────────────────────
+  if (frameRing.length === 0 || maxBack <= 0) return;
+
   const ctx = gBuf.drawingContext;
   for (let i = 0; i < targets.length; i++) {
     let [cx, cy] = targets[i];
@@ -196,43 +199,24 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0) {
     const h = Math.min(block * (size / 20), height - cy);
     if (w <= 0 || h <= 0) continue;
 
-    if (frameRing.length > 0 && maxBack > 0) {
-      const randBack  = Math.floor(random(1, maxBack + 1));
-      const blendBack = Math.round(baseBack + (randBack - baseBack) * depthScatter);
-      const back      = frameRing.length - 1 - Math.max(1, Math.min(maxBack, blendBack));
-      const src       = frameRing[Math.max(0, back)];
+    const randBack  = Math.floor(random(1, maxBack + 1));
+    const blendBack = Math.round(baseBack + (randBack - baseBack) * depthScatter);
+    const back      = frameRing.length - 1 - Math.max(1, Math.min(maxBack, blendBack));
+    const src       = frameRing[Math.max(0, back)];
 
-      // Trail accordion ghost frames
-      const trailLayers = parseInt(els.trailLayers?.value ?? '1', 10);
-      const trailDepth  = parseFloat(els.trailDepth?.value  ?? '0');
-      if (trailLayers > 0 && trailDepth > 0 && back > 0) {
-        const maxGhostSpan = Math.max(1, Math.floor(maxBack * trailDepth));
-        const step = Math.max(1, Math.floor(maxGhostSpan / trailLayers));
-        for (let g = 1; g <= trailLayers; g++) {
-          const ghostBack  = Math.min(frameRing.length - 1, back + g * step);
-          const ghostAlpha = (1 - g / (trailLayers + 1)) * (160 / 255);
-          const gSrc = frameRing[ghostBack];
-          ctx.save();
-          ctx.globalAlpha = ghostAlpha;
-          drawRingRegion(gBuf, gSrc, cx, cy, w, h, cx, cy, w, h);
-          ctx.restore();
-        }
-      }
+    ctx.save();
+    ctx.globalAlpha = tileAlpha / 255;
+    drawRingRegion(gBuf, src, cx, cy, w, h, cx, cy, w, h);
+    ctx.restore();
 
-      ctx.save();
-      ctx.globalAlpha = tileAlpha / 255;
-      drawRingRegion(gBuf, src, cx, cy, w, h, cx, cy, w, h);
-      ctx.restore();
-
-      if (smearLen > 0) {
-        for (let s = 1; s <= smearLen; s++) {
-          const sx2 = Math.max(0, Math.min(width  - w, cx + Math.round(dxUnit * s * block) + baseDX));
-          const sy2 = Math.max(0, Math.min(height - h, cy + Math.round(dyUnit * s * block) + baseDY));
-          ctx.save();
-          ctx.globalAlpha = tileAlpha / 255;
-          drawRingRegion(gBuf, src, cx, cy, w, h, sx2, sy2, w, h);
-          ctx.restore();
-        }
+    if (smearLen > 0) {
+      for (let s = 1; s <= smearLen; s++) {
+        const sx2 = Math.max(0, Math.min(width  - w, cx + Math.round(dxUnit * s * block) + baseDX));
+        const sy2 = Math.max(0, Math.min(height - h, cy + Math.round(dyUnit * s * block) + baseDY));
+        ctx.save();
+        ctx.globalAlpha = tileAlpha / 255;
+        drawRingRegion(gBuf, src, cx, cy, w, h, sx2, sy2, w, h);
+        ctx.restore();
       }
     }
   }
@@ -245,7 +229,6 @@ function applyFlowWarp(src, dst, strength = 6, scale = 80, pulse = 0, implode = 
 
   let srcFrame = src;
   if (pulse > 0 && Array.isArray(frameRing) && frameRing.length > pulse) {
-    // frameRing stores ImageData; render onto the shared ring canvas
     srcFrame = { _isRingData: true, data: frameRing[frameRing.length - 1 - pulse] };
   }
 
@@ -254,10 +237,8 @@ function applyFlowWarp(src, dst, strength = 6, scale = 80, pulse = 0, implode = 
   const t    = frameCount * 0.005;
   const w = width, h = height;
   const cx2 = w * 0.5, cy2 = h * 0.5;
-
   const dctx = dst.drawingContext;
   dctx.save();
-  dst.imageMode(CORNER);
 
   for (let y = 0; y < h; y += cell) {
     for (let x = 0; x < w; x += cell) {
@@ -272,21 +253,19 @@ function applyFlowWarp(src, dst, strength = 6, scale = 80, pulse = 0, implode = 
         const px = x + 0.5 * cell, py = y + 0.5 * cell;
         const vx = cx2 - px, vy = cy2 - py;
         const L  = Math.hypot(vx, vy) || 1;
-        const k  = off * implode;
-        dx2 += (vx / L) * k;
-        dy2 += (vy / L) * k;
+        dx2 += (vx / L) * off * implode;
+        dy2 += (vy / L) * off * implode;
       }
 
       const tileW = Math.min(cell, w - x);
       const tileH = Math.min(cell, h - y);
-      const sx2 = Math.max(0, Math.min(w - tileW, Math.floor(x + dx2)));
-      const sy2 = Math.max(0, Math.min(h - tileH, Math.floor(y + dy2)));
+      const sx2   = Math.max(0, Math.min(w - tileW, Math.floor(x + dx2)));
+      const sy2   = Math.max(0, Math.min(h - tileH, Math.floor(y + dy2)));
 
-      if (srcFrame && srcFrame._isRingData) {
+      if (srcFrame?._isRingData) {
         drawRingRegion(dst, srcFrame.data, sx2, sy2, tileW, tileH, x, y, tileW, tileH);
       } else {
-        // srcFrame is a p5 Graphics (live buffer path)
-        dctx.drawImage(srcFrame.elt || srcFrame.canvas || srcFrame.drawingContext.canvas,
+        dctx.drawImage(srcFrame.elt || srcFrame.drawingContext.canvas,
           sx2, sy2, tileW, tileH, x, y, tileW, tileH);
       }
     }
@@ -295,22 +274,55 @@ function applyFlowWarp(src, dst, strength = 6, scale = 80, pulse = 0, implode = 
 }
 
 // ─── Solarize ─────────────────────────────────────────────────────────────
+// Perf: downsamples to a max 640px wide offscreen canvas before pixel math,
+// then scales result back up. This is ~4-16x faster on large screens / Windows.
+
+let _solCanvas = null, _solCtx = null;
+let _solOut    = null, _solOutCtx = null;
 
 function applySolarize(buf, thresh = 0.5, amount = 1.0, solR = 1.0, solG = 1.0, solB = 1.0) {
-  buf.loadPixels();
-  const pix = buf.pixels;
+  const BW = buf.width, BH = buf.height;
+  const MAX_W = 640;
+  const scale = BW > MAX_W ? MAX_W / BW : 1;
+  const sw = Math.max(1, Math.round(BW * scale));
+  const sh = Math.max(1, Math.round(BH * scale));
+
+  // Allocate/resize working canvases
+  if (!_solCanvas || _solCanvas.width !== sw || _solCanvas.height !== sh) {
+    _solCanvas = document.createElement('canvas'); _solCanvas.width = sw; _solCanvas.height = sh;
+    _solCtx    = _solCanvas.getContext('2d', { willReadFrequently: true });
+  }
+  if (!_solOut || _solOut.width !== BW || _solOut.height !== BH) {
+    _solOut    = document.createElement('canvas'); _solOut.width = BW; _solOut.height = BH;
+    _solOutCtx = _solOut.getContext('2d');
+  }
+
+  // Downsample buf into working canvas
+  const srcCanvas = buf.elt || buf.drawingContext.canvas;
+  _solCtx.clearRect(0, 0, sw, sh);
+  _solCtx.drawImage(srcCanvas, 0, 0, sw, sh);
+
+  const imgData = _solCtx.getImageData(0, 0, sw, sh);
+  const pix = imgData.data;
   const t   = thresh * 255;
   const a   = Math.max(0, Math.min(1, amount));
+
   for (let i = 0; i < pix.length; i += 4) {
-    const r = pix[i], g = pix[i + 1], b = pix[i + 2];
-    const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+    const r = pix[i], g = pix[i+1], b = pix[i+2];
+    const lum = 0.299*r + 0.587*g + 0.114*b;
     if (lum > t) {
-      pix[i]     = Math.round(Math.min(255, Math.max(0, (r + (255 - r - r) * a) * solR)));
-      pix[i + 1] = Math.round(Math.min(255, Math.max(0, (g + (255 - g - g) * a) * solG)));
-      pix[i + 2] = Math.round(Math.min(255, Math.max(0, (b + (255 - b - b) * a) * solB)));
+      pix[i]   = Math.min(255, Math.max(0, (r + (255-r-r)*a) * solR + 0.5) | 0);
+      pix[i+1] = Math.min(255, Math.max(0, (g + (255-g-g)*a) * solG + 0.5) | 0);
+      pix[i+2] = Math.min(255, Math.max(0, (b + (255-b-b)*a) * solB + 0.5) | 0);
     }
   }
-  buf.updatePixels();
+  _solCtx.putImageData(imgData, 0, 0);
+
+  // Scale back to full res and composite onto buf
+  _solOutCtx.clearRect(0, 0, BW, BH);
+  _solOutCtx.drawImage(_solCanvas, 0, 0, BW, BH);
+  buf.drawingContext.clearRect(0, 0, BW, BH);
+  buf.drawingContext.drawImage(_solOut, 0, 0);
 }
 
 // ─── Symmetry ─────────────────────────────────────────────────────────────
@@ -329,16 +341,15 @@ function applySymmetry(src, dst, mode = 'v', pos = 0.5) {
 
   if (mode === 'v' || mode === 'hv') {
     ctx.save();
-    ctx.beginPath(); ctx.rect(x0, 0, w - x0, h); ctx.clip();
-    dst.push(); dst.translate(2 * x0, 0); dst.scale(-1, 1);
+    ctx.beginPath(); ctx.rect(x0, 0, w-x0, h); ctx.clip();
+    dst.push(); dst.translate(2*x0, 0); dst.scale(-1, 1);
     dst.image(src, 0, 0, w, h);
     dst.pop(); ctx.restore();
   }
-
   if (mode === 'h' || mode === 'hv') {
     ctx.save();
-    ctx.beginPath(); ctx.rect(0, y0, w, h - y0); ctx.clip();
-    dst.push(); dst.translate(0, 2 * y0); dst.scale(1, -1);
+    ctx.beginPath(); ctx.rect(0, y0, w, h-y0); ctx.clip();
+    dst.push(); dst.translate(0, 2*y0); dst.scale(1, -1);
     dst.image(src, 0, 0, w, h);
     dst.pop(); ctx.restore();
   }

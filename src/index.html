@@ -12,7 +12,7 @@
         html, body {
             margin: 0; height: 100%;
             background: black; color: #e8eaf0;
-            font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+            font-family: 'Arial Black', 'Arial Bold', Arial, sans-serif;
             overflow: hidden;
         }
 
@@ -24,7 +24,7 @@
         /* ── icon watermark behind header ── */
         #huff-bg {
             position: fixed; inset: 0; z-index: 0;
-            background: url('../src-tauri/icons/icon.png') center/cover no-repeat;
+            background: url('icon-name.jpg') center/cover no-repeat;
             opacity: .07; filter: grayscale(1); pointer-events: none;
         }
 
@@ -47,7 +47,9 @@
             display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
         }
         .topbar-title {
-            font-size: 14px; font-weight: 800; letter-spacing: .12em;
+            font-size: 15px; font-weight: 900;
+            font-family: 'Arial Black', 'Arial Bold', Arial, sans-serif;
+            letter-spacing: .08em;
             color: #ff4646; text-transform: uppercase; flex-shrink: 0;
         }
         .topbar-sep { width:1px; height:18px; background: #ffffff22; flex-shrink:0; }
@@ -171,8 +173,10 @@
         }
         #aboutBox .a-icon {
             float: right; width: 68px; height: 68px; border-radius: 10px;
-            object-fit: cover; margin: 0 0 10px 16px;
+            background: url('icon-name.jpg') center/cover no-repeat;
+            margin: 0 0 10px 16px;
             border: 1px solid rgba(255,255,255,.12);
+            flex-shrink: 0;
         }
         #aboutBox h1 {
             font-size: 28px; font-weight: 900; letter-spacing: .1em;
@@ -248,19 +252,14 @@
     <div id="aboutOverlay">
         <div id="aboutBox">
             <button id="aboutClose">×</button>
-            <img class="a-icon" src="../src-tauri/icons/icon-name.jpg" alt="huff">
-            <h1>huff</h1>
+            <div class="a-icon"></div>
+            <h1 style="font-family:'Arial Black','Arial Bold',Arial,sans-serif;font-weight:900;letter-spacing:.06em">huff</h1>
             <div class="build">v2.0 · beta · 2025</div>
             <p>Real-time datamosh &amp; glitch-art engine. Load a video or connect a camera,
             then sculpt temporal tile displacement, feedback loops, flow warps, symmetry,
             and solarise effects — streamed live to a fullscreen mirror window over WebSocket.</p>
             <p>Built with <strong>Tauri v1</strong> + <strong>p5.js</strong>.<br>
-            Embedded WS relay on <strong>port 8787</strong>.<br>
-            MIDI CC + TouchOSC/OSC-over-WS supported.</p>
-            <div class="links">
-                <a href="https://github.com/schwwaaa/huff">github.com/schwwaaa/huff</a>
-                &nbsp;·&nbsp; <strong>P</strong> toggle panel &nbsp;·&nbsp; <strong>F</strong> fullscreen
-            </div>
+            Embedded WS relay on <strong>port 8787</strong>.</p>
         </div>
     </div>
 
@@ -279,10 +278,15 @@
         <div class="topbar">
             <span class="topbar-title">huff</span>
             <div class="topbar-sep"></div>
-            <input id="file" type="file" accept="video/*">
-            <button id="playBtn"    disabled>▶ Play</button>
-            <button id="pauseBtn"   disabled>⏸ Pause</button>
+            <input id="file" type="file" accept="video/mp4,video/quicktime,video/mov,video/*">
+            <button id="playBtn"  disabled>▶ Play</button>
+            <button id="pauseBtn" disabled>⏸ Pause</button>
+            <div class="ctrl" style="border:none;background:none;padding:0 2px">
+                <label style="font-size:9px;opacity:.5">VOL</label>
+                <input id="volumeSlider" type="range" min="0" max="1" step="0.01" value="1" style="width:60px">
+            </div>
             <button id="refreshBtn" disabled>↻ Refresh</button>
+            <button id="resetBtn" title="Reset all parameters to defaults">↺ Reset</button>
             <div class="topbar-sep"></div>
             <button id="camStartBtn">⬤ Cam</button>
             <button id="camStopBtn">✕ Cam</button>
@@ -457,23 +461,23 @@
                     </div>
                     <div class="ctrl">
                         <label>GLITCH X</label>
-                        <input id="glitchBaseX" type="range" min="-400" max="400" step="1" value="0">
+                        <input id="glitchBaseX" type="range" min="-1000" max="1000" step="1" value="0">
                         <span class="val" id="glitchBaseXVal">0</span>
                     </div>
                     <div class="ctrl">
                         <label>GLITCH Y</label>
-                        <input id="glitchBaseY" type="range" min="-400" max="400" step="1" value="0">
+                        <input id="glitchBaseY" type="range" min="-1000" max="1000" step="1" value="0">
                         <span class="val" id="glitchBaseYVal">0</span>
                     </div>
                     <div class="ctrl">
                         <label>TRAIL LAYERS</label>
-                        <input id="trailLayers" type="range" min="0" max="8" step="1" value="1">
-                        <span class="val" id="trailLayersVal">1</span>
+                        <input id="trailLayers" type="range" min="0" max="8" step="1" value="2">
+                        <span class="val" id="trailLayersVal">2</span>
                     </div>
                     <div class="ctrl">
                         <label>TRAIL DEPTH</label>
-                        <input id="trailDepth" type="range" min="0" max="1" step="0.01" value="0">
-                        <span class="val" id="trailDepthVal">0.00</span>
+                        <input id="trailDepth" type="range" min="0" max="1" step="0.01" value="0.5">
+                        <span class="val" id="trailDepthVal">0.50</span>
                     </div>
                 </div>
             </div>
@@ -634,6 +638,26 @@
 
         </div><!-- .groups -->
         </form>
+
+            <!-- PRESETS (outside form so buttons don't submit) -->
+            <div class="groups" style="margin-top:0">
+            <div class="group">
+                <div class="group-label">Presets</div>
+                <div class="group-body">
+                <div class="group-row">
+                    <input id="presetName" type="text" placeholder="preset name"
+                           style="width:110px;background:rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.14);
+                                  border-radius:5px;color:#e8eaf0;padding:2px 6px;font-size:10px;
+                                  font-family:inherit;">
+                    <button id="presetSaveBtn" class="btn-dim" style="font-size:10px;padding:3px 8px">💾 Save</button>
+                    <select id="presetList" style="max-width:130px;font-size:10px"></select>
+                    <button id="presetLoadBtn"   class="btn-dim" style="font-size:10px;padding:3px 8px">▶ Load</button>
+                    <button id="presetDeleteBtn" class="btn-dim" style="font-size:10px;padding:3px 8px;color:#ff6060">✕</button>
+                    <span id="presetStatus" style="font-size:9px;color:rgba(255,255,255,.35);padding:0 4px"></span>
+                </div>
+                </div>
+            </div>
+            </div>
     </header>
 
     <script defer src="p5.js"></script>
@@ -661,6 +685,285 @@
         window.addEventListener('keydown', e => {
             if (e.key === 'Escape') overlay.classList.remove('open');
         }, true);
+
+        /* ── Reset all parameters to HTML defaults ────────────── */
+        document.getElementById('resetBtn').addEventListener('click', () => {
+            document.getElementById('controlsForm').reset();
+            // fire input events so labels update
+            document.querySelectorAll('#controlsForm input[type=range], #controlsForm input[type=number]')
+                .forEach(el => el.dispatchEvent(new Event('input', { bubbles: true })));
+            document.querySelectorAll('#controlsForm input[type=checkbox], #controlsForm select')
+                .forEach(el => el.dispatchEvent(new Event('change', { bubbles: true })));
+        });
+
+        /* ── Presets (JSON files in src/presets/) ─────────────────
+         * In Tauri: uses fetch() to read from src/presets/ dir.
+         * Save writes via Tauri fs API if available; falls back to
+         * localStorage so it works in browser dev mode too.
+         * ─────────────────────────────────────────────────────── */
+        const PRESET_PARAM_IDS = [
+            'baseMix','baseOn','bgMode','quality','seedOnLoad','seed',
+            'feedback','persistence','fbX','fbY','fbZ','fbTheta',
+            'depth','depthScatter','corrupt','corruptDrift','block',
+            'glitchSpeed','glitchSpeedFine','glitchSpeedMul','glitchSize',
+            'glitchSmear','glitchSmearAngle','glitchAlpha','glitchJitter',
+            'glitchBaseX','glitchBaseY','trailLayers','trailDepth',
+            'symOn','symMode','symPos',
+            'clusters','clusterCount','clusterRadius','scanShift','scanDrift','scanAlpha',
+            'clusterTiles','cluCenters','cluSpread','spatialGap',
+            'solarizeOn','solarizeThresh','solarizeAmt','solarizeR','solarizeG','solarizeB',
+            'flowOn','flowStrength','flowScale','flowPulse','flowImpl',
+            'corruptOn',
+        ];
+
+        function capturePreset(name) {
+            const p = { name, version: 1, params: {} };
+            PRESET_PARAM_IDS.forEach(id => {
+                const el = document.getElementById(id); if (!el) return;
+                p.params[id] = el.type === 'checkbox' ? el.checked : el.value;
+            });
+            return p;
+        }
+
+        function applyPreset(p) {
+            if (!p || !p.params) return;
+            Object.entries(p.params).forEach(([id, val]) => {
+                const el = document.getElementById(id); if (!el) return;
+                if (el.type === 'checkbox') {
+                    el.checked = (val === true || val === 'true');
+                    el.dispatchEvent(new Event('change', { bubbles: true }));
+                } else {
+                    el.value = val;
+                    el.dispatchEvent(new Event('input', { bubbles: true }));
+                }
+            });
+        }
+
+        // Storage: try localStorage (works everywhere); Tauri fs if available
+        const PRESET_LS_KEY = 'huffPresets';
+
+        /* ── Factory presets — built-in, never deletable ───────── */
+        const FACTORY_PRESETS = {
+          'factory:clean': { name:'factory:clean', version:1, factory:true, params:{
+            baseMix:'1.00',baseOn:true,bgMode:'black',quality:'1.00',seedOnLoad:false,seed:'1',
+            feedback:'0.00',persistence:'0.70',fbX:'0',fbY:'0',fbZ:'1.00',fbTheta:'0',
+            depth:'0.50',depthScatter:'1.00',corrupt:'0.00',corruptDrift:'0.00',block:'20',
+            glitchSpeed:'0.80',glitchSpeedFine:'1.00',glitchSpeedMul:'1.00',glitchSize:'20',
+            glitchSmear:'0',glitchSmearAngle:'0',glitchAlpha:'1.00',glitchJitter:'1.00',
+            glitchBaseX:'0',glitchBaseY:'0',trailLayers:'0',trailDepth:'0.00',
+            symOn:false,symMode:'vertical',symPos:'0.50',
+            clusters:false,clusterCount:'3',clusterRadius:'10',scanShift:'0.12',scanDrift:'1.00',scanAlpha:'0.86',
+            clusterTiles:false,cluCenters:'3',cluSpread:'80',spatialGap:'0',
+            solarizeOn:false,solarizeThresh:'0.50',solarizeAmt:'1.00',solarizeR:'1.00',solarizeG:'1.00',solarizeB:'1.00',
+            flowOn:false,flowStrength:'6',flowScale:'80',flowPulse:'0',flowImpl:'0.00',corruptOn:true,
+          }},
+          'factory:melt': { name:'factory:melt', version:1, factory:true, params:{
+            baseMix:'0.40',baseOn:true,bgMode:'black',quality:'1.00',seedOnLoad:false,seed:'42',
+            feedback:'0.75',persistence:'0.92',fbX:'0',fbY:'2',fbZ:'1.01',fbTheta:'0',
+            depth:'0.80',depthScatter:'0.80',corrupt:'0.35',corruptDrift:'0.30',block:'16',
+            glitchSpeed:'0.60',glitchSpeedFine:'1.00',glitchSpeedMul:'1.00',glitchSize:'24',
+            glitchSmear:'4',glitchSmearAngle:'0',glitchAlpha:'0.85',glitchJitter:'0.80',
+            glitchBaseX:'0',glitchBaseY:'0',trailLayers:'3',trailDepth:'0.60',
+            symOn:false,symMode:'vertical',symPos:'0.50',
+            clusters:false,clusterCount:'3',clusterRadius:'10',scanShift:'0.12',scanDrift:'1.00',scanAlpha:'0.86',
+            clusterTiles:false,cluCenters:'3',cluSpread:'80',spatialGap:'0',
+            solarizeOn:false,solarizeThresh:'0.50',solarizeAmt:'1.00',solarizeR:'1.00',solarizeG:'1.00',solarizeB:'1.00',
+            flowOn:true,flowStrength:'8',flowScale:'60',flowPulse:'0',flowImpl:'0.00',corruptOn:true,
+          }},
+          'factory:pulse': { name:'factory:pulse', version:1, factory:true, params:{
+            baseMix:'0.60',baseOn:true,bgMode:'black',quality:'1.00',seedOnLoad:false,seed:'7',
+            feedback:'0.50',persistence:'0.80',fbX:'0',fbY:'0',fbZ:'1.00',fbTheta:'1',
+            depth:'0.60',depthScatter:'1.00',corrupt:'0.25',corruptDrift:'0.50',block:'8',
+            glitchSpeed:'1.20',glitchSpeedFine:'1.00',glitchSpeedMul:'1.00',glitchSize:'16',
+            glitchSmear:'2',glitchSmearAngle:'0',glitchAlpha:'0.90',glitchJitter:'1.20',
+            glitchBaseX:'0',glitchBaseY:'0',trailLayers:'2',trailDepth:'0.50',
+            symOn:true,symMode:'vertical',symPos:'0.50',
+            clusters:true,clusterCount:'5',clusterRadius:'10',scanShift:'0.20',scanDrift:'1.50',scanAlpha:'0.70',
+            clusterTiles:false,cluCenters:'3',cluSpread:'80',spatialGap:'0',
+            solarizeOn:false,solarizeThresh:'0.50',solarizeAmt:'1.00',solarizeR:'1.00',solarizeG:'1.00',solarizeB:'1.00',
+            flowOn:false,flowStrength:'6',flowScale:'80',flowPulse:'0',flowImpl:'0.00',corruptOn:true,
+          }},
+          'factory:mirror': { name:'factory:mirror', version:1, factory:true, params:{
+            baseMix:'0.50',baseOn:true,bgMode:'black',quality:'1.00',seedOnLoad:false,seed:'99',
+            feedback:'0.65',persistence:'0.85',fbX:'0',fbY:'0',fbZ:'1.00',fbTheta:'0',
+            depth:'0.70',depthScatter:'0.50',corrupt:'0.20',corruptDrift:'0.00',block:'24',
+            glitchSpeed:'0.40',glitchSpeedFine:'1.00',glitchSpeedMul:'1.00',glitchSize:'20',
+            glitchSmear:'1',glitchSmearAngle:'0',glitchAlpha:'1.00',glitchJitter:'0.60',
+            glitchBaseX:'0',glitchBaseY:'0',trailLayers:'2',trailDepth:'0.50',
+            symOn:true,symMode:'hv',symPos:'0.50',
+            clusters:false,clusterCount:'3',clusterRadius:'10',scanShift:'0.12',scanDrift:'1.00',scanAlpha:'0.86',
+            clusterTiles:false,cluCenters:'3',cluSpread:'80',spatialGap:'0',
+            solarizeOn:false,solarizeThresh:'0.50',solarizeAmt:'1.00',solarizeR:'1.00',solarizeG:'1.00',solarizeB:'1.00',
+            flowOn:false,flowStrength:'6',flowScale:'80',flowPulse:'0',flowImpl:'0.00',corruptOn:true,
+          }},
+          'factory:solar': { name:'factory:solar', version:1, factory:true, params:{
+            baseMix:'0.30',baseOn:true,bgMode:'black',quality:'1.00',seedOnLoad:false,seed:'13',
+            feedback:'0.55',persistence:'0.88',fbX:'0',fbY:'0',fbZ:'1.00',fbTheta:'0',
+            depth:'0.65',depthScatter:'0.70',corrupt:'0.30',corruptDrift:'0.20',block:'12',
+            glitchSpeed:'0.70',glitchSpeedFine:'1.00',glitchSpeedMul:'1.00',glitchSize:'18',
+            glitchSmear:'3',glitchSmearAngle:'0',glitchAlpha:'0.80',glitchJitter:'1.00',
+            glitchBaseX:'0',glitchBaseY:'0',trailLayers:'3',trailDepth:'0.55',
+            symOn:false,symMode:'vertical',symPos:'0.50',
+            clusters:false,clusterCount:'3',clusterRadius:'10',scanShift:'0.12',scanDrift:'1.00',scanAlpha:'0.86',
+            clusterTiles:false,cluCenters:'3',cluSpread:'80',spatialGap:'0',
+            solarizeOn:true,solarizeThresh:'0.40',solarizeAmt:'0.85',solarizeR:'1.10',solarizeG:'0.90',solarizeB:'1.20',
+            flowOn:false,flowStrength:'6',flowScale:'80',flowPulse:'0',flowImpl:'0.00',corruptOn:true,
+          }},
+          'factory:vapor': { name:'factory:vapor', version:1, factory:true, params:{
+            baseMix:'0.55',baseOn:true,bgMode:'black',quality:'1.00',seedOnLoad:false,seed:'77',
+            feedback:'0.80',persistence:'0.95',fbX:'0',fbY:'1',fbZ:'1.005',fbTheta:'0',
+            depth:'0.90',depthScatter:'0.60',corrupt:'0.15',corruptDrift:'0.10',block:'32',
+            glitchSpeed:'0.30',glitchSpeedFine:'0.80',glitchSpeedMul:'1.00',glitchSize:'28',
+            glitchSmear:'6',glitchSmearAngle:'90',glitchAlpha:'0.70',glitchJitter:'0.50',
+            glitchBaseX:'0',glitchBaseY:'0',trailLayers:'4',trailDepth:'0.70',
+            symOn:false,symMode:'vertical',symPos:'0.50',
+            clusters:false,clusterCount:'3',clusterRadius:'10',scanShift:'0.08',scanDrift:'0.50',scanAlpha:'0.60',
+            clusterTiles:false,cluCenters:'3',cluSpread:'80',spatialGap:'0',
+            solarizeOn:false,solarizeThresh:'0.50',solarizeAmt:'1.00',solarizeR:'1.00',solarizeG:'1.00',solarizeB:'1.00',
+            flowOn:true,flowStrength:'5',flowScale:'100',flowPulse:'0',flowImpl:'0.20',corruptOn:true,
+          }},
+          'factory:chaos': { name:'factory:chaos', version:1, factory:true, params:{
+            baseMix:'0.20',baseOn:true,bgMode:'black',quality:'0.70',seedOnLoad:false,seed:'666',
+            feedback:'0.60',persistence:'0.75',fbX:'0',fbY:'0',fbZ:'1.02',fbTheta:'3',
+            depth:'1.00',depthScatter:'1.00',corrupt:'0.70',corruptDrift:'0.80',block:'6',
+            glitchSpeed:'1.80',glitchSpeedFine:'1.50',glitchSpeedMul:'1.00',glitchSize:'12',
+            glitchSmear:'8',glitchSmearAngle:'0',glitchAlpha:'0.90',glitchJitter:'1.50',
+            glitchBaseX:'0',glitchBaseY:'0',trailLayers:'5',trailDepth:'0.80',
+            symOn:false,symMode:'vertical',symPos:'0.50',
+            clusters:true,clusterCount:'8',clusterRadius:'15',scanShift:'0.35',scanDrift:'2.00',scanAlpha:'0.90',
+            clusterTiles:true,cluCenters:'5',cluSpread:'120',spatialGap:'0',
+            solarizeOn:false,solarizeThresh:'0.50',solarizeAmt:'1.00',solarizeR:'1.00',solarizeG:'1.00',solarizeB:'1.00',
+            flowOn:true,flowStrength:'12',flowScale:'40',flowPulse:'0',flowImpl:'0.00',corruptOn:true,
+          }},
+        };
+
+        function isFactory(name) { return !!FACTORY_PRESETS[name]; }
+
+        function loadAllPresets() {
+            try { return JSON.parse(localStorage.getItem(PRESET_LS_KEY) || '{}'); } catch { return {}; }
+        }
+        function saveAllPresets(map) {
+            try { localStorage.setItem(PRESET_LS_KEY, JSON.stringify(map)); } catch {}
+        }
+
+        function allPresetsMap() {
+            // Merge factory (always present) + user-saved (from localStorage)
+            return Object.assign({}, FACTORY_PRESETS, loadAllPresets());
+        }
+
+        function refreshPresetList() {
+            const sel = document.getElementById('presetList');
+            const prev = sel.value;
+            const map = allPresetsMap();
+            sel.innerHTML = '';
+            const names = Object.keys(map).sort((a,b) => {
+                // Factory presets first, then user presets alphabetically
+                const af = isFactory(a), bf = isFactory(b);
+                if (af && !bf) return -1; if (!af && bf) return 1;
+                return a.localeCompare(b);
+            });
+            names.forEach(n => {
+                const o = document.createElement('option');
+                o.value = n;
+                // Show factory presets with a lock prefix, strip the 'factory:' key prefix for display
+                const display = isFactory(n) ? '🔒 ' + n.replace('factory:','') : n;
+                o.textContent = display;
+                sel.appendChild(o);
+            });
+            if (prev && Array.from(sel.options).some(o => o.value === prev)) sel.value = prev;
+        }
+
+        function showPresetStatus(msg, ms = 1800) {
+            const s = document.getElementById('presetStatus');
+            s.textContent = msg;
+            clearTimeout(s._t);
+            s._t = setTimeout(() => s.textContent = '', ms);
+        }
+
+        document.getElementById('presetSaveBtn').addEventListener('click', () => {
+            const nameEl = document.getElementById('presetName');
+            const name = (nameEl.value || '').trim();
+            if (!name) { showPresetStatus('enter a name first'); return; }
+            const map = loadAllPresets();
+            map[name] = capturePreset(name);
+            saveAllPresets(map);
+            nameEl.value = '';
+            refreshPresetList();
+            // try to select what we just saved
+            const sel = document.getElementById('presetList');
+            for (let o of sel.options) { if (o.value === name) { sel.value = name; break; } }
+            showPresetStatus('saved ✓');
+        });
+
+        document.getElementById('presetLoadBtn').addEventListener('click', () => {
+            const sel = document.getElementById('presetList');
+            const name = sel.value; if (!name) return;
+            const map = allPresetsMap();
+            if (!map[name]) { showPresetStatus('not found'); return; }
+            applyPreset(map[name]);
+            showPresetStatus('loaded: ' + name.replace('factory:',''));
+        });
+
+        document.getElementById('presetDeleteBtn').addEventListener('click', () => {
+            const sel = document.getElementById('presetList');
+            const name = sel.value; if (!name) return;
+            if (isFactory(name)) { showPresetStatus('factory presets cannot be deleted'); return; }
+            const map = loadAllPresets();
+            if (!map[name]) return;
+            if (!confirm('Delete preset "' + name + '"?')) return;
+            delete map[name];
+            saveAllPresets(map);
+            refreshPresetList();
+            showPresetStatus('deleted');
+        });
+
+        // Export preset as downloadable JSON file
+        document.getElementById('presetList').addEventListener('dblclick', () => {
+            const sel = document.getElementById('presetList');
+            const name = sel.value; if (!name) return;
+            const map = allPresetsMap();
+            if (!map[name]) return;
+            const blob = new Blob([JSON.stringify(map[name], null, 2)], { type: 'application/json' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = name.replace(/[^a-z0-9_\-]/gi, '_') + '.json';
+            a.click(); URL.revokeObjectURL(a.href);
+            showPresetStatus('exported ✓');
+        });
+
+        // Import preset from JSON file via hidden input
+        const presetImportInput = document.createElement('input');
+        presetImportInput.type = 'file'; presetImportInput.accept = '.json';
+        presetImportInput.style.display = 'none'; document.body.appendChild(presetImportInput);
+        presetImportInput.addEventListener('change', () => {
+            const file = presetImportInput.files?.[0]; if (!file) return;
+            const reader = new FileReader();
+            reader.onload = e => {
+                try {
+                    const p = JSON.parse(e.target.result);
+                    if (!p.params || !p.name) { showPresetStatus('invalid preset file'); return; }
+                    const map = loadAllPresets();
+                    map[p.name] = p;
+                    saveAllPresets(map);
+                    refreshPresetList();
+                    const sel = document.getElementById('presetList');
+                    for (let o of sel.options) { if (o.value === p.name) { sel.value = p.name; break; } }
+                    showPresetStatus('imported: ' + p.name);
+                } catch { showPresetStatus('parse error'); }
+            };
+            reader.readAsText(file);
+            presetImportInput.value = '';
+        });
+
+        // Add import button next to delete
+        const importBtn = document.createElement('button');
+        importBtn.textContent = '📂 Import';
+        importBtn.className = 'btn-dim';
+        importBtn.style.cssText = 'font-size:10px;padding:3px 8px';
+        importBtn.addEventListener('click', () => presetImportInput.click());
+        document.getElementById('presetDeleteBtn').after(importBtn);
+
+        refreshPresetList();
 
         /* ── MIDI + OSC commented out ─────────────────────────────
          * Web MIDI API (navigator.requestMIDIAccess) requires a
