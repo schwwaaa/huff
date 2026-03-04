@@ -1287,6 +1287,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6dbf3de79e51f3d586ab4cb9d5c3e2c14aa28ed23d180cf89b4df0454a69cc87"
 
 [[package]]
+name = "huff"
+version = "1.0.2"
+dependencies = [
+ "futures-util",
+ "objc",
+ "objc-foundation",
+ "objc_id",
+ "once_cell",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tokio",
+ "tokio-tungstenite",
+ "tungstenite",
+]
+
+[[package]]
 name = "iana-time-zone"
 version = "0.1.64"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3159,24 +3177,6 @@ dependencies = [
  "webview2-com",
  "windows 0.39.0",
  "wry",
-]
-
-[[package]]
-name = "tauri-two-windows-ws-relay"
-version = "0.1.0"
-dependencies = [
- "futures-util",
- "objc",
- "objc-foundation",
- "objc_id",
- "once_cell",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tokio",
- "tokio-tungstenite",
- "tungstenite",
 ]
 
 [[package]]

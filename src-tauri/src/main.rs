@@ -37,13 +37,13 @@ const PORT: u16 = 8787;
 
 async fn run_listener(bind_addr: String, clients: ClientMap) -> Result<(), String> {
   let listener = TcpListener::bind(&bind_addr).await.map_err(|e| e.to_string())?;
-  println!("[ws-relay] listening on ws://{bind_addr}");
+  println!("[huff] listening on ws://{bind_addr}");
   loop {
     let (stream, peer_addr) = listener.accept().await.map_err(|e| e.to_string())?;
     let clients = Arc::clone(&clients);
     tokio::spawn(async move {
       if let Err(e) = handle_ws(stream, peer_addr, clients).await {
-        eprintln!("[ws-relay] client {peer_addr} error: {e}");
+        eprintln!("[huff] client {peer_addr} error: {e}");
       }
     });
   }
@@ -105,7 +105,7 @@ async fn handle_ws(
               let mut map = clients_r.lock().await;
               if let Some(c) = map.get_mut(&peer_addr) {
                 c.role = parsed.role.clone();
-                println!("[ws-relay] {peer_addr} set role = {}", c.role);
+                println!("[huff] {peer_addr} set role = {}", c.role);
               }
             }
           }
@@ -115,7 +115,7 @@ async fn handle_ws(
         Ok(Message::Binary(bin)) => {
           let sent = broadcast_binary(&clients_r, peer_addr, bin).await;
           if sent == 0 {
-            println!("[ws-relay] binary from {peer_addr}, but no canvas clients yet");
+            println!("[huff] binary from {peer_addr}, but no canvas clients yet");
           }
         }
 
@@ -126,14 +126,14 @@ async fn handle_ws(
         Ok(Message::Close(_)) => break,
         Ok(_) => {}
         Err(e) => {
-          eprintln!("[ws-relay] recv error from {peer_addr}: {e}");
+          eprintln!("[huff] recv error from {peer_addr}: {e}");
           break;
         }
       }
     }
 
     clients_r.lock().await.remove(&peer_addr);
-    println!("[ws-relay] {peer_addr} disconnected");
+    println!("[huff] {peer_addr} disconnected");
     Ok::<(), ()>(())
   });
 
@@ -146,24 +146,24 @@ tauri::Builder::default()
   .setup(|_app| {
       const PORT: u16 = 8787;
 
-      println!("[ws-relay] setup: starting listeners on 127.0.0.1:{PORT} and [::1]:{PORT}");
+      println!("[huff] setup: starting listeners on 127.0.0.1:{PORT} and [::1]:{PORT}");
 
       let clients_v4 = Arc::clone(&CLIENTS);
       let clients_v6 = Arc::clone(&CLIENTS);
 
       tauri::async_runtime::spawn(async move {
           let addr = format!("127.0.0.1:{PORT}");
-          println!("[ws-relay] trying IPv4 bind on {}", addr);
+          println!("[huff] trying IPv4 bind on {}", addr);
           if let Err(e) = run_listener(addr, clients_v4).await {
-              eprintln!("[ws-relay] IPv4 listener error: {e}");
+              eprintln!("[huff] IPv4 listener error: {e}");
           }
       });
 
       tauri::async_runtime::spawn(async move {
           let addr = format!("[::1]:{PORT}");
-          println!("[ws-relay] trying IPv6 bind on {}", addr);
+          println!("[huff] trying IPv6 bind on {}", addr);
           if let Err(e) = run_listener(addr, clients_v6).await {
-              eprintln!("[ws-relay] IPv6 listener error: {e}");
+              eprintln!("[huff] IPv6 listener error: {e}");
           }
       });
 
