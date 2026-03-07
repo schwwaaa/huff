@@ -314,7 +314,6 @@
                 <div class="group-label">Source</div>
                 <div class="group-body">
                 <div class="group-row">
-                    <div class="ctrl"><label>SYSTEM</label><input id="corruptOn" type="checkbox"></div>
                     <div class="ctrl"><label>BASE VIDEO</label><input id="baseOn" type="checkbox" checked></div>
                     <div class="ctrl">
                         <label>BASE MIX</label>
@@ -385,6 +384,7 @@
                 <div class="group-label">Glitch</div>
                 <div class="group-body">
                 <div class="group-row">
+                    <div class="ctrl"><label>ON</label><input id="corruptOn" type="checkbox" checked></div>
                     <div class="ctrl">
                         <label>DEPTH</label>
                         <input id="depth" type="range" min="0" max="0.5" step="0.01" value="0.5">
@@ -478,6 +478,11 @@
                         <label>TRAIL DEPTH</label>
                         <input id="trailDepth" type="range" min="0" max="1" step="0.01" value="0.5">
                         <span class="val" id="trailDepthVal">0.50</span>
+                    </div>
+                    <div class="ctrl">
+                        <label>LUMA KEY</label>
+                        <input id="trailLumaKey" type="range" min="0" max="1" step="0.01" value="0">
+                        <span class="val" id="trailLumaKeyVal">0.00</span>
                     </div>
                 </div>
             </div>
@@ -707,7 +712,7 @@
             'depth','depthScatter','corrupt','corruptDrift','block',
             'glitchSpeed','glitchSpeedFine','glitchSpeedMul','glitchSize',
             'glitchSmear','glitchSmearAngle','glitchAlpha','glitchJitter',
-            'glitchBaseX','glitchBaseY','trailLayers','trailDepth',
+            'glitchBaseX','glitchBaseY','trailLayers','trailDepth','trailLumaKey',
             'symOn','symMode','symPos',
             'clusters','clusterCount','clusterRadius','scanShift','scanDrift','scanAlpha',
             'clusterTiles','cluCenters','cluSpread','spatialGap',
@@ -742,102 +747,41 @@
         // Storage: try localStorage (works everywhere); Tauri fs if available
         const PRESET_LS_KEY = 'huffPresets';
 
-        /* ── Factory presets — built-in, never deletable ───────── */
-        const FACTORY_PRESETS = {
-          'factory:clean': { name:'factory:clean', version:1, factory:true, params:{
-            baseMix:'1.00',baseOn:true,bgMode:'black',quality:'1.00',seedOnLoad:false,seed:'1',
-            feedback:'0.00',persistence:'0.70',fbX:'0',fbY:'0',fbZ:'1.00',fbTheta:'0',
-            depth:'0.50',depthScatter:'1.00',corrupt:'0.00',corruptDrift:'0.00',block:'20',
-            glitchSpeed:'0.80',glitchSpeedFine:'1.00',glitchSpeedMul:'1.00',glitchSize:'20',
-            glitchSmear:'0',glitchSmearAngle:'0',glitchAlpha:'1.00',glitchJitter:'1.00',
-            glitchBaseX:'0',glitchBaseY:'0',trailLayers:'0',trailDepth:'0.00',
-            symOn:false,symMode:'vertical',symPos:'0.50',
-            clusters:false,clusterCount:'3',clusterRadius:'10',scanShift:'0.12',scanDrift:'1.00',scanAlpha:'0.86',
-            clusterTiles:false,cluCenters:'3',cluSpread:'80',spatialGap:'0',
-            solarizeOn:false,solarizeThresh:'0.50',solarizeAmt:'1.00',solarizeR:'1.00',solarizeG:'1.00',solarizeB:'1.00',
-            flowOn:false,flowStrength:'6',flowScale:'80',flowPulse:'0',flowImpl:'0.00',corruptOn:true,
-          }},
-          'factory:melt': { name:'factory:melt', version:1, factory:true, params:{
-            baseMix:'0.40',baseOn:true,bgMode:'black',quality:'1.00',seedOnLoad:false,seed:'42',
-            feedback:'0.75',persistence:'0.92',fbX:'0',fbY:'2',fbZ:'1.01',fbTheta:'0',
-            depth:'0.80',depthScatter:'0.80',corrupt:'0.35',corruptDrift:'0.30',block:'16',
-            glitchSpeed:'0.60',glitchSpeedFine:'1.00',glitchSpeedMul:'1.00',glitchSize:'24',
-            glitchSmear:'4',glitchSmearAngle:'0',glitchAlpha:'0.85',glitchJitter:'0.80',
-            glitchBaseX:'0',glitchBaseY:'0',trailLayers:'3',trailDepth:'0.60',
-            symOn:false,symMode:'vertical',symPos:'0.50',
-            clusters:false,clusterCount:'3',clusterRadius:'10',scanShift:'0.12',scanDrift:'1.00',scanAlpha:'0.86',
-            clusterTiles:false,cluCenters:'3',cluSpread:'80',spatialGap:'0',
-            solarizeOn:false,solarizeThresh:'0.50',solarizeAmt:'1.00',solarizeR:'1.00',solarizeG:'1.00',solarizeB:'1.00',
-            flowOn:true,flowStrength:'8',flowScale:'60',flowPulse:'0',flowImpl:'0.00',corruptOn:true,
-          }},
-          'factory:pulse': { name:'factory:pulse', version:1, factory:true, params:{
-            baseMix:'0.60',baseOn:true,bgMode:'black',quality:'1.00',seedOnLoad:false,seed:'7',
-            feedback:'0.50',persistence:'0.80',fbX:'0',fbY:'0',fbZ:'1.00',fbTheta:'1',
-            depth:'0.60',depthScatter:'1.00',corrupt:'0.25',corruptDrift:'0.50',block:'8',
-            glitchSpeed:'1.20',glitchSpeedFine:'1.00',glitchSpeedMul:'1.00',glitchSize:'16',
-            glitchSmear:'2',glitchSmearAngle:'0',glitchAlpha:'0.90',glitchJitter:'1.20',
-            glitchBaseX:'0',glitchBaseY:'0',trailLayers:'2',trailDepth:'0.50',
-            symOn:true,symMode:'vertical',symPos:'0.50',
-            clusters:true,clusterCount:'5',clusterRadius:'10',scanShift:'0.20',scanDrift:'1.50',scanAlpha:'0.70',
-            clusterTiles:false,cluCenters:'3',cluSpread:'80',spatialGap:'0',
-            solarizeOn:false,solarizeThresh:'0.50',solarizeAmt:'1.00',solarizeR:'1.00',solarizeG:'1.00',solarizeB:'1.00',
-            flowOn:false,flowStrength:'6',flowScale:'80',flowPulse:'0',flowImpl:'0.00',corruptOn:true,
-          }},
-          'factory:mirror': { name:'factory:mirror', version:1, factory:true, params:{
-            baseMix:'0.50',baseOn:true,bgMode:'black',quality:'1.00',seedOnLoad:false,seed:'99',
-            feedback:'0.65',persistence:'0.85',fbX:'0',fbY:'0',fbZ:'1.00',fbTheta:'0',
-            depth:'0.70',depthScatter:'0.50',corrupt:'0.20',corruptDrift:'0.00',block:'24',
-            glitchSpeed:'0.40',glitchSpeedFine:'1.00',glitchSpeedMul:'1.00',glitchSize:'20',
-            glitchSmear:'1',glitchSmearAngle:'0',glitchAlpha:'1.00',glitchJitter:'0.60',
-            glitchBaseX:'0',glitchBaseY:'0',trailLayers:'2',trailDepth:'0.50',
-            symOn:true,symMode:'hv',symPos:'0.50',
-            clusters:false,clusterCount:'3',clusterRadius:'10',scanShift:'0.12',scanDrift:'1.00',scanAlpha:'0.86',
-            clusterTiles:false,cluCenters:'3',cluSpread:'80',spatialGap:'0',
-            solarizeOn:false,solarizeThresh:'0.50',solarizeAmt:'1.00',solarizeR:'1.00',solarizeG:'1.00',solarizeB:'1.00',
-            flowOn:false,flowStrength:'6',flowScale:'80',flowPulse:'0',flowImpl:'0.00',corruptOn:true,
-          }},
-          'factory:solar': { name:'factory:solar', version:1, factory:true, params:{
-            baseMix:'0.30',baseOn:true,bgMode:'black',quality:'1.00',seedOnLoad:false,seed:'13',
-            feedback:'0.55',persistence:'0.88',fbX:'0',fbY:'0',fbZ:'1.00',fbTheta:'0',
-            depth:'0.65',depthScatter:'0.70',corrupt:'0.30',corruptDrift:'0.20',block:'12',
-            glitchSpeed:'0.70',glitchSpeedFine:'1.00',glitchSpeedMul:'1.00',glitchSize:'18',
-            glitchSmear:'3',glitchSmearAngle:'0',glitchAlpha:'0.80',glitchJitter:'1.00',
-            glitchBaseX:'0',glitchBaseY:'0',trailLayers:'3',trailDepth:'0.55',
-            symOn:false,symMode:'vertical',symPos:'0.50',
-            clusters:false,clusterCount:'3',clusterRadius:'10',scanShift:'0.12',scanDrift:'1.00',scanAlpha:'0.86',
-            clusterTiles:false,cluCenters:'3',cluSpread:'80',spatialGap:'0',
-            solarizeOn:true,solarizeThresh:'0.40',solarizeAmt:'0.85',solarizeR:'1.10',solarizeG:'0.90',solarizeB:'1.20',
-            flowOn:false,flowStrength:'6',flowScale:'80',flowPulse:'0',flowImpl:'0.00',corruptOn:true,
-          }},
-          'factory:vapor': { name:'factory:vapor', version:1, factory:true, params:{
-            baseMix:'0.55',baseOn:true,bgMode:'black',quality:'1.00',seedOnLoad:false,seed:'77',
-            feedback:'0.80',persistence:'0.95',fbX:'0',fbY:'1',fbZ:'1.005',fbTheta:'0',
-            depth:'0.90',depthScatter:'0.60',corrupt:'0.15',corruptDrift:'0.10',block:'32',
-            glitchSpeed:'0.30',glitchSpeedFine:'0.80',glitchSpeedMul:'1.00',glitchSize:'28',
-            glitchSmear:'6',glitchSmearAngle:'90',glitchAlpha:'0.70',glitchJitter:'0.50',
-            glitchBaseX:'0',glitchBaseY:'0',trailLayers:'4',trailDepth:'0.70',
-            symOn:false,symMode:'vertical',symPos:'0.50',
-            clusters:false,clusterCount:'3',clusterRadius:'10',scanShift:'0.08',scanDrift:'0.50',scanAlpha:'0.60',
-            clusterTiles:false,cluCenters:'3',cluSpread:'80',spatialGap:'0',
-            solarizeOn:false,solarizeThresh:'0.50',solarizeAmt:'1.00',solarizeR:'1.00',solarizeG:'1.00',solarizeB:'1.00',
-            flowOn:true,flowStrength:'5',flowScale:'100',flowPulse:'0',flowImpl:'0.20',corruptOn:true,
-          }},
-          'factory:chaos': { name:'factory:chaos', version:1, factory:true, params:{
-            baseMix:'0.20',baseOn:true,bgMode:'black',quality:'0.70',seedOnLoad:false,seed:'666',
-            feedback:'0.60',persistence:'0.75',fbX:'0',fbY:'0',fbZ:'1.02',fbTheta:'3',
-            depth:'1.00',depthScatter:'1.00',corrupt:'0.70',corruptDrift:'0.80',block:'6',
-            glitchSpeed:'1.80',glitchSpeedFine:'1.50',glitchSpeedMul:'1.00',glitchSize:'12',
-            glitchSmear:'8',glitchSmearAngle:'0',glitchAlpha:'0.90',glitchJitter:'1.50',
-            glitchBaseX:'0',glitchBaseY:'0',trailLayers:'5',trailDepth:'0.80',
-            symOn:false,symMode:'vertical',symPos:'0.50',
-            clusters:true,clusterCount:'8',clusterRadius:'15',scanShift:'0.35',scanDrift:'2.00',scanAlpha:'0.90',
-            clusterTiles:true,cluCenters:'5',cluSpread:'120',spatialGap:'0',
-            solarizeOn:false,solarizeThresh:'0.50',solarizeAmt:'1.00',solarizeR:'1.00',solarizeG:'1.00',solarizeB:'1.00',
-            flowOn:true,flowStrength:'12',flowScale:'40',flowPulse:'0',flowImpl:'0.00',corruptOn:true,
-          }},
-        };
+        /* ── Factory presets — loaded from src/presets/*.json ─────
+         * Files live in src/presets/ so you can edit or add new ones
+         * without touching index.html. Each file is a JSON object
+         * matching the preset schema: { name, version, factory, params }.
+         * The list below is the manifest — add an entry here when you
+         * drop a new .json file into the presets folder.
+         * ─────────────────────────────────────────────────────── */
+        const FACTORY_PRESET_FILES = [
+            'presets/factory-clean.json',
+            'presets/factory-melt.json',
+            'presets/factory-pulse.json',
+            'presets/factory-mirror.json',
+            'presets/factory-solar.json',
+            'presets/factory-vapor.json',
+            'presets/factory-chaos.json',
+        ];
 
-        function isFactory(name) { return !!FACTORY_PRESETS[name]; }
+        // Loaded asynchronously at startup; preset list rebuilds once complete
+        let _factoryPresets = {};
+
+        async function loadFactoryPresets() {
+            const results = await Promise.allSettled(
+                FACTORY_PRESET_FILES.map(f => fetch(f).then(r => r.json()))
+            );
+            results.forEach(r => {
+                if (r.status === 'fulfilled' && r.value?.name) {
+                    _factoryPresets[r.value.name] = r.value;
+                } else if (r.status === 'rejected') {
+                    console.warn('[huff] Failed to load preset:', r.reason);
+                }
+            });
+            refreshPresetList();
+        }
+
+        function isFactory(name) { return !!_factoryPresets[name]; }
 
         function loadAllPresets() {
             try { return JSON.parse(localStorage.getItem(PRESET_LS_KEY) || '{}'); } catch { return {}; }
@@ -848,7 +792,7 @@
 
         function allPresetsMap() {
             // Merge factory (always present) + user-saved (from localStorage)
-            return Object.assign({}, FACTORY_PRESETS, loadAllPresets());
+            return Object.assign({}, _factoryPresets, loadAllPresets());
         }
 
         function refreshPresetList() {
@@ -963,6 +907,9 @@
         importBtn.addEventListener('click', () => presetImportInput.click());
         document.getElementById('presetDeleteBtn').after(importBtn);
 
+        // Boot: load factory presets from src/presets/*.json async, then rebuild list
+        loadFactoryPresets();
+        // Show user presets from localStorage immediately; factory fills in once fetched
         refreshPresetList();
 
         /* ── MIDI + OSC commented out ─────────────────────────────

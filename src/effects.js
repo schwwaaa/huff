@@ -3,8 +3,9 @@
 //  - frameRing stores ImageData; drawRingRegion uses a single shared canvas
 //  - applySolarize downsamples to max 640px wide before pixel math (big Windows win)
 //  - applyTrails runs independently — not nested inside tile loop
-//  - Scanlines skip on everyN like solarize
+//  - applyScanlines is a standalone pass, called separately from applyGlitch
 //  - applyFlowWarp uses native drawImage throughout
+//  - applyTrails supports luma keying via downsampled pixel pass (trailLumaKey)
 
 // ─── Ring frame helpers ────────────────────────────────────────────────────
 
@@ -28,13 +29,65 @@ function drawRingRegion(target, imgData, sx, sy, sw, sh, dx, dy, dw, dh) {
   target.drawingContext.drawImage(_ringCanvas, sx, sy, sw, sh, dx, dy, dw, dh);
 }
 
+// ─── Luma-keyed trail blit ─────────────────────────────────────────────────
+// Downsamples the ring ImageData, zeroes alpha for pixels below luma threshold,
+// then scales the masked result back to full res. Same perf trick as solarize.
+
+let _trailLumaCanvas = null, _trailLumaCtx = null;
+const TRAIL_LUMA_MAX_W = 640;
+
+function blitTrailLumaKeyed(ctx, imgData, alpha, lumaThresh) {
+  const w = imgData.width, h = imgData.height;
+  const scale = w > TRAIL_LUMA_MAX_W ? TRAIL_LUMA_MAX_W / w : 1;
+  const sw = Math.max(1, Math.round(w * scale));
+  const sh = Math.max(1, Math.round(h * scale));
+
+  if (!_trailLumaCanvas || _trailLumaCanvas.width !== sw || _trailLumaCanvas.height !== sh) {
+    _trailLumaCanvas = document.createElement('canvas');
+    _trailLumaCanvas.width  = sw;
+    _trailLumaCanvas.height = sh;
+    _trailLumaCtx = _trailLumaCanvas.getContext('2d', { willReadFrequently: true });
+  }
+
+  // Ensure _ringCanvas has this frame
+  if (!_ringCanvas) return;
+  if (_ringCanvas._lastFrame !== imgData) {
+    _ringCtx.putImageData(imgData, 0, 0);
+    _ringCanvas._lastFrame = imgData;
+  }
+
+  // Downsample into luma canvas
+  _trailLumaCtx.clearRect(0, 0, sw, sh);
+  _trailLumaCtx.drawImage(_ringCanvas, 0, 0, sw, sh);
+
+  // Pixel pass: zero alpha below luma threshold, scale surviving alpha by trail alpha
+  const imageData = _trailLumaCtx.getImageData(0, 0, sw, sh);
+  const pix = imageData.data;
+  const t   = lumaThresh * 255;
+  for (let i = 0; i < pix.length; i += 4) {
+    const lum = 0.299 * pix[i] + 0.587 * pix[i + 1] + 0.114 * pix[i + 2];
+    if (lum < t) {
+      pix[i + 3] = 0;
+    } else {
+      // Smooth rolloff above threshold so hard edges don't pop
+      const roll = Math.min(1, (lum - t) / (Math.max(1, 255 - t)));
+      pix[i + 3] = Math.round(roll * alpha * 255);
+    }
+  }
+  _trailLumaCtx.putImageData(imageData, 0, 0);
+
+  // Scale back up onto gBuf — no save/restore needed, alpha already baked in
+  ctx.drawImage(_trailLumaCanvas, 0, 0, w, h);
+}
+
 // ─── Trails (independent full-frame ghost pass) ────────────────────────────
-// Runs before the tile pass so ghosts sit under tiles.
+// Call this from draw() before the tile / scanline passes so ghosts sit underneath.
 // Requires: frameRing.length > 1, trailLayers > 0, trailDepth > 0
 
 function applyTrails() {
-  const trailLayers = parseInt(els.trailLayers?.value ?? '0', 10);
-  const trailDepth  = parseFloat(els.trailDepth?.value ?? '0');
+  const trailLayers = parseInt(els.trailLayers?.value  ?? '0',   10);
+  const trailDepth  = parseFloat(els.trailDepth?.value  ?? '0');
+  const lumaKey     = parseFloat(els.trailLumaKey?.value ?? '0');
   if (trailLayers <= 0 || trailDepth <= 0 || frameRing.length < 2) return;
 
   const maxBack = Math.max(1, Math.floor((frameRing.length - 1) * trailDepth));
@@ -45,23 +98,68 @@ function applyTrails() {
     const back  = Math.min(frameRing.length - 1, g * step);
     const src   = frameRing[frameRing.length - 1 - back];
     if (!src) continue;
+
     // Fade from opaque at g=1 to near-transparent at g=trailLayers
     const alpha = (1 - (g - 1) / trailLayers) * 0.65;
+
+    if (lumaKey > 0) {
+      blitTrailLumaKeyed(ctx, src, alpha, lumaKey);
+    } else {
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      drawRingRegion(gBuf, src, 0, 0, width, height, 0, 0, width, height);
+      ctx.restore();
+    }
+  }
+}
+
+// ─── Scanlines (band displacement pass) ───────────────────────────────────
+// Extracted from applyGlitch so it can be toggled independently.
+// Controlled by: els.clusters (ON), clusterCount, clusterRadius, scanAlpha,
+//                scanShift, scanDrift, depth.
+
+function applyScanlines(density) {
+  if (!els.clusters?.checked) return;
+
+  const scanBands  = parseInt(els.clusterCount.value,  10);
+  const scanRadius = parseInt(els.clusterRadius.value, 10);
+  if (scanBands <= 0 || frameRing.length < 2) return;
+
+  const depth      = parseFloat(els.depth.value);
+  const maxBackSc  = Math.max(1, Math.floor((frameRing.length - 1) * depth));
+  const bandHeight = Math.max(4, Math.floor(scanRadius * 3));
+  const bandAlpha  = Math.floor(parseFloat(els.scanAlpha?.value  ?? '0.86') * 255);
+  const shiftScale = parseFloat(els.scanShift?.value  ?? '0.12');
+  const driftSpeed = parseFloat(els.scanDrift?.value  ?? '1.0');
+
+  const ctx = gBuf.drawingContext;
+  for (let n = 0; n < scanBands; n++) {
+    const driftY = noise(n * 4.1 + nPhaseY * 0.4 * driftSpeed) * height;
+    const bTop   = Math.max(0, Math.floor(driftY));
+    const bBot   = Math.min(height, bTop + bandHeight);
+    const bH     = bBot - bTop;
+    if (bH <= 0) continue;
+
+    const back   = frameRing.length - 1 - Math.floor(random(1, maxBackSc + 1));
+    const src    = frameRing[Math.max(0, back)];
+    const shiftX = Math.floor(map(noise(n * 2.3 + nPhaseX * 0.5), 0, 1, -width * shiftScale, width * shiftScale));
+    const srcX   = Math.max(0, shiftX < 0 ? -shiftX : 0);
+    const dstX   = Math.max(0, shiftX > 0 ? shiftX  : 0);
+    const bW     = width - Math.abs(shiftX);
+    if (bW <= 0) continue;
+
     ctx.save();
-    ctx.globalAlpha = alpha;
-    drawRingRegion(gBuf, src, 0, 0, width, height, 0, 0, width, height);
+    ctx.globalAlpha = bandAlpha / 255;
+    drawRingRegion(gBuf, src, srcX, bTop, bW, bH, dstX, bTop, bW, bH);
     ctx.restore();
   }
 }
 
-// ─── Glitch ────────────────────────────────────────────────────────────────
+// ─── Glitch (tile displacement pass) ─────────────────────────────────────
+// Scanlines and trails are now separate passes — call them from draw() before this.
+// Controlled by: els.corruptOn (ON toggle in Glitch group).
 
 function applyGlitch(density = 1, baseDX = 0, baseDY = 0) {
-  if (els.corruptOn && !els.corruptOn.checked) return;
-
-  // Run trails before tiles so they appear underneath
-  applyTrails();
-
   const block     = parseInt(els.block.value, 10);
   const size      = parseInt(els.glitchSize.value, 10);
   const smearLen  = parseInt(els.glitchSmear.value, 10);
@@ -97,10 +195,7 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0) {
   let count = Math.max(1, Math.floor(total * corrupt * corruptMul));
 
   const gap         = parseInt(els.spatialGap.value, 10);
-  const useScan     = !!els.clusters.checked;
   const useCluTiles = !!els.clusterTiles?.checked;
-  const scanBands   = parseInt(els.clusterCount.value, 10);
-  const scanRadius  = parseInt(els.clusterRadius.value, 10);
   const cluCenters  = parseInt(els.cluCenters?.value  ?? '3',  10);
   const cluSpread   = parseInt(els.cluSpread?.value   ?? '80', 10);
 
@@ -115,37 +210,6 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0) {
   };
 
   randomSeed(baseSeed + frameCount);
-
-  // ── Scanlines (band displacement) ───────────────────────────────────────
-  if (useScan && scanBands > 0 && frameRing.length > 1) {
-    const bandHeight = Math.max(4, Math.floor(scanRadius * 3));
-    const maxBackSc  = Math.max(1, Math.floor((frameRing.length - 1) * depth));
-    const bandAlpha  = Math.floor(parseFloat(els.scanAlpha?.value  ?? '0.86') * 255);
-    const shiftScale = parseFloat(els.scanShift?.value ?? '0.12');
-    const driftSpeed = parseFloat(els.scanDrift?.value ?? '1.0');
-
-    const ctx = gBuf.drawingContext;
-    for (let n = 0; n < scanBands; n++) {
-      const driftY = noise(n * 4.1 + nPhaseY * 0.4 * driftSpeed) * height;
-      const bTop   = Math.max(0, Math.floor(driftY));
-      const bBot   = Math.min(height, bTop + bandHeight);
-      const bH     = bBot - bTop;
-      if (bH <= 0) continue;
-
-      const back   = frameRing.length - 1 - Math.floor(random(1, maxBackSc + 1));
-      const src    = frameRing[Math.max(0, back)];
-      const shiftX = Math.floor(map(noise(n * 2.3 + nPhaseX * 0.5), 0, 1, -width * shiftScale, width * shiftScale));
-      const srcX   = Math.max(0, shiftX < 0 ? -shiftX : 0);
-      const dstX   = Math.max(0, shiftX > 0 ? shiftX  : 0);
-      const bW     = width - Math.abs(shiftX);
-      if (bW <= 0) continue;
-
-      ctx.save();
-      ctx.globalAlpha = bandAlpha / 255;
-      drawRingRegion(gBuf, src, srcX, bTop, bW, bH, dstX, bTop, bW, bH);
-      ctx.restore();
-    }
-  }
 
   // ── Tile placement ───────────────────────────────────────────────────────
   if (useCluTiles && cluCenters > 0) {
@@ -287,7 +351,6 @@ function applySolarize(buf, thresh = 0.5, amount = 1.0, solR = 1.0, solG = 1.0, 
   const sw = Math.max(1, Math.round(BW * scale));
   const sh = Math.max(1, Math.round(BH * scale));
 
-  // Allocate/resize working canvases
   if (!_solCanvas || _solCanvas.width !== sw || _solCanvas.height !== sh) {
     _solCanvas = document.createElement('canvas'); _solCanvas.width = sw; _solCanvas.height = sh;
     _solCtx    = _solCanvas.getContext('2d', { willReadFrequently: true });
@@ -297,7 +360,6 @@ function applySolarize(buf, thresh = 0.5, amount = 1.0, solR = 1.0, solG = 1.0, 
     _solOutCtx = _solOut.getContext('2d');
   }
 
-  // Downsample buf into working canvas
   const srcCanvas = buf.elt || buf.drawingContext.canvas;
   _solCtx.clearRect(0, 0, sw, sh);
   _solCtx.drawImage(srcCanvas, 0, 0, sw, sh);
@@ -318,7 +380,6 @@ function applySolarize(buf, thresh = 0.5, amount = 1.0, solR = 1.0, solG = 1.0, 
   }
   _solCtx.putImageData(imgData, 0, 0);
 
-  // Scale back to full res and composite onto buf
   _solOutCtx.clearRect(0, 0, BW, BH);
   _solOutCtx.drawImage(_solCanvas, 0, 0, BW, BH);
   buf.drawingContext.clearRect(0, 0, BW, BH);

@@ -6,6 +6,7 @@
  *  - Solarize frame-skips based on quality setting (big Windows perf win)
  *  - playBtn toggles label
  *  - frameRing capped at 192MB
+ *  - applyTrails / applyScanlines / applyGlitch are independent toggleable passes
  */
 
 window.$  = window.$  || (id  => document.getElementById(id));
@@ -51,7 +52,6 @@ async function primeCameraPermissionOnce() {
 
 // Sync-accurate frame pump — uses rVFC where available, falls back to RAF
 // Video blitting is handled directly in draw() — no separate pump loop needed.
-// This avoids requestVideoFrameCallback firing continuously even when paused.
 function pumpVideoFrames() {
   // no-op — kept for call-site compatibility
 }
@@ -132,7 +132,9 @@ function hookUI() {
     'solarizeR','solarizeRVal','solarizeG','solarizeGVal','solarizeB','solarizeBVal',
     'scanAlpha','scanAlphaVal','scanShift','scanShiftVal','scanDrift','scanDriftVal',
     'depthScatter','depthScatterVal','corruptDrift','corruptDriftVal',
-    'trailLayers','trailLayersVal','trailDepth','trailDepthVal','bgMode',
+    'trailLayers','trailLayersVal','trailDepth','trailDepthVal',
+    'trailLumaKey','trailLumaKeyVal',
+    'bgMode',
   ].forEach(k => els[k] = $(k));
 
   els.file.addEventListener('change', onFile);
@@ -179,7 +181,7 @@ function hookUI() {
     'spatialGap','clusterCount','clusterRadius','cluCenters','cluSpread',
     'scanAlpha','scanShift','scanDrift','glitchAlpha','glitchJitter','glitchSmearAngle',
     'flowStrength','flowScale','flowPulse','flowImpl','baseMix','symPos','glitchSpeedMul',
-    'depthScatter','corruptDrift','trailLayers','trailDepth',
+    'depthScatter','corruptDrift','trailLayers','trailDepth','trailLumaKey',
     'solarizeThresh','solarizeAmt','solarizeR','solarizeG','solarizeB',
   ].forEach(id => els[id]?.addEventListener('input', updateLabels));
 
@@ -239,6 +241,7 @@ function updateLabels() {
   set(els.corruptDrift,     els.corruptDriftVal,     f2);
   set(els.trailLayers,      els.trailLayersVal,      v => (v|0));
   set(els.trailDepth,       els.trailDepthVal,       f2);
+  set(els.trailLumaKey,     els.trailLumaKeyVal,     f2);
   set(els.symPos,           els.symPosVal,           f2);
   set(els.solarizeThresh,   els.solarizeThreshVal,   f2);
   set(els.solarizeAmt,      els.solarizeAmtVal,      f2);
@@ -288,7 +291,6 @@ function onFile(ev) {
   let primed = false;
   const startPlayback = async () => {
     if (primed) return;
-    // Need HAVE_FUTURE_DATA (3) at minimum — guarantees smooth start
     if (v.readyState < 3 || v.videoWidth === 0) return;
     primed = true;
     clearAll(); updateDim();
@@ -309,7 +311,6 @@ function onFile(ev) {
     playing = true;
     enableTransport(true);
 
-    // Apply current volume slider setting
     const volSlider = document.getElementById('volumeSlider');
     const vol = volSlider ? parseFloat(volSlider.value) : 1;
     try { v.muted = (vol === 0); v.volume = vol; } catch {}
@@ -318,7 +319,6 @@ function onFile(ev) {
   v.addEventListener('canplay',        startPlayback, { once: true });
   v.addEventListener('canplaythrough', startPlayback, { once: true });
   v.addEventListener('loadeddata',     startPlayback, { once: true });
-  // Poll fallback for slow WebViews
   let poll = 0;
   const poller = setInterval(() => { startPlayback(); if (primed || ++poll > 40) clearInterval(poller); }, 100);
   v.addEventListener('error', () => { clearInterval(poller); enableTransport(true); }, { once: true });
@@ -345,7 +345,6 @@ function draw() {
   randomSeed(baseSeed + frameCount);
   noiseSeed(baseSeed);
 
-  // Blit current video frame into gCur only when playing
   if (playing) { try { blitVideoInto(gCur); } catch {} }
 
   if (!seededOnce && els.seedOnLoad?.checked) {
@@ -353,7 +352,7 @@ function draw() {
     seededOnce = true;
   }
 
-  // Persistence decay — pure ctx op, no p5 push/pop needed
+  // Persistence decay
   const pers = parseFloat(els.persistence?.value ?? '0.7');
   if (pers < 1) {
     const ctx = gBuf.drawingContext;
@@ -374,11 +373,20 @@ function draw() {
   const Q      = parseFloat(els.quality?.value ?? '1');
   const everyN = Q >= 0.9 ? 1 : Q >= 0.7 ? 2 : Q >= 0.5 ? 3 : 4;
 
-  applyGlitch(density,
-    parseInt(els.glitchBaseX?.value ?? '0', 10),
-    parseInt(els.glitchBaseY?.value ?? '0', 10));
+  // ── Trails — runs before all tile passes so ghosts sit underneath ─────────
+  applyTrails();
 
-  // Feedback — drawingContext only, no p5 .get() allocation
+  // ── Scanlines — independent of glitch tiles, toggled by clusters checkbox ─
+  applyScanlines(density);
+
+  // ── Glitch tiles — toggled by corruptOn in Glitch group ───────────────────
+  if (els.corruptOn?.checked !== false) {
+    applyGlitch(density,
+      parseInt(els.glitchBaseX?.value ?? '0', 10),
+      parseInt(els.glitchBaseY?.value ?? '0', 10));
+  }
+
+  // ── Feedback ─────────────────────────────────────────────────────────────
   const fb = parseFloat(els.feedback?.value ?? '0');
   if (fb > 0) {
     const fx = parseFloat(els.fbX?.value    ?? '0');
@@ -406,7 +414,7 @@ function draw() {
     ctx.restore();
   }
 
-  // Flow
+  // ── Flow ─────────────────────────────────────────────────────────────────
   const flowS = parseInt(els.flowStrength?.value ?? '0', 10);
   if (els.flowOn?.checked && flowS > 0 && (frameCount % everyN === 0)) {
     applyFlowWarp(gBuf, gWarp, flowS,
@@ -416,13 +424,13 @@ function draw() {
     [gBuf, gWarp] = [gWarp, gBuf];
   }
 
-  // Symmetry
+  // ── Symmetry ─────────────────────────────────────────────────────────────
   if (els.symOn?.checked) {
     applySymmetry(gBuf, gTemp, els.symMode?.value || 'v', parseFloat(els.symPos?.value ?? '0.5'));
     [gBuf, gTemp] = [gTemp, gBuf];
   }
 
-  // Solarize — frame-skip at lower quality for Windows perf
+  // ── Solarize ─────────────────────────────────────────────────────────────
   if (els.solarizeOn?.checked && (frameCount % everyN === 0)) {
     applySolarize(gBuf,
       parseFloat(els.solarizeThresh?.value ?? '0.5'),
@@ -432,14 +440,14 @@ function draw() {
       parseFloat(els.solarizeB?.value      ?? '1.0'));
   }
 
-  // Composite
+  // ── Composite ────────────────────────────────────────────────────────────
   if (els.baseOn?.checked && parseFloat(els.baseMix?.value ?? '0') > 0) {
     push(); tint(255, parseFloat(els.baseMix.value) * 255);
     image(gCur, 0, 0, width, height); pop();
   }
   image(gBuf, 0, 0, width, height);
 
-  // Frame ring
+  // ── Frame ring ────────────────────────────────────────────────────────────
   const bytesPerFrame = width * height * 4;
   let ringCap = Math.max(4, Math.round(60 * (Q * 2)));
   ringCap = Math.min(ringCap, Math.max(4, Math.floor(192*1024*1024 / bytesPerFrame)));
