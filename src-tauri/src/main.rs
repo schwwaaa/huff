@@ -33,7 +33,7 @@ struct HelloMsg {
   role: String,
 }
 
-// const PORT: u16 = 8787;
+const PORT: u16 = 8787;
 
 async fn run_listener(bind_addr: String, clients: ClientMap) -> Result<(), String> {
   let listener = TcpListener::bind(&bind_addr).await.map_err(|e| e.to_string())?;

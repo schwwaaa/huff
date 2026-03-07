@@ -85,6 +85,7 @@ function blitTrailLumaKeyed(ctx, imgData, alpha, lumaThresh) {
 // Requires: frameRing.length > 1, trailLayers > 0, trailDepth > 0
 
 function applyTrails() {
+  if (!els.trailOn?.checked) return;
   const trailLayers = parseInt(els.trailLayers?.value  ?? '0',   10);
   const trailDepth  = parseFloat(els.trailDepth?.value  ?? '0');
   const lumaKey     = parseFloat(els.trailLumaKey?.value ?? '0');
@@ -122,21 +123,27 @@ function applyScanlines(density) {
   if (!els.clusters?.checked) return;
 
   const scanBands  = parseInt(els.clusterCount.value,  10);
-  const scanRadius = parseInt(els.clusterRadius.value, 10);
+  const baseRadius = parseInt(els.clusterRadius.value, 10);
   if (scanBands <= 0 || frameRing.length < 2) return;
 
   const depth      = parseFloat(els.depth.value);
   const maxBackSc  = Math.max(1, Math.floor((frameRing.length - 1) * depth));
-  const bandHeight = Math.max(4, Math.floor(scanRadius * 3));
+  const randSize   = !!els.scanRandSize?.checked;
+  const bandHeight = randSize
+    ? Math.max(4, Math.floor(random(baseRadius * 0.5, baseRadius * 4) * 3))
+    : Math.max(4, Math.floor(baseRadius * 3));
   const bandAlpha  = Math.floor(parseFloat(els.scanAlpha?.value  ?? '0.86') * 255);
   const shiftScale = parseFloat(els.scanShift?.value  ?? '0.12');
   const driftSpeed = parseFloat(els.scanDrift?.value  ?? '1.0');
 
   const ctx = gBuf.drawingContext;
   for (let n = 0; n < scanBands; n++) {
+    const bH_n = randSize
+      ? Math.max(4, Math.floor(random(baseRadius * 0.5, baseRadius * 4) * 3))
+      : bandHeight;
     const driftY = noise(n * 4.1 + nPhaseY * 0.4 * driftSpeed) * height;
     const bTop   = Math.max(0, Math.floor(driftY));
-    const bBot   = Math.min(height, bTop + bandHeight);
+    const bBot   = Math.min(height, bTop + bH_n);
     const bH     = bBot - bTop;
     if (bH <= 0) continue;
 
@@ -194,10 +201,7 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0) {
   const corruptMul   = Math.max(0.05, 1.0 + corruptDrift * driftMod);
   let count = Math.max(1, Math.floor(total * corrupt * corruptMul));
 
-  const gap         = parseInt(els.spatialGap.value, 10);
-  const useCluTiles = !!els.clusterTiles?.checked;
-  const cluCenters  = parseInt(els.cluCenters?.value  ?? '3',  10);
-  const cluSpread   = parseInt(els.cluSpread?.value   ?? '80', 10);
+  const gap = parseInt(els.spatialGap?.value ?? '0', 10);
 
   const targets = [];
   const tryAdd = (x, y) => {
@@ -211,39 +215,10 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0) {
 
   randomSeed(baseSeed + frameCount);
 
-  // ── Tile placement ───────────────────────────────────────────────────────
-  if (useCluTiles && cluCenters > 0) {
-    const centers = [];
-    for (let i = 0; i < cluCenters; i++) {
-      centers.push([
-        Math.floor(random(cols)) * block + (block >> 1),
-        Math.floor(random(rows)) * block + (block >> 1),
-      ]);
-    }
-    const per = Math.max(1, Math.floor(count / cluCenters));
-    for (const c of centers) {
-      for (let i = 0; i < per && targets.length < count; i++) {
-        const ang = random(TWO_PI), r = random(cluSpread);
-        const x   = (c[0] + Math.cos(ang) * r + width)  % width;
-        const y   = (c[1] + Math.sin(ang) * r + height) % height;
-        let ok = tryAdd(Math.floor(x), Math.floor(y)), tries = 0;
-        while (!ok && tries++ < 6) {
-          const a2 = random(TWO_PI), r2 = random(cluSpread);
-          ok = tryAdd(
-            Math.floor((c[0] + Math.cos(a2) * r2 + width)  % width),
-            Math.floor((c[1] + Math.sin(a2) * r2 + height) % height)
-          );
-        }
-      }
-    }
-    let guard = 0;
-    while (targets.length < count && guard++ < count * 4)
-      tryAdd(Math.floor(random(cols)) * block, Math.floor(random(rows)) * block);
-  } else {
-    let attempts = 0;
-    while (targets.length < count && attempts++ < count * 8)
-      tryAdd(Math.floor(random(cols)) * block, Math.floor(random(rows)) * block);
-  }
+  // ── Tile placement (uniform scatter) ────────────────────────────────────
+  let attempts = 0;
+  while (targets.length < count && attempts++ < count * 8)
+    tryAdd(Math.floor(random(cols)) * block, Math.floor(random(rows)) * block);
 
   // ── Blit tiles ───────────────────────────────────────────────────────────
   if (frameRing.length === 0 || maxBack <= 0) return;
@@ -414,4 +389,127 @@ function applySymmetry(src, dst, mode = 'v', pos = 0.5) {
     dst.image(src, 0, 0, w, h);
     dst.pop(); ctx.restore();
   }
+}
+
+// ─── Chroma Bleed ─────────────────────────────────────────────────────────
+// Emulates VHS/Betamax color subcarrier lag: R/G/B channels are horizontally
+// offset by different amounts, with an optional per-scanline noise wobble and
+// a vertical chroma smear that bleeds color into adjacent lines.
+// Perf: downsamples to MAX_W before pixel work, scales result back up.
+
+let _chromaCanvas = null, _chromaCtx = null;
+let _chromaOut    = null, _chromaOutCtx = null;
+const CHROMA_MAX_W = 640;
+
+function applyChromaBleed(buf) {
+  const rShift  = parseFloat(els.chromaR?.value    ?? '4');
+  const gShift  = parseFloat(els.chromaG?.value    ?? '0');
+  const bShift  = parseFloat(els.chromaB?.value    ?? '-4');
+  const wobble  = parseFloat(els.chromaWobble?.value ?? '0');
+  const bleed   = parseFloat(els.chromaBleed?.value  ?? '0');
+  const amount  = parseFloat(els.chromaAmt?.value    ?? '1.0');
+
+  const BW = buf.width, BH = buf.height;
+  const scale = BW > CHROMA_MAX_W ? CHROMA_MAX_W / BW : 1;
+  const sw = Math.max(1, Math.round(BW * scale));
+  const sh = Math.max(1, Math.round(BH * scale));
+
+  if (!_chromaCanvas || _chromaCanvas.width !== sw || _chromaCanvas.height !== sh) {
+    _chromaCanvas = document.createElement('canvas');
+    _chromaCanvas.width = sw; _chromaCanvas.height = sh;
+    _chromaCtx = _chromaCanvas.getContext('2d', { willReadFrequently: true });
+  }
+  if (!_chromaOut || _chromaOut.width !== BW || _chromaOut.height !== BH) {
+    _chromaOut = document.createElement('canvas');
+    _chromaOut.width = BW; _chromaOut.height = BH;
+    _chromaOutCtx = _chromaOut.getContext('2d');
+  }
+
+  const srcCanvas = buf.elt || buf.drawingContext.canvas;
+  _chromaCtx.clearRect(0, 0, sw, sh);
+  _chromaCtx.drawImage(srcCanvas, 0, 0, sw, sh);
+
+  const src  = _chromaCtx.getImageData(0, 0, sw, sh);
+  const dst  = _chromaCtx.createImageData(sw, sh);
+  const sp   = src.data, dp = dst.data;
+
+  // Scale shifts to the downsampled width
+  const rOff = rShift * scale;
+  const gOff = gShift * scale;
+  const bOff = bShift * scale;
+  const wobPx = wobble * sw * 0.02; // max wobble in downsampled pixels
+
+  for (let y = 0; y < sh; y++) {
+    // Per-row noise wobble — simulates sync jitter on analog tape
+    const rowWob = wobPx > 0
+      ? Math.round((Math.random() - 0.5) * 2 * wobPx)
+      : 0;
+
+    for (let x = 0; x < sw; x++) {
+      const di = (y * sw + x) * 4;
+
+      // Sample each channel from a horizontally offset position
+      const rX = Math.max(0, Math.min(sw - 1, Math.round(x - rOff + rowWob)));
+      const gX = Math.max(0, Math.min(sw - 1, Math.round(x - gOff + rowWob)));
+      const bX = Math.max(0, Math.min(sw - 1, Math.round(x - bOff + rowWob)));
+
+      const ri = (y * sw + rX) * 4;
+      const gi = (y * sw + gX) * 4;
+      const bi = (y * sw + bX) * 4;
+
+      // Original pixel for lerp
+      const si = di;
+
+      dp[di    ] = sp[ri];
+      dp[di + 1] = sp[gi + 1];
+      dp[di + 2] = sp[bi + 2];
+      dp[di + 3] = sp[si + 3]; // preserve original alpha
+    }
+  }
+
+  // Vertical chroma bleed — smear chroma (Cb/Cr equivalent) downward
+  // by blending each row's color into the row below
+  if (bleed > 0) {
+    const bleedFrac = Math.min(0.92, bleed);
+    for (let y = sh - 2; y >= 0; y--) {
+      for (let x = 0; x < sw; x++) {
+        const i  = (y * sw + x) * 4;
+        const i2 = ((y + 1) * sw + x) * 4;
+        // Blend R and B (chroma channels) — leave G (closest to luma) less affected
+        dp[i2    ] = Math.round(dp[i2    ] * (1 - bleedFrac) + dp[i    ] * bleedFrac);
+        dp[i2 + 2] = Math.round(dp[i2 + 2] * (1 - bleedFrac) + dp[i + 2] * bleedFrac);
+      }
+    }
+  }
+
+  // Blend result back with original by `amount`
+  if (amount < 1.0) {
+    const orig = src.data;
+    for (let i = 0; i < dp.length; i += 4) {
+      dp[i    ] = Math.round(orig[i    ] * (1 - amount) + dp[i    ] * amount);
+      dp[i + 1] = Math.round(orig[i + 1] * (1 - amount) + dp[i + 1] * amount);
+      dp[i + 2] = Math.round(orig[i + 2] * (1 - amount) + dp[i + 2] * amount);
+    }
+  }
+
+  _chromaCtx.putImageData(dst, 0, 0);
+  _chromaOutCtx.clearRect(0, 0, BW, BH);
+  _chromaOutCtx.drawImage(_chromaCanvas, 0, 0, BW, BH);
+  buf.drawingContext.clearRect(0, 0, BW, BH);
+  buf.drawingContext.drawImage(_chromaOut, 0, 0);
+}
+
+// ─── GC helper — call on resize or new video load ─────────────────────────
+// Releases all module-level offscreen canvases so the old (possibly large)
+// GPU-backed surfaces can be collected before new ones are allocated.
+function resetEffectsCanvases() {
+  for (const c of [_ringCanvas, _trailLumaCanvas, _solCanvas, _solOut, _chromaCanvas, _chromaOut]) {
+    if (c) { try { c.width = 1; c.height = 1; } catch {} }
+  }
+  _ringCanvas      = null; _ringCtx       = null;
+  _trailLumaCanvas = null; _trailLumaCtx  = null;
+  _solCanvas       = null; _solCtx        = null;
+  _solOut          = null; _solOutCtx     = null;
+  _chromaCanvas    = null; _chromaCtx     = null;
+  _chromaOut       = null; _chromaOutCtx  = null;
 }

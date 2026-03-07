@@ -89,10 +89,15 @@ function setup() {
 window.setup = setup;
 
 function allocBuffers() {
+  // Release p5 graphics buffers
   [gCur, gBuf, gWarp, gTemp].forEach(g => { try { if (g) g.remove(); } catch {} });
+  // Release feedback offscreen canvas
+  if (_fbCanvas) { try { _fbCanvas.width = 1; _fbCanvas.height = 1; } catch {} }
+  _fbCanvas = null; _fbCtx = null;
+  // Release all effects module offscreen canvases
+  try { resetEffectsCanvases(); } catch {}
   gCur = createGraphics(width, height); gBuf = createGraphics(width, height);
   gWarp = createGraphics(width, height); gTemp = createGraphics(width, height);
-  _fbCanvas = null; _fbCtx = null;
 }
 
 function windowResized() {
@@ -102,9 +107,14 @@ function windowResized() {
 window.windowResized = windowResized;
 
 function clearAll() {
-  [gBuf, gWarp, gTemp].forEach(g => g.clear());
+  [gBuf, gWarp, gTemp].forEach(g => { try { g.clear(); } catch {} });
   frameRing.length = 0;
   seededOnce = false;
+  // Release feedback canvas so stale frame data doesn't linger
+  if (_fbCanvas) { try { _fbCanvas.width = 1; _fbCanvas.height = 1; } catch {} }
+  _fbCanvas = null; _fbCtx = null;
+  // Release effects offscreen canvases
+  try { resetEffectsCanvases(); } catch {}
 }
 
 // ─── UI wiring ──────────────────────────────────────────────────────────────
@@ -121,9 +131,8 @@ function hookUI() {
     'glitchJitter','glitchJitterVal','glitchSmearAngle','glitchSmearAngleVal','seed',
     'feedback','feedbackVal','persistence','persistenceVal',
     'fbX','fbXVal','fbY','fbYVal','fbZ','fbZVal','fbTheta','fbThetaVal',
-    'clusters','clusterTiles','clusterCount','clusterCountVal',
-    'clusterRadius','clusterRadiusVal','spatialGap','spatialGapVal',
-    'cluCenters','cluCentersVal','cluSpread','cluSpreadVal',
+    'clusters','clusterCount','clusterCountVal',
+    'clusterRadius','clusterRadiusVal',
     'flowOn','flowStrength','flowStrengthVal','flowScale','flowScaleVal',
     'flowPulse','flowPulseVal','flowImpl','flowImplVal',
     'baseOn','baseMix','baseMixVal','seedOnLoad',
@@ -132,8 +141,11 @@ function hookUI() {
     'solarizeR','solarizeRVal','solarizeG','solarizeGVal','solarizeB','solarizeBVal',
     'scanAlpha','scanAlphaVal','scanShift','scanShiftVal','scanDrift','scanDriftVal',
     'depthScatter','depthScatterVal','corruptDrift','corruptDriftVal',
-    'trailLayers','trailLayersVal','trailDepth','trailDepthVal',
+    'trailOn','trailLayers','trailLayersVal','trailDepth','trailDepthVal',
     'trailLumaKey','trailLumaKeyVal',
+    'scanRandSize',
+    'chromaOn','chromaR','chromaRVal','chromaG','chromaGVal','chromaB','chromaBVal',
+    'chromaWobble','chromaWobbleVal','chromaBleed','chromaBleedVal','chromaAmt','chromaAmtVal',
     'bgMode',
   ].forEach(k => els[k] = $(k));
 
@@ -178,11 +190,12 @@ function hookUI() {
     'quality','depth','corrupt','block','glitchSpeed','glitchSpeedFine',
     'glitchSize','glitchSmear','glitchBaseX','glitchBaseY',
     'feedback','persistence','fbX','fbY','fbZ','fbTheta',
-    'spatialGap','clusterCount','clusterRadius','cluCenters','cluSpread',
+    'clusterCount','clusterRadius',
     'scanAlpha','scanShift','scanDrift','glitchAlpha','glitchJitter','glitchSmearAngle',
     'flowStrength','flowScale','flowPulse','flowImpl','baseMix','symPos','glitchSpeedMul',
     'depthScatter','corruptDrift','trailLayers','trailDepth','trailLumaKey',
     'solarizeThresh','solarizeAmt','solarizeR','solarizeG','solarizeB',
+    'chromaR','chromaG','chromaB','chromaWobble','chromaBleed','chromaAmt',
   ].forEach(id => els[id]?.addEventListener('input', updateLabels));
 
   els.baseOn?.addEventListener('change', () => {
@@ -219,11 +232,8 @@ function updateLabels() {
   set(els.fbY,              els.fbYVal,              f2);
   set(els.fbZ,              els.fbZVal,              f2);
   set(els.fbTheta,          els.fbThetaVal,          v => v);
-  set(els.spatialGap,       els.spatialGapVal,       v => v);
   set(els.clusterCount,     els.clusterCountVal,     v => v);
   set(els.clusterRadius,    els.clusterRadiusVal,    v => v);
-  set(els.cluCenters,       els.cluCentersVal,       v => v);
-  set(els.cluSpread,        els.cluSpreadVal,        v => v);
   set(els.flowStrength,     els.flowStrengthVal,     v => v);
   set(els.flowScale,        els.flowScaleVal,        v => v);
   set(els.flowPulse,        els.flowPulseVal,        v => (v|0));
@@ -248,6 +258,12 @@ function updateLabels() {
   set(els.solarizeR,        els.solarizeRVal,        f2);
   set(els.solarizeG,        els.solarizeGVal,        f2);
   set(els.solarizeB,        els.solarizeBVal,        f2);
+  set(els.chromaR,          els.chromaRVal,          v => (v|0));
+  set(els.chromaG,          els.chromaGVal,          v => (v|0));
+  set(els.chromaB,          els.chromaBVal,          v => (v|0));
+  set(els.chromaWobble,     els.chromaWobbleVal,     f2);
+  set(els.chromaBleed,      els.chromaBleedVal,      f2);
+  set(els.chromaAmt,        els.chromaAmtVal,        f2);
   if (els.baseMix && els.baseMixVal) {
     els.baseMixVal.textContent = f2(els.baseMix.value);
     els.baseMix.disabled = !els.baseOn?.checked;
@@ -267,8 +283,9 @@ function onFile(ev) {
   const file = input.files?.[0]; if (!file) return;
   queueMicrotask(() => { try { input.value = ''; } catch {} });
 
-  // Teardown previous
+  // Teardown previous — stop all tracks before removing element
   try { videoEl?.elt?.srcObject?.getTracks().forEach(t => t.stop()); } catch {}
+  try { if (videoEl?.elt) { videoEl.elt.pause(); videoEl.elt.src = ''; videoEl.elt.load(); } } catch {}
   try { if (videoEl) videoEl.remove(); } catch {}
   videoEl = null;
   if (currentBlobUrl) { try { URL.revokeObjectURL(currentBlobUrl); } catch {} currentBlobUrl = null; }
@@ -345,14 +362,20 @@ function draw() {
   randomSeed(baseSeed + frameCount);
   noiseSeed(baseSeed);
 
+  // Always blit the current video frame into gCur
   if (playing) { try { blitVideoInto(gCur); } catch {} }
 
-  if (!seededOnce && els.seedOnLoad?.checked) {
+  // Seed gBuf with current frame on first draw
+  if (!seededOnce) {
     gBuf.image(gCur, 0, 0, gBuf.width, gBuf.height);
     seededOnce = true;
   }
 
-  // Persistence decay
+  // Every frame: stamp current video into gBuf as the base layer.
+  // FX passes then paint on top. This makes each effect independently
+  // visible without requiring any other effect to be on.
+  gBuf.image(gCur, 0, 0, gBuf.width, gBuf.height);
+
   const pers = parseFloat(els.persistence?.value ?? '0.7');
   if (pers < 1) {
     const ctx = gBuf.drawingContext;
@@ -380,7 +403,7 @@ function draw() {
   applyScanlines(density);
 
   // ── Glitch tiles — toggled by corruptOn in Glitch group ───────────────────
-  if (els.corruptOn?.checked !== false) {
+  if (els.corruptOn?.checked) {
     applyGlitch(density,
       parseInt(els.glitchBaseX?.value ?? '0', 10),
       parseInt(els.glitchBaseY?.value ?? '0', 10));
@@ -440,7 +463,13 @@ function draw() {
       parseFloat(els.solarizeB?.value      ?? '1.0'));
   }
 
-  // ── Composite ────────────────────────────────────────────────────────────
+  // ── Chroma Bleed ──────────────────────────────────────────────────────────
+  if (els.chromaOn?.checked) {
+    applyChromaBleed(gBuf);
+  }
+
+  // ── Composite to screen ───────────────────────────────────────────────────
+  // gBuf always has the current frame as base + whatever FX are active on top.
   if (els.baseOn?.checked && parseFloat(els.baseMix?.value ?? '0') > 0) {
     push(); tint(255, parseFloat(els.baseMix.value) * 255);
     image(gCur, 0, 0, width, height); pop();
@@ -468,10 +497,6 @@ function drawWaiting() {
   fill(220); textAlign(CENTER,CENTER); textSize(14);
   text('Load a video or start a camera  ·  P: toggle UI  ·  F: fullscreen', width/2, height/2);
 }
-
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => { try { hookUI(); } catch(e) { console.warn('[hookUI]',e); } });
-} else { try { hookUI(); } catch(e) { console.warn('[hookUI]',e); } }
 
 // ─── camera ──────────────────────────────────────────────────────────────────
 
