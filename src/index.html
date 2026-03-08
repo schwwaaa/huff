@@ -309,24 +309,6 @@
         <form id="controlsForm" autocomplete="off" novalidate>
         <div class="groups">
 
-            <!-- PRESETS (inline in form row so it resets with Reset btn) -->
-            <div class="group">
-                <div class="group-label">Presets</div>
-                <div class="group-body">
-                <div class="group-row">
-                    <input id="presetName" type="text" placeholder="preset name"
-                           style="width:110px;background:rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.14);
-                                  border-radius:5px;color:#e8eaf0;padding:2px 6px;font-size:10px;
-                                  font-family:inherit;">
-                    <button type="button" id="presetSaveBtn" class="btn-dim" style="font-size:10px;padding:3px 8px">💾 Save</button>
-                    <select id="presetList" style="max-width:130px;font-size:10px"></select>
-                    <button type="button" id="presetLoadBtn"   class="btn-dim" style="font-size:10px;padding:3px 8px">▶ Load</button>
-                    <button type="button" id="presetDeleteBtn" class="btn-dim" style="font-size:10px;padding:3px 8px;color:#ff6060">✕</button>
-                    <span id="presetStatus" style="font-size:9px;color:rgba(255,255,255,.35);padding:0 4px"></span>
-                </div>
-                </div>
-            </div>
-
             <!-- SOURCE -->
             <div class="group">
                 <div class="group-label">Source</div>
@@ -397,27 +379,12 @@
             </div>
             </div>
 
-            <!-- GLITCH + MOTION -->
+            <!-- GLITCH CORE -->
             <div class="group">
                 <div class="group-label">Glitch</div>
                 <div class="group-body">
                 <div class="group-row">
                     <div class="ctrl"><label>ON</label><input id="corruptOn" type="checkbox"></div>
-                    <div class="ctrl">
-                        <label>SPEED</label>
-                        <input id="glitchSpeed" type="range" min="0" max="5" step="0.005" value="0.8">
-                        <span class="val" id="glitchSpeedVal">0.80</span>
-                    </div>
-                    <div class="ctrl">
-                        <label>FINE</label>
-                        <input id="glitchSpeedFine" type="range" min="0" max="10" step="0.001" value="1.00">
-                        <span class="val" id="glitchSpeedFineVal">1.00</span>
-                    </div>
-                    <div class="ctrl">
-                        <label>MULT</label>
-                        <input id="glitchSpeedMul" type="range" min="0" max="10" step="0.1" value="1.00">
-                        <span class="val" id="glitchSpeedMulVal">1.00</span>
-                    </div>
                     <div class="ctrl">
                         <label>DEPTH</label>
                         <input id="depth" type="range" min="0" max="0.5" step="0.01" value="0.5">
@@ -467,6 +434,30 @@
                         <label>SMEAR ANGLE</label>
                         <input id="glitchSmearAngle" type="range" min="0" max="360" step="1" value="0">
                         <span class="val" id="glitchSmearAngleVal">0°</span>
+                    </div>
+                </div>
+            </div>
+            </div>
+
+            <!-- MOTION -->
+            <div class="group">
+                <div class="group-label">Motion</div>
+                <div class="group-body">
+                <div class="group-row">
+                    <div class="ctrl">
+                        <label>SPEED</label>
+                        <input id="glitchSpeed" type="range" min="0" max="5" step="0.005" value="0.8">
+                        <span class="val" id="glitchSpeedVal">0.80</span>
+                    </div>
+                    <div class="ctrl">
+                        <label>FINE</label>
+                        <input id="glitchSpeedFine" type="range" min="0" max="10" step="0.001" value="1.00">
+                        <span class="val" id="glitchSpeedFineVal">1.00</span>
+                    </div>
+                    <div class="ctrl">
+                        <label>MULT</label>
+                        <input id="glitchSpeedMul" type="range" min="0" max="10" step="0.1" value="1.00">
+                        <span class="val" id="glitchSpeedMulVal">1.00</span>
                     </div>
                     <div class="ctrl">
                         <label>GLITCH X</label>
@@ -566,41 +557,26 @@
             </div>
             </div>
 
-            <!-- CHROMA BLEED -->
+            <!-- CLUSTERS -->
             <div class="group">
-                <div class="group-label">Chroma Bleed</div>
+                <div class="group-label">Clusters</div>
                 <div class="group-body">
                 <div class="group-row">
-                    <div class="ctrl"><label>ON</label><input id="chromaOn" type="checkbox"></div>
+                    <div class="ctrl"><label>ON</label><input id="clusterTiles" type="checkbox"></div>
                     <div class="ctrl">
-                        <label>R SHIFT</label>
-                        <input id="chromaR" type="range" min="-40" max="40" step="1" value="4">
-                        <span class="val" id="chromaRVal">4</span>
+                        <label>CENTERS</label>
+                        <input id="cluCenters" type="range" min="1" max="20" step="1" value="3">
+                        <span class="val" id="cluCentersVal">3</span>
                     </div>
                     <div class="ctrl">
-                        <label>G SHIFT</label>
-                        <input id="chromaG" type="range" min="-40" max="40" step="1" value="0">
-                        <span class="val" id="chromaGVal">0</span>
+                        <label>SPREAD</label>
+                        <input id="cluSpread" type="range" min="1" max="300" step="1" value="80">
+                        <span class="val" id="cluSpreadVal">80</span>
                     </div>
                     <div class="ctrl">
-                        <label>B SHIFT</label>
-                        <input id="chromaB" type="range" min="-40" max="40" step="1" value="-4">
-                        <span class="val" id="chromaBVal">-4</span>
-                    </div>
-                    <div class="ctrl">
-                        <label>WOBBLE</label>
-                        <input id="chromaWobble" type="range" min="0" max="1" step="0.01" value="0">
-                        <span class="val" id="chromaWobbleVal">0.00</span>
-                    </div>
-                    <div class="ctrl">
-                        <label>BLEED</label>
-                        <input id="chromaBleed" type="range" min="0" max="0.92" step="0.01" value="0">
-                        <span class="val" id="chromaBleedVal">0.00</span>
-                    </div>
-                    <div class="ctrl">
-                        <label>AMOUNT</label>
-                        <input id="chromaAmt" type="range" min="0" max="1" step="0.01" value="1.0">
-                        <span class="val" id="chromaAmtVal">1.00</span>
+                        <label>SPATIAL GAP</label>
+                        <input id="spatialGap" type="range" min="0" max="200" step="1" value="40">
+                        <span class="val" id="spatialGapVal">40</span>
                     </div>
                 </div>
             </div>
@@ -671,9 +647,28 @@
             </div>
             </div>
 
-        </div><!-- /.groups -->
+        </div><!-- .groups -->
         </form>
 
+            <!-- PRESETS (outside form so buttons don't submit) -->
+            <div class="groups" style="margin-top:0">
+            <div class="group">
+                <div class="group-label">Presets</div>
+                <div class="group-body">
+                <div class="group-row">
+                    <input id="presetName" type="text" placeholder="preset name"
+                           style="width:110px;background:rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.14);
+                                  border-radius:5px;color:#e8eaf0;padding:2px 6px;font-size:10px;
+                                  font-family:inherit;">
+                    <button id="presetSaveBtn" class="btn-dim" style="font-size:10px;padding:3px 8px">💾 Save</button>
+                    <select id="presetList" style="max-width:130px;font-size:10px"></select>
+                    <button id="presetLoadBtn"   class="btn-dim" style="font-size:10px;padding:3px 8px">▶ Load</button>
+                    <button id="presetDeleteBtn" class="btn-dim" style="font-size:10px;padding:3px 8px;color:#ff6060">✕</button>
+                    <span id="presetStatus" style="font-size:9px;color:rgba(255,255,255,.35);padding:0 4px"></span>
+                </div>
+                </div>
+            </div>
+            </div>
     </header>
 
     <script defer src="p5.js"></script>
@@ -723,11 +718,11 @@
             'depth','depthScatter','corrupt','corruptDrift','block',
             'glitchSpeed','glitchSpeedFine','glitchSpeedMul','glitchSize',
             'glitchSmear','glitchSmearAngle','glitchAlpha','glitchJitter',
-            'glitchBaseX','glitchBaseY','trailOn','trailLayers','trailDepth','trailLumaKey',
+            'glitchBaseX','glitchBaseY','trailLayers','trailDepth','trailLumaKey',
             'symOn','symMode','symPos',
-            'clusters','clusterCount','clusterRadius','scanRandSize','scanShift','scanDrift','scanAlpha',
+            'clusters','clusterCount','clusterRadius','scanShift','scanDrift','scanAlpha',
+            'clusterTiles','cluCenters','cluSpread','spatialGap',
             'solarizeOn','solarizeThresh','solarizeAmt','solarizeR','solarizeG','solarizeB',
-            'chromaOn','chromaR','chromaG','chromaB','chromaWobble','chromaBleed','chromaAmt',
             'flowOn','flowStrength','flowScale','flowPulse','flowImpl',
             'corruptOn',
         ];

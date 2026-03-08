@@ -89,15 +89,10 @@ function setup() {
 window.setup = setup;
 
 function allocBuffers() {
-  // Release p5 graphics buffers
   [gCur, gBuf, gWarp, gTemp].forEach(g => { try { if (g) g.remove(); } catch {} });
-  // Release feedback offscreen canvas
-  if (_fbCanvas) { try { _fbCanvas.width = 1; _fbCanvas.height = 1; } catch {} }
-  _fbCanvas = null; _fbCtx = null;
-  // Release all effects module offscreen canvases
-  try { resetEffectsCanvases(); } catch {}
   gCur = createGraphics(width, height); gBuf = createGraphics(width, height);
   gWarp = createGraphics(width, height); gTemp = createGraphics(width, height);
+  _fbCanvas = null; _fbCtx = null;
 }
 
 function windowResized() {
@@ -107,14 +102,9 @@ function windowResized() {
 window.windowResized = windowResized;
 
 function clearAll() {
-  [gBuf, gWarp, gTemp].forEach(g => { try { g.clear(); } catch {} });
+  [gBuf, gWarp, gTemp].forEach(g => g.clear());
   frameRing.length = 0;
   seededOnce = false;
-  // Release feedback canvas so stale frame data doesn't linger
-  if (_fbCanvas) { try { _fbCanvas.width = 1; _fbCanvas.height = 1; } catch {} }
-  _fbCanvas = null; _fbCtx = null;
-  // Release effects offscreen canvases
-  try { resetEffectsCanvases(); } catch {}
 }
 
 // ─── UI wiring ──────────────────────────────────────────────────────────────
@@ -131,8 +121,9 @@ function hookUI() {
     'glitchJitter','glitchJitterVal','glitchSmearAngle','glitchSmearAngleVal','seed',
     'feedback','feedbackVal','persistence','persistenceVal',
     'fbX','fbXVal','fbY','fbYVal','fbZ','fbZVal','fbTheta','fbThetaVal',
-    'clusters','clusterCount','clusterCountVal',
-    'clusterRadius','clusterRadiusVal',
+    'clusters','clusterTiles','clusterCount','clusterCountVal',
+    'clusterRadius','clusterRadiusVal','spatialGap','spatialGapVal',
+    'cluCenters','cluCentersVal','cluSpread','cluSpreadVal',
     'flowOn','flowStrength','flowStrengthVal','flowScale','flowScaleVal',
     'flowPulse','flowPulseVal','flowImpl','flowImplVal',
     'baseOn','baseMix','baseMixVal','seedOnLoad',
@@ -144,8 +135,6 @@ function hookUI() {
     'trailOn','trailLayers','trailLayersVal','trailDepth','trailDepthVal',
     'trailLumaKey','trailLumaKeyVal',
     'scanRandSize',
-    'chromaOn','chromaR','chromaRVal','chromaG','chromaGVal','chromaB','chromaBVal',
-    'chromaWobble','chromaWobbleVal','chromaBleed','chromaBleedVal','chromaAmt','chromaAmtVal',
     'bgMode',
   ].forEach(k => els[k] = $(k));
 
@@ -190,12 +179,11 @@ function hookUI() {
     'quality','depth','corrupt','block','glitchSpeed','glitchSpeedFine',
     'glitchSize','glitchSmear','glitchBaseX','glitchBaseY',
     'feedback','persistence','fbX','fbY','fbZ','fbTheta',
-    'clusterCount','clusterRadius',
+    'spatialGap','clusterCount','clusterRadius','cluCenters','cluSpread',
     'scanAlpha','scanShift','scanDrift','glitchAlpha','glitchJitter','glitchSmearAngle',
     'flowStrength','flowScale','flowPulse','flowImpl','baseMix','symPos','glitchSpeedMul',
     'depthScatter','corruptDrift','trailLayers','trailDepth','trailLumaKey',
     'solarizeThresh','solarizeAmt','solarizeR','solarizeG','solarizeB',
-    'chromaR','chromaG','chromaB','chromaWobble','chromaBleed','chromaAmt',
   ].forEach(id => els[id]?.addEventListener('input', updateLabels));
 
   els.baseOn?.addEventListener('change', () => {
@@ -232,8 +220,11 @@ function updateLabels() {
   set(els.fbY,              els.fbYVal,              f2);
   set(els.fbZ,              els.fbZVal,              f2);
   set(els.fbTheta,          els.fbThetaVal,          v => v);
+  set(els.spatialGap,       els.spatialGapVal,       v => v);
   set(els.clusterCount,     els.clusterCountVal,     v => v);
   set(els.clusterRadius,    els.clusterRadiusVal,    v => v);
+  set(els.cluCenters,       els.cluCentersVal,       v => v);
+  set(els.cluSpread,        els.cluSpreadVal,        v => v);
   set(els.flowStrength,     els.flowStrengthVal,     v => v);
   set(els.flowScale,        els.flowScaleVal,        v => v);
   set(els.flowPulse,        els.flowPulseVal,        v => (v|0));
@@ -258,12 +249,6 @@ function updateLabels() {
   set(els.solarizeR,        els.solarizeRVal,        f2);
   set(els.solarizeG,        els.solarizeGVal,        f2);
   set(els.solarizeB,        els.solarizeBVal,        f2);
-  set(els.chromaR,          els.chromaRVal,          v => (v|0));
-  set(els.chromaG,          els.chromaGVal,          v => (v|0));
-  set(els.chromaB,          els.chromaBVal,          v => (v|0));
-  set(els.chromaWobble,     els.chromaWobbleVal,     f2);
-  set(els.chromaBleed,      els.chromaBleedVal,      f2);
-  set(els.chromaAmt,        els.chromaAmtVal,        f2);
   if (els.baseMix && els.baseMixVal) {
     els.baseMixVal.textContent = f2(els.baseMix.value);
     els.baseMix.disabled = !els.baseOn?.checked;
@@ -283,9 +268,8 @@ function onFile(ev) {
   const file = input.files?.[0]; if (!file) return;
   queueMicrotask(() => { try { input.value = ''; } catch {} });
 
-  // Teardown previous — stop all tracks before removing element
+  // Teardown previous
   try { videoEl?.elt?.srcObject?.getTracks().forEach(t => t.stop()); } catch {}
-  try { if (videoEl?.elt) { videoEl.elt.pause(); videoEl.elt.src = ''; videoEl.elt.load(); } } catch {}
   try { if (videoEl) videoEl.remove(); } catch {}
   videoEl = null;
   if (currentBlobUrl) { try { URL.revokeObjectURL(currentBlobUrl); } catch {} currentBlobUrl = null; }
@@ -371,11 +355,7 @@ function draw() {
     seededOnce = true;
   }
 
-  // Every frame: stamp current video into gBuf as the base layer.
-  // FX passes then paint on top. This makes each effect independently
-  // visible without requiring any other effect to be on.
-  gBuf.image(gCur, 0, 0, gBuf.width, gBuf.height);
-
+  // Persistence decay on gBuf
   const pers = parseFloat(els.persistence?.value ?? '0.7');
   if (pers < 1) {
     const ctx = gBuf.drawingContext;
@@ -463,18 +443,25 @@ function draw() {
       parseFloat(els.solarizeB?.value      ?? '1.0'));
   }
 
-  // ── Chroma Bleed ──────────────────────────────────────────────────────────
-  if (els.chromaOn?.checked) {
-    applyChromaBleed(gBuf);
-  }
-
   // ── Composite to screen ───────────────────────────────────────────────────
-  // gBuf always has the current frame as base + whatever FX are active on top.
-  if (els.baseOn?.checked && parseFloat(els.baseMix?.value ?? '0') > 0) {
-    push(); tint(255, parseFloat(els.baseMix.value) * 255);
-    image(gCur, 0, 0, width, height); pop();
+  // Always draw the live video frame as base, then gBuf (FX) on top.
+  // When no FX are active, gBuf mirrors gCur so video is always visible.
+  const anyFxActive = els.corruptOn?.checked || els.trailOn?.checked ||
+    els.clusters?.checked || els.flowOn?.checked || els.symOn?.checked ||
+    els.solarizeOn?.checked || parseFloat(els.feedback?.value ?? '0') > 0;
+
+  if (anyFxActive) {
+    // Draw base video first (behind FX)
+    if (els.baseOn?.checked && parseFloat(els.baseMix?.value ?? '0') > 0) {
+      push(); tint(255, parseFloat(els.baseMix.value) * 255);
+      image(gCur, 0, 0, width, height); pop();
+    }
+    image(gBuf, 0, 0, width, height);
+  } else {
+    // No FX — just show clean video, and keep gBuf in sync with gCur
+    image(gCur, 0, 0, width, height);
+    gBuf.image(gCur, 0, 0, gBuf.width, gBuf.height);
   }
-  image(gBuf, 0, 0, width, height);
 
   // ── Frame ring ────────────────────────────────────────────────────────────
   const bytesPerFrame = width * height * 4;
