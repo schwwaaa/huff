@@ -4,428 +4,298 @@
 
 <p align="center"><em>A real-time datamosh / glitch-art desktop application built with Tauri + p5.js.</em></p>
 
----
-
-## Table of Contents
-
-- [Features](#features)
-- [Architecture](#architecture)
-- [Prerequisites](#prerequisites)
-  - [All Platforms](#all-platforms)
-  - [macOS](#macos-extra)
-  - [Windows](#windows-extra)
-  - [Linux](#linux-extra)
-- [Development Build](#development-build)
-- [Production Build](#production-build)
-  - [macOS – Universal DMG](#macos--universal-dmg)
-  - [Windows – EXE / MSI / NSIS](#windows--exe--msi--nsis)
-  - [Linux – AppImage / deb](#linux--appimage--deb)
-- [Project Structure](#project-structure)
-- [Effect Controls Reference](#effect-controls-reference)
-- [WebSocket Relay](#websocket-relay)
-- [Performance Notes](#performance-notes)
-- [Troubleshooting](#troubleshooting)
+huff is a desktop application built with [Tauri v1](https://tauri.app) and [p5.js](https://p5js.org). It applies a configurable stack of live visual effects — feedback loops, scanlines, pixel corruption, flow warping, solarization, and symmetry — to a video source. Every parameter is controllable in real time via a built-in panel, MIDI hardware, or OSC over UDP.
 
 ---
-
-Load a video file or plug in a webcam, then sculpt live datamoshing, feedback loops, flow warps, symmetry, solarise, scanline corruption, and more — all streamed in real time to a separate fullscreen canvas window via an embedded WebSocket relay.
 
 ## Features
 
-- **Datamosh / glitch tiles** — temporal tile displacement sampled from a frame ring buffer
-- **Feedback loop** — zoom/rotate/translate the buffer back onto itself each frame
-- **Flow warp** — noise-driven optical-flow distortion with pulse and implosion modes
-- **Symmetry** — vertical, horizontal, or both, with adjustable axis position
-- **Solarise** — luminance-threshold inversion with per-channel RGB tinting
-- **Scanline bands** — drifting horizontal displacement bands sampled from past frames
-- **Trail accordion** — stacked ghost frames for motion-smear effects
-- **Camera input** — live webcam feed alongside or instead of video files
-- **Canvas mirror** — second window (or popup) that receives the composited frame over WebSocket at up to 30 fps
-- **Keyboard shortcuts** — `P` toggles the control panel; `F` toggles fullscreen
+- **Feedback loop** — continuously re-processes the previous frame with zoom, pan, and rotation transforms
+- **Glitch / corruption** — tile-based pixel displacement with cluster physics, jitter, smear, and alpha
+- **Scanlines** — animated horizontal band pass with drift, shift, skew, and gap quantization
+- **Flow warp** — Perlin noise-driven displacement field
+- **Solarization** — per-channel luminance inversion with threshold control
+- **Symmetry** — vertical, horizontal, or quad mirror modes
+- **Trails** — luma-keyed frame blending with configurable depth
+- **Preset system** — save and restore full parameter states by name
+- **MIDI** — connect any USB or virtual MIDI controller; map CCs to parameters via JSON
+- **OSC** — receive Open Sound Control over UDP from TouchOSC, Max/MSP, Pure Data, SuperCollider, TouchDesigner, or any OSC-capable software
 
 ---
 
-## Architecture
+## Tech stack
 
-```
-┌─────────────────────────────────────┐
-│  Tauri shell (Rust)                 │
-│  ┌──────────────────────────────┐   │
-│  │  Embedded WS relay (port 8787│   │
-│  │  Tokio + tokio-tungstenite   │   │
-│  └───────────┬──────────────────┘   │
-│              │ binary frames        │
-│  ┌───────────▼──────────────────┐   │
-│  │  index.html (controls + p5)  │◄──┼─ video file / webcam
-│  │  canvas.js  effects.js       │   │
-│  └───────────┬──────────────────┘   │
-│              │ JPEG frames over WS  │
-│  ┌───────────▼──────────────────┐   │
-│  │  canvas.html (mirror viewer) │   │
-│  │  drawImage + fullscreen      │   │
-│  └──────────────────────────────┘   │
-└─────────────────────────────────────┘
-```
-
-The Rust backend spawns two Tokio listeners (`127.0.0.1:8787` and `[::1]:8787`). Clients register as `index` (sender) or `canvas` (receiver) via a `{"type":"hello","role":"..."}` handshake. Binary frames are forwarded only to `canvas` clients; text messages are broadcast to all others.
+| Layer | Technology |
+|---|---|
+| Desktop shell | Tauri v1 (Rust) |
+| Frontend | p5.js + vanilla JS + HTML/CSS |
+| Canvas ↔ controls IPC | WebSocket relay (Rust, port 8787) |
+| MIDI input | `midir` crate (CoreMIDI / ALSA / WinMM) |
+| OSC input | `rosc` crate + Tokio UDP socket (port 9000) |
+| Build | `@tauri-apps/cli` via npm |
 
 ---
 
 ## Prerequisites
 
-### All Platforms
+| Tool | Version | Notes |
+|---|---|---|
+| Node.js | 18 or later | |
+| Rust | stable (1.70+) | install via [rustup](https://rustup.rs) |
+| Tauri CLI | 1.x | installed automatically via npm |
+| Xcode CLT | latest | macOS only — `xcode-select --install` |
 
-| Tool | Version | Install |
-|------|---------|---------|
-| **Node.js** | ≥ 18 LTS | [nodejs.org](https://nodejs.org) |
-| **Rust + Cargo** | stable | `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` |
-| **Tauri CLI** | 1.x (installed via npm) | `npm install` in project root |
+---
 
-After cloning, install Node dependencies from the project root:
+## Getting started
 
 ```bash
+# 1. Clone
+git clone https://github.com/schwwaaa/huff.git
+cd huff
+
+# 2. Install JS dependencies
 npm install
-```
 
----
-
-### macOS extra
-
-Xcode Command Line Tools are required for the linker and `lipo`:
-
-```bash
-xcode-select --install
-```
-
-Camera access requires the entitlements already present in `src-tauri/entitlements.plist`. No extra steps are needed for dev builds; codesigning is required for distribution.
-
----
-
-### Windows extra
-
-Install the **Microsoft C++ Build Tools** (MSVC toolchain):
-
-1. Download [Build Tools for Visual Studio](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
-2. Select **Desktop development with C++**
-
-Install **WebView2** (required at runtime on Windows < 11):
-
-- Download [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/)
-- Or ship the bootstrapper — the Windows build script's `README.txt` reminds end-users.
-
-Add the MSVC target for Rust:
-
-```powershell
-rustup target add x86_64-pc-windows-msvc
-```
-
----
-
-### Linux extra
-
-Install system libraries required by Tauri/WebKitGTK:
-
-**Ubuntu / Debian:**
-
-```bash
-sudo apt update
-sudo apt install -y \
-  libwebkit2gtk-4.0-dev \
-  build-essential \
-  curl \
-  wget \
-  file \
-  libssl-dev \
-  libgtk-3-dev \
-  libayatana-appindicator3-dev \
-  librsvg2-dev
-```
-
-**Arch Linux:**
-
-```bash
-sudo pacman -S --needed \
-  webkit2gtk \
-  base-devel \
-  curl \
-  wget \
-  file \
-  openssl \
-  appmenu-gtk-module \
-  gtk3 \
-  libappindicator-gtk3 \
-  librsvg \
-  libvips
-```
-
-**Fedora:**
-
-```bash
-sudo dnf install \
-  webkit2gtk4.0-devel \
-  openssl-devel \
-  curl \
-  wget \
-  file \
-  libappindicator-gtk3 \
-  librsvg2-devel
-```
-
----
-
-## Development Build
-
-Runs the app with hot-reload (Rust side requires a full recompile on change):
-
-```bash
+# 3. Run in dev mode (hot-reload frontend, Rust recompiles on change)
 npm run dev
-# or equivalently:
-npx tauri dev
+
+# 4. Production build
+npm run build
 ```
 
-The WebSocket relay starts automatically on port **8787**. Open `canvas.html` in a browser (or via the in-app button) to connect the mirror window.
+The first `npm run dev` after a fresh clone will take several minutes — Cargo needs to fetch and compile Rust crates including `tokio`, `midir`, and `rosc`. Subsequent builds are cached.
 
 ---
 
-## Production Build
-
-### macOS – Universal DMG
-
-Use the all-in-one script in `platform/macOS/`:
-
-```bash
-cd platform/macOS
-bash dmg_creation.sh
-```
-
-This script:
-1. Adds both Rust targets (`aarch64-apple-darwin`, `x86_64-apple-darwin`)
-2. Builds ARM64 and x64 app bundles via `tauri build --bundles app`
-3. Stitches them into a Universal binary with `lipo`
-4. Creates a DMG using `hdiutil`
-
-Output files land in `artifacts/`:
-
-```
-artifacts/
-  universal-app/datamosh-desktop.app   ← drag-to-Applications bundle
-  datamosh-desktop-universal.dmg       ← distributable disk image
-```
-
-> **Codesigning & Notarisation:** The script does not sign or notarise. To distribute outside the Mac App Store, wrap the script with `codesign --deep --force --options runtime` and `xcrun notarytool`. See [Apple's documentation](https://developer.apple.com/documentation/security/notarizing_macos_software_before_distribution).
-
-#### Manual single-arch build
-
-```bash
-# Apple Silicon
-npm run tauri -- build -- --target aarch64-apple-darwin
-
-# Intel
-npm run tauri -- build -- --target x86_64-apple-darwin
-```
-
----
-
-### Windows – EXE / MSI / NSIS
-
-Run the batch script from the project root (or the `platform/windows/` folder):
-
-```cmd
-platform\windows\Build-Artifacts.cmd
-```
-
-Configurable variables at the top of the script:
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `TARGET` | `x86_64-pc-windows-msvc` | Rust target triple |
-| `KEEP` | `5` | Number of timestamped artifact folders to retain |
-| `CLEAN_ARTIFACTS` | `0` | Set to `1` to wipe `artifacts\` before building |
-| `DEEP_NPM_CLEAN` | `0` | Set to `1` to delete `node_modules` and reinstall |
-
-Output files land in `artifacts\<timestamp>\`:
-
-```
-artifacts\20250101-120000\
-  huff-v2_0.1.0_x64.exe          ← portable binary
-  huff-v2_0.1.0_x64-setup.exe    ← NSIS installer
-  huff-v2_0.1.0_x64_en-US.msi    ← MSI installer
-  portable-20250101-120000.zip    ← zipped portable EXE
-  SHA256SUMS.txt                  ← checksums for all artifacts
-```
-
-#### Manual build
-
-```powershell
-npx tauri build --target x86_64-pc-windows-msvc
-```
-
-> **SmartScreen:** Unsigned builds will trigger a Windows SmartScreen warning. Click *More info → Run anyway*, or sign the binary with a code-signing certificate.
-
----
-
-### Linux – AppImage / deb
-
-```bash
-npm run tauri build
-# or
-npx tauri build
-```
-
-Tauri will produce an **AppImage** and a **.deb** package under:
-
-```
-src-tauri/target/release/bundle/
-  appimage/huff-v2_0.1.0_amd64.AppImage
-  deb/huff-v2_0.1.0_amd64.deb
-```
-
-To run the AppImage directly:
-
-```bash
-chmod +x huff-v2_0.1.0_amd64.AppImage
-./huff-v2_0.1.0_amd64.AppImage
-```
-
-> **Camera permissions on Linux:** Grant camera access through your desktop environment's privacy settings, or ensure the running user is in the `video` group (`sudo usermod -aG video $USER`).
-
----
-
-## Project Structure
+## Project structure
 
 ```
 huff/
-├── src/                        # Frontend (HTML + JS, no bundler)
-│   ├── index.html              # Main controls window
-│   ├── canvas.html             # Mirror/receiver window
-│   ├── canvas.js               # p5 setup, draw loop, UI wiring, WS sender
-│   ├── effects.js              # applyGlitch, applyFlowWarp, applySolarize, applySymmetry
-│   ├── ws-server.js            # Standalone Node.js relay (dev/testing only)
-│   ├── ws-mirror.js            # Standalone WS sender (unused; logic is inlined in canvas.js)
-│   └── p5.js                   # p5.js library (bundled locally)
+├── src/                        # Frontend (loaded by Tauri WebView)
+│   ├── index.html              # Control panel — all parameters, MIDI modal, OSC modal
+│   ├── canvas.html             # Render window — p5 canvas only
+│   ├── canvas.js               # p5 lifecycle, UI wiring, WebSocket client
+│   ├── effects.js              # All rendering passes (no DOM, no WS — pure canvas)
+│   ├── p5.js                   # p5.js local copy
+│   ├── midi/                   # MIDI map files
+│   │   ├── FORMAT.md           # Map authoring reference
+│   │   ├── nanokontrol2.json   # Korg nanoKONTROL2 factory map
+│   │   ├── nanokontrol1.json   # Korg nanoKONTROL mk1 factory map
+│   │   └── generic.json        # 16-CC starter map
+│   └── osc/                    # OSC map files
+│       ├── FORMAT.md           # Map authoring reference
+│       ├── touchosc-mix.json   # TouchOSC Mix template — primary surface
+│       ├── touchosc-effects.json # TouchOSC — texture and physics
+│       ├── generic-16.json     # 16 /huff/ addresses for any sender
+│       └── osc-validate.json   # 3-address smoke test
 │
 ├── src-tauri/
-│   ├── src/
-│   │   └── main.rs             # Rust entry point + embedded WS relay
-│   ├── Cargo.toml              # Rust dependencies
-│   ├── tauri.conf.json         # App config: windows, bundle, identifiers
-│   ├── entitlements.plist      # macOS entitlements (camera, network)
-│   ├── Info.plist              # macOS Info.plist overrides
-│   ├── capabilities/
-│   │   ├── network.json        # Tauri capability: WebSocket access
-│   │   └── recording-save.json # Tauri capability: file save
-│   └── icons/                  # App icons for all platforms
+│   ├── src/main.rs             # Rust: WS relay + MIDI commands + OSC listener
+│   ├── Cargo.toml
+│   └── tauri.conf.json
 │
-├── platform/
-│   ├── macOS/
-│   │   └── dmg_creation.sh     # Universal binary + DMG build script
-│   └── windows/
-│       └── Build-Artifacts.cmd # Windows build + artifact collection script
-│
-├── scripts/
-│   ├── create_mac_builds.sh    # Build both macOS arch targets
-│   ├── create_universal.sh     # lipo universal binary
-│   ├── create_universal_dmg.sh # Package DMG
-│   └── remove_artifacts.sh     # Clean artifacts directory
-│
-├── package.json
-└── README.md
+└── package.json
 ```
 
 ---
 
-## Effect Controls Reference
+## Architecture
 
-| Control | Description |
-|---------|-------------|
-| **SYSTEM** | Master on/off for the glitch engine |
-| **BASE VIDEO** | Show the raw source video underneath the effect |
-| **BASE MIX** | Opacity of the base video layer (0–1) |
-| **BASE BG** | Background colour when no tile covers a pixel (Black / Green / Blue / White) |
-| **FEEDBACK** | How much of the previous frame feeds back into the next (0–3) |
-| **PERSISTENCE** | How quickly the buffer decays between frames (0–10) |
-| **SYMM / MODE / SYM POS** | Mirror the buffer vertically, horizontally, or both, around a moveable axis |
-| **DEPTH** | How far back in the frame ring tiles are sampled |
-| **DEPTH SCATTER** | Randomness of per-tile temporal offset (0 = all tiles same frame, 1 = full scatter) |
-| **CORRUPT %** | Fraction of grid tiles displaced per frame |
-| **CORRUPT DRIFT** | Noise-driven breathing of the corruption density |
-| **PIXEL SIZE** | Block/tile size in pixels |
-| **GLITCH SPEED / FINE SPEED** | Noise phase velocity (coarse × fine = overall density) |
-| **GLITCH SIZE** | Spatial size of each displaced tile |
-| **SMEAR** | Number of duplicate stamps trailed behind each tile |
-| **SMEAR ANGLE** | Direction of smear trail (0 = noise-driven) |
-| **TRAIL LAYERS / TRAIL DEPTH** | Ghost frames stacked behind each tile for motion-smear |
-| **GLITCH MULT** | Global speed multiplier |
-| **GLITCH X / Y** | Base offset applied to all tile destinations |
-| **TILE OPACITY** | Alpha of each blit tile |
-| **JITTER** | Magnitude of per-tile position noise |
-| **SEED** | Random seed (deterministic output for the same seed + frame) |
-| **FB X / Y / Z / θ** | Feedback translation, zoom, and rotation per frame |
-| **SCANLINES** | Enable drifting horizontal band displacement |
-| **BANDS / BAND HEIGHT / SHIFT / DRIFT / SCAN OPACITY** | Scanline band parameters |
-| **CLUSTER TILES** | Place tiles in radial clusters rather than uniform scatter |
-| **CENTERS / SPREAD / SPATIAL GAP** | Cluster geometry |
-| **SOLARIZE** | Luminance-threshold colour inversion |
-| **THRESH / AMOUNT / SOL R/G/B** | Solarise parameters |
-| **FLOW** | Enable noise-field optical-flow warp |
-| **STRENGTH / SCALE / QUALITY / PULSE / IMPLODE** | Flow warp parameters |
-| **Seed on load** | Seed the buffer with the first video frame on file load |
+### Two-window model
+
+huff opens two windows at startup. The **control panel** (`index.html`) runs in the primary window and contains all sliders, checkboxes, and buttons. The **canvas** (`canvas.html`) runs in a second window and renders the p5.js output. They communicate via a Rust-hosted WebSocket relay on `ws://127.0.0.1:8787`.
+
+```
+index.html  ──WS text──►  main.rs relay  ──WS text──►  canvas.js
+                          ◄──WS binary──              ──WS binary──►
+```
+
+Text messages carry parameter JSON. Binary messages carry raw pixel data when needed. The relay is role-aware — each client identifies itself on connection with `{"type":"hello","role":"index|canvas"}` and the relay routes accordingly.
+
+### Graphics pipeline
+
+All rendering lives in `effects.js`. Functions are standalone passes called in sequence by `canvas.js`:
+
+```
+video frame
+    │
+    ▼
+applyTrails()       — luma-keyed frame blending
+    │
+    ▼
+applyGlitch()       — tile displacement + cluster physics
+    │
+    ▼
+applyScanlines()    — animated band pass
+    │
+    ▼
+applyFlowWarp()     — Perlin noise displacement
+    │
+    ▼
+applySolarize()     — luminance inversion
+    │
+    ▼
+applySymmetry()     — mirror transform
+    │
+    ▼
+feedback loop       — transformed composite → next frame input
+```
+
+> **Note for contributors:** `effects.js` must not be coupled to DOM elements or the WebSocket. All parameters enter as function arguments. This separation is intentional — the canvas window has no access to the control panel's DOM.
+
+### Cluster physics
+
+`applyGlitch()` places displacement tiles using either a static noise distribution (`cluSpeed === 0`) or a full velocity-integrated physics simulation (`cluSpeed > 0`). Physics state (`_cluPhysics[]`, `_cluPhysT`) is module-level and persists across frames to carry momentum.
+
+### MIDI
+
+MIDI runs entirely in Rust via `midir`. There is no Web MIDI API usage — `navigator.requestMIDIAccess` does not function inside Tauri's WebView because `tauri://` is not a secure context.
+
+```
+USB/virtual MIDI device
+    │
+    ▼
+midir (Rust, CoreMIDI/ALSA/WinMM)
+    │  parse_midi() → MidiEvent
+    ▼
+window.emit("midi-event")          Tauri IPC
+    │
+    ▼
+tauriEvent.listen("midi-event")    index.html
+    │  ccLookup[cc] → { paramId, type }
+    ▼
+DOM element  →  input/change/click event  →  canvas.js draw loop
+```
+
+**Tauri commands exposed:**
+
+| Command | Description |
+|---|---|
+| `list_midi_ports()` | Returns all OS-visible port names. Creates a fresh `MidiInput` each call so virtual ports appear without restart. |
+| `connect_midi_port_by_name({ portName })` | Exact match first, then case-insensitive substring. Drops any existing connection first. |
+| `connect_midi_port({ portIndex })` | Legacy index-based connect. |
+| `disconnect_midi()` | Releases the active port. |
+| `debug_midi_ports()` | Prints all visible ports to stdout. Returns the same string. |
+
+### OSC
+
+OSC runs over UDP. Rust binds `0.0.0.0:9000` at startup so any device on the local network can send to it. Packets are decoded with `rosc` and bundles are handled recursively.
+
+```
+TouchOSC / Max / Pd / SuperCollider
+    │  UDP packet → 0.0.0.0:9000
+    ▼
+rosc::decoder::decode_udp()
+    │  OscPacket → OscEvent { addr, value, args }
+    ▼
+app.emit_all("osc-message")        Tauri IPC (all windows)
+    │
+    ▼
+tauriEvent.listen("osc-message")   index.html
+    │  addrLookup[addr] → { paramId, type, inputMin, inputMax }
+    ▼
+DOM element  →  input/change/click event  →  canvas.js draw loop
+```
+
+**Tauri commands exposed:**
+
+| Command | Description |
+|---|---|
+| `get_osc_port()` | Returns `9000`. Lets the frontend display the active port. |
 
 ---
 
-## WebSocket Relay
+## MIDI maps
 
-The relay runs embedded in the Tauri process on `ws://127.0.0.1:8787` (IPv4) and `ws://[::1]:8787` (IPv6).
+MIDI maps are JSON files loaded at runtime via the MIDI panel. The loaded map persists in `localStorage` and reloads automatically on the next launch.
 
-**Handshake:**
 ```json
-{ "type": "hello", "role": "index" }   // sender
-{ "type": "hello", "role": "canvas" }  // receiver
+{
+  "name": "My Controller",
+  "description": "optional",
+  "version": 1,
+  "channel": -1,
+  "mappings": [
+    { "param": "feedback",  "cc": 0,  "type": "range",   "enabled": true },
+    { "param": "corruptOn", "cc": 32, "type": "toggle",  "enabled": true },
+    { "param": "refreshBtn","cc": 41, "type": "trigger", "enabled": true },
+    { "_section": "comments are ignored by the engine" }
+  ]
+}
 ```
 
-**Routing rules:**
-- Text messages → broadcast to all other connected clients
-- Binary messages (JPEG frames) → forwarded only to clients with `role == "canvas"`
+`channel: -1` accepts any channel. `0`–`15` filters to a specific channel.
 
-A standalone Node.js relay (`src/ws-server.js`) is included for testing outside of Tauri:
+| `type` | Behaviour |
+|---|---|
+| `range` | CC 0–127 scaled linearly to the element's `min`–`max` |
+| `toggle` | CC > 63 → checked · CC ≤ 63 → unchecked |
+| `trigger` | Any CC value > 0 fires `.click()` |
 
-```bash
-node src/ws-server.js
-```
+Full parameter reference: `src/midi/FORMAT.md`
+
+Factory maps in `src/midi/`: `nanokontrol2.json`, `nanokontrol1.json`, `generic.json`
 
 ---
 
-## Performance Notes
+## OSC maps
 
-- **Frame ring** stores `ImageData` objects rather than p5 `Graphics` instances. This avoids the `Graphics.get()` copy-on-read overhead and keeps GPU memory pressure low.
-- **Ring buffer drawRingRegion** uses a single reused offscreen `<canvas>` with `putImageData` + native `drawImage` cropping — no per-tile allocation.
-- **WS sender** uses a single reused offscreen canvas for JPEG encoding; it only resizes the canvas when the output dimensions change.
-- **Label updates** fire on `input` events only — not during the draw loop.
-- **p5 Graphics** buffers are disposed (`remove()`) before reallocation on window resize.
-- Tune the **QUALITY** slider to reduce the frame-ring depth and skip flow-warp frames (`everyN`), trading temporal richness for frame rate on slower machines.
-- The 256 MB ring-buffer memory cap is enforced regardless of the quality setting.
+OSC maps follow the same load/persist pattern as MIDI maps.
+
+```json
+{
+  "name": "My Layout",
+  "version": 1,
+  "mappings": [
+    { "param": "feedback",  "addr": "/1/fader1", "type": "range",   "inputMin": 0, "inputMax": 1 },
+    { "param": "corruptOn", "addr": "/1/toggle1","type": "toggle",  "inputMin": 0, "inputMax": 1 },
+    { "param": "refreshBtn","addr": "/1/push1",  "type": "trigger", "inputMin": 0, "inputMax": 1 }
+  ]
+}
+```
+
+`inputMin`/`inputMax` define the range the sender emits. The engine normalises this to 0–1 before scaling to the parameter's native range. Use `inputMax: 127` for MIDI-to-OSC bridges.
+
+| `type` | Behaviour |
+|---|---|
+| `range` | Incoming value normalised from `inputMin–inputMax` → element `min`–`max` |
+| `toggle` | Value > 0.5 → checked · value ≤ 0.5 → unchecked |
+| `trigger` | Value > 0.5 fires `.click()` |
+
+Full parameter reference: `src/osc/FORMAT.md`
+
+Factory maps in `src/osc/`: `touchosc-mix.json`, `touchosc-effects.json`, `generic-16.json`
+
+**TouchOSC setup:** Settings → OSC → Host = your computer's LAN IP → Port (outgoing) = `9000` → enable OSC.
+
+**Soft OSC (same machine):**
+- Max/MSP: `[udpsend 127.0.0.1 9000]`
+- Pure Data: `[netsend -u -b 127.0.0.1 9000]`
+- SuperCollider: `NetAddr("127.0.0.1", 9000).sendMsg("/huff/feedback", 0.75)`
 
 ---
 
-## Troubleshooting
+## Adding a new effect parameter
 
-**Blank canvas on Windows:**
-Install [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/).
+1. Add the control element to `index.html` with a unique `id`.
+2. Register the `id` in the `hookUI()` element map in `canvas.js`.
+3. Add it to `PRESET_PARAM_IDS` in `index.html` if it should be saved with presets.
+4. Read the value in `canvas.js` and pass it to the relevant `effects.js` function.
+5. Add a `_section` comment and entry to any relevant map files in `src/midi/` and `src/osc/`.
 
-**Camera not appearing (macOS):**
-The app must be codesigned with the `NSCameraUsageDescription` entitlement for the permission dialog to appear. In dev mode (`tauri dev`) the entitlement is injected automatically. For distribution builds, sign with `--entitlements src-tauri/entitlements.plist`.
+Do not modify `effects.js` to read from the DOM directly. All parameters must flow through function arguments.
 
-**`WS: disconnected` in the status pill:**
-The relay starts in the Tauri process; if you open `index.html` directly in a browser (outside Tauri) you need to run `node src/ws-server.js` separately.
+---
 
-**Port 8787 already in use:**
-Change `const PORT: u16 = 8787;` in `src-tauri/src/main.rs` and update the `__getWSURL__` call in `src/index.html` to match.
+## Contributing
 
-**High memory usage:**
-Lower the **QUALITY** slider or reduce **DEPTH** to shrink the frame ring. The ring is capped at 256 MB but can still grow large at high resolutions.
+Issues and pull requests are welcome at [github.com/schwwaaa/huff](https://github.com/schwwaaa/huff).
 
-**SmartScreen warning (Windows):**
-Expected for unsigned binaries. Click *More info → Run anyway*, or codesign the executable.
+When contributing to the graphics pipeline, please run a before/after visual comparison — small regressions in `effects.js` are easy to introduce and hard to catch in code review alone.
 
-**`tauri build` fails on Linux with missing library:**
-Re-run the dependency install commands for your distro in the [Linux extra](#linux-extra) section.
+---
+
+## License
+
+ISC
