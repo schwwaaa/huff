@@ -45,7 +45,10 @@
         "icons/icon.ico"
       ],
       "macOS": {
-        "entitlements": "src-tauri/entitlements.plist"
+        "entitlements": "src-tauri/entitlements.plist",
+        "frameworks": [
+          "frameworks/Syphon.framework"
+        ]
       }
     }
   }

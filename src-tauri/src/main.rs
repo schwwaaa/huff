@@ -6,6 +6,14 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+// macOS-only Syphon output module
+#[cfg(target_os = "macos")]
+#[macro_use]
+extern crate objc;
+
+#[cfg(target_os = "macos")]
+mod syphon;
+
 use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 
 use futures_util::{SinkExt, StreamExt};
@@ -344,9 +352,25 @@ async fn handle_ws(
         }
 
         Ok(Message::Binary(bin)) => {
-          let sent = broadcast_binary(&clients_r, peer_addr, bin).await;
-          if sent == 0 {
-            println!("[huff] binary from {peer_addr}, but no canvas clients yet");
+          // macOS: intercept Syphon frames before relaying
+          #[cfg(target_os = "macos")]
+          if bin.starts_with(b"HUFFSYPH") {
+            syphon::push_frame(&bin);
+            // do NOT relay syphon frames to the canvas window — they're large
+            // and the canvas already draws from its own p5 loop
+          } else {
+            let sent = broadcast_binary(&clients_r, peer_addr, bin).await;
+            if sent == 0 {
+              println!("[huff] binary from {peer_addr}, but no canvas clients yet");
+            }
+          }
+
+          #[cfg(not(target_os = "macos"))]
+          {
+            let sent = broadcast_binary(&clients_r, peer_addr, bin).await;
+            if sent == 0 {
+              println!("[huff] binary from {peer_addr}, but no canvas clients yet");
+            }
           }
         }
 
@@ -372,6 +396,38 @@ async fn handle_ws(
   Ok(())
 }
 
+// ── Syphon commands (macOS only) ──────────────────────────────────────────────
+
+#[command]
+fn start_syphon(width: u32, height: u32) -> Result<String, String> {
+    #[cfg(target_os = "macos")]
+    {
+        syphon::start(width, height)?;
+        Ok(format!("Syphon server started — {}×{}", width, height))
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (width, height);
+        Err("Syphon is macOS only".into())
+    }
+}
+
+#[command]
+fn stop_syphon() -> String {
+    #[cfg(target_os = "macos")]
+    { syphon::stop(); "Syphon server stopped".into() }
+    #[cfg(not(target_os = "macos"))]
+    { "Syphon is macOS only".into() }
+}
+
+#[command]
+fn syphon_status() -> String {
+    #[cfg(target_os = "macos")]
+    { syphon::status() }
+    #[cfg(not(target_os = "macos"))]
+    { "unavailable (macOS only)".into() }
+}
+
 fn main() {
 tauri::Builder::default()
   .invoke_handler(tauri::generate_handler![
@@ -381,6 +437,9 @@ tauri::Builder::default()
       connect_midi_port_by_name,
       disconnect_midi,
       get_osc_port,
+      start_syphon,
+      stop_syphon,
+      syphon_status,
   ])
   .setup(|app| {
       const PORT: u16 = 8787;

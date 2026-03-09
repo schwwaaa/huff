@@ -278,7 +278,58 @@
             transition: border-color .05s, background .05s !important;
         }
 
-        /* ── OSC modal (mirrors MIDI modal, green accent) ────────── */
+        /* ── Syphon modal (purple accent) ───────────────────────────── */
+        #syphonOverlay {
+            display: none; position: fixed; inset: 0; z-index: 1000;
+            background: rgba(0,0,0,.78); backdrop-filter: blur(10px);
+            align-items: center; justify-content: center;
+        }
+        #syphonOverlay.open { display: flex; }
+        #syphonBox {
+            position: relative;
+            background: #090909; border: 2px solid rgba(180,100,255,.5);
+            border-radius: 14px; padding: 24px 28px 22px;
+            max-width: 520px; width: 94%;
+            font-size: 12px;
+        }
+        #syphonBox h2 {
+            font-size: 15px; font-weight: 900; letter-spacing: .12em;
+            color: rgba(180,100,255,.9); text-transform: uppercase;
+            margin: 0 0 4px;
+        }
+        #syphonBox .syph-sub {
+            font-size: 10px; color: rgba(255,255,255,.3);
+            letter-spacing: .05em; margin-bottom: 18px;
+        }
+        #syphonClose {
+            position: absolute; top: 12px; right: 15px;
+            background: none; border: none; font-size: 22px;
+            color: rgba(255,255,255,.3); cursor: pointer; padding: 0; line-height: 1;
+        }
+        #syphonClose:hover { color: #fff; }
+        #syphonStatus {
+            background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.08);
+            border-radius: 8px; padding: 10px 14px; font-size: 11px;
+            color: rgba(255,255,255,.35); margin-bottom: 14px; line-height: 1.6;
+        }
+        #syphonStatus.active { color: rgba(180,100,255,.9); border-color: rgba(180,100,255,.3); }
+        #syphonStatus.error  { color: #ff6060; }
+        .syph-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+        .syph-label { font-size: 10px; color: rgba(255,255,255,.35); letter-spacing:.05em; width: 52px; }
+        .syph-row select, .syph-row input[type=number] {
+            background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.12);
+            color: #e8eaf0; border-radius: 5px; padding: 3px 7px; font-size: 11px;
+        }
+        #syphonToggleBtn {
+            padding: 6px 18px; border-radius: 6px; border: none; cursor: pointer;
+            font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase;
+            background: rgba(180,100,255,.2); color: rgba(180,100,255,.9);
+            border: 1px solid rgba(180,100,255,.4); transition: background .15s;
+        }
+        #syphonToggleBtn:hover { background: rgba(180,100,255,.35); }
+        #syphonToggleBtn.active { background: rgba(180,100,255,.5); color: #fff; }
+
+        /* ── OSC modal ───────────────────────────────────────────────────── */
         #oscOverlay {
             display: none; position: fixed; inset: 0; z-index: 1000;
             background: rgba(0,0,0,.78); backdrop-filter: blur(10px);
@@ -459,6 +510,49 @@
       </div>
     </div>
 
+    <!-- ═══ Syphon Modal ═════════════════════════════════════════ -->
+    <div id="syphonOverlay">
+      <div id="syphonBox">
+        <button id="syphonClose">×</button>
+        <h2>Syphon Output</h2>
+        <div class="syph-sub">macOS only · shares huff's canvas with Resolume, VDMX, MadMapper, CoGe, Millumin…</div>
+
+        <div id="syphonStatus">Not started — click Start to publish frames via Syphon.</div>
+
+        <div class="syph-row">
+          <span class="syph-label">Resolution</span>
+          <input type="number" id="syphW" value="1280" min="64" max="3840" step="1" style="width:64px">
+          <span style="color:rgba(255,255,255,.3);font-size:11px">×</span>
+          <input type="number" id="syphH" value="720"  min="64" max="2160" step="1" style="width:64px">
+          <span style="color:rgba(255,255,255,.25);font-size:10px">(match your canvas window)</span>
+        </div>
+
+        <div class="syph-row">
+          <span class="syph-label">FPS cap</span>
+          <select id="syphFps">
+            <option value="60">60</option>
+            <option value="30" selected>30</option>
+            <option value="24">24</option>
+            <option value="15">15</option>
+          </select>
+          <span style="color:rgba(255,255,255,.25);font-size:10px">frames/sec sent to Syphon</span>
+        </div>
+
+        <div class="syph-row" style="margin-top:6px">
+          <button id="syphonToggleBtn">▶ Start</button>
+          <span id="syphonFrameCount" style="font-size:10px;color:rgba(255,255,255,.3);margin-left:8px"></span>
+        </div>
+
+        <div style="margin-top:18px;font-size:10px;color:rgba(255,255,255,.2);line-height:1.9;border-top:1px solid rgba(255,255,255,.06);padding-top:14px">
+          <strong style="color:rgba(255,255,255,.35)">Syphon.framework is bundled</strong> — no install required.<br>
+          The framework ships inside this project at <code>src-tauri/frameworks/Syphon.framework</code>
+          and is embedded in the <code>.app</code> at build time.<br><br>
+          The canvas will appear as <strong style="color:rgba(180,100,255,.6)">"huff"</strong> in any Syphon client.<br>
+          Connect from Resolume, VDMX, MadMapper, CoGe, or Millumin — it will appear immediately once started.
+        </div>
+      </div>
+    </div>
+
     <!-- ═══ OSC Modal ════════════════════════════════════════════ -->
     <div id="oscOverlay">
       <div id="oscBox">
@@ -521,9 +615,11 @@
             <div style="flex:1"></div>
             <span class="pill" id="status">WS: …</span>
             <span class="pill" id="midiPill" style="color:rgba(255,160,0,.7);border-color:rgba(255,160,0,.25);cursor:pointer" title="Open MIDI settings">MIDI: —</span>
-            <span class="pill" id="oscPill"  style="color:rgba(80,220,120,.6);border-color:rgba(80,220,120,.2);cursor:pointer"  title="Open OSC settings">OSC: —</span>
-            <button id="midiBtn" class="btn-dim">MIDI</button>
-            <button id="oscBtn"  class="btn-dim">OSC</button>
+            <span class="pill" id="oscPill"    style="color:rgba(80,220,120,.6);border-color:rgba(80,220,120,.2);cursor:pointer"  title="Open OSC settings">OSC: —</span>
+            <span class="pill" id="syphonPill" style="color:rgba(180,100,255,.6);border-color:rgba(180,100,255,.2);cursor:pointer" title="Open Syphon settings">SYPHON: OFF</span>
+            <button id="midiBtn"   class="btn-dim">MIDI</button>
+            <button id="oscBtn"    class="btn-dim">OSC</button>
+            <button id="syphonBtn" class="btn-dim">SYPHON</button>
             <button id="aboutBtn" class="btn-red">ABOUT</button>
         </div>
 
@@ -1513,6 +1609,214 @@
 
     })();
     </script>
+    <!-- ═══ Syphon Engine ════════════════════════════════════════════════ -->
+    <script>
+    (() => {
+        'use strict';
+        // ────────────────────────────────────────────────────────────────────
+        // SYPHON ENGINE
+        //
+        // Flow:
+        //   RAF loop → p5 canvas.getImageData() → prepend "HUFFSYPH" header
+        //       → binary WebSocket → Rust relay intercepts on b"HUFFSYPH"
+        //       → syphon::push_frame() → MTLTexture upload → SyphonMetalServer
+        //       → Syphon clients (Resolume, VDMX, MadMapper, etc.)
+        //
+        // The HUFFSYPH magic prefix lets Rust distinguish syphon frames from
+        // normal p5 canvas-mirror frames without a separate WS connection.
+        //
+        // Frame binary layout:
+        //   Bytes  0– 7  : b"HUFFSYPH"
+        //   Bytes  8–11  : width  u32 LE
+        //   Bytes 12–15  : height u32 LE
+        //   Bytes 16+    : raw RGBA8 pixels (width × height × 4)
+        // ────────────────────────────────────────────────────────────────────
+
+        const invoke     = window.__TAURI__?.invoke;
+        const overlay    = document.getElementById('syphonOverlay');
+        const closeBtn   = document.getElementById('syphonClose');
+        const toggleBtn  = document.getElementById('syphonToggleBtn');
+        const statusBox  = document.getElementById('syphonStatus');
+        const pill       = document.getElementById('syphonPill');
+        const syphonBtn  = document.getElementById('syphonBtn');
+        const frameLabel = document.getElementById('syphonFrameCount');
+        const wInput     = document.getElementById('syphW');
+        const hInput     = document.getElementById('syphH');
+        const fpsSelect  = document.getElementById('syphFps');
+
+        // ── modal ────────────────────────────────────────────────────────────
+        const openModal  = () => overlay.classList.add('open');
+        const closeModal = () => overlay.classList.remove('open');
+        syphonBtn.addEventListener('click', openModal);
+        pill     .addEventListener('click', openModal);
+        closeBtn .addEventListener('click', closeModal);
+        overlay  .addEventListener('click', e => { if (e.target === overlay) closeModal(); });
+        window   .addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); }, true);
+
+        if (!invoke) {
+            statusBox.textContent = 'Syphon unavailable outside Tauri app.';
+            statusBox.className   = 'error';
+            pill.textContent      = 'SYPHON: N/A';
+            return;
+        }
+
+        // ── state ─────────────────────────────────────────────────────────────
+        let active       = false;
+        let rafId        = null;
+        let lastTs       = 0;
+        let localFrames  = 0;
+
+        // Reuse a single offscreen canvas for pixel extraction
+        const offscreen  = document.createElement('canvas');
+        const offCtx     = offscreen.getContext('2d', { willReadFrequently: true });
+
+        // Shared WS connection — reuse the relay socket that canvas.js already
+        // maintains. We grab it from the global scope if available, otherwise
+        // open our own to the same relay URL.
+        function getRelayWS() {
+            // canvas.js exposes its ws instance on window.__huffWS if present.
+            // Fallback: open a second connection as role "syphon-sender".
+            if (window.__huffWS && window.__huffWS.readyState === WebSocket.OPEN) {
+                return window.__huffWS;
+            }
+            return null; // will use dedicated socket
+        }
+
+        // Dedicated WS socket for syphon frames (avoids interfering with canvas mirror)
+        let syphWS   = null;
+        let wsReady  = false;
+
+        function ensureSyphWS() {
+            if (syphWS && (syphWS.readyState === WebSocket.OPEN || syphWS.readyState === WebSocket.CONNECTING)) return;
+            const url = window.WS_MIRROR_URL || 'ws://127.0.0.1:8787';
+            syphWS = new WebSocket(url);
+            syphWS.binaryType = 'arraybuffer';
+            syphWS.onopen  = () => {
+                wsReady = true;
+                syphWS.send(JSON.stringify({ type: 'hello', role: 'syphon-sender' }));
+            };
+            syphWS.onclose = () => { wsReady = false; syphWS = null; };
+            syphWS.onerror = () => { wsReady = false; };
+        }
+
+        // ── pixel sender ──────────────────────────────────────────────────────
+        const MAGIC = new Uint8Array([72,85,70,70,83,89,80,72]); // "HUFFSYPH"
+
+        function findCanvas() {
+            // p5 canvas is the first canvas in the document
+            return document.querySelector('canvas');
+        }
+
+        function sendFrame(ts) {
+            if (!active) return;
+
+            const fpsCap = parseInt(fpsSelect.value, 10) || 30;
+            const period = 1000 / fpsCap;
+            if (ts - lastTs < period) { rafId = requestAnimationFrame(sendFrame); return; }
+            lastTs = ts;
+
+            if (!wsReady) { ensureSyphWS(); rafId = requestAnimationFrame(sendFrame); return; }
+
+            const cnv = findCanvas();
+            if (!cnv) { rafId = requestAnimationFrame(sendFrame); return; }
+
+            // Always output at the user-specified resolution — this is what
+            // OBS / Resolume / VDMX will see. drawImage handles the scale.
+            const targetW = Math.max(64, parseInt(wInput.value, 10) || 1280);
+            const targetH = Math.max(64, parseInt(hInput.value, 10) || 720);
+
+            if (offscreen.width !== targetW || offscreen.height !== targetH) {
+                offscreen.width  = targetW;
+                offscreen.height = targetH;
+            }
+
+            offCtx.drawImage(cnv, 0, 0, targetW, targetH);
+            let imgData;
+            try { imgData = offCtx.getImageData(0, 0, targetW, targetH); }
+            catch (e) { rafId = requestAnimationFrame(sendFrame); return; }
+
+            // Build binary packet: 8-byte magic + 4-byte W + 4-byte H + pixels
+            const header = new ArrayBuffer(16);
+            const hView  = new DataView(header);
+            MAGIC.forEach((b, i) => hView.setUint8(i, b));
+            hView.setUint32(8,  targetW, true);
+            hView.setUint32(12, targetH, true);
+
+            // Concatenate without copying pixels (just reference the buffer)
+            const blob = new Blob([header, imgData.data.buffer]);
+            blob.arrayBuffer().then(ab => {
+                if (wsReady && syphWS?.readyState === WebSocket.OPEN) {
+                    syphWS.send(ab);
+                    localFrames++;
+                    if (frameLabel) frameLabel.textContent = `${localFrames} frames sent`;
+                }
+            }).catch(() => {});
+
+            rafId = requestAnimationFrame(sendFrame);
+        }
+
+        // ── start / stop ─────────────────────────────────────────────────────
+        async function startSyphon() {
+            const w = Math.max(64, parseInt(wInput.value, 10) || 1280);
+            const h = Math.max(64, parseInt(hInput.value, 10) || 720);
+
+            statusBox.textContent = 'Starting…';
+            statusBox.className   = '';
+
+            try {
+                const msg = await invoke('start_syphon', { width: w, height: h });
+                active = true;
+                localFrames = 0;
+                ensureSyphWS();
+
+                statusBox.textContent = `${msg}\nSending ${w}×${h} pixels → Syphon → look for "huff" in your VJ software.`;
+                statusBox.className   = 'active';
+                pill.textContent      = `SYPHON: ${w}×${h}`;
+                pill.style.color      = 'rgba(180,100,255,.9)';
+                toggleBtn.textContent = '■ Stop';
+                toggleBtn.classList.add('active');
+
+                rafId = requestAnimationFrame(sendFrame);
+            } catch (e) {
+                statusBox.textContent = `⚠ ${e}`;
+                statusBox.className   = 'error';
+            }
+        }
+
+        async function stopSyphon() {
+            active = false;
+            if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+
+            try {
+                const msg = await invoke('stop_syphon');
+                statusBox.textContent = msg;
+            } catch {}
+
+            statusBox.className   = '';
+            pill.textContent      = 'SYPHON: OFF';
+            pill.style.color      = 'rgba(180,100,255,.5)';
+            toggleBtn.textContent = '▶ Start';
+            toggleBtn.classList.remove('active');
+            if (frameLabel) frameLabel.textContent = '';
+        }
+
+        toggleBtn.addEventListener('click', () => {
+            if (active) stopSyphon(); else startSyphon();
+        });
+
+        // ── status poll ───────────────────────────────────────────────────────
+        // Poll Rust every 2s while active to get authoritative frame count
+        setInterval(async () => {
+            if (!active) return;
+            try {
+                const s = await invoke('syphon_status');
+                if (frameLabel && s) frameLabel.textContent = s;
+            } catch {}
+        }, 2000);
+
+    })();
+    </script>
+
     <!-- ═══ OSC Engine ═══════════════════════════════════════════════════ -->
     <script>
     (() => {
