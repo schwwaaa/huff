@@ -193,17 +193,90 @@
         }
         #aboutClose:hover { color: #fff; }
 
-        /* ── midi learn toast ── */
-        #midiToast {
-            display: none; position: fixed; top: 50%; left: 50%;
-            transform: translate(-50%,-50%);
-            background: rgba(0,0,0,.95); border: 2px solid #ff4646; border-radius: 12px;
-            padding: 18px 28px; text-align: center; z-index: 2000; min-width: 250px;
+        /* ── MIDI modal overlay ─────────────────────────────── */
+        #midiOverlay {
+            display: none; position: fixed; inset: 0; z-index: 1000;
+            background: rgba(0,0,0,.78); backdrop-filter: blur(10px);
+            align-items: center; justify-content: center;
         }
-        #midiToast.show { display: block; }
-        #midiToast .tt  { color: #ff4646; font-weight: 700; font-size: 12px; margin-bottom: 8px; }
-        #midiToast .tp  { font-size: 12px; color: #e8eaf0; margin-bottom: 5px; }
-        #midiToast .th  { font-size: 10px; color: rgba(255,255,255,.35); }
+        #midiOverlay.open { display: flex; }
+        #midiBox {
+            position: relative;
+            background: #090909; border: 2px solid rgba(255,160,0,.6);
+            border-radius: 14px; padding: 24px 28px 22px;
+            max-width: 600px; width: 94%;
+            max-height: 88vh; overflow-y: auto;
+            font-size: 12px;
+        }
+        #midiBox h2 {
+            font-size: 15px; font-weight: 900; letter-spacing: .12em;
+            color: rgba(255,160,0,.9); text-transform: uppercase;
+            margin: 0 0 4px;
+        }
+        #midiBox .midi-sub {
+            font-size: 10px; color: rgba(255,255,255,.3);
+            letter-spacing: .05em; margin-bottom: 18px;
+        }
+        #midiClose {
+            position: absolute; top: 12px; right: 15px;
+            background: none; border: none; font-size: 22px;
+            color: rgba(255,255,255,.3); cursor: pointer; padding: 0; line-height: 1;
+        }
+        #midiClose:hover { color: #fff; }
+
+        /* status section */
+        #midiStatusRow {
+            display: flex; align-items: center; gap: 10px;
+            background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.08);
+            border-radius: 8px; padding: 9px 12px; margin-bottom: 16px; flex-wrap: wrap;
+        }
+        #midiPortList { font-size: 11px; color: rgba(255,255,255,.5); flex: 1; min-width: 100px; }
+        #midiBridgeStatus {
+            font-size: 10px; padding: 2px 8px; border-radius: 999px;
+            border: 1px solid rgba(255,160,0,.3); color: rgba(255,160,0,.7);
+            white-space: nowrap;
+        }
+        #midiBridgeStatus.connected { color: #50dc78; border-color: rgba(80,220,120,.4); }
+        #midiBridgeStatus.error     { color: #ff6060; border-color: rgba(255,60,60,.3); }
+
+        /* map loader section */
+        .midi-section-label {
+            font-size: 9px; font-weight: 700; letter-spacing: .14em;
+            text-transform: uppercase; color: rgba(255,160,0,.6);
+            margin: 16px 0 7px;
+        }
+        #midiMapRow { display: flex; gap: 7px; align-items: center; flex-wrap: wrap; }
+        #midiMapName {
+            font-size: 11px; color: #e8eaf0; padding: 3px 8px;
+            background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.12);
+            border-radius: 5px; flex: 1; min-width: 120px;
+        }
+
+        /* map table */
+        #midiMapTable {
+            width: 100%; border-collapse: collapse;
+            margin-top: 6px; font-size: 10px;
+        }
+        #midiMapTable th {
+            text-align: left; font-size: 9px; letter-spacing: .1em;
+            text-transform: uppercase; color: rgba(255,255,255,.3);
+            padding: 4px 6px; border-bottom: 1px solid rgba(255,255,255,.07);
+        }
+        #midiMapTable td {
+            padding: 3px 6px; border-bottom: 1px solid rgba(255,255,255,.04);
+            color: rgba(255,255,255,.65); vertical-align: middle;
+        }
+        #midiMapTable tr:hover td { background: rgba(255,255,255,.03); }
+        #midiMapTable .cc-cell { color: rgba(255,160,0,.8); font-weight: 700; }
+        #midiMapTable .type-cell { color: rgba(150,200,255,.7); }
+        #midiMapTable .dis { opacity: .3; text-decoration: line-through; }
+
+        /* activity flash */
+        .ctrl.midi-active {
+            border-color: rgba(255,160,0,.9) !important;
+            background: rgba(255,160,0,.12) !important;
+            transition: border-color .05s, background .05s !important;
+        }
 
         /* file input tweak */
         input[type=file] { font-size: 11px; color: rgba(255,255,255,.55); max-width: 155px; }
@@ -263,13 +336,56 @@
         </div>
     </div>
 
-    <!-- MIDI learn toast — hidden until MIDI implemented in Tauri context
-    <div id="midiToast">
-        <div class="tt">MIDI LEARN</div>
-        <div class="tp" id="midiToastParam">click any control to arm it</div>
-        <div class="th">move a CC knob to map · ESC to cancel · right-click any control = quick arm</div>
+    <!-- MIDI learn toast removed — replaced by MIDI modal below -->
+
+    <!-- ═══ MIDI Modal ═══════════════════════════════════════ -->
+    <div id="midiOverlay">
+      <div id="midiBox">
+        <button id="midiClose">×</button>
+        <h2>MIDI</h2>
+        <div class="midi-sub">MIDI runs natively via Rust · USB controllers + virtual ports (IAC Bus · loopMIDI · Max/MSP · Pd)</div>
+
+        <!-- Port selection + connect -->
+        <div class="midi-section-label">Device</div>
+        <div id="midiStatusRow">
+          <select id="midiPortSelect" style="flex:1;font-size:11px;padding:4px 6px;background:rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.12);border-radius:5px;color:#e8eaf0;font-family:inherit">
+            <option value="">— click Refresh to list ports —</option>
+          </select>
+          <button id="midiRefreshBtn" style="font-size:10px;padding:3px 8px">↻ Refresh</button>
+          <button id="midiConnectBtn" class="btn-dim" style="font-size:10px;padding:3px 8px">Connect</button>
+          <button id="midiDisconnectBtn" style="font-size:10px;padding:3px 8px;color:#ff6060">Disconnect</button>
+        </div>
+        <div id="midiBridgeStatus" style="font-size:11px;margin-top:6px;padding:6px 10px;border-radius:5px;background:rgba(255,255,255,.04);color:rgba(255,255,255,.4);min-height:28px;line-height:1.5">Not connected</div>
+
+        <!-- Debug button -->
+        <button id="midiDebugBtn" style="margin-top:6px;font-size:9px;padding:2px 8px;opacity:.5">Debug: log all ports to console</button>
+
+        <!-- Map loader -->
+        <div class="midi-section-label">MIDI Map</div>
+        <div id="midiMapRow">
+          <span id="midiMapName" title="No map loaded">No map loaded</span>
+          <button id="midiLoadMapBtn" class="btn-dim" style="font-size:10px;padding:3px 8px">📂 Load Map…</button>
+          <button id="midiClearMapBtn" class="btn-dim" style="font-size:10px;padding:3px 8px;color:#ff6060">✕ Clear</button>
+        </div>
+
+        <!-- Map preview table -->
+        <div class="midi-section-label" style="margin-top:14px">Active Mappings</div>
+        <table id="midiMapTable">
+          <thead>
+            <tr><th>CC</th><th>Parameter ID</th><th>Type</th><th>Note</th></tr>
+          </thead>
+          <tbody id="midiMapTbody">
+            <tr><td colspan="4" style="color:rgba(255,255,255,.25);font-style:italic;padding:8px 6px">Load a map file to see mappings.</td></tr>
+          </tbody>
+        </table>
+
+        <div style="margin-top:18px;font-size:10px;color:rgba(255,255,255,.25);line-height:1.7">
+          Map format: <code>src/midi/FORMAT.md</code> &nbsp;·&nbsp;
+          Factory maps: <code>nanokontrol2.json</code> · <code>nanokontrol1.json</code> · <code>generic.json</code><br>
+          Soft MIDI: enable IAC Driver (macOS Audio MIDI Setup) or install loopMIDI (Windows), then send from Max/MSP or Pd to that port.
+        </div>
+      </div>
     </div>
-    -->
 
     <!-- ═══ Main header ════════════════════════════════════════ -->
     <header>
@@ -294,15 +410,9 @@
             <select id="cams" style="max-width:115px"></select>
             <div style="flex:1"></div>
             <span class="pill" id="status">WS: …</span>
-            <!-- MIDI + OSC pills hidden until Tauri MIDI solution implemented
-            <span class="pill" id="midiPill">MIDI: —</span>
-            <span class="pill" id="oscPill">OSC: —</span>
-            -->
-            <!-- MIDI LEARN + TouchOSC buttons hidden until implemented
-            <button id="midiLearnBtn" class="btn-dim">MIDI LEARN</button>
-            <button id="oscInfoBtn"   class="btn-dim">TouchOSC</button>
-            -->
-            <button id="aboutBtn"     class="btn-red">ABOUT</button>
+            <span class="pill" id="midiPill" style="color:rgba(255,160,0,.7);border-color:rgba(255,160,0,.25);cursor:pointer" title="Open MIDI settings">MIDI: —</span>
+            <button id="midiBtn" class="btn-dim">MIDI</button>
+            <button id="aboutBtn" class="btn-red">ABOUT</button>
         </div>
 
         <!-- PRESETS (outside form so buttons don't submit) -->
@@ -974,323 +1084,322 @@
     })();
     </script>
 
-    <!-- MIDI + OSC implementation (preserved, commented out)
+    <!-- ═══ MIDI Engine ══════════════════════════════════════════════════ -->
     <script>
     (() => {
         'use strict';
-        document.getElementById('aboutBtn')  .addEventListener('click', () => overlay.classList.add('open'));
-        document.getElementById('aboutClose').addEventListener('click', () => overlay.classList.remove('open'));
-        overlay.addEventListener('click', e => { if (e.target === overlay) overlay.classList.remove('open'); });
 
-        /* ── Parameter tables ─────────────────────────────────────
-         * [ elementId, defaultCC, oscAddress ]
-         * Range: CC 0-127 mapped linearly to param min–max
-         * Toggle: CC > 63 → ON, else OFF
-         * ──────────────────────────────────────────────────────── */
-        const RANGE_PARAMS = [
-            ['baseMix',          20, 'huff/baseMix/'],
-            ['feedback',         21, 'huff/feedback/'],
-            ['persistence',      22, 'huff/persistence/'],
-            ['depth',            23, 'huff/depth/'],
-            ['depthScatter',     24, 'huff/depthScatter/'],
-            ['corrupt',          25, 'huff/corrupt/'],
-            ['corruptDrift',     26, 'huff/corruptDrift/'],
-            ['block',            27, 'huff/pixelSize/'],
-            ['glitchSpeed',      28, 'huff/glitchSpeed/'],
-            ['glitchSpeedFine',  29, 'huff/glitchSpeedFine/'],
-            ['glitchSpeedMul',   30, 'huff/glitchMult/'],
-            ['glitchSize',       31, 'huff/glitchSize/'],
-            ['glitchSmear',      32, 'huff/smear/'],
-            ['glitchSmearAngle', 33, 'huff/smearAngle/'],
-            ['glitchAlpha',      34, 'huff/tileOpacity/'],
-            ['glitchJitter',     35, 'huff/jitter/'],
-            ['glitchBaseX',      36, 'huff/glitchX/'],
-            ['glitchBaseY',      37, 'huff/glitchY/'],
-            ['trailLayers',      38, 'huff/trailLayers/'],
-            ['trailDepth',       39, 'huff/trailDepth/'],
-            ['fbX',              40, 'huff/fbX/'],
-            ['fbY',              41, 'huff/fbY/'],
-            ['fbZ',              42, 'huff/fbZ/'],
-            ['fbTheta',          43, 'huff/fbTheta/'],
-            ['symPos',           44, 'huff/symPos/'],
-            ['clusterCount',     45, 'huff/scanBands/'],
-            ['clusterRadius',    46, 'huff/scanHeight/'],
-            ['scanShift',        47, 'huff/scanShift/'],
-            ['scanDrift',        48, 'huff/scanDrift/'],
-            ['scanAlpha',        49, 'huff/scanOpacity/'],
-            ['cluCenters',       50, 'huff/cluCenters/'],
-            ['cluSpread',        51, 'huff/cluSpread/'],
-            ['spatialGap',       52, 'huff/spatialGap/'],
-            ['solarizeThresh',   53, 'huff/solarizeThresh/'],
-            ['solarizeAmt',      54, 'huff/solarizeAmt/'],
-            ['solarizeR',        55, 'huff/solarizeR/'],
-            ['solarizeG',        56, 'huff/solarizeG/'],
-            ['solarizeB',        57, 'huff/solarizeB/'],
-            ['flowStrength',     58, 'huff/flowStrength/'],
-            ['flowScale',        59, 'huff/flowScale/'],
-            ['flowPulse',        60, 'huff/flowPulse/'],
-            ['flowImpl',         61, 'huff/flowImplode/'],
-            ['quality',          62, 'huff/quality/'],
-        ];
-        const TOGGLE_PARAMS = [
-            ['corruptOn',    70, 'huff/system/'],
-            ['baseOn',       71, 'huff/baseVideo/'],
-            ['symOn',        72, 'huff/symOn/'],
-            ['clusters',     73, 'huff/scanlines/'],
-            ['clusterTiles', 74, 'huff/clusterTiles/'],
-            ['solarizeOn',   75, 'huff/solarizeOn/'],
-            ['flowOn',       76, 'huff/flowOn/'],
-            ['seedOnLoad',   77, 'huff/seedOnLoad/'],
-        ];
-
-        /* build runtime lookup maps */
-        const ccMap  = new Map(); // cc  → { el, isToggle }
-        const oscMap = new Map(); // addr → { el, isToggle }
-        const idCC   = new Map(); // id  → defaultCC
-
-        let ccOverrides = {};
-        try { ccOverrides = JSON.parse(localStorage.getItem('huffMidiCC') || '{}'); } catch {}
-
-        function buildMaps() {
-            ccMap.clear(); oscMap.clear();
-            const reg = (id, defCC, osc, tog) => {
-                const el = document.getElementById(id); if (!el) return;
-                const cc = (id in ccOverrides) ? ccOverrides[id] : defCC;
-                ccMap .set(cc,  { el, isToggle: tog });
-                oscMap.set(osc, { el, isToggle: tog });
-                if (!idCC.has(id)) idCC.set(id, defCC);
-            };
-            RANGE_PARAMS .forEach(([id,cc,osc]) => reg(id,cc,osc,false));
-            TOGGLE_PARAMS.forEach(([id,cc,osc]) => reg(id,cc,osc,true));
-        }
-        buildMaps();
-
-        function applyCC(cc, v127) {
-            const e = ccMap.get(cc); if (!e) return;
-            if (e.isToggle) {
-                e.el.checked = v127 > 63;
-                e.el.dispatchEvent(new Event('change', { bubbles: true }));
-            } else {
-                const mn = parseFloat(e.el.min), mx = parseFloat(e.el.max);
-                e.el.value = mn + (v127/127)*(mx-mn);
-                e.el.dispatchEvent(new Event('input', { bubbles: true }));
-            }
-        }
-        function applyOSC(addr, norm) {
-            const key = addr.replace(/^\//, '');
-            const e = oscMap.get(key) || oscMap.get(key+'/'); if (!e) return;
-            if (e.isToggle) {
-                e.el.checked = norm > 0.5;
-                e.el.dispatchEvent(new Event('change', { bubbles: true }));
-            } else {
-                const mn = parseFloat(e.el.min), mx = parseFloat(e.el.max);
-                e.el.value = mn + norm*(mx-mn);
-                e.el.dispatchEvent(new Event('input', { bubbles: true }));
-            }
-        }
-
-        /* ══════════════════════════════════════════════════════════
-         * MIDI — works with hardware controllers AND soft/virtual
-         * ports (IAC Bus, Max MSP, Pure Data, loopMIDI, etc.)
+        /* ─────────────────────────────────────────────────────────────────────
+         * MIDI ENGINE  v2.0  —  Tauri-native via midir (Rust)
          *
-         * LEARN FLOW:
-         *  1. Click any .ctrl chip label/slider to ARM it (goes red)
-         *  2. Move a CC knob → mapping saved, chip turns orange
-         *  3. Click CLEAR MIDI on a chip to remove its mapping
-         *  4. MIDI LEARN button = toggle: arms first unarmed click /
-         *     cancels all armed state
-         * ══════════════════════════════════════════════════════════ */
-        const midiPill  = document.getElementById('midiPill');
-        const learnBtn  = document.getElementById('midiLearnBtn');
-        const toast     = document.getElementById('midiToast');
-        const toastPar  = document.getElementById('midiToastParam');
+         * Architecture:
+         *   MIDI device ──midir(Rust)──► window.emit("midi-event")
+         *                                    ▼
+         *   tauriEvent.listen("midi-event") ──► applyCC() ──► DOM params
+         *
+         * The Web MIDI API doesn't work in Tauri's WebView (not a secure
+         * context). Instead, midir runs in Rust, exposes Tauri commands for
+         * port listing/connecting, and emits "midi-event" for every message.
+         *
+         * Commands (Rust):
+         *   list_midi_ports()                          → string[]
+         *   connect_midi_port_by_name({ portName })    → void | throws
+         *   disconnect_midi()                          → void
+         *   debug_midi_ports()                         → string
+         *
+         * Event payload (from Rust parse_midi):
+         *   { kind, channel, data1, data2, value }
+         *   kind: "cc" | "note_on" | "note_off" | "pitch_bend" | ...
+         *   value: data2 / 127.0
+         * ───────────────────────────────────────────────────────────────────── */
 
-        let learnActive = false;  // learn mode on/off
-        let armedId     = null;   // which param id is currently armed
+        // Tauri v1 globals — injected by the runtime before any user scripts
+        const invoke     = window.__TAURI__?.invoke;
+        const tauriEvent = window.__TAURI__?.event;
 
-        /* ── arm a specific control for learn ── */
-        function armControl(id) {
-            document.querySelectorAll('.ctrl.midi-armed').forEach(c => c.classList.remove('midi-armed'));
-            armedId = id;
-            const chip = document.querySelector('#' + id)?.closest?.('.ctrl') ||
-                         document.querySelector('label[for="' + id + '"]')?.closest?.('.ctrl');
-            if (chip) chip.classList.add('midi-armed');
-            toastPar.textContent = id + ' — now move a CC knob';
-            toast.classList.add('show');
+        // ── DOM refs ──────────────────────────────────────────────────────────
+        const overlay       = document.getElementById('midiOverlay');
+        const closeBtn      = document.getElementById('midiClose');
+        const portSelect    = document.getElementById('midiPortSelect');
+        const refreshBtn    = document.getElementById('midiRefreshBtn');
+        const connectBtn    = document.getElementById('midiConnectBtn');
+        const disconnectBtn = document.getElementById('midiDisconnectBtn');
+        const statusEl      = document.getElementById('midiBridgeStatus');
+        const debugBtn      = document.getElementById('midiDebugBtn');
+        const loadMapBtn    = document.getElementById('midiLoadMapBtn');
+        const clearMapBtn   = document.getElementById('midiClearMapBtn');
+        const mapNameEl     = document.getElementById('midiMapName');
+        const tbody         = document.getElementById('midiMapTbody');
+        const midiBtn       = document.getElementById('midiBtn');
+        const pill          = document.getElementById('midiPill');
+
+        // ── modal open/close — wired unconditionally so button always works ───
+        const openModal  = () => overlay.classList.add('open');
+        const closeModal = () => overlay.classList.remove('open');
+        midiBtn .addEventListener('click', openModal);
+        pill    .addEventListener('click', openModal);
+        closeBtn.addEventListener('click', closeModal);
+        overlay .addEventListener('click', e => { if (e.target === overlay) closeModal(); });
+        window  .addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); }, true);
+
+        if (!invoke || !tauriEvent) {
+            // Running in a plain browser (dev preview without Tauri) — show warning
+            if (statusEl) { statusEl.textContent = 'MIDI unavailable outside Tauri app'; statusEl.style.color = '#ff8060'; }
+            return;
         }
 
-        function cancelLearn() {
-            learnActive = false; armedId = null;
-            learnBtn.textContent = 'MIDI LEARN';
-            learnBtn.classList.remove('midi-armed');
-            toast.classList.remove('show');
-            document.querySelectorAll('.ctrl.midi-armed').forEach(c => c.classList.remove('midi-armed'));
+        // ── connection state ──────────────────────────────────────────────────
+        let connectedPort = null;
+
+        function setStatus(text, ok) {
+            statusEl.textContent = text;
+            statusEl.style.color = ok === true  ? '#50dc78'
+                                 : ok === false ? '#ff6060'
+                                 : 'rgba(255,255,255,.4)';
         }
 
-        /* toggle learn mode button */
-        learnBtn.addEventListener('click', () => {
-            if (learnActive) { cancelLearn(); return; }
-            learnActive = true;
-            learnBtn.textContent = 'CANCEL LEARN';
-            learnBtn.classList.add('midi-armed');
-            toastPar.textContent = 'click any control to arm it';
-            toast.classList.add('show');
-        });
-
-        window.addEventListener('keydown', e => {
-            if (e.key === 'Escape') {
-                overlay.classList.remove('open');
-                if (learnActive) cancelLearn();
-            }
-        }, true);
-
-        /* clicking a .ctrl chip while in learn mode arms it */
-        document.querySelectorAll('.ctrl').forEach(chip => {
-            chip.addEventListener('click', e => {
-                if (!learnActive) return;
-                const inp = chip.querySelector('input[id], select[id]');
-                if (!inp) return;
-                e.preventDefault(); e.stopPropagation();
-                armControl(inp.id);
-            });
-            /* right-click always arms regardless of learn mode toggle
-               (power-user shortcut — hold right-click on any chip) */
-            chip.addEventListener('contextmenu', e => {
-                e.preventDefault();
-                const inp = chip.querySelector('input[id], select[id]');
-                if (!inp) return;
-                if (!learnActive) {
-                    learnActive = true;
-                    learnBtn.textContent = 'CANCEL LEARN';
-                    learnBtn.classList.add('midi-armed');
-                }
-                armControl(inp.id);
-            });
-        });
-
-        /* ── MIDI access ── */
-        const attachedPorts = new Set(); // track which port IDs we've attached to
-
-        function attachPort(port) {
-            if (attachedPorts.has(port.id)) return; // don't double-attach
-            attachedPorts.add(port.id);
-            port.onmidimessage = ({ data }) => {
-                if (!data || data.length < 3) return;
-                const [st, cc, val] = data;
-                if ((st & 0xF0) !== 0xB0) return; // CC messages only
-
-                if (learnActive && armedId) {
-                    /* save mapping */
-                    ccOverrides[armedId] = cc;
-                    try { localStorage.setItem('huffMidiCC', JSON.stringify(ccOverrides)); } catch {}
-                    buildMaps();
-                    /* visual feedback */
-                    const chip = document.querySelector('#' + armedId)?.closest('.ctrl');
-                    if (chip) { chip.classList.remove('midi-armed'); chip.classList.add('midi-bound'); }
-                    toastPar.textContent = armedId + ' → CC ' + cc + ' ✓  (port: ' + (port.name || port.id) + ')';
-                    armedId = null;
-                    /* brief confirmation then dismiss */
-                    setTimeout(cancelLearn, 1200);
-                } else {
-                    applyCC(cc, val);
-                }
-                midiPill.textContent = 'MIDI ' + (port.name ? port.name.substring(0,14) : 'CC') + ' ' + cc + '=' + val;
-            };
-        }
-
-        function scanPorts(access) {
-            let count = 0;
-            access.inputs.forEach(port => {
-                attachPort(port);
-                count++;
-            });
-            /* show all connected port names */
-            const names = [];
-            access.inputs.forEach(p => names.push(p.name || p.id));
-            midiPill.style.display = 'inline';
-            if (count === 0) {
-                midiPill.textContent = 'MIDI: no ports';
+        function updatePill() {
+            if (connectedPort) {
+                pill.textContent = 'MIDI: ' + connectedPort.substring(0, 20);
+                pill.style.color = '#50dc78';
+                pill.style.borderColor = 'rgba(80,220,120,.3)';
             } else {
-                midiPill.textContent = 'MIDI: ' + count + ' port' + (count > 1 ? 's' : '');
-                midiPill.title = names.join('\n'); // hover to see port names
+                pill.textContent = 'MIDI: —';
+                pill.style.color = 'rgba(255,160,0,.7)';
+                pill.style.borderColor = 'rgba(255,160,0,.25)';
+            }
+        }
+        updatePill();
+
+        // ── port listing ──────────────────────────────────────────────────────
+        async function refreshPorts() {
+            refreshBtn.disabled = true;
+            setStatus('Scanning ports…');
+            try {
+                const ports = await invoke('list_midi_ports');
+                portSelect.innerHTML = ports.length === 0
+                    ? '<option value="">— no MIDI ports found —</option>'
+                    : ports.map(n => `<option value="${n}">${n}</option>`).join('');
+                setStatus(ports.length === 0
+                    ? 'No ports found — connect a device and refresh'
+                    : ports.length + ' port(s) found', ports.length > 0);
+                console.log('[huff-midi] ports:', ports);
+            } catch (err) {
+                console.error('[huff-midi] list_midi_ports failed:', err);
+                const isNotFound = String(err).includes('not found') || String(err).includes('Command');
+                setStatus(
+                    isNotFound
+                        ? '⚠ MIDI commands not found — rebuild required: cd src-tauri && cargo build'
+                        : '⚠ ' + err,
+                    false
+                );
+                portSelect.innerHTML = '<option value="">— rebuild Tauri to enable MIDI —</option>';
+            } finally {
+                refreshBtn.disabled = false;
             }
         }
 
-        if (navigator.requestMIDIAccess) {
-            navigator.requestMIDIAccess({ sysex: false }).then(access => {
-                scanPorts(access);
-                access.onstatechange = e => {
-                    const port = e.port;
-                    if (port.type !== 'input') return;
-                    if (port.state === 'connected') {
-                        /* new port appeared (e.g. IAC Bus, virtual port in Max/PD) */
-                        attachPort(port);
-                        scanPorts(access); // refresh count/names
-                    } else if (port.state === 'disconnected') {
-                        attachedPorts.delete(port.id);
-                        scanPorts(access);
-                    }
-                };
-            }).catch(err => {
-                midiPill.style.display = 'inline';
-                midiPill.textContent = 'MIDI: denied';
-                midiPill.title = String(err);
-            });
-        } else {
-            midiPill.style.display = 'inline';
-            midiPill.textContent = 'MIDI: unsupported';
+        refreshBtn.addEventListener('click', refreshPorts);
+
+        // ── connect ───────────────────────────────────────────────────────────
+        connectBtn.addEventListener('click', async () => {
+            const name = portSelect.value;
+            if (!name) { setStatus('Select a port first', false); return; }
+            connectBtn.disabled = true;
+            setStatus('Connecting…');
+            try {
+                await invoke('connect_midi_port_by_name', { portName: name });
+                connectedPort = name;
+                connectBtn.classList.add('midi-bound');
+                setStatus('Connected → ' + name, true);
+                updatePill();
+                try { localStorage.setItem('huffMidiPort', name); } catch {}
+            } catch (err) {
+                setStatus('Connect failed: ' + err, false);
+            } finally {
+                connectBtn.disabled = false;
+            }
+        });
+
+        // ── disconnect ────────────────────────────────────────────────────────
+        disconnectBtn.addEventListener('click', async () => {
+            await invoke('disconnect_midi');
+            connectedPort = null;
+            connectBtn.classList.remove('midi-bound');
+            setStatus('Disconnected');
+            updatePill();
+            try { localStorage.removeItem('huffMidiPort'); } catch {}
+        });
+
+        // ── debug ─────────────────────────────────────────────────────────────
+        debugBtn.addEventListener('click', async () => {
+            const result = await invoke('debug_midi_ports');
+            setStatus(result);
+            console.log('[huff-midi]', result);
+        });
+
+        // ── map storage ───────────────────────────────────────────────────────
+        let currentMap = null;
+        let ccLookup   = new Map(); // cc(int) → [{paramId, type}]
+
+        function buildLookup(map) {
+            ccLookup.clear();
+            if (!map) return;
+            for (const entry of map.mappings) {
+                if (entry._section || entry.enabled === false) continue;
+                if (typeof entry.cc !== 'number') continue;
+                const list = ccLookup.get(entry.cc) || [];
+                list.push({ paramId: entry.param, type: entry.type || 'range' });
+                ccLookup.set(entry.cc, list);
+            }
         }
 
-        /* ── MIDI mappings reset utility (run in console) ──────────
-         * huffResetMIDI()  →  clears all learned CC overrides
-         * ─────────────────────────────────────────────────────── */
-        window.huffResetMIDI = () => {
-            localStorage.removeItem('huffMidiCC');
-            ccOverrides = {};
-            buildMaps();
-            document.querySelectorAll('.ctrl.midi-bound').forEach(c => c.classList.remove('midi-bound'));
-            console.log('[huff] MIDI CC overrides cleared');
-        };
+        function renderTable(map) {
+            if (!map?.mappings) {
+                tbody.innerHTML = '<tr><td colspan="4" style="color:rgba(255,255,255,.25);font-style:italic;padding:8px 6px">Load a map file to see mappings.</td></tr>';
+                return;
+            }
+            let html = '';
+            for (const e of map.mappings) {
+                if (e._section) {
+                    html += `<tr><td colspan="4" style="padding:7px 6px 2px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.2)">${e._section}</td></tr>`;
+                    continue;
+                }
+                const dis = e.enabled === false ? ' class="dis"' : '';
+                html += `<tr${dis}>
+                    <td class="cc-cell">CC ${e.cc}</td>
+                    <td><code style="color:#e8eaf0">${e.param}</code></td>
+                    <td class="type-cell">${e.type || 'range'}</td>
+                    <td><span style="color:rgba(255,255,255,.3)">${e.note || ''}</span></td>
+                </tr>`;
+            }
+            tbody.innerHTML = html;
+        }
 
-        /* ── TouchOSC / OSC-over-WebSocket ────────────────────────
-         * Run TouchOSC Bridge on port 8000. Messages arrive as:
-         *   text: "/huff/param/ 0.75"
-         *   JSON: { "address": "/huff/param/", "args": [0.75] }
-         * ─────────────────────────────────────────────────────── */
-        document.getElementById('oscInfoBtn').addEventListener('click', () => alert(
-            'TouchOSC / OSC-over-WebSocket\n\n' +
-            'Run TouchOSC Bridge on your machine (default port 8000).\n' +
-            'Set your device OSC target → 127.0.0.1 : 8000\n\n' +
-            'Address namespace: /huff/<parameter>/\n' +
-            'Values: 0.0–1.0 (normalized to each param\'s min–max)\n\n' +
-            'See TOUCHOSC_REFERENCE.md for the full address list.'
-        ));
+        // ── map file loading ──────────────────────────────────────────────────
+        const fileInput = document.createElement('input');
+        fileInput.type = 'file'; fileInput.accept = '.json';
+        fileInput.style.display = 'none'; document.body.appendChild(fileInput);
 
-        const oscPill = document.getElementById('oscPill');
-        let oscConnected = false;
-        function connectOSC() {
-            let ws;
-            try { ws = new WebSocket('ws://127.0.0.1:8000'); } catch { return; }
-            ws.onopen  = () => { oscConnected = true; oscPill.style.display='inline'; oscPill.textContent='OSC: on'; };
-            ws.onclose = () => { oscConnected = false; oscPill.textContent='OSC: off'; setTimeout(connectOSC, 5000); };
-            ws.onerror = () => { /* suppress — bridge just isn't running */ };
-            ws.onmessage = ({ data }) => {
-                    try {
-                        let addr, val;
-                        if (typeof data==='string' && data.trim().startsWith('{')) {
-                            const j=JSON.parse(data); addr=j.address; val=parseFloat(j.args?.[0]??0);
-                        } else {
-                            const p=data.trim().split(/\s+/); addr=p[0]; val=parseFloat(p[1]??0);
-                        }
-                        applyOSC(addr, val);
-                        oscPill.textContent = 'OSC: '+addr.split('/').filter(Boolean).pop();
-                    } catch {}
+        loadMapBtn.addEventListener('click', () => fileInput.click());
+
+        fileInput.addEventListener('change', () => {
+            const file = fileInput.files?.[0]; if (!file) return;
+            const reader = new FileReader();
+            reader.onload = e => {
+                try {
+                    const map = JSON.parse(e.target.result);
+                    if (!Array.isArray(map.mappings)) throw new Error('missing mappings array');
+                    currentMap = map;
+                    buildLookup(currentMap);
+                    renderTable(currentMap);
+                    mapNameEl.textContent = map.name || file.name;
+                    mapNameEl.title = map.description || map.name || file.name;
+                    try { localStorage.setItem('huffMidiMap', JSON.stringify(map)); } catch {}
+                } catch (err) {
+                    mapNameEl.textContent = '⚠ Parse error: ' + err.message;
+                }
             };
+            reader.readAsText(file);
+            fileInput.value = '';
+        });
+
+        clearMapBtn.addEventListener('click', () => {
+            currentMap = null; buildLookup(null); renderTable(null);
+            mapNameEl.textContent = 'No map loaded'; mapNameEl.title = '';
+            try { localStorage.removeItem('huffMidiMap'); } catch {}
+        });
+
+        // restore last map from localStorage
+        try {
+            const saved = localStorage.getItem('huffMidiMap');
+            if (saved) {
+                const map = JSON.parse(saved);
+                if (Array.isArray(map.mappings)) {
+                    currentMap = map; buildLookup(currentMap); renderTable(currentMap);
+                    mapNameEl.textContent = map.name || 'Loaded map';
+                    mapNameEl.title = map.description || '';
+                }
+            }
+        } catch {}
+
+        // ── CC dispatcher ─────────────────────────────────────────────────────
+        const flashTimers = {};
+
+        function flashCtrl(paramId) {
+            const el = document.getElementById(paramId);
+            const chip = el?.closest?.('.ctrl');
+            if (!chip) return;
+            chip.classList.add('midi-active');
+            clearTimeout(flashTimers[paramId]);
+            flashTimers[paramId] = setTimeout(() => chip.classList.remove('midi-active'), 120);
         }
-        connectOSC();
+
+        function applyCC(cc, val127, channel) {
+            if (currentMap) {
+                const mapCh = typeof currentMap.channel === 'number' ? currentMap.channel : -1;
+                if (mapCh !== -1 && mapCh !== channel) return;
+            }
+
+            const entries = ccLookup.get(cc);
+            if (!entries) return;
+
+            for (const { paramId, type } of entries) {
+                const el = document.getElementById(paramId);
+                if (!el) continue;
+
+                if (type === 'toggle') {
+                    el.checked = val127 > 63;
+                    el.dispatchEvent(new Event('change', { bubbles: true }));
+                } else if (type === 'trigger') {
+                    if (val127 > 0) el.click();
+                } else {
+                    const mn = parseFloat(el.min ?? 0);
+                    const mx = parseFloat(el.max ?? 1);
+                    el.value = mn + (val127 / 127) * (mx - mn);
+                    el.dispatchEvent(new Event('input', { bubbles: true }));
+                }
+                flashCtrl(paramId);
+            }
+        }
+
+        // ── Tauri event listener ──────────────────────────────────────────────
+        tauriEvent.listen('midi-event', ({ payload }) => {
+            const { kind, channel, data1, data2, value } = payload;
+
+            if (kind === 'cc') {
+                applyCC(data1, data2, channel);
+                // brief pill flash showing CC number
+                pill.textContent = 'CC ' + data1 + '=' + data2;
+                clearTimeout(pill._t);
+                pill._t = setTimeout(updatePill, 600);
+            }
+            // note_on / note_off / pitch_bend available for future extension
+        });
+
+        // ── auto-reconnect last port on load ──────────────────────────────────
+        (async () => {
+            await refreshPorts();
+            const lastPort = localStorage.getItem('huffMidiPort');
+            if (lastPort) {
+                // try to auto-reconnect silently
+                try {
+                    await invoke('connect_midi_port_by_name', { portName: lastPort });
+                    connectedPort = lastPort;
+                    connectBtn.classList.add('midi-bound');
+                    setStatus('Auto-reconnected → ' + lastPort, true);
+                    updatePill();
+                    // select the port in the dropdown if it's still in the list
+                    for (const opt of portSelect.options) {
+                        if (opt.value === lastPort) { portSelect.value = lastPort; break; }
+                    }
+                } catch {
+                    setStatus('Last port "' + lastPort + '" not found — reconnect manually');
+                }
+            }
+        })();
 
     })();
     </script>
-    -->
 </body>
 </html>

@@ -9,10 +9,156 @@
 use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 
 use futures_util::{SinkExt, StreamExt};
+use midir::{MidiInput, MidiInputConnection};
 use once_cell::sync::Lazy;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tokio::{net::TcpListener, sync::Mutex};
 use tokio_tungstenite::{accept_async, tungstenite::Message};
+use tauri::{command, Window};
+
+// ── MIDI event ────────────────────────────────────────────────────────────────
+
+#[derive(Serialize, Clone, Debug)]
+pub struct MidiEvent {
+    /// "note_on" | "note_off" | "cc" | "pitch_bend" | "aftertouch" | "program_change" | "pressure" | "unknown"
+    pub kind: String,
+    /// MIDI channel 1–16
+    pub channel: u8,
+    /// note / CC number
+    pub data1: u8,
+    /// velocity / CC value
+    pub data2: u8,
+    /// data2 / 127.0 — normalised 0.0–1.0
+    pub value: f32,
+    pub raw: Vec<u8>,
+}
+
+type MidiConn = Option<MidiInputConnection<()>>;
+
+static MIDI_CONN: Lazy<std::sync::Mutex<Option<MidiConn>>> =
+    Lazy::new(|| std::sync::Mutex::new(None));
+
+fn parse_midi(bytes: &[u8]) -> MidiEvent {
+    let status   = bytes.get(0).copied().unwrap_or(0);
+    let data1    = bytes.get(1).copied().unwrap_or(0);
+    let data2    = bytes.get(2).copied().unwrap_or(0);
+    let msg_type = status & 0xF0;
+    let channel  = (status & 0x0F) + 1;
+
+    let (kind, d1, d2): (String, u8, u8) = match msg_type {
+        0x90 if data2 > 0 => ("note_on".into(),        data1, data2),
+        0x80 | 0x90       => ("note_off".into(),        data1, data2),
+        0xB0              => ("cc".into(),               data1, data2),
+        0xE0 => {
+            let raw14 = (data2 as u16) << 7 | data1 as u16;
+            let norm  = (raw14 as f32 / 16383.0 * 127.0) as u8;
+            ("pitch_bend".into(), 0, norm)
+        }
+        0xA0 => ("aftertouch".into(),      data1, data2),
+        0xC0 => ("program_change".into(),  data1, 0),
+        0xD0 => ("pressure".into(),        data1, 0),
+        _    => ("unknown".into(),         data1, data2),
+    };
+
+    MidiEvent { kind, channel, data1: d1, data2: d2, value: d2 as f32 / 127.0, raw: bytes.to_vec() }
+}
+
+// ── Tauri MIDI commands ───────────────────────────────────────────────────────
+
+/// Returns all MIDI input port names visible to the OS right now.
+/// Creates a fresh MidiInput each call so virtual ports (IAC Bus, loopMIDI,
+/// Max/MSP, Pure Data) that appear after launch are always included.
+#[command]
+fn list_midi_ports() -> Vec<String> {
+    match MidiInput::new("huff-list") {
+        Ok(m) => {
+            let names: Vec<String> = m.ports().iter()
+                .filter_map(|p| m.port_name(p).ok())
+                .collect();
+            println!("[midi] {} port(s): {:?}", names.len(), names);
+            names
+        }
+        Err(e) => { eprintln!("[midi] list error: {e}"); vec![] }
+    }
+}
+
+/// Logs all ports to stdout and returns a debug string — call from JS when
+/// the port list looks wrong.  invoke('debug_midi_ports')
+#[command]
+fn debug_midi_ports() -> String {
+    match MidiInput::new("huff-debug") {
+        Ok(m) => {
+            let ports = m.ports();
+            if ports.is_empty() {
+                let msg = "[midi] No ports. Check Audio MIDI Setup / loopMIDI / device driver.";
+                eprintln!("{msg}"); return msg.to_string();
+            }
+            let lines: Vec<String> = ports.iter().enumerate()
+                .map(|(i, p)| format!("  [{i}] {}", m.port_name(p).unwrap_or_else(|_| "<?>".into())))
+                .collect();
+            let out = format!("[midi] {} port(s):\n{}", ports.len(), lines.join("\n"));
+            println!("{out}"); out
+        }
+        Err(e) => format!("[midi] MidiInput::new failed: {e}")
+    }
+}
+
+/// Connect by name (exact match first, then case-insensitive substring).
+/// invoke('connect_midi_port_by_name', { portName: "nanoKONTROL2" })
+#[command]
+fn connect_midi_port_by_name(port_name: String, window: Window) -> Result<(), String> {
+    { let mut g = MIDI_CONN.lock().unwrap(); *g = None; } // drop existing connection
+
+    let midi_in = MidiInput::new("huff-input").map_err(|e| e.to_string())?;
+    let ports   = midi_in.ports();
+
+    let port = ports.iter()
+        .find(|p| midi_in.port_name(p).ok().as_deref() == Some(&port_name))
+        .or_else(|| {
+            let lower = port_name.to_lowercase();
+            ports.iter().find(|p| {
+                midi_in.port_name(p).ok()
+                    .map(|n| n.to_lowercase().contains(&lower))
+                    .unwrap_or(false)
+            })
+        })
+        .ok_or_else(|| {
+            let avail: Vec<String> = ports.iter()
+                .filter_map(|p| midi_in.port_name(p).ok()).collect();
+            format!("Port '{port_name}' not found. Available: {avail:?}")
+        })?;
+
+    let resolved = midi_in.port_name(port).unwrap_or_else(|_| port_name.clone());
+    println!("[midi] connecting → {resolved}");
+
+    let win = Arc::new(window);
+    let conn = midi_in.connect(port, "huff-conn", move |_ts, bytes, _| {
+        let ev = parse_midi(bytes);
+        if let Err(e) = win.emit("midi-event", &ev) {
+            eprintln!("[midi] emit error: {e}");
+        }
+    }, ()).map_err(|e| e.to_string())?;
+
+    *MIDI_CONN.lock().unwrap() = Some(Some(conn));
+    println!("[midi] connected to {resolved}");
+    Ok(())
+}
+
+/// Legacy index-based connect — kept for compatibility.
+#[command]
+fn connect_midi_port(port_index: usize, window: Window) -> Result<(), String> {
+    let midi_in = MidiInput::new("huff-list").map_err(|e| e.to_string())?;
+    let name = midi_in.ports().get(port_index)
+        .and_then(|p| midi_in.port_name(p).ok())
+        .ok_or_else(|| format!("port {port_index} out of range"))?;
+    connect_midi_port_by_name(name, window)
+}
+
+#[command]
+fn disconnect_midi() {
+    *MIDI_CONN.lock().unwrap() = None;
+    println!("[midi] disconnected");
+}
 
 #[derive(Clone, Debug)]
 struct Client {
@@ -143,6 +289,13 @@ async fn handle_ws(
 
 fn main() {
 tauri::Builder::default()
+  .invoke_handler(tauri::generate_handler![
+      list_midi_ports,
+      debug_midi_ports,
+      connect_midi_port,
+      connect_midi_port_by_name,
+      disconnect_midi,
+  ])
   .setup(|_app| {
       const PORT: u16 = 8787;
 

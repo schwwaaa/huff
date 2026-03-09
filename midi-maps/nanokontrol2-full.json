@@ -1,0 +1,73 @@
+{
+  "name": "Korg nanoKONTROL2 — Full",
+  "description": "Complete performance map for nanoKONTROL2 Scene 1 factory defaults. 8 faders, 8 knobs, 8 solo toggles, 8 mute toggles, 8 rec sliders, transport triggers. Load this after validating with nk2-validate.json.",
+  "version": 1,
+  "channel": -1,
+  "mappings": [
+    {
+      "_section": "── FADERS (CC 0–7) — primary mix ─────────────────────────────────────"
+    },
+    { "param": "feedback",      "cc": 0,  "type": "range",   "enabled": true, "note": "Fader 1" },
+    { "param": "depth",         "cc": 1,  "type": "range",   "enabled": true, "note": "Fader 2" },
+    { "param": "corrupt",       "cc": 2,  "type": "range",   "enabled": true, "note": "Fader 3" },
+    { "param": "baseMix",       "cc": 3,  "type": "range",   "enabled": true, "note": "Fader 4" },
+    { "param": "glitchSpeed",   "cc": 4,  "type": "range",   "enabled": true, "note": "Fader 5" },
+    { "param": "flowStrength",  "cc": 5,  "type": "range",   "enabled": true, "note": "Fader 6" },
+    { "param": "fbZ",           "cc": 6,  "type": "range",   "enabled": true, "note": "Fader 7 — feedback zoom" },
+    { "param": "persistence",   "cc": 7,  "type": "range",   "enabled": true, "note": "Fader 8" },
+
+    {
+      "_section": "── KNOBS (CC 16–23) — texture sculpting ───────────────────────────────"
+    },
+    { "param": "block",          "cc": 16, "type": "range",   "enabled": true, "note": "Knob 1 — pixel size" },
+    { "param": "glitchSize",     "cc": 17, "type": "range",   "enabled": true, "note": "Knob 2" },
+    { "param": "glitchSmear",    "cc": 18, "type": "range",   "enabled": true, "note": "Knob 3" },
+    { "param": "glitchAlpha",    "cc": 19, "type": "range",   "enabled": true, "note": "Knob 4 — tile opacity" },
+    { "param": "scanShift",      "cc": 20, "type": "range",   "enabled": true, "note": "Knob 5 — scanline shift" },
+    { "param": "cluSpread",      "cc": 21, "type": "range",   "enabled": true, "note": "Knob 6 — cluster spread" },
+    { "param": "solarizeThresh", "cc": 22, "type": "range",   "enabled": true, "note": "Knob 7 — solarize threshold" },
+    { "param": "quality",        "cc": 23, "type": "range",   "enabled": true, "note": "Knob 8" },
+
+    {
+      "_section": "── SOLO BUTTONS (CC 32–39) — fx on/off ────────────────────────────────"
+    },
+    { "param": "corruptOn",    "cc": 32, "type": "toggle",  "enabled": true, "note": "Solo 1 — glitch system" },
+    { "param": "clusters",     "cc": 33, "type": "toggle",  "enabled": true, "note": "Solo 2 — scanlines" },
+    { "param": "clusterTiles", "cc": 34, "type": "toggle",  "enabled": true, "note": "Solo 3 — cluster tiles" },
+    { "param": "flowOn",       "cc": 35, "type": "toggle",  "enabled": true, "note": "Solo 4 — flow warp" },
+    { "param": "symOn",        "cc": 36, "type": "toggle",  "enabled": true, "note": "Solo 5 — symmetry" },
+    { "param": "solarizeOn",   "cc": 37, "type": "toggle",  "enabled": true, "note": "Solo 6 — solarize" },
+    { "param": "baseOn",       "cc": 38, "type": "toggle",  "enabled": true, "note": "Solo 7 — base video" },
+    { "param": "seedOnLoad",   "cc": 39, "type": "toggle",  "enabled": true, "note": "Solo 8 — seed on load" },
+
+    {
+      "_section": "── MUTE BUTTONS (CC 48–55) — secondary range params ───────────────────"
+    },
+    { "param": "glitchJitter",   "cc": 48, "type": "range",   "enabled": true, "note": "Mute 1" },
+    { "param": "glitchSpeedMul", "cc": 49, "type": "range",   "enabled": true, "note": "Mute 2 — speed multiplier" },
+    { "param": "scanDrift",      "cc": 50, "type": "range",   "enabled": true, "note": "Mute 3 — scanline drift" },
+    { "param": "scanAlpha",      "cc": 51, "type": "range",   "enabled": true, "note": "Mute 4 — scanline opacity" },
+    { "param": "fbX",            "cc": 52, "type": "range",   "enabled": true, "note": "Mute 5 — feedback X" },
+    { "param": "fbY",            "cc": 53, "type": "range",   "enabled": true, "note": "Mute 6 — feedback Y" },
+    { "param": "fbTheta",        "cc": 54, "type": "range",   "enabled": true, "note": "Mute 7 — feedback rotation" },
+    { "param": "symPos",         "cc": 55, "type": "range",   "enabled": true, "note": "Mute 8 — symmetry axis" },
+
+    {
+      "_section": "── REC BUTTONS (CC 64–71) — extra params ──────────────────────────────"
+    },
+    { "param": "depthScatter",  "cc": 64, "type": "range",   "enabled": true, "note": "Rec 1" },
+    { "param": "corruptDrift",  "cc": 65, "type": "range",   "enabled": true, "note": "Rec 2" },
+    { "param": "cluSpeed",      "cc": 66, "type": "range",   "enabled": true, "note": "Rec 3 — cluster physics speed" },
+    { "param": "cluInertia",    "cc": 67, "type": "range",   "enabled": true, "note": "Rec 4 — cluster inertia" },
+    { "param": "trailDepth",    "cc": 68, "type": "range",   "enabled": true, "note": "Rec 5" },
+    { "param": "cluBias",       "cc": 69, "type": "range",   "enabled": true, "note": "Rec 6 — cluster bias" },
+    { "param": "scanSpeed",     "cc": 70, "type": "range",   "enabled": true, "note": "Rec 7 — scanline speed" },
+    { "param": "cluDrift",      "cc": 71, "type": "range",   "enabled": true, "note": "Rec 8 — cluster drift" },
+
+    {
+      "_section": "── TRANSPORT ───────────────────────────────────────────────────────────"
+    },
+    { "param": "refreshBtn",     "cc": 41, "type": "trigger", "enabled": true, "note": "PLAY — re-seed glitch" },
+    { "param": "resetMotionBtn", "cc": 42, "type": "trigger", "enabled": true, "note": "STOP — reset FB motion" }
+  ]
+}

@@ -1,0 +1,48 @@
+{
+  "name": "nanoKONTROL2 — VALIDATION (4 controls)",
+  "description": "Minimal map to confirm MIDI is working. Touch any of these 4 controls and watch huff respond immediately. Once confirmed, load nanokontrol2-full.json.",
+  "version": 1,
+  "channel": -1,
+  "mappings": [
+    {
+      "_section": "FADER 1 → FEEDBACK (push it up and down, the image should smear/clear)"
+    },
+    {
+      "param": "feedback",
+      "cc": 0,
+      "type": "range",
+      "enabled": true,
+      "note": "Fader 1 — default CC 0 on nanoKONTROL2 Scene 1"
+    },
+    {
+      "_section": "KNOB 1 → CORRUPT % (turn it, glitch tiles should appear/disappear)"
+    },
+    {
+      "param": "corrupt",
+      "cc": 16,
+      "type": "range",
+      "enabled": true,
+      "note": "Knob 1 — default CC 16 on nanoKONTROL2 Scene 1"
+    },
+    {
+      "_section": "SOLO BUTTON 1 → GLITCH ON/OFF (press it, all glitch should toggle)"
+    },
+    {
+      "param": "corruptOn",
+      "cc": 32,
+      "type": "toggle",
+      "enabled": true,
+      "note": "Solo 1 — default CC 32 on nanoKONTROL2 Scene 1. Value >63 = ON, <=63 = OFF"
+    },
+    {
+      "_section": "MUTE BUTTON 1 → BASE VIDEO ON/OFF (press it, source video toggles)"
+    },
+    {
+      "param": "baseOn",
+      "cc": 48,
+      "type": "toggle",
+      "enabled": true,
+      "note": "Mute 1 — default CC 48 on nanoKONTROL2 Scene 1"
+    }
+  ]
+}
