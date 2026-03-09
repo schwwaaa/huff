@@ -1,0 +1,55 @@
+{
+  "name": "TEST 1 — Range (faders)",
+  "description": "Proves range mapping works. Send any of these addresses with a float 0.0–1.0 and watch the corresponding slider move in huff. Start here.",
+  "version": 1,
+  "mappings": [
+    {
+      "_section": "Send float 0.0–1.0 to each address. Watch the slider move in real time."
+    },
+    {
+      "param": "feedback",
+      "addr": "/test/feedback",
+      "type": "range",
+      "inputMin": 0,
+      "inputMax": 1,
+      "enabled": true,
+      "note": "EXPECTED: Feedback slider moves. Image smears at high values."
+    },
+    {
+      "param": "corrupt",
+      "addr": "/test/corrupt",
+      "type": "range",
+      "inputMin": 0,
+      "inputMax": 1,
+      "enabled": true,
+      "note": "EXPECTED: Corrupt % slider moves. Glitch tiles appear at high values."
+    },
+    {
+      "param": "glitchAlpha",
+      "addr": "/test/alpha",
+      "type": "range",
+      "inputMin": 0,
+      "inputMax": 1,
+      "enabled": true,
+      "note": "EXPECTED: Glitch Alpha slider moves. Tiles fade in/out."
+    },
+    {
+      "param": "baseMix",
+      "addr": "/test/mix",
+      "type": "range",
+      "inputMin": 0,
+      "inputMax": 1,
+      "enabled": true,
+      "note": "EXPECTED: Base Mix slider moves. Source video appears/disappears."
+    },
+    {
+      "param": "flowStrength",
+      "addr": "/test/flow",
+      "type": "range",
+      "inputMin": 0,
+      "inputMax": 1,
+      "enabled": true,
+      "note": "EXPECTED: Flow Strength slider moves. Image warps at high values."
+    }
+  ]
+}

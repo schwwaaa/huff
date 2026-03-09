@@ -10,11 +10,12 @@ use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 
 use futures_util::{SinkExt, StreamExt};
 use midir::{MidiInput, MidiInputConnection};
-use once_cell::sync::Lazy;
+use once_cell::sync::{Lazy, OnceCell};
+use rosc::{OscPacket, OscType};
 use serde::{Deserialize, Serialize};
-use tokio::{net::TcpListener, sync::Mutex};
+use tokio::{net::{TcpListener, UdpSocket}, sync::Mutex};
 use tokio_tungstenite::{accept_async, tungstenite::Message};
-use tauri::{command, Window};
+use tauri::{command, Manager, Window};
 
 // ── MIDI event ────────────────────────────────────────────────────────────────
 
@@ -160,6 +161,90 @@ fn disconnect_midi() {
     println!("[midi] disconnected");
 }
 
+// ── OSC ───────────────────────────────────────────────────────────────────────
+
+const OSC_PORT: u16 = 9000;
+
+/// Sent to JS as the "osc-message" event payload.
+#[derive(Serialize, Clone, Debug)]
+pub struct OscEvent {
+    /// OSC address string e.g. "/huff/feedback", "/1/fader1"
+    pub addr: String,
+    /// First numeric arg normalised — float as-is, int divided by 127
+    pub value: f32,
+    /// All args serialised as strings for the monitor display
+    pub args: Vec<String>,
+}
+
+static OSC_SHUTDOWN: OnceCell<tokio::sync::oneshot::Sender<()>> = OnceCell::new();
+
+/// Converts an OscPacket recursively (handles bundles) and emits each message.
+fn dispatch_osc(packet: OscPacket, app: &tauri::AppHandle) {
+    match packet {
+        OscPacket::Message(msg) => {
+            let value = msg.args.iter().find_map(|a| match a {
+                OscType::Float(f)  => Some(*f),
+                OscType::Int(i)    => Some(*i as f32 / 127.0),
+                OscType::Double(d) => Some(*d as f32),
+                _                  => None,
+            }).unwrap_or(0.0);
+
+            let args: Vec<String> = msg.args.iter().map(|a| match a {
+                OscType::Float(f)  => format!("f:{f:.3}"),
+                OscType::Int(i)    => format!("i:{i}"),
+                OscType::Double(d) => format!("d:{d:.3}"),
+                OscType::String(s) => format!("s:{s}"),
+                OscType::Bool(b)   => format!("b:{b}"),
+                _                  => "?".into(),
+            }).collect();
+
+            let event = OscEvent { addr: msg.addr, value, args };
+            app.emit_all("osc-message", &event).ok();
+        }
+        OscPacket::Bundle(bundle) => {
+            for p in bundle.content { dispatch_osc(p, app); }
+        }
+    }
+}
+
+/// Async UDP listener — runs for the lifetime of the app.
+async fn run_osc_listener(
+    app: tauri::AppHandle,
+    mut shutdown_rx: tokio::sync::oneshot::Receiver<()>,
+) {
+    let addr = format!("0.0.0.0:{OSC_PORT}");
+    let socket = match UdpSocket::bind(&addr).await {
+        Ok(s)  => s,
+        Err(e) => { eprintln!("[osc] bind failed on {addr}: {e}"); return; }
+    };
+    println!("[osc] listening on {addr}");
+    app.emit_all("osc-port", OSC_PORT).ok();
+
+    let mut buf = [0u8; 4096];
+    loop {
+        tokio::select! {
+            _ = &mut shutdown_rx => {
+                println!("[osc] listener stopped");
+                break;
+            }
+            result = socket.recv_from(&mut buf) => {
+                match result {
+                    Ok((size, _from)) => {
+                        match rosc::decoder::decode_udp(&buf[..size]) {
+                            Ok((_, packet)) => dispatch_osc(packet, &app),
+                            Err(e)          => eprintln!("[osc] decode error: {e}"),
+                        }
+                    }
+                    Err(e) => eprintln!("[osc] recv error: {e}"),
+                }
+            }
+        }
+    }
+}
+
+#[command]
+fn get_osc_port() -> u16 { OSC_PORT }
+
 #[derive(Clone, Debug)]
 struct Client {
   role: String, // "index" | "canvas" | "unknown"
@@ -295,8 +380,9 @@ tauri::Builder::default()
       connect_midi_port,
       connect_midi_port_by_name,
       disconnect_midi,
+      get_osc_port,
   ])
-  .setup(|_app| {
+  .setup(|app| {
       const PORT: u16 = 8787;
 
       println!("[huff] setup: starting listeners on 127.0.0.1:{PORT} and [::1]:{PORT}");
@@ -319,6 +405,12 @@ tauri::Builder::default()
               eprintln!("[huff] IPv6 listener error: {e}");
           }
       });
+
+      // ── OSC UDP listener ────────────────────────────────────────────────
+      let (tx, rx) = tokio::sync::oneshot::channel::<()>();
+      OSC_SHUTDOWN.set(tx).ok();
+      let app_handle = app.handle();
+      tauri::async_runtime::spawn(run_osc_listener(app_handle, rx));
 
       Ok(())
   })

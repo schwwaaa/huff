@@ -1,0 +1,55 @@
+{
+  "name": "TEST 4 — Smoke Test (all types)",
+  "description": "One of each type in a single map. If all three work, OSC is fully operational. Load this last to confirm range + toggle + trigger all coexist correctly.",
+  "version": 1,
+  "mappings": [
+    {
+      "_section": "RANGE — send /smoke/fader with 0.0–1.0"
+    },
+    {
+      "param": "feedback",
+      "addr": "/smoke/fader",
+      "type": "range",
+      "inputMin": 0,
+      "inputMax": 1,
+      "enabled": true,
+      "note": "EXPECTED: Feedback slider moves continuously with the value you send."
+    },
+    {
+      "_section": "TOGGLE — send /smoke/toggle with 1.0 (on) or 0.0 (off)"
+    },
+    {
+      "param": "corruptOn",
+      "addr": "/smoke/toggle",
+      "type": "toggle",
+      "inputMin": 0,
+      "inputMax": 1,
+      "enabled": true,
+      "note": "EXPECTED: Glitch checkbox checks on 1.0, unchecks on 0.0."
+    },
+    {
+      "_section": "TRIGGER — send /smoke/trigger with 1.0 to fire"
+    },
+    {
+      "param": "refreshBtn",
+      "addr": "/smoke/trigger",
+      "type": "trigger",
+      "inputMin": 0,
+      "inputMax": 1,
+      "enabled": true,
+      "note": "EXPECTED: Glitch pattern re-seeds on each 1.0 pulse."
+    },
+    {
+      "_section": "BONUS — disabled entry (should be silently ignored)"
+    },
+    {
+      "param": "depth",
+      "addr": "/smoke/disabled",
+      "type": "range",
+      "inputMin": 0,
+      "inputMax": 1,
+      "enabled": false,
+      "note": "EXPECTED: Sending to this address does nothing. Depth slider stays still."
+    }
+  ]
+}

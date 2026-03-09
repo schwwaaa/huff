@@ -16,6 +16,7 @@ tokio-tungstenite = "0.21"
 tungstenite = { version = "0.21", features = ["rustls-tls-webpki-roots"] }
 once_cell = "1"
 midir = "0.9"
+rosc  = "0.10"
 objc = { version = "0.2", optional = true }
 objc-foundation = { version = "0.1", optional = true }
 objc_id = { version = "0.1", optional = true }

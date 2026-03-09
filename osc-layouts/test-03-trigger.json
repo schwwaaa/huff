@@ -1,0 +1,28 @@
+{
+  "name": "TEST 3 — Triggers (buttons)",
+  "description": "Proves trigger mapping works. Send any value greater than 0.5 to fire the button. The effect should be instantaneous and visible.",
+  "version": 1,
+  "mappings": [
+    {
+      "_section": "Send any value > 0.5 to fire. Values <= 0.5 are ignored (button release)."
+    },
+    {
+      "param": "refreshBtn",
+      "addr": "/test/reseed",
+      "type": "trigger",
+      "inputMin": 0,
+      "inputMax": 1,
+      "enabled": true,
+      "note": "EXPECTED: Glitch pattern randomises instantly. Send 1.0 repeatedly — pattern should change each time."
+    },
+    {
+      "param": "resetMotionBtn",
+      "addr": "/test/resetmotion",
+      "type": "trigger",
+      "inputMin": 0,
+      "inputMax": 1,
+      "enabled": true,
+      "note": "EXPECTED: Feedback motion resets to centre (fbX, fbY, fbZ, fbTheta snap back to defaults)."
+    }
+  ]
+}

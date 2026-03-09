@@ -1,0 +1,55 @@
+{
+  "name": "TEST 2 — Toggles (checkboxes)",
+  "description": "Proves toggle mapping works. Send 1.0 to turn ON, 0.0 to turn OFF. The checkbox in huff should visually check/uncheck and the effect should appear or disappear immediately.",
+  "version": 1,
+  "mappings": [
+    {
+      "_section": "Send 1.0 to turn ON, 0.0 to turn OFF. Watch the checkbox in the huff panel."
+    },
+    {
+      "param": "corruptOn",
+      "addr": "/test/glitch",
+      "type": "toggle",
+      "inputMin": 0,
+      "inputMax": 1,
+      "enabled": true,
+      "note": "EXPECTED: Glitch On checkbox ticks. All glitch tiles appear or vanish."
+    },
+    {
+      "param": "flowOn",
+      "addr": "/test/flowon",
+      "type": "toggle",
+      "inputMin": 0,
+      "inputMax": 1,
+      "enabled": true,
+      "note": "EXPECTED: Flow On checkbox ticks. Warp effect toggles on/off."
+    },
+    {
+      "param": "symOn",
+      "addr": "/test/sym",
+      "type": "toggle",
+      "inputMin": 0,
+      "inputMax": 1,
+      "enabled": true,
+      "note": "EXPECTED: Symmetry On checkbox ticks. Image mirrors on/off."
+    },
+    {
+      "param": "solarizeOn",
+      "addr": "/test/solar",
+      "type": "toggle",
+      "inputMin": 0,
+      "inputMax": 1,
+      "enabled": true,
+      "note": "EXPECTED: Solarize On checkbox ticks. Colour inversion effect toggles."
+    },
+    {
+      "param": "baseOn",
+      "addr": "/test/base",
+      "type": "toggle",
+      "inputMin": 0,
+      "inputMax": 1,
+      "enabled": true,
+      "note": "EXPECTED: Base Video checkbox ticks. Source video layer on/off."
+    }
+  ]
+}

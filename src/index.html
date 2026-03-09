@@ -278,6 +278,78 @@
             transition: border-color .05s, background .05s !important;
         }
 
+        /* ── OSC modal (mirrors MIDI modal, green accent) ────────── */
+        #oscOverlay {
+            display: none; position: fixed; inset: 0; z-index: 1000;
+            background: rgba(0,0,0,.78); backdrop-filter: blur(10px);
+            align-items: center; justify-content: center;
+        }
+        #oscOverlay.open { display: flex; }
+        #oscBox {
+            position: relative;
+            background: #090909; border: 2px solid rgba(80,220,120,.5);
+            border-radius: 14px; padding: 24px 28px 22px;
+            max-width: 600px; width: 94%;
+            max-height: 88vh; overflow-y: auto;
+            font-size: 12px;
+        }
+        #oscBox h2 {
+            font-size: 15px; font-weight: 900; letter-spacing: .12em;
+            color: rgba(80,220,120,.9); text-transform: uppercase;
+            margin: 0 0 4px;
+        }
+        #oscBox .osc-sub {
+            font-size: 10px; color: rgba(255,255,255,.3);
+            letter-spacing: .05em; margin-bottom: 18px;
+        }
+        #oscClose {
+            position: absolute; top: 12px; right: 15px;
+            background: none; border: none; font-size: 22px;
+            color: rgba(255,255,255,.3); cursor: pointer; padding: 0; line-height: 1;
+        }
+        #oscClose:hover { color: #fff; }
+        .osc-section-label {
+            font-size: 9px; font-weight: 700; letter-spacing: .14em;
+            text-transform: uppercase; color: rgba(80,220,120,.6);
+            margin: 16px 0 7px;
+        }
+        #oscStatusBox {
+            background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.08);
+            border-radius: 8px; padding: 9px 12px; margin-bottom: 6px;
+            font-size: 11px; min-height: 28px; line-height: 1.5;
+            color: rgba(255,255,255,.4);
+        }
+        #oscStatusBox.ok    { color: #50dc78; }
+        #oscStatusBox.error { color: #ff6060; }
+        #oscMapRow { display: flex; gap: 7px; align-items: center; flex-wrap: wrap; }
+        #oscMapName {
+            font-size: 11px; color: #e8eaf0; padding: 3px 8px;
+            background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.12);
+            border-radius: 5px; flex: 1; min-width: 120px;
+        }
+        #oscMapTable {
+            width: 100%; border-collapse: collapse;
+            margin-top: 6px; font-size: 10px;
+        }
+        #oscMapTable th {
+            text-align: left; font-size: 9px; letter-spacing: .1em;
+            text-transform: uppercase; color: rgba(255,255,255,.3);
+            padding: 4px 6px; border-bottom: 1px solid rgba(255,255,255,.07);
+        }
+        #oscMapTable td {
+            padding: 3px 6px; border-bottom: 1px solid rgba(255,255,255,.04);
+            color: rgba(255,255,255,.65); vertical-align: middle;
+        }
+        #oscMapTable tr:hover td { background: rgba(255,255,255,.03); }
+        #oscMapTable .addr-cell  { color: rgba(80,220,120,.85); font-family: monospace; font-size: 10px; }
+        #oscMapTable .type-cell  { color: rgba(150,200,255,.7); }
+        #oscMapTable .dis        { opacity: .3; text-decoration: line-through; }
+        .ctrl.osc-active {
+            border-color: rgba(80,220,120,.9) !important;
+            background: rgba(80,220,120,.1) !important;
+            transition: border-color .05s, background .05s !important;
+        }
+
         /* file input tweak */
         input[type=file] { font-size: 11px; color: rgba(255,255,255,.55); max-width: 155px; }
     </style>
@@ -387,6 +459,44 @@
       </div>
     </div>
 
+    <!-- ═══ OSC Modal ════════════════════════════════════════════ -->
+    <div id="oscOverlay">
+      <div id="oscBox">
+        <button id="oscClose">×</button>
+        <h2>OSC</h2>
+        <div class="osc-sub">Open Sound Control · UDP · receive from TouchOSC, Max/MSP, Pure Data, SuperCollider, TouchDesigner</div>
+
+        <div class="osc-section-label">Listener</div>
+        <div id="oscStatusBox">Starting…</div>
+
+        <div class="osc-section-label">OSC Map</div>
+        <div id="oscMapRow">
+          <span id="oscMapName" title="No map loaded">No map loaded</span>
+          <button id="oscLoadMapBtn" class="btn-dim" style="font-size:10px;padding:3px 8px">📂 Load Map…</button>
+          <button id="oscClearMapBtn" class="btn-dim" style="font-size:10px;padding:3px 8px;color:#ff6060">✕ Clear</button>
+        </div>
+
+        <div class="osc-section-label" style="margin-top:14px">Active Mappings</div>
+        <table id="oscMapTable">
+          <thead>
+            <tr><th>Address</th><th>Parameter ID</th><th>Type</th><th>In range</th><th>Note</th></tr>
+          </thead>
+          <tbody id="oscMapTbody">
+            <tr><td colspan="5" style="color:rgba(255,255,255,.25);font-style:italic;padding:8px 6px">Load a map file to see mappings.</td></tr>
+          </tbody>
+        </table>
+
+        <div style="margin-top:18px;font-size:10px;color:rgba(255,255,255,.25);line-height:1.8">
+          <strong style="color:rgba(255,255,255,.4)">Send OSC to this machine's IP on port 9000.</strong><br>
+          TouchOSC: Settings → OSC → Host = this machine's IP · Port (outgoing) = 9000<br>
+          Max/MSP: <code>[udpsend 127.0.0.1 9000]</code> &nbsp;·&nbsp;
+          Pure Data: <code>[netsend -u -b 127.0.0.1 9000]</code><br>
+          Map format: <code>src/osc/FORMAT.md</code> &nbsp;·&nbsp;
+          Factory maps: <code>touchosc-mix.json</code> · <code>touchosc-effects.json</code> · <code>generic-16.json</code>
+        </div>
+      </div>
+    </div>
+
     <!-- ═══ Main header ════════════════════════════════════════ -->
     <header>
 
@@ -411,7 +521,9 @@
             <div style="flex:1"></div>
             <span class="pill" id="status">WS: …</span>
             <span class="pill" id="midiPill" style="color:rgba(255,160,0,.7);border-color:rgba(255,160,0,.25);cursor:pointer" title="Open MIDI settings">MIDI: —</span>
+            <span class="pill" id="oscPill"  style="color:rgba(80,220,120,.6);border-color:rgba(80,220,120,.2);cursor:pointer"  title="Open OSC settings">OSC: —</span>
             <button id="midiBtn" class="btn-dim">MIDI</button>
+            <button id="oscBtn"  class="btn-dim">OSC</button>
             <button id="aboutBtn" class="btn-red">ABOUT</button>
         </div>
 
@@ -1398,6 +1510,230 @@
                 }
             }
         })();
+
+    })();
+    </script>
+    <!-- ═══ OSC Engine ═══════════════════════════════════════════════════ -->
+    <script>
+    (() => {
+        'use strict';
+
+        /* ─────────────────────────────────────────────────────────────────────
+         * OSC ENGINE  v1.0  —  Tauri-native via rosc (Rust)
+         *
+         * Architecture:
+         *   OSC sender (TouchOSC, Max, Pd…) ──UDP:9000──► rosc (Rust)
+         *                                                      │
+         *                                           window.emit("osc-message")
+         *                                                      ▼
+         *   tauriEvent.listen("osc-message") ──► applyOsc() ──► DOM params
+         *
+         * The browser has no UDP API. Rust binds 0.0.0.0:9000, decodes OSC
+         * packets via rosc, and emits each message as "osc-message".
+         *
+         * Event payload:
+         *   { addr: "/huff/feedback", value: 0.73, args: ["f:0.730"] }
+         *   value — first numeric arg (float as-is; int ÷ 127)
+         *
+         * Map JSON:
+         *   { "name", "description", "version", "mappings": [
+         *     { "param":"feedback", "addr":"/huff/feedback",
+         *       "type":"range|toggle|trigger",
+         *       "inputMin":0, "inputMax":1,   ← TouchOSC sends 0–1
+         *       "enabled":true, "note":"…" }
+         *   ]}
+         * ───────────────────────────────────────────────────────────────────── */
+
+        const invoke     = window.__TAURI__?.invoke;
+        const tauriEvent = window.__TAURI__?.event;
+
+        // ── DOM refs ──────────────────────────────────────────────────────────
+        const overlay    = document.getElementById('oscOverlay');
+        const closeBtn   = document.getElementById('oscClose');
+        const statusBox  = document.getElementById('oscStatusBox');
+        const loadMapBtn = document.getElementById('oscLoadMapBtn');
+        const clearMapBtn= document.getElementById('oscClearMapBtn');
+        const mapNameEl  = document.getElementById('oscMapName');
+        const tbody      = document.getElementById('oscMapTbody');
+        const oscBtn     = document.getElementById('oscBtn');
+        const pill       = document.getElementById('oscPill');
+
+        // ── modal open/close ──────────────────────────────────────────────────
+        const openModal  = () => overlay.classList.add('open');
+        const closeModal = () => overlay.classList.remove('open');
+        oscBtn  .addEventListener('click', openModal);
+        pill    .addEventListener('click', openModal);
+        closeBtn.addEventListener('click', closeModal);
+        overlay .addEventListener('click', e => { if (e.target === overlay) closeModal(); });
+        window  .addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); }, true);
+
+        if (!invoke || !tauriEvent) {
+            statusBox.textContent = 'OSC unavailable outside Tauri app';
+            statusBox.className = 'error';
+            pill.textContent = 'OSC: N/A';
+            return;
+        }
+
+        // ── port display ──────────────────────────────────────────────────────
+        function setPort(port) {
+            statusBox.textContent  = `Listening on UDP port ${port} · Send OSC to this machine on port ${port}`;
+            statusBox.className = 'ok';
+            pill.textContent    = `OSC :${port}`;
+            pill.style.color    = 'rgba(80,220,120,.85)';
+            pill.style.borderColor = 'rgba(80,220,120,.3)';
+        }
+
+        invoke('get_osc_port').then(setPort).catch(() => {
+            statusBox.textContent = '⚠ get_osc_port failed — rebuild required';
+            statusBox.className = 'error';
+        });
+
+        tauriEvent.listen('osc-port', e => setPort(e.payload));
+
+        // ── map storage ───────────────────────────────────────────────────────
+        let currentMap  = null;
+        let addrLookup  = new Map(); // addr(string) → [{paramId, type, inputMin, inputMax}]
+
+        function buildLookup(map) {
+            addrLookup.clear();
+            if (!map) return;
+            for (const e of map.mappings) {
+                if (e._section || e.enabled === false) continue;
+                if (!e.addr) continue;
+                const list = addrLookup.get(e.addr) || [];
+                list.push({
+                    paramId:  e.param,
+                    type:     e.type     || 'range',
+                    inputMin: e.inputMin ?? 0,
+                    inputMax: e.inputMax ?? 1,
+                });
+                addrLookup.set(e.addr, list);
+            }
+        }
+
+        function renderTable(map) {
+            if (!map?.mappings) {
+                tbody.innerHTML = '<tr><td colspan="5" style="color:rgba(255,255,255,.25);font-style:italic;padding:8px 6px">Load a map file to see mappings.</td></tr>';
+                return;
+            }
+            let html = '';
+            for (const e of map.mappings) {
+                if (e._section) {
+                    html += `<tr><td colspan="5" style="padding:7px 6px 2px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(80,220,120,.3)">${e._section}</td></tr>`;
+                    continue;
+                }
+                const dis  = e.enabled === false ? ' class="dis"' : '';
+                const range = (e.type === 'range' || !e.type)
+                    ? `${e.inputMin ?? 0}–${e.inputMax ?? 1}`
+                    : '—';
+                html += `<tr${dis}>
+                    <td class="addr-cell">${e.addr}</td>
+                    <td><code style="color:#e8eaf0">${e.param}</code></td>
+                    <td class="type-cell">${e.type || 'range'}</td>
+                    <td style="color:rgba(255,255,255,.35)">${range}</td>
+                    <td><span style="color:rgba(255,255,255,.3)">${e.note || ''}</span></td>
+                </tr>`;
+            }
+            tbody.innerHTML = html;
+        }
+
+        // ── map file loading ──────────────────────────────────────────────────
+        const fileInput = document.createElement('input');
+        fileInput.type = 'file'; fileInput.accept = '.json';
+        fileInput.style.display = 'none'; document.body.appendChild(fileInput);
+
+        loadMapBtn.addEventListener('click', () => fileInput.click());
+
+        fileInput.addEventListener('change', () => {
+            const file = fileInput.files?.[0]; if (!file) return;
+            const reader = new FileReader();
+            reader.onload = e => {
+                try {
+                    const map = JSON.parse(e.target.result);
+                    if (!Array.isArray(map.mappings)) throw new Error('missing mappings array');
+                    currentMap = map;
+                    buildLookup(currentMap);
+                    renderTable(currentMap);
+                    mapNameEl.textContent = map.name || file.name;
+                    mapNameEl.title = map.description || map.name || file.name;
+                    try { localStorage.setItem('huffOscMap', JSON.stringify(map)); } catch {}
+                } catch (err) {
+                    mapNameEl.textContent = '⚠ ' + err.message;
+                }
+            };
+            reader.readAsText(file);
+            fileInput.value = '';
+        });
+
+        clearMapBtn.addEventListener('click', () => {
+            currentMap = null; buildLookup(null); renderTable(null);
+            mapNameEl.textContent = 'No map loaded'; mapNameEl.title = '';
+            try { localStorage.removeItem('huffOscMap'); } catch {}
+        });
+
+        // restore saved map
+        try {
+            const saved = localStorage.getItem('huffOscMap');
+            if (saved) {
+                const map = JSON.parse(saved);
+                if (Array.isArray(map.mappings)) {
+                    currentMap = map; buildLookup(currentMap); renderTable(currentMap);
+                    mapNameEl.textContent = map.name || 'Loaded map';
+                    mapNameEl.title = map.description || '';
+                }
+            }
+        } catch {}
+
+        // ── OSC dispatcher ────────────────────────────────────────────────────
+        const flashTimers = {};
+
+        function flashCtrl(paramId) {
+            const el = document.getElementById(paramId)?.closest?.('.ctrl');
+            if (!el) return;
+            el.classList.add('osc-active');
+            clearTimeout(flashTimers[paramId]);
+            flashTimers[paramId] = setTimeout(() => el.classList.remove('osc-active'), 120);
+        }
+
+        function applyOsc(addr, rawValue) {
+            const entries = addrLookup.get(addr);
+            if (!entries) return;
+
+            for (const { paramId, type, inputMin, inputMax } of entries) {
+                const el = document.getElementById(paramId);
+                if (!el) continue;
+
+                if (type === 'toggle') {
+                    // TouchOSC buttons send 1.0 on press, 0.0 on release
+                    el.checked = rawValue > 0.5;
+                    el.dispatchEvent(new Event('change', { bubbles: true }));
+                } else if (type === 'trigger') {
+                    if (rawValue > 0.5) el.click();
+                } else {
+                    // range — normalise inputMin–inputMax to 0–1, then scale to el min–max
+                    const span = inputMax - inputMin || 1;
+                    const t    = Math.max(0, Math.min(1, (rawValue - inputMin) / span));
+                    const mn   = parseFloat(el.min ?? 0);
+                    const mx   = parseFloat(el.max ?? 1);
+                    el.value   = mn + t * (mx - mn);
+                    el.dispatchEvent(new Event('input', { bubbles: true }));
+                }
+                flashCtrl(paramId);
+            }
+        }
+
+        // ── Tauri event listener ──────────────────────────────────────────────
+        tauriEvent.listen('osc-message', ({ payload }) => {
+            const { addr, value } = payload;
+            applyOsc(addr, value);
+
+            // pill flash: show the address briefly
+            pill.textContent = addr.length > 22 ? addr.slice(0, 22) + '…' : addr;
+            clearTimeout(pill._t);
+            pill._t = setTimeout(() => {
+                invoke('get_osc_port').then(p => { pill.textContent = `OSC :${p}`; }).catch(() => {});
+            }, 700);
+        });
 
     })();
     </script>
