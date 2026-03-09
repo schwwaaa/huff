@@ -55,9 +55,39 @@ detect_os() {
 
 # Run tauri build via npx (Tauri v1, npm-managed)
 tauri_build() {
-  # Pass all extra args (e.g. --target ...) through to tauri
   cd "${SCRIPT_DIR}"
   npx tauri build "$@"
+}
+
+# ── Syphon framework thinning ─────────────────────────────────
+#
+# Tauri copies Syphon.framework (fat: arm64+x86_64) into each arch bundle.
+# Before our lipo pass combines the two bundles, we thin each bundle's copy
+# to its own arch — otherwise lipo errors:
+#   "same architectures (x86_64) can't be in the same fat output file"
+#
+# Works on macOS system bash (3.2) — no associative arrays needed.
+#
+# Usage: thin_bundle_frameworks <app_bundle_path> <lipo_arch>
+#   e.g. thin_bundle_frameworks ".../huff.app" "arm64"
+#
+thin_bundle_frameworks() {
+  local app="$1"
+  local arch="$2"
+  local fw_dir="${app}/Contents/Frameworks"
+
+  if [[ ! -d "${fw_dir}" ]]; then
+    return 0  # no frameworks in this bundle, nothing to do
+  fi
+
+  # Find every fat Mach-O inside Contents/Frameworks/ and thin it in-place
+  while IFS= read -r bin; do
+    if file "${bin}" | grep -q "Mach-O universal"; then
+      log "  thin ${arch}: ${bin#${app}/}"
+      lipo "${bin}" -thin "${arch}" -output "${bin}.thin"
+      mv "${bin}.thin" "${bin}"
+    fi
+  done < <(find "${fw_dir}" -type f)
 }
 
 # ── Build functions ───────────────────────────────────────────
@@ -89,6 +119,13 @@ build_mac_universal() {
   [[ -d "${ARM_APP}" ]]   || fail "ARM .app not found: ${ARM_APP}"
   [[ -d "${INTEL_APP}" ]] || fail "Intel .app not found: ${INTEL_APP}"
 
+  # Thin each bundle's framework copies to their arch before lipo combines them.
+  # Syphon.framework ships as a fat binary (arm64+x86_64); lipo can't merge two
+  # fat binaries with overlapping architectures, so we strip each down first.
+  log "Thinning bundled frameworks…"
+  thin_bundle_frameworks "${ARM_APP}"   "arm64"
+  thin_bundle_frameworks "${INTEL_APP}" "x86_64"
+
   UNIVERSAL_ROOT="${TAURI_DIR}/target/universal/release/bundle/macos"
   UNIVERSAL_APP="${UNIVERSAL_ROOT}/${APP_NAME}.app"
 
@@ -97,7 +134,8 @@ build_mac_universal() {
   mkdir -p "${UNIVERSAL_ROOT}"
   cp -R "${ARM_APP}" "${UNIVERSAL_APP}"
 
-  # Lipo all Mach-O binaries in the bundle
+  # Lipo all Mach-O binaries found in the ARM bundle (now thin) with their
+  # x86_64 counterparts from the Intel bundle
   _TMPFILE="$(mktemp)"
   find "${ARM_APP}" -type f > "${_TMPFILE}"
   while IFS= read -r arm_bin; do
