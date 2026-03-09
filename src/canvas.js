@@ -124,6 +124,8 @@ function hookUI() {
     'clusters','clusterTiles','clusterCount','clusterCountVal',
     'clusterRadius','clusterRadiusVal','spatialGap','spatialGapVal',
     'cluCenters','cluCentersVal','cluSpread','cluSpreadVal',
+    'cluMinSpread','cluMinSpreadVal','cluBias','cluBiasVal','cluDrift','cluDriftVal',
+    'cluSpeed','cluSpeedVal','cluInertia','cluInertiaVal',
     'flowOn','flowStrength','flowStrengthVal','flowScale','flowScaleVal',
     'flowPulse','flowPulseVal','flowImpl','flowImplVal',
     'baseOn','baseMix','baseMixVal','seedOnLoad',
@@ -131,6 +133,7 @@ function hookUI() {
     'solarizeOn','solarizeThresh','solarizeThreshVal','solarizeAmt','solarizeAmtVal',
     'solarizeR','solarizeRVal','solarizeG','solarizeGVal','solarizeB','solarizeBVal',
     'scanAlpha','scanAlphaVal','scanShift','scanShiftVal','scanDrift','scanDriftVal',
+    'scanSpeed','scanSpeedVal','scanGap','scanGapVal','scanSkew','scanSkewVal',
     'depthScatter','depthScatterVal','corruptDrift','corruptDriftVal',
     'trailOn','trailLayers','trailLayersVal','trailDepth','trailDepthVal',
     'trailLumaKey','trailLumaKeyVal',
@@ -180,7 +183,9 @@ function hookUI() {
     'glitchSize','glitchSmear','glitchBaseX','glitchBaseY',
     'feedback','persistence','fbX','fbY','fbZ','fbTheta',
     'spatialGap','clusterCount','clusterRadius','cluCenters','cluSpread',
-    'scanAlpha','scanShift','scanDrift','glitchAlpha','glitchJitter','glitchSmearAngle',
+    'cluMinSpread','cluBias','cluDrift','cluSpeed','cluInertia',
+    'scanAlpha','scanShift','scanDrift','scanSpeed','scanGap','scanSkew',
+    'glitchAlpha','glitchJitter','glitchSmearAngle',
     'flowStrength','flowScale','flowPulse','flowImpl','baseMix','symPos','glitchSpeedMul',
     'depthScatter','corruptDrift','trailLayers','trailDepth','trailLumaKey',
     'solarizeThresh','solarizeAmt','solarizeR','solarizeG','solarizeB',
@@ -225,6 +230,11 @@ function updateLabels() {
   set(els.clusterRadius,    els.clusterRadiusVal,    v => v);
   set(els.cluCenters,       els.cluCentersVal,       v => v);
   set(els.cluSpread,        els.cluSpreadVal,        v => v);
+  set(els.cluMinSpread,     els.cluMinSpreadVal,     v => v);
+  set(els.cluBias,          els.cluBiasVal,          f2);
+  set(els.cluDrift,         els.cluDriftVal,         f2);
+  set(els.cluSpeed,         els.cluSpeedVal,         v => (+v).toFixed(1));
+  set(els.cluInertia,       els.cluInertiaVal,       f2);
   set(els.flowStrength,     els.flowStrengthVal,     v => v);
   set(els.flowScale,        els.flowScaleVal,        v => v);
   set(els.flowPulse,        els.flowPulseVal,        v => (v|0));
@@ -238,6 +248,9 @@ function updateLabels() {
   set(els.scanAlpha,        els.scanAlphaVal,        f2);
   set(els.scanShift,        els.scanShiftVal,        f2);
   set(els.scanDrift,        els.scanDriftVal,        f2);
+  set(els.scanSpeed,        els.scanSpeedVal,        f2);
+  set(els.scanGap,          els.scanGapVal,          v => (v|0));
+  set(els.scanSkew,         els.scanSkewVal,         f2);
   set(els.depthScatter,     els.depthScatterVal,     f2);
   set(els.corruptDrift,     els.corruptDriftVal,     f2);
   set(els.trailLayers,      els.trailLayersVal,      v => (v|0));

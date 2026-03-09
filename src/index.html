@@ -305,6 +305,26 @@
             <button id="aboutBtn"     class="btn-red">ABOUT</button>
         </div>
 
+        <!-- PRESETS (outside form so buttons don't submit) -->
+        <div class="groups" style="margin-top:0">
+        <div class="group">
+            <div class="group-label">Presets</div>
+            <div class="group-body">
+            <div class="group-row">
+                <input id="presetName" type="text" placeholder="preset name"
+                       style="width:110px;background:rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.14);
+                              border-radius:5px;color:#e8eaf0;padding:2px 6px;font-size:10px;
+                              font-family:inherit;">
+                <button id="presetSaveBtn" class="btn-dim" style="font-size:10px;padding:3px 8px">💾 Save</button>
+                <select id="presetList" style="max-width:130px;font-size:10px"></select>
+                <button id="presetLoadBtn"   class="btn-dim" style="font-size:10px;padding:3px 8px">▶ Load</button>
+                <button id="presetDeleteBtn" class="btn-dim" style="font-size:10px;padding:3px 8px;color:#ff6060">✕</button>
+                <span id="presetStatus" style="font-size:9px;color:rgba(255,255,255,.35);padding:0 4px"></span>
+            </div>
+            </div>
+        </div>
+        </div>
+
         <!-- grouped controls -->
         <form id="controlsForm" autocomplete="off" novalidate>
         <div class="groups">
@@ -375,11 +395,12 @@
                         <input id="fbTheta" type="range" min="-2.0" max="2.0" step="0.005" value="0.01">
                         <span class="val" id="fbThetaVal">0</span>
                     </div>
+                    <button id="resetMotionBtn" class="btn-dim" style="font-size:9px;padding:2px 7px" title="Reset X, Y, Z, Delta to defaults">↺ Reset Motion</button>
                 </div>
             </div>
             </div>
 
-            <!-- GLITCH CORE -->
+            <!-- GLITCH CORE + MOTION -->
             <div class="group">
                 <div class="group-label">Glitch</div>
                 <div class="group-body">
@@ -435,15 +456,6 @@
                         <input id="glitchSmearAngle" type="range" min="0" max="360" step="1" value="0">
                         <span class="val" id="glitchSmearAngleVal">0°</span>
                     </div>
-                </div>
-            </div>
-            </div>
-
-            <!-- MOTION -->
-            <div class="group">
-                <div class="group-label">Motion</div>
-                <div class="group-body">
-                <div class="group-row">
                     <div class="ctrl">
                         <label>SPEED</label>
                         <input id="glitchSpeed" type="range" min="0" max="5" step="0.005" value="0.8">
@@ -549,6 +561,21 @@
                         <span class="val" id="scanDriftVal">1.00</span>
                     </div>
                     <div class="ctrl">
+                        <label>SPEED</label>
+                        <input id="scanSpeed" type="range" min="0" max="5" step="0.01" value="1.0">
+                        <span class="val" id="scanSpeedVal">1.00</span>
+                    </div>
+                    <div class="ctrl">
+                        <label>GAP</label>
+                        <input id="scanGap" type="range" min="0" max="200" step="1" value="0">
+                        <span class="val" id="scanGapVal">0</span>
+                    </div>
+                    <div class="ctrl">
+                        <label>SKEW</label>
+                        <input id="scanSkew" type="range" min="-1" max="1" step="0.01" value="0">
+                        <span class="val" id="scanSkewVal">0.00</span>
+                    </div>
+                    <div class="ctrl">
                         <label>OPACITY</label>
                         <input id="scanAlpha" type="range" min="0" max="1" step="0.01" value="0.86">
                         <span class="val" id="scanAlphaVal">0.86</span>
@@ -574,9 +601,34 @@
                         <span class="val" id="cluSpreadVal">80</span>
                     </div>
                     <div class="ctrl">
+                        <label>MIN RAD</label>
+                        <input id="cluMinSpread" type="range" min="0" max="150" step="1" value="0">
+                        <span class="val" id="cluMinSpreadVal">0</span>
+                    </div>
+                    <div class="ctrl">
                         <label>SPATIAL GAP</label>
                         <input id="spatialGap" type="range" min="0" max="200" step="1" value="40">
                         <span class="val" id="spatialGapVal">40</span>
+                    </div>
+                    <div class="ctrl">
+                        <label>BIAS</label>
+                        <input id="cluBias" type="range" min="0" max="1" step="0.01" value="0.85">
+                        <span class="val" id="cluBiasVal">0.85</span>
+                    </div>
+                    <div class="ctrl">
+                        <label>DRIFT</label>
+                        <input id="cluDrift" type="range" min="0" max="5" step="0.01" value="0">
+                        <span class="val" id="cluDriftVal">0.00</span>
+                    </div>
+                    <div class="ctrl">
+                        <label>SPEED</label>
+                        <input id="cluSpeed" type="range" min="0" max="15" step="0.1" value="0">
+                        <span class="val" id="cluSpeedVal">0.0</span>
+                    </div>
+                    <div class="ctrl">
+                        <label>INERTIA</label>
+                        <input id="cluInertia" type="range" min="0.01" max="0.99" step="0.01" value="0.92">
+                        <span class="val" id="cluInertiaVal">0.92</span>
                     </div>
                 </div>
             </div>
@@ -649,26 +701,6 @@
 
         </div><!-- .groups -->
         </form>
-
-            <!-- PRESETS (outside form so buttons don't submit) -->
-            <div class="groups" style="margin-top:0">
-            <div class="group">
-                <div class="group-label">Presets</div>
-                <div class="group-body">
-                <div class="group-row">
-                    <input id="presetName" type="text" placeholder="preset name"
-                           style="width:110px;background:rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.14);
-                                  border-radius:5px;color:#e8eaf0;padding:2px 6px;font-size:10px;
-                                  font-family:inherit;">
-                    <button id="presetSaveBtn" class="btn-dim" style="font-size:10px;padding:3px 8px">💾 Save</button>
-                    <select id="presetList" style="max-width:130px;font-size:10px"></select>
-                    <button id="presetLoadBtn"   class="btn-dim" style="font-size:10px;padding:3px 8px">▶ Load</button>
-                    <button id="presetDeleteBtn" class="btn-dim" style="font-size:10px;padding:3px 8px;color:#ff6060">✕</button>
-                    <span id="presetStatus" style="font-size:9px;color:rgba(255,255,255,.35);padding:0 4px"></span>
-                </div>
-                </div>
-            </div>
-            </div>
     </header>
 
     <script defer src="p5.js"></script>
@@ -707,6 +739,17 @@
                 .forEach(el => el.dispatchEvent(new Event('change', { bubbles: true })));
         });
 
+        /* ── Reset Feedback motion sliders (X, Y, Z, Delta) ───── */
+        document.getElementById('resetMotionBtn').addEventListener('click', () => {
+            const defaults = { fbX: '1', fbY: '1', fbZ: '1.000', fbTheta: '0.01' };
+            Object.entries(defaults).forEach(([id, val]) => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                el.value = val;
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+            });
+        });
+
         /* ── Presets (JSON files in src/presets/) ─────────────────
          * In Tauri: uses fetch() to read from src/presets/ dir.
          * Save writes via Tauri fs API if available; falls back to
@@ -721,7 +764,8 @@
             'glitchBaseX','glitchBaseY','trailLayers','trailDepth','trailLumaKey',
             'symOn','symMode','symPos',
             'clusters','clusterCount','clusterRadius','scanShift','scanDrift','scanAlpha',
-            'clusterTiles','cluCenters','cluSpread','spatialGap',
+            'scanSpeed','scanGap','scanSkew','scanRandSize',
+            'clusterTiles','cluCenters','cluSpread','cluMinSpread','cluBias','cluDrift','cluSpeed','cluInertia','spatialGap',
             'solarizeOn','solarizeThresh','solarizeAmt','solarizeR','solarizeG','solarizeB',
             'flowOn','flowStrength','flowScale','flowPulse','flowImpl',
             'corruptOn',

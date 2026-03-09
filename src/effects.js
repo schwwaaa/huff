@@ -12,6 +12,12 @@
 let _ringCanvas = null;
 let _ringCtx    = null;
 
+// ─── Cluster physics state ─────────────────────────────────────────────────
+// Each entry: { x, y, vx, vy, noiseOffX, noiseOffY }
+// Persists across frames so centers carry momentum between draws.
+let _cluPhysics  = [];
+let _cluPhysT    = 0;   // internal time accumulator for steering noise
+
 function drawRingRegion(target, imgData, sx, sy, sw, sh, dx, dy, dw, dh) {
   if (!_ringCanvas) {
     _ringCanvas = document.createElement('canvas');
@@ -117,7 +123,7 @@ function applyTrails() {
 // ─── Scanlines (band displacement pass) ───────────────────────────────────
 // Extracted from applyGlitch so it can be toggled independently.
 // Controlled by: els.clusters (ON), clusterCount, clusterRadius, scanAlpha,
-//                scanShift, scanDrift, depth.
+//                scanShift, scanDrift, scanSpeed, scanGap, scanSkew, depth.
 
 function applyScanlines(density) {
   if (!els.clusters?.checked) return;
@@ -135,21 +141,30 @@ function applyScanlines(density) {
   const bandAlpha  = Math.floor(parseFloat(els.scanAlpha?.value  ?? '0.86') * 255);
   const shiftScale = parseFloat(els.scanShift?.value  ?? '0.12');
   const driftSpeed = parseFloat(els.scanDrift?.value  ?? '1.0');
+  const speedMul   = parseFloat(els.scanSpeed?.value  ?? '1.0');
+  const scanGap    = parseInt(els.scanGap?.value       ?? '0',   10);
+  const scanSkew   = parseFloat(els.scanSkew?.value   ?? '0');
 
   const ctx = gBuf.drawingContext;
   for (let n = 0; n < scanBands; n++) {
     const bH_n = randSize
       ? Math.max(4, Math.floor(random(baseRadius * 0.5, baseRadius * 4) * 3))
       : bandHeight;
-    const driftY = noise(n * 4.1 + nPhaseY * 0.4 * driftSpeed) * height;
-    const bTop   = Math.max(0, Math.floor(driftY));
+    const driftY = noise(n * 4.1 + nPhaseY * 0.4 * driftSpeed * speedMul) * height;
+    // scanGap: enforce regular spacing between band positions
+    const gappedY = scanGap > 0
+      ? (Math.floor(driftY / Math.max(1, bH_n + scanGap)) * (bH_n + scanGap))
+      : driftY;
+    const bTop   = Math.max(0, Math.floor(gappedY));
     const bBot   = Math.min(height, bTop + bH_n);
     const bH     = bBot - bTop;
     if (bH <= 0) continue;
 
     const back   = frameRing.length - 1 - Math.floor(random(1, maxBackSc + 1));
     const src    = frameRing[Math.max(0, back)];
-    const shiftX = Math.floor(map(noise(n * 2.3 + nPhaseX * 0.5), 0, 1, -width * shiftScale, width * shiftScale));
+    // scanSkew: adds a position-based horizontal offset to each band
+    const skewOffset = Math.floor(scanSkew * bTop);
+    const shiftX = Math.floor(map(noise(n * 2.3 + nPhaseX * 0.5 * speedMul), 0, 1, -width * shiftScale, width * shiftScale)) + skewOffset;
     const srcX   = Math.max(0, shiftX < 0 ? -shiftX : 0);
     const dstX   = Math.max(0, shiftX > 0 ? shiftX  : 0);
     const bW     = width - Math.abs(shiftX);
@@ -205,6 +220,12 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0) {
   const useCluTiles = !!els.clusterTiles?.checked;
   const cluCenters  = parseInt(els.cluCenters?.value  ?? '3',  10);
   const cluSpread   = parseInt(els.cluSpread?.value   ?? '80', 10);
+  const cluMinSpread = parseInt(els.cluMinSpread?.value ?? '0', 10);
+  const cluBias     = parseFloat(els.cluBias?.value   ?? '0.85');
+  const cluDrift    = parseFloat(els.cluDrift?.value  ?? '0');
+
+  const cluSpeed   = parseFloat(els.cluSpeed?.value   ?? '0');
+  const cluInertia = parseFloat(els.cluInertia?.value ?? '0.92');
 
   const targets = [];
   const tryAdd = (x, y) => {
@@ -218,31 +239,97 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0) {
 
   randomSeed(baseSeed + frameCount);
 
-  // ── Tile placement ───────────────────────────────────────────────────────
-  if (useCluTiles && cluCenters > 0) {
+  // ── Cluster center physics ───────────────────────────────────────────────
+  // When cluSpeed > 0, centers have persistent positions + velocity (inertia).
+  // When cluSpeed = 0, fall back to the original noise-offset approach.
+
+  function getPhysicsCenters() {
+    // Grow / shrink state array to match requested count
+    while (_cluPhysics.length < cluCenters) {
+      _cluPhysics.push({
+        x: Math.random() * width,
+        y: Math.random() * height,
+        vx: (Math.random() - 0.5) * 2,
+        vy: (Math.random() - 0.5) * 2,
+        noiseOffX: Math.random() * 1000,
+        noiseOffY: Math.random() * 1000,
+      });
+    }
+    _cluPhysics.length = cluCenters;
+
+    // Advance internal time proportional to cluSpeed
+    _cluPhysT += cluSpeed * 0.004;
+
+    for (const c of _cluPhysics) {
+      // Steering: desired direction from a slowly-evolving noise field
+      const steerAng = noise(c.noiseOffX + _cluPhysT * 0.7,
+                             c.noiseOffY + _cluPhysT * 0.5) * TWO_PI * 2;
+      const desiredVx = Math.cos(steerAng) * cluSpeed;
+      const desiredVy = Math.sin(steerAng) * cluSpeed;
+
+      // Inertia: blend current velocity toward desired
+      c.vx = c.vx * cluInertia + desiredVx * (1 - cluInertia);
+      c.vy = c.vy * cluInertia + desiredVy * (1 - cluInertia);
+
+      // Optionally add cluDrift as an extra noise perturbation on top
+      if (cluDrift > 0) {
+        c.vx += (noise(c.noiseOffX * 2.1 + _cluPhysT * 1.3) - 0.5) * cluDrift * 0.5;
+        c.vy += (noise(c.noiseOffY * 2.1 + _cluPhysT * 1.1) - 0.5) * cluDrift * 0.5;
+      }
+
+      // Integrate position, wrap at screen edges
+      c.x = ((c.x + c.vx) % width  + width)  % width;
+      c.y = ((c.y + c.vy) % height + height) % height;
+    }
+    return _cluPhysics;
+  }
+
+  function getStaticCenters() {
     const centers = [];
     for (let i = 0; i < cluCenters; i++) {
-      centers.push([
-        Math.floor(random(cols)) * block + (block >> 1),
-        Math.floor(random(rows)) * block + (block >> 1),
-      ]);
+      const baseX = Math.floor(random(cols)) * block + (block >> 1);
+      const baseY = Math.floor(random(rows)) * block + (block >> 1);
+      const driftOff = cluDrift > 0
+        ? (noise(i * 3.7 + nPhaseX * cluDrift * 0.01) - 0.5) * 2 * Math.min(width, height) * 0.5 * cluDrift
+        : 0;
+      const driftOffY = cluDrift > 0
+        ? (noise(i * 5.3 + nPhaseY * cluDrift * 0.01) - 0.5) * 2 * Math.min(width, height) * 0.5 * cluDrift
+        : 0;
+      centers.push({
+        x: (baseX + driftOff + width)  % width,
+        y: (baseY + driftOffY + height) % height,
+      });
     }
-    const per = Math.max(1, Math.floor(count / cluCenters));
+    return centers;
+  }
+
+  // ── Tile placement ───────────────────────────────────────────────────────
+  if (useCluTiles && cluCenters > 0) {
+    const centers = cluSpeed > 0 ? getPhysicsCenters() : getStaticCenters();
+
+    // cluBias: fraction of tiles forced into clusters; remainder placed randomly
+    const biasCount = Math.round(count * cluBias);
+    const per = Math.max(1, Math.floor(biasCount / cluCenters));
+
     for (const c of centers) {
-      for (let i = 0; i < per && targets.length < count; i++) {
-        const ang = random(TWO_PI), r = random(cluSpread);
-        const x   = (c[0] + Math.cos(ang) * r + width)  % width;
-        const y   = (c[1] + Math.sin(ang) * r + height) % height;
+      for (let i = 0; i < per && targets.length < biasCount; i++) {
+        const ang = random(TWO_PI);
+        // cluMinSpread: minimum cluster radius
+        const r = cluMinSpread + random(Math.max(1, cluSpread - cluMinSpread));
+        const x = (c.x + Math.cos(ang) * r + width)  % width;
+        const y = (c.y + Math.sin(ang) * r + height) % height;
         let ok = tryAdd(Math.floor(x), Math.floor(y)), tries = 0;
         while (!ok && tries++ < 6) {
-          const a2 = random(TWO_PI), r2 = random(cluSpread);
+          const a2 = random(TWO_PI);
+          const r2 = cluMinSpread + random(Math.max(1, cluSpread - cluMinSpread));
           ok = tryAdd(
-            Math.floor((c[0] + Math.cos(a2) * r2 + width)  % width),
-            Math.floor((c[1] + Math.sin(a2) * r2 + height) % height)
+            Math.floor((c.x + Math.cos(a2) * r2 + width)  % width),
+            Math.floor((c.y + Math.sin(a2) * r2 + height) % height)
           );
         }
       }
     }
+    // Fill remaining slots randomly
     let guard = 0;
     while (targets.length < count && guard++ < count * 4)
       tryAdd(Math.floor(random(cols)) * block, Math.floor(random(rows)) * block);
