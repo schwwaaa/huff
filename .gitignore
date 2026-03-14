@@ -3,6 +3,7 @@
 debug
 target
 src-tauri/target
+src-target/binaries
 artifacts
 node_modules
 
