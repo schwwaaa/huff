@@ -148,6 +148,8 @@
         .btn-dim  { border-color: rgba(255,70,70,.4); color: #ff7070; }
         .btn-dim:hover { background: rgba(255,70,70,.1); border-color: rgba(255,70,70,.7); }
         .btn-dim.midi-armed { background: #ff4646; border-color: #ff4646; color: #000; }
+        #recBtn.recording { background: rgba(255,60,60,.25); border-color: #ff4040; color: #ff5050; animation: rec-blink 1s step-start infinite; }
+        @keyframes rec-blink { 0%,100%{opacity:1} 50%{opacity:.45} }
 
         /* ── status pills (inline in topbar) ── */
         .pill {
@@ -401,6 +403,36 @@
             transition: border-color .05s, background .05s !important;
         }
 
+        /* ── Recording modal ───────────────────────────────────────────────── */
+        #recOverlay {
+            display: none; position: fixed; inset: 0; z-index: 1000;
+            background: rgba(0,0,0,.78); backdrop-filter: blur(10px);
+            align-items: center; justify-content: center;
+        }
+        #recOverlay.open { display: flex; }
+        #recBox {
+            position: relative; background: #090909;
+            border: 2px solid rgba(255,80,80,.5); border-radius: 14px;
+            padding: 24px 28px 22px; max-width: 460px; width: 94%; font-size: 12px;
+        }
+        #recBox h2 { font-size: 15px; font-weight: 900; letter-spacing: .12em; color: rgba(255,80,80,.9); text-transform: uppercase; margin: 0 0 4px; }
+        #recBox .rec-sub { font-size: 10px; color: rgba(255,255,255,.3); letter-spacing: .05em; margin-bottom: 18px; }
+        #recClose { position: absolute; top: 12px; right: 15px; background: none; border: none; font-size: 22px; color: rgba(255,255,255,.3); cursor: pointer; padding: 0; line-height: 1; }
+        #recClose:hover { color: #fff; }
+        .rec-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+        .rec-label { font-size: 10px; color: rgba(255,255,255,.35); letter-spacing: .05em; width: 68px; flex-shrink: 0; }
+        #recStatus { background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.08); border-radius: 8px; padding: 9px 12px; margin-bottom: 14px; font-size: 11px; color: rgba(255,255,255,.35); line-height: 1.5; white-space: pre-wrap; }
+        #recStatus.recording { color: rgba(255,80,80,.9);  border-color: rgba(255,80,80,.35); }
+        #recStatus.ok        { color: rgba(80,220,120,.9); border-color: rgba(80,220,120,.3); }
+        #recStatus.error     { color: #ff6060; }
+        #recToggleBtn { padding: 6px 18px; border-radius: 6px; border: none; cursor: pointer; font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; background: rgba(255,80,80,.2); color: rgba(255,80,80,.9); border: 1px solid rgba(255,80,80,.4); transition: background .15s; }
+        #recToggleBtn:hover  { background: rgba(255,80,80,.35); }
+        #recToggleBtn.active { background: rgba(255,80,80,.5); color: #fff; }
+        #recSnapBtn { padding: 6px 14px; border-radius: 6px; border: none; cursor: pointer; font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; background: rgba(255,255,255,.07); color: rgba(255,255,255,.7); border: 1px solid rgba(255,255,255,.15); transition: background .15s; }
+        #recSnapBtn:hover { background: rgba(255,255,255,.14); }
+        #recModeSelect, #recFpsSelect { background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.12); color: #e8eaf0; border-radius: 5px; padding: 3px 7px; font-size: 11px; }
+        #recFrameCount { font-size: 10px; color: rgba(255,80,80,.7); min-width: 80px; font-variant-numeric: tabular-nums; }
+
         /* file input tweak */
         input[type=file] { font-size: 11px; color: rgba(255,255,255,.55); max-width: 155px; }
     </style>
@@ -554,6 +586,43 @@
     </div>
 
     <!-- ═══ OSC Modal ════════════════════════════════════════════ -->
+    <!-- ═══ Recording modal ════════════════════════════════════ -->
+    <div id="recOverlay">
+      <div id="recBox">
+        <button id="recClose">×</button>
+        <h2>⏺ Record</h2>
+        <div class="rec-sub">Capture huff output · saved via Rust to a location you choose</div>
+        <div id="recStatus">Idle — press Start to begin recording.</div>
+        <div class="rec-row">
+          <span class="rec-label">Mode</span>
+          <select id="recModeSelect">
+            <option value="mp4">MP4 video (requires FFmpeg)</option>
+            <option value="mov">MOV video (requires FFmpeg)</option>
+            <option value="zip">ZIP archive (JPEG frames)</option>
+            <option value="sequence">Image sequence (folder)</option>
+          </select>
+        </div>
+        <div class="rec-row">
+          <span class="rec-label">FPS</span>
+          <select id="recFpsSelect">
+            <option value="24">24 fps</option>
+            <option value="30" selected>30 fps</option>
+            <option value="60">60 fps</option>
+          </select>
+        </div>
+        <div class="rec-row" style="margin-bottom:16px">
+          <button id="recToggleBtn">⏺ Start</button>
+          <button id="recSnapBtn">📷 Snapshot</button>
+          <span id="recFrameCount"></span>
+        </div>
+        <div style="font-size:10px;color:rgba(255,255,255,.25);line-height:1.9">
+          <strong style="color:rgba(255,255,255,.35)">MP4 / MOV</strong> — encodes via bundled FFmpeg at full canvas resolution.<br>
+          <strong style="color:rgba(255,255,255,.35)">ZIP / Sequence</strong> — raw JPEG frames, no FFmpeg needed.<br>
+          A native Save dialog opens when recording stops.
+        </div>
+      </div>
+    </div>
+
     <div id="oscOverlay">
       <div id="oscBox">
         <button id="oscClose">×</button>
@@ -605,6 +674,7 @@
                 <label style="font-size:9px;opacity:.5">VOL</label>
                 <input id="volumeSlider" type="range" min="0" max="1" step="0.01" value="1" style="width:60px">
             </div>
+            <button id="recBtn"     disabled>⏺ REC</button>
             <button id="refreshBtn" disabled>↻ Refresh</button>
             <button id="resetBtn" title="Reset all parameters to defaults">↺ Reset</button>
             <div class="topbar-sep"></div>
@@ -613,6 +683,7 @@
             <button id="camRefreshBtn">↻</button>
             <select id="cams" style="max-width:115px"></select>
             <div style="flex:1"></div>
+            <span class="pill" id="recPill" style="color:rgba(255,80,80,.6);border-color:rgba(255,80,80,.2);cursor:pointer" title="Open recording settings">REC: OFF</span>
             <span class="pill" id="status">WS: …</span>
             <span class="pill" id="midiPill" style="color:rgba(255,160,0,.7);border-color:rgba(255,160,0,.25);cursor:pointer" title="Open MIDI settings">MIDI: —</span>
             <span class="pill" id="oscPill"    style="color:rgba(80,220,120,.6);border-color:rgba(80,220,120,.2);cursor:pointer"  title="Open OSC settings">OSC: —</span>
@@ -2038,6 +2109,159 @@
                 invoke('get_osc_port').then(p => { pill.textContent = `OSC :${p}`; }).catch(() => {});
             }, 700);
         });
+
+    })();
+    </script>
+
+    <!-- ═══ Recording Engine ══════════════════════════════════════════════ -->
+    <script>
+    (() => {
+        'use strict';
+
+        const invoke = window.__TAURI__?.invoke;
+
+        const overlay      = document.getElementById('recOverlay');
+        const closeBtn     = document.getElementById('recClose');
+        const statusEl     = document.getElementById('recStatus');
+        const toggleBtn    = document.getElementById('recToggleBtn');
+        const snapBtn      = document.getElementById('recSnapBtn');
+        const modeSelect   = document.getElementById('recModeSelect');
+        const fpsSelect    = document.getElementById('recFpsSelect');
+        const frameCountEl = document.getElementById('recFrameCount');
+        const recBtnBar    = document.getElementById('recBtn');
+        const pill         = document.getElementById('recPill');
+
+        // ── modal ─────────────────────────────────────────────────────────────
+        const openModal  = () => overlay.classList.add('open');
+        const closeModal = () => overlay.classList.remove('open');
+        pill    ?.addEventListener('click', openModal);
+        closeBtn?.addEventListener('click', closeModal);
+        overlay ?.addEventListener('click', e => { if (e.target === overlay) closeModal(); });
+        window  .addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); }, true);
+
+        // ── state ─────────────────────────────────────────────────────────────
+        let recording   = false;
+        let frames      = [];
+        let captureNext = false;
+
+        // ── helpers ───────────────────────────────────────────────────────────
+        function setStatus(msg, cls = '') {
+            if (statusEl) { statusEl.textContent = msg; statusEl.className = cls; }
+        }
+        function updateCount() {
+            if (frameCountEl) frameCountEl.textContent = recording ? `${frames.length} frame${frames.length !== 1 ? 's' : ''} buffered` : '';
+        }
+        function setPill(on) {
+            if (!pill) return;
+            pill.textContent      = on ? 'REC ●' : 'REC: OFF';
+            pill.style.color      = on ? 'rgba(255,80,80,.95)' : 'rgba(255,80,80,.6)';
+            pill.style.borderColor= on ? 'rgba(255,80,80,.5)'  : 'rgba(255,80,80,.2)';
+        }
+        function timestamp() {
+            const n = new Date(), p = v => String(v).padStart(2,'0');
+            return `${n.getFullYear()}${p(n.getMonth()+1)}${p(n.getDate())}-${p(n.getHours())}${p(n.getMinutes())}${p(n.getSeconds())}`;
+        }
+
+        // ── public API (called from canvas.js sendFrame) ──────────────────────
+        window.recorder = {
+            isActive() { return recording || captureNext; },
+
+            captureBlob(blob) {
+                if (!blob) return;
+                if (captureNext) {
+                    captureNext = false;
+                    blob.arrayBuffer().then(buf => doSnapshot(new Uint8Array(buf)));
+                    return;
+                }
+                if (!recording) return;
+                blob.arrayBuffer().then(buf => {
+                    frames.push(Array.from(new Uint8Array(buf)));
+                    updateCount();
+                });
+            },
+
+            start() {
+                if (recording) return;
+                frames = []; recording = true;
+                toggleBtn.textContent = '⏹ Stop & Save';
+                toggleBtn.classList.add('active');
+                recBtnBar?.classList.add('recording');
+                setPill(true);
+                setStatus('Recording… frames are buffering in memory.', 'recording');
+                updateCount();
+            },
+
+            stop() {
+                if (!recording) return;
+                recording = false;
+                toggleBtn.textContent = '⏺ Start';
+                toggleBtn.classList.remove('active');
+                recBtnBar?.classList.remove('recording');
+                setPill(false);
+                updateCount();
+                doSave();
+            },
+
+            snapshot() {
+                if (recording) return;
+                captureNext = true;
+                setStatus('Capturing next frame as snapshot…');
+            }
+        };
+
+        // ── topbar REC button — open modal when idle, stop when recording ──────
+        recBtnBar?.addEventListener('click', () => {
+            if (!recording) openModal();
+            else { window.recorder.stop(); closeModal(); }
+        });
+
+        toggleBtn?.addEventListener('click', () => {
+            recording ? window.recorder.stop() : window.recorder.start();
+        });
+
+        snapBtn?.addEventListener('click', () => window.recorder.snapshot());
+
+        // ── save to disk via Rust ─────────────────────────────────────────────
+        async function doSnapshot(bytes) {
+            if (!invoke) { setStatus('Snapshot requires the Tauri app.', 'error'); return; }
+            setStatus('Opening save dialog…');
+            try {
+                const path = await invoke('save_single_frame', {
+                    data: Array.from(bytes),
+                    filename: `huff-snap-${timestamp()}.jpg`
+                });
+                if (!path) { setStatus('Snapshot cancelled.'); return; }
+                setStatus(`Snapshot saved:\n${path}`, 'ok');
+            } catch(e) { setStatus(`Snapshot failed: ${e}`, 'error'); }
+        }
+
+        async function doSave() {
+            if (frames.length === 0) { setStatus('No frames recorded.'); return; }
+            if (!invoke) { setStatus('Save requires the Tauri app.', 'error'); frames = []; return; }
+            const mode = modeSelect?.value || 'mp4';
+            const fps  = parseInt(fpsSelect?.value || '30', 10);
+            const ts   = timestamp();
+            setStatus(`Opening save dialog… (${frames.length} frames)`);
+            try {
+                let path;
+                if (mode === 'mp4' || mode === 'mov') {
+                    path = await invoke('save_recording_video', {
+                        frames, fps, format: mode,
+                        suggestedName: `huff-rec-${ts}.${mode}`
+                    });
+                } else if (mode === 'zip') {
+                    path = await invoke('save_recording', { frames, archiveName: `huff-rec-${ts}.zip` });
+                } else {
+                    path = await invoke('save_recording_sequence', { frames, folderName: `huff-seq-${ts}` });
+                }
+                if (!path) setStatus('Save cancelled — frames discarded.');
+                else       setStatus(`Saved ${frames.length} frames:\n${path}`, 'ok');
+            } catch(e) {
+                setStatus(`Save failed: ${e}`, 'error');
+            } finally { frames = []; }
+        }
+
+        if (!invoke) setStatus('Recording requires the Tauri app — not available in browser preview.', 'error');
 
     })();
     </script>

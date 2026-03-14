@@ -14,6 +14,8 @@ extern crate objc;
 #[cfg(target_os = "macos")]
 mod syphon;
 
+mod recording;
+
 use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 
 use futures_util::{SinkExt, StreamExt};
@@ -440,6 +442,10 @@ tauri::Builder::default()
       start_syphon,
       stop_syphon,
       syphon_status,
+      recording::save_single_frame,
+      recording::save_recording,
+      recording::save_recording_sequence,
+      recording::save_recording_video,
   ])
   .setup(|app| {
       const PORT: u16 = 8787;
