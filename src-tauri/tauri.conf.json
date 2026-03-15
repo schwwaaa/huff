@@ -15,13 +15,6 @@
   },
 
   "tauri": {
-    "allowlist": {
-      "shell": {
-        "sidecar": true,
-        "all": false
-      }
-    },
-
     "windows": [
       {
         "label": "main",
@@ -50,9 +43,6 @@
         "icons/icon.icns",
         "icons/icon.png",
         "icons/icon.ico"
-      ],
-      "externalBin": [
-        "binaries/ffmpeg"
       ],
       "macOS": {
         "entitlements": "src-tauri/entitlements.plist",

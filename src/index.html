@@ -2149,20 +2149,21 @@
             if (statusEl) { statusEl.textContent = msg; statusEl.className = cls; }
         }
         function updateCount() {
-            if (frameCountEl) frameCountEl.textContent = recording ? `${frames.length} frame${frames.length !== 1 ? 's' : ''} buffered` : '';
+            if (frameCountEl) frameCountEl.textContent = recording
+                ? `${frames.length} frame${frames.length !== 1 ? 's' : ''} buffered` : '';
         }
         function setPill(on) {
             if (!pill) return;
-            pill.textContent      = on ? 'REC ●' : 'REC: OFF';
-            pill.style.color      = on ? 'rgba(255,80,80,.95)' : 'rgba(255,80,80,.6)';
-            pill.style.borderColor= on ? 'rgba(255,80,80,.5)'  : 'rgba(255,80,80,.2)';
+            pill.textContent       = on ? 'REC ●' : 'REC: OFF';
+            pill.style.color       = on ? 'rgba(255,80,80,.95)' : 'rgba(255,80,80,.6)';
+            pill.style.borderColor = on ? 'rgba(255,80,80,.5)'  : 'rgba(255,80,80,.2)';
         }
         function timestamp() {
             const n = new Date(), p = v => String(v).padStart(2,'0');
             return `${n.getFullYear()}${p(n.getMonth()+1)}${p(n.getDate())}-${p(n.getHours())}${p(n.getMinutes())}${p(n.getSeconds())}`;
         }
 
-        // ── public API (called from canvas.js sendFrame) ──────────────────────
+        // ── public API — called from canvas.js sendFrame() ────────────────────
         window.recorder = {
             isActive() { return recording || captureNext; },
 
@@ -2209,7 +2210,7 @@
             }
         };
 
-        // ── topbar REC button — open modal when idle, stop when recording ──────
+        // ── topbar REC button — open modal when idle, stop when recording ─────
         recBtnBar?.addEventListener('click', () => {
             if (!recording) openModal();
             else { window.recorder.stop(); closeModal(); }
