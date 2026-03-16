@@ -1,0 +1,64 @@
+<svg viewBox="0 0 720 220" xmlns="http://www.w3.org/2000/svg" font-family="'SF Mono', 'Fira Code', monospace">
+  <defs>
+    <marker id="a4" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 Z" fill="rgba(255,255,255,0.4)"/>
+    </marker>
+    <marker id="a4r" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#ff4444"/>
+    </marker>
+  </defs>
+
+  <rect width="720" height="220" fill="#0d0d0f" rx="12"/>
+  <text x="360" y="28" text-anchor="middle" fill="#ff4444" font-size="12" font-weight="700" letter-spacing="2">FRAME RING BUFFER</text>
+
+  <!-- Ring slots -->
+  <!-- Current frame (being built) -->
+  <rect x="20" y="50" width="70" height="90" rx="5" fill="rgba(255,68,68,0.18)" stroke="#ff4444" stroke-width="2"/>
+  <text x="55" y="88" text-anchor="middle" fill="#ff4444" font-size="9" font-weight="700">current</text>
+  <text x="55" y="102" text-anchor="middle" fill="rgba(255,68,68,0.7)" font-size="8">(building)</text>
+  <text x="55" y="154" text-anchor="middle" fill="rgba(255,255,255,0.2)" font-size="7.5">t</text>
+
+  <!-- t-1 -->
+  <rect x="105" y="50" width="70" height="90" rx="5" fill="rgba(255,255,255,0.1)" stroke="rgba(255,255,255,0.35)" stroke-width="1.5"/>
+  <text x="140" y="92" text-anchor="middle" fill="rgba(255,255,255,0.8)" font-size="9" font-weight="700">[t-1]</text>
+  <text x="140" y="106" text-anchor="middle" fill="rgba(255,255,255,0.3)" font-size="7.5">prev frame</text>
+  <text x="140" y="154" text-anchor="middle" fill="rgba(255,255,255,0.35)" font-size="7.5">DEPTH 0</text>
+
+  <!-- t-2 -->
+  <rect x="190" y="55" width="70" height="80" rx="5" fill="rgba(255,255,255,0.07)" stroke="rgba(255,255,255,0.25)" stroke-width="1"/>
+  <text x="225" y="93" text-anchor="middle" fill="rgba(255,255,255,0.6)" font-size="9">[t-2]</text>
+  <text x="225" y="154" text-anchor="middle" fill="rgba(255,255,255,0.25)" font-size="7.5">DEPTH 0.03</text>
+
+  <!-- t-3 -->
+  <rect x="275" y="60" width="70" height="70" rx="5" fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.18)" stroke-width="1"/>
+  <text x="310" y="95" text-anchor="middle" fill="rgba(255,255,255,0.45)" font-size="9">[t-3]</text>
+  <text x="310" y="154" text-anchor="middle" fill="rgba(255,255,255,0.2)" font-size="7.5">···</text>
+
+  <!-- t-N/2 -->
+  <rect x="360" y="65" width="70" height="60" rx="5" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.12)" stroke-width="1"/>
+  <text x="395" y="97" text-anchor="middle" fill="rgba(255,255,255,0.3)" font-size="9">[t-N/2]</text>
+  <text x="395" y="154" text-anchor="middle" fill="rgba(255,255,255,0.18)" font-size="7.5">DEPTH 0.5</text>
+
+  <!-- dots -->
+  <text x="465" y="100" fill="rgba(255,255,255,0.2)" font-size="14">···</text>
+
+  <!-- t-N -->
+  <rect x="510" y="70" width="70" height="55" rx="5" fill="rgba(255,255,255,0.02)" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+  <text x="545" y="100" text-anchor="middle" fill="rgba(255,255,255,0.2)" font-size="9">[t-N]</text>
+  <text x="545" y="154" text-anchor="middle" fill="rgba(255,255,255,0.15)" font-size="7.5">192MB cap</text>
+
+  <!-- Arrow showing ring push direction -->
+  <line x1="595" y1="95" x2="630" y2="95" stroke="rgba(255,255,255,0.15)" stroke-width="1"/>
+  <path d="M630,80 Q680,80 680,95 Q680,145 640,155 Q560,165 20,155 Q5,154 5,140 L5,95 Q5,80 20,80 L25,80" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#a4)"/>
+  <text x="686" y="118" fill="rgba(255,255,255,0.15)" font-size="8" transform="rotate(90,686,118)">ring wraps</text>
+
+  <!-- Quality annotation -->
+  <rect x="20" y="168" width="310" height="38" rx="5" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+  <text x="175" y="183" text-anchor="middle" fill="rgba(255,255,255,0.5)" font-size="8.5" font-weight="700">QUALITY SLIDER → ring depth</text>
+  <text x="175" y="197" text-anchor="middle" fill="rgba(255,255,255,0.3)" font-size="8">0 = 4 frames  ·  0.5 = 30 frames  ·  1.0 = 60 frames (or 192MB cap)</text>
+
+  <!-- Depth annotation -->
+  <rect x="345" y="168" width="360" height="38" rx="5" fill="rgba(255,68,68,0.06)" stroke="rgba(255,68,68,0.2)" stroke-width="1"/>
+  <text x="525" y="183" text-anchor="middle" fill="rgba(255,68,68,0.7)" font-size="8.5" font-weight="700">DEPTH + SCATTER → which slot effects read</text>
+  <text x="525" y="197" text-anchor="middle" fill="rgba(255,255,255,0.3)" font-size="8">DEPTH 0 = only [t-1]  ·  DEPTH 0.5 = up to [t-N/2]  ·  SCATTER = per-tile randomisation</text>
+</svg>

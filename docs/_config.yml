@@ -1,0 +1,44 @@
+title: huff
+description: Real-time datamosh & glitch-art for desktop. Tauri · p5.js · Rust · Syphon · Spout · MIDI · OSC.
+baseurl: "/huff"
+url: "https://your-org.github.io"
+
+# Remote theme — builds on GitHub Pages without local install
+remote_theme: jekyll/minima@v2.5.1
+
+# Minima skin: "auto" follows system dark/light preference
+minima:
+  skin: dark
+
+# Navigation order for the sidebar / header links
+header_pages:
+  - index.md
+  - how-it-works.md
+  - installation.md
+  - interface.md
+  - midi.md
+  - osc.md
+  - output.md
+  - parameter-reference.md
+  - architecture.md
+  - caveats.md
+  - troubleshooting.md
+
+plugins:
+  - jekyll-remote-theme
+  - jekyll-seo-tag
+  - jekyll-sitemap
+
+# Markdown renderer
+markdown: kramdown
+highlighter: rouge
+kramdown:
+  input: GFM
+  syntax_highlighter: rouge
+
+# Exclude build artefacts
+exclude:
+  - Gemfile
+  - Gemfile.lock
+  - node_modules
+  - vendor

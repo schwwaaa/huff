@@ -1,0 +1,151 @@
+---
+---
+
+@import "minima";
+
+/* ── huff docs custom styles ─────────────────────────────────────────────── */
+
+/* Accent colour — huff red */
+:root {
+  --huff-red:    #ff4444;
+  --huff-dim:    rgba(255, 68, 68, 0.15);
+  --huff-border: rgba(255, 255, 255, 0.08);
+}
+
+/* Page header accent line */
+.site-header {
+  border-top: 3px solid var(--huff-red);
+}
+
+/* Site title */
+.site-title,
+.site-title:visited {
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--huff-red) !important;
+}
+
+/* Navigation links */
+.page-link {
+  font-size: 0.85rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* Headings */
+h1, h2, h3 {
+  letter-spacing: -0.01em;
+}
+
+h2 {
+  border-bottom: 1px solid var(--huff-border);
+  padding-bottom: 0.35em;
+  margin-top: 2.5rem;
+}
+
+/* Inline code */
+code {
+  font-size: 0.82em;
+  border-radius: 3px;
+}
+
+/* Tables */
+table {
+  font-size: 0.88rem;
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.5rem 0;
+}
+
+th {
+  background: var(--huff-dim);
+  color: var(--huff-red);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 8px 12px;
+  text-align: left;
+}
+
+td {
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--huff-border);
+  vertical-align: top;
+}
+
+tr:last-child td {
+  border-bottom: none;
+}
+
+/* Diagrams */
+.diagram-wrap {
+  margin: 2rem 0;
+  overflow-x: auto;
+}
+
+.diagram-wrap svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+/* Image placeholders */
+.img-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 8px;
+  background: rgba(255,255,255,0.03);
+  border: 2px dashed rgba(255,68,68,0.3);
+  border-radius: 8px;
+  padding: 40px 20px;
+  margin: 2rem 0;
+  color: rgba(255,255,255,0.3);
+  font-size: 0.85rem;
+  font-family: monospace;
+  text-align: center;
+  min-height: 180px;
+}
+
+.img-placeholder .ph-label {
+  font-size: 1rem;
+  color: var(--huff-red);
+  opacity: 0.7;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+/* Callout boxes */
+.callout {
+  border-left: 3px solid var(--huff-red);
+  background: var(--huff-dim);
+  padding: 12px 16px;
+  border-radius: 0 6px 6px 0;
+  margin: 1.5rem 0;
+  font-size: 0.9rem;
+}
+
+.callout.note {
+  border-left-color: #4488ff;
+  background: rgba(68, 136, 255, 0.08);
+}
+
+.callout.warning {
+  border-left-color: #ffaa00;
+  background: rgba(255, 170, 0, 0.08);
+}
+
+/* Badge strip */
+.badge-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 1rem 0 2rem;
+}
+
+/* Pre/code blocks */
+pre {
+  font-size: 0.82rem;
+  border-radius: 6px;
+}
