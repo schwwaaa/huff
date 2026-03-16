@@ -1,7 +1,5 @@
 
 
----
-# huff
 
 <p align="center">
   <img width="300px" height="950px" src="https://github.com/schwwaaa/huff/blob/beta/src-tauri/icons/icon.png?raw=true"/>  
@@ -9,11 +7,6 @@
 
 <p align="center">
   <strong>Real-time datamosh &amp; glitch-art for desktop.</strong><br/>
-  Tauri · p5.js · Rust · Syphon · Spout · MIDI · OSC
-
-
-<p align="center"><em>A real-time datamosh / glitch-art desktop application built with Tauri + p5.js.</em></p>
-
 </p>
 
 <p align="center">
@@ -27,6 +20,8 @@
 
 ## What is huff?
 
+  <em>Tauri · p5.js · Rust · Syphon · Spout · MIDI · OSC</em>
+  
 huff is a desktop application for creating real-time datamosh, glitch-art, and feedback effects. Load a video file or connect a webcam, then sculpt the image through a live effect chain — datamosh tile displacement, feedback loops, flow warps, symmetry folds, solarise, scanline corruption, and ghost trails.
 
 It ships with a two-window architecture: a **controls panel** and a separate **fullscreen output window** that receives the processed frames over a local WebSocket relay. The output window can be recorded, mirrored to a projector, or shared directly to VJ software via **Syphon** (macOS) or **Spout** (Windows).
