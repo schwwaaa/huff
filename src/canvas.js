@@ -111,7 +111,7 @@ function clearAll() {
 
 function hookUI() {
   [
-    'file','playBtn','recBtn','refreshBtn','resetBtn',
+    'file','playBtn','refreshBtn','resetBtn',
     'camStartBtn','camStopBtn','camRefreshBtn','cams','corruptOn',
     'quality','qualityVal','depth','depthVal','corrupt','corruptVal','block','blockVal',
     'glitchSpeed','glitchSpeedVal','glitchSpeedFine','glitchSpeedFineVal',
@@ -340,7 +340,7 @@ function onFile(ev) {
 }
 
 function enableTransport(en) {
-  ['playBtn','pauseBtn','recBtn','refreshBtn'].forEach(id => {
+  ['playBtn','pauseBtn','refreshBtn'].forEach(id => {
     const b = document.getElementById(id); if (b) b.disabled = !en;
   });
 }
@@ -547,7 +547,6 @@ function startCamera(deviceId) {
 // ─── ws-mirror ───────────────────────────────────────────────────────────────
 (function() {
   const STREAM_MAX_W=1280, STREAM_MAX_H=1280, STREAM_Q=0.76, TARGET_FPS=30;
-  const rcv=document.createElement('canvas'), rtx=rcv.getContext('2d',{alpha:false});
   function setWSStatus(txt) { const el=$('status'); if(el) el.textContent=txt; }
   function findCanvas() {
     try { if(typeof canvas!=='undefined'&&canvas?.elt instanceof HTMLCanvasElement) return canvas.elt; } catch {}
@@ -580,12 +579,6 @@ function startCamera(deviceId) {
       if (tcv.width!==tw||tcv.height!==th){tcv.width=tw;tcv.height=th;}
       ttx.drawImage(cnv,0,0,tw,th);
       await new Promise(r=>tcv.toBlob(b=>{try{if(b)ws.send(b);}catch{}r();},'image/jpeg',STREAM_Q));
-      // Full-res capture for recorder (bypasses the 1280px WS stream cap)
-      if (window.recorder?.isActive()) {
-        if (rcv.width!==cnv.width||rcv.height!==cnv.height){rcv.width=cnv.width;rcv.height=cnv.height;}
-        rtx.drawImage(cnv,0,0);
-        await new Promise(r=>rcv.toBlob(b=>{try{if(b)window.recorder.captureBlob(b);}catch{}r();},'image/jpeg',0.92));
-      }
     } finally { sending=false; }
   }
   const period=1000/TARGET_FPS; let last=0;

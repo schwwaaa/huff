@@ -14,6 +14,8 @@ extern crate objc;
 #[cfg(target_os = "macos")]
 mod syphon;
 
+mod spout;
+
 use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 
 use futures_util::{SinkExt, StreamExt};
@@ -365,7 +367,19 @@ async fn handle_ws(
             }
           }
 
-          #[cfg(not(target_os = "macos"))]
+          // Windows: intercept Spout frames before relaying
+          #[cfg(target_os = "windows")]
+          if bin.starts_with(b"HUFFSPOUT") {
+            spout::push_frame(&bin);
+            // do NOT relay spout frames to the canvas window
+          } else {
+            let sent = broadcast_binary(&clients_r, peer_addr, bin).await;
+            if sent == 0 {
+              println!("[huff] binary from {peer_addr}, but no canvas clients yet");
+            }
+          }
+
+          #[cfg(not(any(target_os = "macos", target_os = "windows")))]
           {
             let sent = broadcast_binary(&clients_r, peer_addr, bin).await;
             if sent == 0 {
@@ -428,6 +442,38 @@ fn syphon_status() -> String {
     { "unavailable (macOS only)".into() }
 }
 
+// ── Spout commands (Windows only) ─────────────────────────────────────────────
+
+#[command]
+fn start_spout(width: u32, height: u32) -> Result<String, String> {
+    #[cfg(target_os = "windows")]
+    {
+        spout::start(width, height)?;
+        Ok(format!("Spout sender started — {}×{}", width, height))
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (width, height);
+        Err("Spout is Windows-only".into())
+    }
+}
+
+#[command]
+fn stop_spout() -> String {
+    #[cfg(target_os = "windows")]
+    { spout::stop(); "Spout sender stopped".into() }
+    #[cfg(not(target_os = "windows"))]
+    { "Spout is Windows-only".into() }
+}
+
+#[command]
+fn spout_status() -> String {
+    #[cfg(target_os = "windows")]
+    { spout::status() }
+    #[cfg(not(target_os = "windows"))]
+    { "unavailable (Windows only)".into() }
+}
+
 fn main() {
 tauri::Builder::default()
   .invoke_handler(tauri::generate_handler![
@@ -440,6 +486,9 @@ tauri::Builder::default()
       start_syphon,
       stop_syphon,
       syphon_status,
+      start_spout,
+      stop_spout,
+      spout_status,
   ])
   .setup(|app| {
       const PORT: u16 = 8787;
