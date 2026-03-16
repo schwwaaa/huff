@@ -1,431 +1,865 @@
+
+
+---
+# huff
+
 <p align="center">
   <img width="300px" height="950px" src="https://github.com/schwwaaa/huff/blob/beta/src-tauri/icons/icon.png?raw=true"/>  
 </p>
 
+<p align="center">
+  <strong>Real-time datamosh &amp; glitch-art for desktop.</strong><br/>
+  Tauri · p5.js · Rust · Syphon · Spout · MIDI · OSC
+
+
 <p align="center"><em>A real-time datamosh / glitch-art desktop application built with Tauri + p5.js.</em></p>
+
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/version-1.0.2--beta-ff4444?style=flat-square"/>
+  <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey?style=flat-square"/>
+  <img src="https://img.shields.io/badge/Tauri-v1-blueviolet?style=flat-square"/>
+  <img src="https://img.shields.io/badge/license-ISC-green?style=flat-square"/>
+</p>
+
+---
+
+## What is huff?
+
+huff is a desktop application for creating real-time datamosh, glitch-art, and feedback effects. Load a video file or connect a webcam, then sculpt the image through a live effect chain — datamosh tile displacement, feedback loops, flow warps, symmetry folds, solarise, scanline corruption, and ghost trails.
+
+It ships with a two-window architecture: a **controls panel** and a separate **fullscreen output window** that receives the processed frames over a local WebSocket relay. The output window can be recorded, mirrored to a projector, or shared directly to VJ software via **Syphon** (macOS) or **Spout** (Windows).
+
+huff is built for **performers and artists** who want a tool that behaves predictably under pressure — MIDI-mappable, OSC-receivable, and hot-swappable mid-set.
 
 ---
 
 ## Table of Contents
 
 - [Features](#features)
+- [How it Works](#how-it-works)
+  - [Effect Pipeline Diagram](#effect-pipeline-diagram)
+  - [UI → Effect Flow](#ui--effect-flow)
+  - [Frame Output Pipeline](#frame-output-pipeline)
+- [Installation](#installation)
+  - [macOS](#macos)
+  - [Windows](#windows)
+- [Building from Source](#building-from-source)
+- [The Interface](#the-interface)
+  - [Source Group](#source-group)
+  - [Glitch Group](#glitch-group)
+  - [Feedback Group](#feedback-group)
+  - [Scanlines Group](#scanlines-group)
+  - [Clusters Group](#clusters-group)
+  - [Solarize Group](#solarize-group)
+  - [Flow Warp Group](#flow-warp-group)
+  - [Symmetry Group](#symmetry-group)
+  - [Trails Group](#trails-group)
+  - [Presets](#presets)
+  - [Keyboard Shortcuts](#keyboard-shortcuts)
+- [MIDI](#midi)
+  - [Connecting a Device](#connecting-a-device)
+  - [MIDI Map Format](#midi-map-format)
+  - [Bundled Maps](#bundled-maps)
+  - [Virtual MIDI (IAC / loopMIDI)](#virtual-midi)
+- [OSC](#osc)
+  - [Setup](#osc-setup)
+  - [OSC Map Format](#osc-map-format)
+  - [Sending from Software](#sending-from-software)
+  - [TouchOSC](#touchosc)
+- [Video Output](#video-output)
+  - [Syphon (macOS)](#syphon-macos)
+  - [Spout (Windows)](#spout-windows)
+  - [Canvas Mirror Window](#canvas-mirror-window)
+- [Parameter Reference](#parameter-reference)
+- [Presets Reference](#presets-reference)
 - [Architecture](#architecture)
-- [Prerequisites](#prerequisites)
-  - [All Platforms](#all-platforms)
-  - [macOS](#macos-extra)
-  - [Windows](#windows-extra)
-  - [Linux](#linux-extra)
-- [Development Build](#development-build)
-- [Production Build](#production-build)
-  - [macOS – Universal DMG](#macos--universal-dmg)
-  - [Windows – EXE / MSI / NSIS](#windows--exe--msi--nsis)
-  - [Linux – AppImage / deb](#linux--appimage--deb)
-- [Project Structure](#project-structure)
-- [Effect Controls Reference](#effect-controls-reference)
-- [WebSocket Relay](#websocket-relay)
 - [Performance Notes](#performance-notes)
+- [Caveats and Known Limitations](#caveats-and-known-limitations)
 - [Troubleshooting](#troubleshooting)
 
 ---
 
-Load a video file or plug in a webcam, then sculpt live datamoshing, feedback loops, flow warps, symmetry, solarise, scanline corruption, and more — all streamed in real time to a separate fullscreen canvas window via an embedded WebSocket relay.
-
 ## Features
 
-- **Datamosh / glitch tiles** — temporal tile displacement sampled from a frame ring buffer
-- **Feedback loop** — zoom/rotate/translate the buffer back onto itself each frame
-- **Flow warp** — noise-driven optical-flow distortion with pulse and implosion modes
-- **Symmetry** — vertical, horizontal, or both, with adjustable axis position
-- **Solarise** — luminance-threshold inversion with per-channel RGB tinting
-- **Scanline bands** — drifting horizontal displacement bands sampled from past frames
-- **Trail accordion** — stacked ghost frames for motion-smear effects
+- **Datamosh / glitch tiles** — temporal tile displacement sampled from a 60-frame ring buffer with cluster physics, spatial gap, smear, and depth scatter
+- **Feedback loop** — zoom, translate X/Y, and rotate the buffer back onto itself each frame
+- **Flow warp** — noise-field optical-flow UV distortion with pulse (sample from N frames back) and implosion modes
+- **Symmetry** — vertical, horizontal, or both axes with a moveable split position
+- **Solarise** — luminance-threshold colour inversion with per-channel R/G/B tinting
+- **Scanline bands** — drifting horizontal displacement bands sampled from past frames, with gap quantisation and skew
+- **Trails** — stacked ghost frames with luma keying for motion-smear
 - **Camera input** — live webcam feed alongside or instead of video files
-- **Canvas mirror** — second window (or popup) that receives the composited frame over WebSocket at up to 30 fps
-- **Keyboard shortcuts** — `P` toggles the control panel; `F` toggles fullscreen
+- **Syphon output (macOS)** — zero-install Metal texture sharing to Resolume, VDMX, MadMapper, CoGe, Millumin, and any Syphon receiver
+- **Spout output (Windows)** — D3D11 texture sharing to Resolume Arena, TouchDesigner, MadMapper, and any Spout2 receiver
+- **MIDI** — full CC/note input via native Rust `midir`; JSON-format map files; supports hardware controllers and virtual ports
+- **OSC** — UDP listener on port 9000; JSON-format map files; works with TouchOSC, Max/MSP, Pure Data, SuperCollider, TouchDesigner
+- **Presets** — save and recall named snapshots of all parameters; 7 factory presets included
+- **Two-window output** — controls panel + separate fullscreen canvas window via embedded WebSocket relay
+- **Hot-key control** — `P` toggles the control panel; `F` toggles fullscreen on the output window
+
+---
+
+## How it Works
+
+### Effect Pipeline Diagram
+
+Each frame, huff runs the source material through up to eight independent effect passes. Each pass is optional and independently toggleable. The order is fixed — the output of one pass feeds the next.
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                         SOURCE                                   │
+│          video file  ·  webcam  ·  frame ring seed               │
+└────────────────────────────┬─────────────────────────────────────┘
+                             │
+                             ▼
+┌──────────────────────────────────────────────────────────────────┐
+│                      FRAME RING BUFFER                           │
+│   Stores last N frames as ImageData (capped at 192 MB)          │
+│   N = quality × 60, max 60 frames at quality=1                  │
+└────┬──────┬──────┬──────┬──────┬──────┬──────┬──────────────────┘
+     │      │      │      │      │      │      │
+     ▼      ▼      ▼      ▼      ▼      ▼      ▼
+  [t-1]  [t-2]  [t-3]  ...  [t-N]
+     │
+     ▼  (each pass reads the ring; writes to gBuf)
+┌─────────────────────────────────────────────────────────────────┐
+│  PASS 1  TRAILS        ghost frames composited under current    │
+│  PASS 2  FEEDBACK      zoom/translate/rotate feedback blit      │
+│  PASS 3  GLITCH        tile displacement from ring frames       │
+│  PASS 4  SCANLINES     drifting horizontal band displacement    │
+│  PASS 5  FLOW WARP     noise UV distortion                      │
+│  PASS 6  SOLARIZE      luma-threshold colour inversion          │
+│  PASS 7  SYMMETRY      mirror fold at axis                      │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+                             ▼
+┌──────────────────────────────────────────────────────────────────┐
+│                       OUTPUT FRAME                               │
+├──────────────────────────────────────────────────────────────────┤
+│  → Canvas window (WebSocket JPEG relay, port 8787)              │
+│  → Syphon server  (macOS — Metal texture upload)                │
+│  → Spout sender   (Windows — D3D11 texture upload)              │
+│  → Screen (controls window preview)                             │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+### UI → Effect Flow
+
+The controls window (`index.html`) runs inside the Tauri WebView. Every slider, checkbox, and input reads its value through the `els` object (a DOM lookup cache). The p5.js draw loop runs at the browser's frame rate and queries `els` directly — there is no intermediate state synchronisation layer.
+
+```
+┌──────────────────────────────────────────┐
+│          Controls Panel (WebView)        │
+│                                          │
+│  slider → input event                   │
+│       ↓                                  │
+│  els.corrupt.value  (live DOM read)     │
+│       ↓                                  │
+│  p5 draw() loop  (requestAnimationFrame) │
+│       ↓                                  │
+│  applyGlitch(density, baseDX, baseDY)   │
+│       ↓                                  │
+│  drawRingRegion() per tile              │
+└──────────────────────────────────────────┘
+
+  MIDI CC received → midir (Rust)
+       ↓
+  Tauri "midi-event" event emitted
+       ↓
+  canvas.js onmessage handler
+       ↓
+  DOM element value updated
+       ↓
+  Next draw() frame picks it up (no delay)
+
+  OSC UDP packet → rosc (Rust)
+       ↓
+  Tauri "osc-message" event emitted
+       ↓
+  canvas.js onmessage handler
+       ↓
+  DOM element value updated  ──→  same path as MIDI
+```
+
+MIDI and OSC both write to the same DOM elements as the sliders. There is intentionally no difference between moving a slider manually and receiving a CC or OSC message — they all converge on the same element value, and the draw loop reads that value on the next frame.
+
+### Frame Output Pipeline
+
+huff uses a single shared canvas as the source of truth for all output routes. The output pass happens at the end of each `draw()` call.
+
+```
+  p5 gBuf (effect chain output)
+          │
+          ├──→  Canvas window preview (drawn directly to screen)
+          │
+          ├──→  WebSocket mirror (canvas.html)
+          │       JPEG-encoded at quality × 0.82
+          │       sent as binary WS message to port 8787
+          │       canvas.html drawImage() from blob URL
+          │
+          ├──→  Syphon (macOS only, when enabled)
+          │       getImageData() → raw RGBA bytes
+          │       prepend "HUFFSYPH" + width + height header
+          │       binary WS to port 8787
+          │       Rust relay intercepts on b"HUFFSYPH"
+          │       syphon::push_frame() → MTLTexture upload
+          │       SyphonMetalServer.publishFrameTexture()
+          │
+          └──→  Spout (Windows only, when enabled)
+                  getImageData() → raw RGBA bytes
+                  prepend "HUFFSPOUT" + width + height header
+                  binary WS to port 8787
+                  Rust relay intercepts on b"HUFFSPOUT"
+                  spout::push_frame() → spoutdx_send_image()
+                  SpoutDX D3D11 UpdateSubresource
+```
+
+The "HUFFSYPH" and "HUFFSPOUT" magic byte prefixes allow the Rust relay to distinguish platform output frames from normal canvas mirror frames on the same WebSocket connection, without requiring a separate port or connection.
+
+---
+
+## Installation
+
+### macOS
+
+1. Download `huff-1.0.2-universal.dmg` from the [Releases](../../releases) page.
+2. Open the DMG and drag **huff** to your Applications folder.
+3. On first launch, macOS may show a Gatekeeper warning because the app is not notarised. Right-click the app icon → **Open** → **Open** to bypass this once.
+4. Grant camera access when prompted (required for webcam input).
+
+No additional software is needed for Syphon — the framework is bundled inside the app.
+
+### Windows
+
+1. Download `huff-1.0.2-x64-setup.exe` or the MSI from the [Releases](../../releases) page.
+2. Run the installer. Windows SmartScreen may warn about an unsigned binary — click **More info → Run anyway**.
+3. If you plan to use Spout output, install the [Spout2 runtime](https://spout.zeal.co/) from the Spout website.
+4. [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/) is required on Windows 10 (pre-installed on Windows 11).
+
+---
+
+## Building from Source
+
+### Prerequisites
+
+| Tool | Version | Notes |
+|------|---------|-------|
+| Node.js | ≥ 18 LTS | [nodejs.org](https://nodejs.org) |
+| Rust + Cargo | stable | `rustup` |
+| Tauri CLI | 1.x | installed via `npm install` |
+
+**macOS:** Xcode Command Line Tools (`xcode-select --install`)
+
+**Windows:** [Build Tools for Visual Studio](https://visualstudio.microsoft.com/visual-cpp-build-tools/) with **Desktop development with C++**. Add the MSVC Rust target: `rustup target add x86_64-pc-windows-msvc`.
+
+**Linux:** WebKitGTK development libraries. See [Tauri Linux prerequisites](https://tauri.app/v1/guides/getting-started/prerequisites/#setting-up-linux).
+
+```bash
+# Clone and install
+git clone https://github.com/your-org/huff.git
+cd huff
+npm install
+
+# Development (hot-reload)
+npm run dev
+
+# Production build
+npm run build         # macOS: Universal DMG
+npx tauri build       # Windows/Linux: native installer
+```
+
+### macOS Universal Binary
+
+```bash
+# Build ARM64 + Intel, lipo them together, package as DMG
+bash scripts/create_universal_dmg.sh
+# Output: artifacts/huff-universal.dmg
+```
+
+### Windows Artifacts
+
+```cmd
+REM Builds EXE + NSIS installer + MSI + portable ZIP + SHA256SUMS
+scripts\tauri-build.cjs
+REM Output: artifacts\<timestamp>\
+```
+
+---
+
+## The Interface
+
+The controls window is divided into collapsible groups. Each group can be collapsed by clicking its label. Groups are independent — collapsing one has no effect on the others or on active effects.
+
+### Source Group
+
+Controls the input material fed into the effect chain.
+
+| Control | Description |
+|---------|-------------|
+| **File** | Load a video file. Drag-and-drop also works on the controls window. |
+| **Camera** | Select and start a webcam. Refresh scans for newly connected devices. |
+| **Play / Pause** | Toggle video playback. |
+| **BASE VIDEO** | Show the raw source frame underneath the glitch output. |
+| **BASE MIX** | Opacity of the base video layer (0 = fully glitched, 1 = full base). |
+| **BASE BG** | Background fill colour when no tile covers a pixel: Black, Green (chroma), Blue, White. |
+| **SEED ON LOAD** | Prime the frame ring buffer with the first video frame immediately on file load, rather than waiting for the ring to fill naturally. |
+| **QUALITY** | Scales the frame ring depth (0→4 frames, 1→60 frames) and affects the temporal richness of all time-based effects. Also controls Solarize frame-skip frequency. |
+
+### Glitch Group
+
+The core datamosh engine. Reads tiles from past frames and blits them onto the current frame at noise-driven positions.
+
+| Control | Range | Description |
+|---------|-------|-------------|
+| **ON** | toggle | Enable/disable the glitch pass. |
+| **CORRUPT %** | 0–7 | Fraction of grid tiles displaced per frame. 0 = no tiles move. 7 = all tiles replaced. |
+| **CORRUPT DRIFT** | 0–1 | Noise-driven breathing of the corruption density — the percentage oscillates slowly when > 0. |
+| **PIXEL SIZE** | 150–2000 | Size of each grid tile in pixels. Larger = blockier, more visible datamosh. Smaller = fine grain. |
+| **DEPTH** | 0–0.5 | How far back in the frame ring tiles are sampled. 0 = only the most recent frame. 0.5 = up to half the ring depth. |
+| **DEPTH SCATTER** | 0–1 | Per-tile randomisation of the time offset. 0 = all tiles from the same frame. 1 = each tile picks its own depth independently. |
+| **GLITCH SIZE** | 1–60 | Spatial scaling of each tile relative to PIXEL SIZE. |
+| **OPACITY** | 0–1 | Alpha of each blit tile. Lower values ghost the displaced content. |
+| **JITTER** | 0–1 | Magnitude of per-tile position noise. Adds organic displacement on top of the regular grid. |
+| **SMEAR** | 0–200 | Number of duplicate stamps trailed behind each displaced tile. |
+| **SMEAR ANGLE** | 0–360 | Direction of smear trail in degrees. 0 = noise-driven (random per frame). |
+| **SPEED** | 0–10 | Phase velocity of the noise field that drives tile selection and positioning. |
+| **FINE SPEED** | 0–5 | Secondary noise phase — multiplied with SPEED for finer control. |
+| **MULT** | 0–5 | Global speed multiplier applied on top of SPEED × FINE SPEED. |
+| **GLITCH X / Y** | -1–1 | Base offset applied to all tile destination positions. |
+| **SEED** | — | Randomisation seed. Same seed + same parameters = same output. Use to lock a particular glitch pattern. |
+
+### Feedback Group
+
+Composites the previous output frame back onto itself with a spatial transform. Enables infinite zoom, drift, and rotation effects.
+
+| Control | Range | Description |
+|---------|-------|-------------|
+| **FEEDBACK** | 0–3 | How strongly the previous frame contributes to the next. 0 = no feedback. Values > 1 over-expose. |
+| **PERSISTENCE** | 0–10 | Decay rate of the feedback buffer between frames. Higher = trails linger longer. |
+| **FB X** | -1–1 | Horizontal translation per frame. Creates lateral drift. |
+| **FB Y** | -1–1 | Vertical translation per frame. Creates vertical drift. |
+| **FB Z** | 0.98–1.03 | Zoom per frame. < 1 = implode, > 1 = explode. |
+| **FB θ** | -2–2 | Rotation in degrees per frame. Creates spinning feedback. |
+| **Reset Motion** | button | Returns FB X, FB Y, FB Z, FB θ to neutral (0, 0, 1.0, 0). |
+
+### Scanlines Group
+
+Displaces horizontal bands of the image by sampling from past frames. Creates a horizontal scan corruption aesthetic.
+
+| Control | Range | Description |
+|---------|-------|-------------|
+| **ON** | toggle | Enable/disable the scanline pass. |
+| **BANDS** | 0–30 | Number of active displacement bands per frame. |
+| **BAND HEIGHT** | 0–1 | Relative height of each band. |
+| **RAND SIZE** | toggle | Randomise band height per band rather than using a fixed value. |
+| **SHIFT** | 0–0.5 | Maximum horizontal displacement magnitude as a fraction of canvas width. |
+| **SKEW** | -1–1 | Adds a position-based horizontal offset so bands angle across the frame. |
+| **DRIFT** | 0–3 | Vertical drift speed of band positions over time. |
+| **SPEED** | 0–5 | Overall speed multiplier for band drift. |
+| **GAP** | 0–200 | Snaps band positions to a regular grid with this spacing, creating rhythmic rather than random placement. |
+| **OPACITY** | 0–1 | Alpha of displaced band content. |
+
+### Clusters Group
+
+When enabled, tile placement is biased toward radial clusters rather than uniform scatter. Creates concentrated glitch zones that can drift, spin, and pulse.
+
+| Control | Range | Description |
+|---------|-------|-------------|
+| **ON** | toggle | Enable cluster-biased tile placement (Glitch must also be ON). |
+| **CENTERS** | 1–20 | Number of cluster centres. |
+| **SPREAD** | 1–300 | Radius around each centre that tiles are distributed within. |
+| **MIN RAD** | 0–150 | Minimum distance from cluster centre — creates a hollow core. |
+| **SPATIAL GAP** | 0–200 | Minimum pixel distance between any two tiles, preventing overlap. |
+| **BIAS** | 0–1 | Fraction of tiles forced into clusters. Remainder are placed randomly. |
+| **DRIFT** | 0–5 | Adds noise-driven movement to cluster centre positions. |
+| **SPEED** | 0–15 | Speed of cluster centre physics simulation. 0 = static positions. |
+| **INERTIA** | 0.01–0.99 | How much cluster centres carry momentum between frames. High inertia = smooth slow movement. Low = jittery. |
+
+### Solarize Group
+
+Per-pixel luminance-threshold colour inversion. Pixels above the threshold have their channel values inverted by the amount, with independent RGB scaling.
+
+| Control | Range | Description |
+|---------|-------|-------------|
+| **ON** | toggle | Enable/disable solarize. |
+| **THRESH** | 0–1 | Luminance threshold. Pixels with luma above this are inverted. |
+| **AMOUNT** | 0–1 | Inversion strength. 0 = no effect, 1 = full inversion. |
+| **SOL R / G / B** | 0–2 | Per-channel multiplier applied after inversion. Use to tint the solarised regions. Values > 1 over-expose that channel. |
+
+### Flow Warp Group
+
+Distorts UV coordinates using a noise field, creating a liquid or heat-haze displacement.
+
+| Control | Range | Description |
+|---------|-------|-------------|
+| **ON** | toggle | Enable/disable flow warp. |
+| **STRENGTH** | 0–20 | Maximum pixel displacement applied by the warp. |
+| **SCALE** | 40–200 | Spatial scale of the noise field. Lower = finer warp cells, higher = broader sweeping motion. |
+| **PULSE** | 0–200 | Number of frames back in the ring to sample during warp. Creates temporal smearing as the warped source comes from the past. |
+| **IMPLODE** | 0–1 | Adds a centripetal pull toward the canvas centre on top of the noise warp. |
+
+### Symmetry Group
+
+Mirrors the current frame about one or both axes.
+
+| Control | Options / Range | Description |
+|---------|-----------------|-------------|
+| **SYMM** | toggle | Enable/disable symmetry. |
+| **MODE** | V / H / HV | Vertical mirror, horizontal mirror, or both simultaneously. |
+| **SYM POS** | 0–1 | Position of the mirror axis as a fraction of canvas width (V) or height (H). 0.5 = centred. |
+
+### Trails Group
+
+Blends multiple past frames as translucent ghost layers underneath the current frame.
+
+| Control | Range | Description |
+|---------|-------|-------------|
+| **ON** | toggle | Enable/disable trails. |
+| **TRAIL LAYERS** | 0–10 | Number of ghost frames composited. More layers = denser trail. |
+| **TRAIL DEPTH** | 0–1 | How far back in the ring to pull trail frames from. |
+| **LUMA KEY** | 0–1 | Below-threshold luminance pixels in trail frames are dropped. Creates a luma-keyed ghost effect where only bright areas trail. |
+
+### Presets
+
+Presets save and recall a complete snapshot of all parameter values. They are stored in `localStorage` and persist across sessions.
+
+- **Save** — type a name and click Save. If the name already exists it is overwritten.
+- **Load** — select a preset from the dropdown and click Load.
+- **Delete** — select and click Delete.
+
+**Factory presets** (read-only, always available):
+
+| Preset | Character |
+|--------|-----------|
+| `clean` | All effects off — raw source passthrough |
+| `chaos` | High corruption, deep ring, fast clusters |
+| `melt` | Slow feedback zoom with deep scanlines |
+| `mirror` | Symmetry-forward with light solarise |
+| `pulse` | Rhythmic cluster glitch with trails |
+| `solar` | Solarise dominant, flow warp texture |
+| `vapor` | Soft trails, slow feedback rotation |
+
+### Keyboard Shortcuts
+
+| Key | Action |
+|-----|--------|
+| `P` | Toggle the controls panel visibility |
+| `F` | Toggle fullscreen on the output canvas window |
+
+---
+
+## MIDI
+
+huff's MIDI system runs natively in Rust via `midir`. USB controllers, USB-MIDI interfaces, and virtual ports (IAC Bus on macOS, loopMIDI on Windows) are all supported. MIDI does not go through the browser — there is no Web MIDI API dependency.
+
+### Connecting a Device
+
+1. Click the **MIDI** button in the top bar.
+2. Click **↻ Refresh** to scan for available ports.
+3. Select your device from the dropdown.
+4. Click **Connect**.
+
+The status area confirms the connected port name. To change devices, disconnect first, then select and connect again.
+
+### MIDI Map Format
+
+Maps are plain JSON files loaded at runtime. The `param` field is the DOM element ID of the control you want to drive.
+
+```json
+{
+  "name": "My Controller",
+  "description": "Optional note",
+  "version": 1,
+  "channel": -1,
+  "mappings": [
+    { "param": "feedback",   "cc": 14, "type": "range",   "enabled": true },
+    { "param": "corrupt",    "cc": 15, "type": "range",   "enabled": true },
+    { "param": "corruptOn",  "cc": 64, "type": "toggle",  "enabled": true },
+    { "param": "refreshBtn", "cc": 82, "type": "trigger", "enabled": true }
+  ]
+}
+```
+
+**`type` values:**
+
+- `range` — CC 0–127 is scaled linearly to the parameter's min–max
+- `toggle` — CC > 63 → ON, CC ≤ 63 → OFF
+- `trigger` — any CC > 0 fires the button's click event
+
+**`channel`:** `-1` accepts all channels. `0`–`15` filters to a specific channel (0-indexed, so channel 1 = `0`).
+
+**`enabled: false`** disables an entry without deleting it — useful for temporarily silencing a mapping.
+
+### Bundled Maps
+
+| File | Controller |
+|------|-----------|
+| `src/midi/nanokontrol2.json` | Korg nanoKONTROL2 |
+| `src/midi/nanokontrol1.json` | Korg nanoKONTROL (original) |
+| `src/midi/generic.json` | Generic 16-CC template (CC 14–29) |
+
+### Virtual MIDI
+
+**macOS — IAC Driver:**
+1. Open **Audio MIDI Setup** (in Applications/Utilities).
+2. Open the MIDI Studio (⌘2).
+3. Double-click **IAC Driver**.
+4. Enable **Device is online**, add a port (e.g. "Bus 1").
+5. The IAC port appears immediately in huff's MIDI port list.
+
+**Windows — loopMIDI:**
+1. Download and install [loopMIDI](https://www.tobias-erichsen.de/software/loopmidi.html).
+2. Create a virtual port.
+3. The port appears in huff's MIDI port list.
+
+Once a virtual port exists, Max/MSP, Pure Data, Ableton, and other software can send MIDI to huff through it.
+
+---
+
+## OSC
+
+huff listens for UDP OSC on port `9000` on all interfaces (`0.0.0.0:9000`). Any device on the same local network can send to it.
+
+### OSC Setup
+
+1. Click the **OSC** button in the top bar.
+2. The status area confirms the listener is active and shows the port.
+3. Load a map file via **Load Map…**. The map persists in `localStorage` and reloads automatically on next launch.
+4. The OSC pill in the top bar flashes the address of each received message.
+
+### OSC Map Format
+
+```json
+{
+  "name": "My TouchOSC Layout",
+  "version": 1,
+  "mappings": [
+    {
+      "param":    "feedback",
+      "addr":     "/1/fader1",
+      "type":     "range",
+      "inputMin": 0,
+      "inputMax": 1,
+      "enabled":  true,
+      "note":     "Main feedback fader"
+    },
+    {
+      "param":    "corruptOn",
+      "addr":     "/1/toggle1",
+      "type":     "toggle",
+      "enabled":  true
+    }
+  ]
+}
+```
+
+**`type` values:**
+
+- `range` — incoming float mapped from `inputMin–inputMax` to the parameter's native min–max
+- `toggle` — value > 0.5 → ON, value ≤ 0.5 → OFF
+- `trigger` — value > 0.5 fires the button click
+
+**`inputMin` / `inputMax`:** Set these to match your sender's output range. TouchOSC faders send `0.0–1.0` so use `0, 1`. Some MIDI-to-OSC bridges send `0–127` — use `0, 127`.
+
+### Sending from Software
+
+| Software | Method |
+|----------|--------|
+| Max/MSP | `[udpsend 127.0.0.1 9000]` |
+| Pure Data | `[netsend -u -b 127.0.0.1 9000]` |
+| SuperCollider | `NetAddr("127.0.0.1", 9000).sendMsg("/huff/feedback", 0.75)` |
+| TouchDesigner | OSC Out DAT, host `127.0.0.1`, port `9000` |
+| Python (pythonosc) | `SimpleUDPClient("127.0.0.1", 9000)` |
+| Protokol / OSCQuery | Any app supporting OSC output |
+
+### TouchOSC
+
+1. In TouchOSC go to **Settings → OSC**.
+2. Set **Host** to your computer's local IP (e.g. `192.168.1.42`).
+3. Set **Port (outgoing)** to `9000`.
+4. Enable **OSC**.
+5. Load one of the bundled map files (`src/osc/touchosc-effects.json` or `touchosc-mix.json`) in huff's OSC panel.
+
+Bundled maps reference the standard TouchOSC `/1/faderN` and `/1/toggleN` address scheme used by the built-in Simple layout.
+
+---
+
+## Video Output
+
+### Syphon (macOS)
+
+Syphon lets huff share its canvas as a named texture that any Syphon-enabled application can receive in real time — without capture cards, screen recording, or NDI.
+
+**Compatible receivers:** Resolume Avenue/Arena, VDMX, MadMapper, CoGe, Millumin, Modul8, Processing (Syphon library), Max/MSP (Jitter), and anything that supports the Syphon protocol.
+
+**Usage:**
+1. Click the **SYPHON** button in the top bar.
+2. Set the output resolution (default: 1280×720).
+3. Set the FPS cap (default: 30).
+4. Click **▶ Start**. The sender appears as `huff` in any Syphon receiver.
+5. Click **■ Stop** to close the server.
+
+**Technical notes:**
+- The Syphon.framework is bundled inside the huff app bundle — no separate installation is needed.
+- The pipeline is: `canvas.getImageData()` → raw RGBA bytes → `HUFFSYPH` binary WS frame → Rust `syphon::push_frame()` → `MTLTexture` CPU upload → `SyphonMetalServer.publishFrameTexture()`.
+- This uses a CPU round-trip (JS pixel readback). Frame rate is throttled to the configured FPS cap to limit the readback cost.
+
+### Spout (Windows)
+
+Spout is the Windows equivalent of Syphon. huff shares its canvas as a named D3D11 texture that any Spout2-enabled application can receive.
+
+**Compatible receivers:** Resolume Arena, TouchDesigner, MadMapper, Notch, and anything that supports the Spout2 protocol.
+
+**Usage:**
+1. Install the [Spout2 runtime](https://spout.zeal.co/) if not already installed.
+2. Click the **SPOUT** button in the top bar.
+3. Set the output resolution and FPS cap.
+4. Click **▶ Start**. The sender appears as `huff` in Spout receivers.
+
+**Technical notes:**
+- The Spout bridge DLL (`spout_bridge.dll`) is compiled from source and bundled next to the huff executable.
+- The pipeline is: `canvas.getImageData()` → raw RGBA bytes → `HUFFSPOUT` binary WS frame → Rust `spout::push_frame()` → `spoutdx_send_image()` → D3D11 `UpdateSubresource`.
+- Same CPU round-trip as Syphon. GPU-direct zero-copy is not implemented in this release.
+
+### Canvas Mirror Window
+
+The separate output canvas window (`canvas.html`) connects to the embedded WebSocket relay on port `8787` and receives JPEG-encoded frames. This window can be:
+
+- Moved to a second monitor and made fullscreen (`F` key)
+- Opened in a browser by navigating to `file:///path/to/huff/src/canvas.html` while the app is running
+- Used as an OBS window-capture source
+
+The canvas window does not apply any additional effects — it displays exactly what the controls window output is.
+
+---
+
+## Parameter Reference
+
+Complete list of all mappable parameter IDs, ranges, and descriptions for use in MIDI and OSC map files.
+
+### Range Parameters
+
+| ID | Label | Min | Max |
+|----|-------|-----|-----|
+| `baseMix` | Base Mix | 0 | 1 |
+| `quality` | Quality | 0 | 3 |
+| `feedback` | Feedback | 0 | 3 |
+| `persistence` | Persistence | 0 | 10 |
+| `fbX` | FB X | -1 | 1 |
+| `fbY` | FB Y | -1 | 1 |
+| `fbZ` | FB Z | 0.98 | 1.03 |
+| `fbTheta` | FB θ | -2 | 2 |
+| `depth` | Depth | 0 | 0.5 |
+| `depthScatter` | Scatter | 0 | 1 |
+| `corrupt` | Corrupt % | 0 | 7 |
+| `corruptDrift` | Corrupt Drift | 0 | 1 |
+| `block` | Pixel Size | 150 | 2000 |
+| `glitchSize` | Glitch Size | 1 | 60 |
+| `glitchAlpha` | Tile Opacity | 0 | 1 |
+| `glitchJitter` | Jitter | 0 | 1 |
+| `glitchSmear` | Smear | 0 | 200 |
+| `glitchSmearAngle` | Smear Angle | 0 | 360 |
+| `glitchSpeed` | Glitch Speed | 0 | 10 |
+| `glitchSpeedFine` | Fine Speed | 0 | 5 |
+| `glitchSpeedMul` | Speed Mult | 0 | 5 |
+| `glitchBaseX` | Glitch X | -1 | 1 |
+| `glitchBaseY` | Glitch Y | -1 | 1 |
+| `trailLayers` | Trail Layers | 0 | 10 |
+| `trailDepth` | Trail Depth | 0 | 1 |
+| `trailLumaKey` | Luma Key | 0 | 1 |
+| `symPos` | Sym Position | 0 | 1 |
+| `scanShift` | Scan Shift | 0 | 0.5 |
+| `scanDrift` | Scan Drift | 0 | 3 |
+| `scanSpeed` | Scan Speed | 0 | 5 |
+| `scanGap` | Scan Gap | 0 | 200 |
+| `scanSkew` | Scan Skew | -1 | 1 |
+| `scanAlpha` | Scan Opacity | 0 | 1 |
+| `clusterCount` | Scan Bands | 0 | 30 |
+| `clusterRadius` | Band Height | 0 | 1 |
+| `cluCenters` | Clu Centers | 1 | 20 |
+| `cluSpread` | Clu Spread | 1 | 300 |
+| `cluMinSpread` | Clu Min Rad | 0 | 150 |
+| `spatialGap` | Spatial Gap | 0 | 200 |
+| `cluBias` | Clu Bias | 0 | 1 |
+| `cluDrift` | Clu Drift | 0 | 5 |
+| `cluSpeed` | Clu Speed | 0 | 15 |
+| `cluInertia` | Clu Inertia | 0.01 | 0.99 |
+| `solarizeThresh` | Sol Thresh | 0 | 1 |
+| `solarizeAmt` | Sol Amount | 0 | 1 |
+| `solarizeR` | Sol R | 0 | 2 |
+| `solarizeG` | Sol G | 0 | 2 |
+| `solarizeB` | Sol B | 0 | 2 |
+| `flowStrength` | Flow Strength | 0 | 20 |
+| `flowScale` | Flow Scale | 40 | 200 |
+| `flowPulse` | Flow Pulse | 0 | 200 |
+| `flowImpl` | Flow Implode | 0 | 1 |
+
+### Toggle Parameters (checkboxes)
+
+| ID | Label |
+|----|-------|
+| `corruptOn` | Glitch On |
+| `baseOn` | Base Video |
+| `seedOnLoad` | Seed on Load |
+| `symOn` | Symmetry On |
+| `clusters` | Scanlines On |
+| `scanRandSize` | Rand Band Size |
+| `clusterTiles` | Cluster Tiles On |
+| `solarizeOn` | Solarize On |
+| `flowOn` | Flow Warp On |
+| `trailOn` | Trails On |
+
+### Trigger Parameters (buttons)
+
+| ID | Action |
+|----|--------|
+| `refreshBtn` | Re-seed glitch randomisation |
+| `resetMotionBtn` | Reset FB X/Y/Z/θ to defaults |
+| `resetBtn` | Reset all parameters to defaults |
 
 ---
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────┐
-│  Tauri shell (Rust)                 │
-│  ┌──────────────────────────────┐   │
-│  │  Embedded WS relay (port 8787│   │
-│  │  Tokio + tokio-tungstenite   │   │
-│  └───────────┬──────────────────┘   │
-│              │ binary frames        │
-│  ┌───────────▼──────────────────┐   │
-│  │  index.html (controls + p5)  │◄──┼─ video file / webcam
-│  │  canvas.js  effects.js       │   │
-│  └───────────┬──────────────────┘   │
-│              │ JPEG frames over WS  │
-│  ┌───────────▼──────────────────┐   │
-│  │  canvas.html (mirror viewer) │   │
-│  │  drawImage + fullscreen      │   │
-│  └──────────────────────────────┘   │
-└─────────────────────────────────────┘
-```
-
-The Rust backend spawns two Tokio listeners (`127.0.0.1:8787` and `[::1]:8787`). Clients register as `index` (sender) or `canvas` (receiver) via a `{"type":"hello","role":"..."}` handshake. Binary frames are forwarded only to `canvas` clients; text messages are broadcast to all others.
-
----
-
-## Prerequisites
-
-### All Platforms
-
-| Tool | Version | Install |
-|------|---------|---------|
-| **Node.js** | ≥ 18 LTS | [nodejs.org](https://nodejs.org) |
-| **Rust + Cargo** | stable | `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` |
-| **Tauri CLI** | 1.x (installed via npm) | `npm install` in project root |
-
-After cloning, install Node dependencies from the project root:
-
-```bash
-npm install
-```
-
----
-
-### macOS extra
-
-Xcode Command Line Tools are required for the linker and `lipo`:
-
-```bash
-xcode-select --install
-```
-
-Camera access requires the entitlements already present in `src-tauri/entitlements.plist`. No extra steps are needed for dev builds; codesigning is required for distribution.
-
----
-
-### Windows extra
-
-Install the **Microsoft C++ Build Tools** (MSVC toolchain):
-
-1. Download [Build Tools for Visual Studio](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
-2. Select **Desktop development with C++**
-
-Install **WebView2** (required at runtime on Windows < 11):
-
-- Download [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/)
-- Or ship the bootstrapper — the Windows build script's `README.txt` reminds end-users.
-
-Add the MSVC target for Rust:
-
-```powershell
-rustup target add x86_64-pc-windows-msvc
-```
-
----
-
-### Linux extra
-
-Install system libraries required by Tauri/WebKitGTK:
-
-**Ubuntu / Debian:**
-
-```bash
-sudo apt update
-sudo apt install -y \
-  libwebkit2gtk-4.0-dev \
-  build-essential \
-  curl \
-  wget \
-  file \
-  libssl-dev \
-  libgtk-3-dev \
-  libayatana-appindicator3-dev \
-  librsvg2-dev
-```
-
-**Arch Linux:**
-
-```bash
-sudo pacman -S --needed \
-  webkit2gtk \
-  base-devel \
-  curl \
-  wget \
-  file \
-  openssl \
-  appmenu-gtk-module \
-  gtk3 \
-  libappindicator-gtk3 \
-  librsvg \
-  libvips
-```
-
-**Fedora:**
-
-```bash
-sudo dnf install \
-  webkit2gtk4.0-devel \
-  openssl-devel \
-  curl \
-  wget \
-  file \
-  libappindicator-gtk3 \
-  librsvg2-devel
-```
-
----
-
-## Development Build
-
-Runs the app with hot-reload (Rust side requires a full recompile on change):
-
-```bash
-npm run dev
-# or equivalently:
-npx tauri dev
-```
-
-The WebSocket relay starts automatically on port **8787**. Open `canvas.html` in a browser (or via the in-app button) to connect the mirror window.
-
----
-
-## Production Build
-
-### macOS – Universal DMG
-
-Use the all-in-one script in `platform/macOS/`:
-
-```bash
-cd platform/macOS
-bash dmg_creation.sh
-```
-
-This script:
-1. Adds both Rust targets (`aarch64-apple-darwin`, `x86_64-apple-darwin`)
-2. Builds ARM64 and x64 app bundles via `tauri build --bundles app`
-3. Stitches them into a Universal binary with `lipo`
-4. Creates a DMG using `hdiutil`
-
-Output files land in `artifacts/`:
-
-```
-artifacts/
-  universal-app/datamosh-desktop.app   ← drag-to-Applications bundle
-  datamosh-desktop-universal.dmg       ← distributable disk image
-```
-
-> **Codesigning & Notarisation:** The script does not sign or notarise. To distribute outside the Mac App Store, wrap the script with `codesign --deep --force --options runtime` and `xcrun notarytool`. See [Apple's documentation](https://developer.apple.com/documentation/security/notarizing_macos_software_before_distribution).
-
-#### Manual single-arch build
-
-```bash
-# Apple Silicon
-npm run tauri -- build -- --target aarch64-apple-darwin
-
-# Intel
-npm run tauri -- build -- --target x86_64-apple-darwin
-```
-
----
-
-### Windows – EXE / MSI / NSIS
-
-Run the batch script from the project root (or the `platform/windows/` folder):
-
-```cmd
-platform\windows\Build-Artifacts.cmd
-```
-
-Configurable variables at the top of the script:
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `TARGET` | `x86_64-pc-windows-msvc` | Rust target triple |
-| `KEEP` | `5` | Number of timestamped artifact folders to retain |
-| `CLEAN_ARTIFACTS` | `0` | Set to `1` to wipe `artifacts\` before building |
-| `DEEP_NPM_CLEAN` | `0` | Set to `1` to delete `node_modules` and reinstall |
-
-Output files land in `artifacts\<timestamp>\`:
-
-```
-artifacts\20250101-120000\
-  huff-v2_0.1.0_x64.exe          ← portable binary
-  huff-v2_0.1.0_x64-setup.exe    ← NSIS installer
-  huff-v2_0.1.0_x64_en-US.msi    ← MSI installer
-  portable-20250101-120000.zip    ← zipped portable EXE
-  SHA256SUMS.txt                  ← checksums for all artifacts
-```
-
-#### Manual build
-
-```powershell
-npx tauri build --target x86_64-pc-windows-msvc
-```
-
-> **SmartScreen:** Unsigned builds will trigger a Windows SmartScreen warning. Click *More info → Run anyway*, or sign the binary with a code-signing certificate.
-
----
-
-### Linux – AppImage / deb
-
-```bash
-npm run tauri build
-# or
-npx tauri build
-```
-
-Tauri will produce an **AppImage** and a **.deb** package under:
-
-```
-src-tauri/target/release/bundle/
-  appimage/huff-v2_0.1.0_amd64.AppImage
-  deb/huff-v2_0.1.0_amd64.deb
-```
-
-To run the AppImage directly:
-
-```bash
-chmod +x huff-v2_0.1.0_amd64.AppImage
-./huff-v2_0.1.0_amd64.AppImage
-```
-
-> **Camera permissions on Linux:** Grant camera access through your desktop environment's privacy settings, or ensure the running user is in the `video` group (`sudo usermod -aG video $USER`).
-
----
-
-## Project Structure
-
-```
 huff/
-├── src/                        # Frontend (HTML + JS, no bundler)
-│   ├── index.html              # Main controls window
-│   ├── canvas.html             # Mirror/receiver window
-│   ├── canvas.js               # p5 setup, draw loop, UI wiring, WS sender
-│   ├── effects.js              # applyGlitch, applyFlowWarp, applySolarize, applySymmetry
-│   ├── ws-server.js            # Standalone Node.js relay (dev/testing only)
-│   ├── ws-mirror.js            # Standalone WS sender (unused; logic is inlined in canvas.js)
-│   └── p5.js                   # p5.js library (bundled locally)
+├── src/                          # Frontend (HTML + JS, no bundler)
+│   ├── index.html                # Controls window — all UI, p5 draw loop, effect chain
+│   ├── canvas.html               # Output mirror window — receives WS frames
+│   ├── canvas.js                 # p5 setup, draw loop, video handling, WS sender
+│   ├── effects.js                # applyGlitch, applyTrails, applyScanlines,
+│   │                             #   applyFlowWarp, applySolarize, applySymmetry
+│   ├── p5.js                     # p5.js library (bundled locally, no CDN)
+│   ├── midi/                     # Bundled MIDI map files
+│   ├── osc/                      # Bundled OSC map files
+│   └── presets/                  # Factory preset JSON files
 │
 ├── src-tauri/
 │   ├── src/
-│   │   └── main.rs             # Rust entry point + embedded WS relay
-│   ├── Cargo.toml              # Rust dependencies
-│   ├── tauri.conf.json         # App config: windows, bundle, identifiers
-│   ├── entitlements.plist      # macOS entitlements (camera, network)
-│   ├── Info.plist              # macOS Info.plist overrides
-│   ├── capabilities/
-│   │   ├── network.json        # Tauri capability: WebSocket access
-│   │   └── recording-save.json # Tauri capability: file save
-│   └── icons/                  # App icons for all platforms
-│
-├── platform/
-│   ├── macOS/
-│   │   └── dmg_creation.sh     # Universal binary + DMG build script
-│   └── windows/
-│       └── Build-Artifacts.cmd # Windows build + artifact collection script
+│   │   ├── main.rs               # Rust entry: WS relay, MIDI commands, OSC listener,
+│   │   │                         #   Syphon + Spout command handlers
+│   │   ├── syphon.rs             # macOS Syphon ObjC FFI (Metal texture upload)
+│   │   └── spout.rs              # Windows Spout2 D3D11 bridge
+│   ├── native/
+│   │   └── spout_bridge/         # C++ SpoutDX bridge (compiled by build.rs via CMake)
+│   │       ├── spout_bridge.cpp
+│   │       ├── spout_bridge.h
+│   │       └── CMakeLists.txt
+│   ├── frameworks/
+│   │   └── Syphon.framework      # Bundled macOS Syphon framework
+│   ├── Cargo.toml
+│   ├── build.rs                  # CMake invocation for Spout (Windows only)
+│   ├── tauri.conf.json
+│   └── capabilities/
+│       └── network.json          # Tauri capability: WS relay access
 │
 ├── scripts/
-│   ├── create_mac_builds.sh    # Build both macOS arch targets
-│   ├── create_universal.sh     # lipo universal binary
-│   ├── create_universal_dmg.sh # Package DMG
-│   └── remove_artifacts.sh     # Clean artifacts directory
+│   ├── create_universal_dmg.sh   # macOS: lipo + DMG packaging
+│   └── tauri-build.cjs           # Windows: EXE + MSI + ZIP + checksums
 │
-├── package.json
-└── README.md
+└── package.json
 ```
 
----
+**WebSocket relay** runs inside the Tauri Rust process. It binds on `127.0.0.1:8787` (IPv4) and `[::1]:8787` (IPv6). Clients register as `index` (sender) or `canvas` (receiver) via a JSON handshake. Binary frames are forwarded only to `canvas` clients unless they carry a `HUFFSYPH` or `HUFFSPOUT` magic prefix, in which case Rust intercepts and routes them to the platform output subsystem.
 
-## Effect Controls Reference
+**Rust crates used:**
 
-| Control | Description |
-|---------|-------------|
-| **SYSTEM** | Master on/off for the glitch engine |
-| **BASE VIDEO** | Show the raw source video underneath the effect |
-| **BASE MIX** | Opacity of the base video layer (0–1) |
-| **BASE BG** | Background colour when no tile covers a pixel (Black / Green / Blue / White) |
-| **FEEDBACK** | How much of the previous frame feeds back into the next (0–3) |
-| **PERSISTENCE** | How quickly the buffer decays between frames (0–10) |
-| **SYMM / MODE / SYM POS** | Mirror the buffer vertically, horizontally, or both, around a moveable axis |
-| **DEPTH** | How far back in the frame ring tiles are sampled |
-| **DEPTH SCATTER** | Randomness of per-tile temporal offset (0 = all tiles same frame, 1 = full scatter) |
-| **CORRUPT %** | Fraction of grid tiles displaced per frame |
-| **CORRUPT DRIFT** | Noise-driven breathing of the corruption density |
-| **PIXEL SIZE** | Block/tile size in pixels |
-| **GLITCH SPEED / FINE SPEED** | Noise phase velocity (coarse × fine = overall density) |
-| **GLITCH SIZE** | Spatial size of each displaced tile |
-| **SMEAR** | Number of duplicate stamps trailed behind each tile |
-| **SMEAR ANGLE** | Direction of smear trail (0 = noise-driven) |
-| **TRAIL LAYERS / TRAIL DEPTH** | Ghost frames stacked behind each tile for motion-smear |
-| **GLITCH MULT** | Global speed multiplier |
-| **GLITCH X / Y** | Base offset applied to all tile destinations |
-| **TILE OPACITY** | Alpha of each blit tile |
-| **JITTER** | Magnitude of per-tile position noise |
-| **SEED** | Random seed (deterministic output for the same seed + frame) |
-| **FB X / Y / Z / θ** | Feedback translation, zoom, and rotation per frame |
-| **SCANLINES** | Enable drifting horizontal band displacement |
-| **BANDS / BAND HEIGHT / SHIFT / DRIFT / SCAN OPACITY** | Scanline band parameters |
-| **CLUSTER TILES** | Place tiles in radial clusters rather than uniform scatter |
-| **CENTERS / SPREAD / SPATIAL GAP** | Cluster geometry |
-| **SOLARIZE** | Luminance-threshold colour inversion |
-| **THRESH / AMOUNT / SOL R/G/B** | Solarise parameters |
-| **FLOW** | Enable noise-field optical-flow warp |
-| **STRENGTH / SCALE / QUALITY / PULSE / IMPLODE** | Flow warp parameters |
-| **Seed on load** | Seed the buffer with the first video frame on file load |
-
----
-
-## WebSocket Relay
-
-The relay runs embedded in the Tauri process on `ws://127.0.0.1:8787` (IPv4) and `ws://[::1]:8787` (IPv6).
-
-**Handshake:**
-```json
-{ "type": "hello", "role": "index" }   // sender
-{ "type": "hello", "role": "canvas" }  // receiver
-```
-
-**Routing rules:**
-- Text messages → broadcast to all other connected clients
-- Binary messages (JPEG frames) → forwarded only to clients with `role == "canvas"`
-
-A standalone Node.js relay (`src/ws-server.js`) is included for testing outside of Tauri:
-
-```bash
-node src/ws-server.js
-```
+| Crate | Purpose |
+|-------|---------|
+| `tauri 1.x` | App shell, two-window management, IPC |
+| `tokio 1.x` | Async runtime for WS relay and OSC listener |
+| `tokio-tungstenite 0.21` | WebSocket server |
+| `midir 0.9` | Native MIDI input |
+| `rosc 0.10` | OSC UDP packet decoder |
+| `objc / objc-foundation` | macOS Syphon ObjC FFI (macOS only) |
+| `cmake 0.1` | Spout bridge CMake build (Windows only) |
 
 ---
 
 ## Performance Notes
 
-- **Frame ring** stores `ImageData` objects rather than p5 `Graphics` instances. This avoids the `Graphics.get()` copy-on-read overhead and keeps GPU memory pressure low.
-- **Ring buffer drawRingRegion** uses a single reused offscreen `<canvas>` with `putImageData` + native `drawImage` cropping — no per-tile allocation.
-- **WS sender** uses a single reused offscreen canvas for JPEG encoding; it only resizes the canvas when the output dimensions change.
-- **Label updates** fire on `input` events only — not during the draw loop.
-- **p5 Graphics** buffers are disposed (`remove()`) before reallocation on window resize.
-- Tune the **QUALITY** slider to reduce the frame-ring depth and skip flow-warp frames (`everyN`), trading temporal richness for frame rate on slower machines.
-- The 256 MB ring-buffer memory cap is enforced regardless of the quality setting.
+- **Frame ring** stores `ImageData` objects (raw RGBA pixel arrays) rather than p5 `Graphics` instances. This avoids the `get()` copy-on-read allocation and keeps peak memory predictable.
+- **192 MB ring cap** — the ring depth is capped regardless of the quality setting. At 1080p (≈8 MB per frame) this gives roughly 24 frames maximum. At 720p (≈3.7 MB) you get the full 60 frames at quality=1.
+- **`drawRingRegion`** uses a single shared offscreen `<canvas>` with `putImageData` + native `drawImage` cropping per tile. No per-tile allocation.
+- **Solarize** downsamples to a 640px-wide scratch canvas before the pixel pass, then scales back up. This is 4–16× faster on large canvases and makes a large practical difference on Windows/DirectX WebView.
+- **Flow warp** renders in tiles rather than per-pixel — the tile size is set by the SCALE parameter. Larger tiles = faster but coarser warp.
+- **QUALITY slider** controls ring depth and also determines how often Solarize runs (it skips frames proportionally at lower quality values).
+- **Feedback** uses `drawingContext.drawImage` directly rather than `p5.get()`, eliminating one full-canvas copy per frame.
+- If the app stutters, try: lower QUALITY → reduce canvas resolution → increase PIXEL SIZE → disable Flow Warp (the most expensive pass).
+
+---
+
+## Caveats and Known Limitations
+
+**CPU pixel readback for Syphon and Spout.**
+Both output routes use `getImageData()` to read pixels from the canvas back to the CPU, then send them over the local WebSocket to Rust, which uploads them to a GPU texture. This is a full GPU→CPU→GPU round trip per frame. It works well at 720p/30fps but is not zero-copy. GPU-direct sharing (sharing the WebGL texture handle directly with Syphon/Spout) is not feasible in the Tauri WebView context in this release.
+
+**Frame rate is throttled for Syphon/Spout.**
+The FPS cap in the Syphon/Spout panels defaults to 30 fps and should not be set higher than your actual canvas frame rate. Sending faster than the canvas draws produces duplicate frames and wastes CPU.
+
+**Memory grows with resolution.**
+The 192 MB ring cap is enforced by frame count, not pixel size. At 4K resolution, the ring effectively holds only a few frames regardless of the quality setting, and the datamosh effect loses temporal depth. 720p or 1080p is the practical sweet spot.
+
+**Syphon is macOS-only. Spout is Windows-only.**
+These are platform protocols with no cross-platform equivalent in this release. If you need cross-platform texture sharing, use OBS window capture or NDI (not currently implemented).
+
+**Camera permissions require codesigning for distribution.**
+In development (`npm run dev`) the camera entitlement is injected by Tauri automatically. In distribution builds on macOS, the app must be codesigned with the `NSCameraUsageDescription` entitlement for the permission dialog to appear. Unsigned builds will silently fail the camera permission request on macOS 12+.
+
+**SmartScreen warning on Windows.**
+Unsigned Windows builds trigger a SmartScreen warning. This is expected — click **More info → Run anyway**. For signed distribution, sign the EXE with a code-signing certificate before publishing.
+
+**Port 8787 must be free.**
+The WS relay binds to `127.0.0.1:8787` and `[::1]:8787` at startup. If another application is already using this port, the relay will fail silently and the canvas mirror window will not receive frames. Change `const PORT: u16 = 8787` in `src-tauri/src/main.rs` and update the `__getWSURL__` call in `src/index.html` to match.
+
+**Linux is untested.**
+The Tauri scaffolding supports Linux and the build instructions include Linux prerequisites, but no binary has been tested against a Linux runtime in this release. Syphon and Spout are not available on Linux. Community contributions welcome.
+
+**OSC map persists in `localStorage` per-origin.**
+The OSC map is stored in the WebView's `localStorage`. If you clear browser data for the app origin or uninstall and reinstall, the map will be lost. Export maps as JSON files and keep them alongside your project files.
+
+**No multi-instance support.**
+Running two instances of huff simultaneously will cause a port conflict on 8787. If you need parallel instances, build separate copies with different port constants.
 
 ---
 
 ## Troubleshooting
 
-**Blank canvas on Windows:**
-Install [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/).
+**Blank canvas window / "WS: disconnected"**
+The canvas window connects to the relay in the Tauri process. If you opened `canvas.html` directly in a browser outside of the app, run `node src/ws-server.js` in the project directory to start a standalone relay.
 
-**Camera not appearing (macOS):**
-The app must be codesigned with the `NSCameraUsageDescription` entitlement for the permission dialog to appear. In dev mode (`tauri dev`) the entitlement is injected automatically. For distribution builds, sign with `--entitlements src-tauri/entitlements.plist`.
+**Camera not appearing**
+Click **↻ Refresh** in the Source group after connecting your camera. On macOS, the first time the app requests camera access a system dialog appears — grant access and refresh again. If no dialog appears and the camera still doesn't show, the app may not be codesigned correctly for the permission to be requested.
 
-**`WS: disconnected` in the status pill:**
-The relay starts in the Tauri process; if you open `index.html` directly in a browser (outside Tauri) you need to run `node src/ws-server.js` separately.
+**MIDI device not appearing**
+Click **↻ Refresh** in the MIDI panel. The port list is read fresh on each refresh — devices plugged in after the panel was opened do not appear automatically.
 
-**Port 8787 already in use:**
-Change `const PORT: u16 = 8787;` in `src-tauri/src/main.rs` and update the `__getWSURL__` call in `src/index.html` to match.
+**Syphon not visible to receivers**
+Confirm the Syphon server shows **active** status in the Syphon panel. In your receiver (e.g. Resolume), trigger a re-scan of Syphon sources. If the app was just launched, wait 1–2 seconds before scanning — the server registers asynchronously.
 
-**High memory usage:**
-Lower the **QUALITY** slider or reduce **DEPTH** to shrink the frame ring. The ring is capped at 256 MB but can still grow large at high resolutions.
+**Spout init failed**
+Install the [Spout2 runtime](https://spout.zeal.co/). The `spoutdx_send_image` function in the bridge DLL requires the Spout2 runtime DLLs to be present on the system.
 
-**SmartScreen warning (Windows):**
-Expected for unsigned binaries. Click *More info → Run anyway*, or codesign the executable.
+**High memory usage**
+Lower the QUALITY slider. At quality=1 and 1080p the ring can hold up to 192 MB. At quality=0 it holds only 4 frames.
 
-**`tauri build` fails on Linux with missing library:**
-Re-run the dependency install commands for your distro in the [Linux extra](#linux-extra) section.
+**Port 8787 already in use**
+Find which process is using the port:
+```bash
+# macOS/Linux
+lsof -i :8787
+# Windows
+netstat -ano | findstr :8787
+```
+Change `PORT` in `src-tauri/src/main.rs` and `WS_MIRROR_URL` in `src/index.html` to an unused port, then rebuild.
+
+**`tauri build` fails on Linux with missing library**
+Re-run the WebKitGTK/libssl dependency install for your distribution from the [Building from Source](#building-from-source) section.
+
+---
+
+<p align="center">
+  <sub>huff v1.0.2 beta · built with Tauri, p5.js, Rust, Syphon, Spout2 · ISC licence</sub>
+</p>
