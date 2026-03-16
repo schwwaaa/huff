@@ -2,10 +2,11 @@
 layout: page
 title: huff
 permalink: /
+nav_order: 1
 ---
 
 <div style="text-align:center;margin:2rem 0 1rem">
-  <img src="https://github.com/schwwaaa/huff/blob/beta/src-tauri/icons/icon.png?raw=true" width="90" alt="huff icon" style="border-radius:16px"/>
+  <img src="assets/img/icon.png" width="90" alt="huff icon" style="border-radius:16px"/>
 </div>
 
 <div style="text-align:center;margin-bottom:2rem">

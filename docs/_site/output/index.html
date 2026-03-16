@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1"><!-- Begin Jekyll SEO tag v2.8.0 -->
+<title>Video Output | huff</title>
+<meta name="generator" content="Jekyll v3.10.0" />
+<meta property="og:title" content="Video Output" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="Real-time datamosh &amp; glitch-art for desktop. Tauri · p5.js · Rust · Syphon · Spout · MIDI · OSC." />
+<meta property="og:description" content="Real-time datamosh &amp; glitch-art for desktop. Tauri · p5.js · Rust · Syphon · Spout · MIDI · OSC." />
+<link rel="canonical" href="http://localhost:4000/huff/output/" />
+<meta property="og:url" content="http://localhost:4000/huff/output/" />
+<meta property="og:site_name" content="huff" />
+<meta property="og:type" content="website" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:title" content="Video Output" />
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"WebPage","description":"Real-time datamosh &amp; glitch-art for desktop. Tauri · p5.js · Rust · Syphon · Spout · MIDI · OSC.","headline":"Video Output","url":"http://localhost:4000/huff/output/"}</script>
+<!-- End Jekyll SEO tag -->
+<link rel="stylesheet" href="/huff/assets/main.css"><link type="application/atom+xml" rel="alternate" href="http://localhost:4000/huff/feed.xml" title="huff" /></head>
+<body><header class="site-header" role="banner">
+
+  <div class="wrapper"><a class="site-title" rel="author" href="/huff/">huff</a><nav class="site-nav">
+        <input type="checkbox" id="nav-trigger" class="nav-trigger" />
+        <label for="nav-trigger">
+          <span class="menu-icon">
+            <svg viewBox="0 0 18 15" width="18px" height="15px">
+              <path d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0 h15.032C17.335,0,18,0.665,18,1.484L18,1.484z M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0 c0-0.82,0.665-1.484,1.484-1.484h15.032C17.335,6.031,18,6.696,18,7.516L18,7.516z M18,13.516C18,14.335,17.335,15,16.516,15H1.484 C0.665,15,0,14.335,0,13.516l0,0c0-0.82,0.665-1.483,1.484-1.483h15.032C17.335,12.031,18,12.695,18,13.516L18,13.516z"/>
+            </svg>
+          </span>
+        </label>
+
+        <div class="trigger"><a class="page-link" href="/huff/">huff</a><a class="page-link" href="/huff/how-it-works/">How it Works</a><a class="page-link" href="/huff/installation/">Installation</a><a class="page-link" href="/huff/interface/">The Interface</a><a class="page-link" href="/huff/midi/">MIDI</a><a class="page-link" href="/huff/osc/">OSC</a><a class="page-link" href="/huff/output/">Video Output</a><a class="page-link" href="/huff/parameter-reference/">Parameter Reference</a><a class="page-link" href="/huff/architecture/">Architecture</a><a class="page-link" href="/huff/caveats/">Caveats &amp; Known Limitations</a><a class="page-link" href="/huff/troubleshooting/">Troubleshooting</a></div>
+      </nav></div>
+</header>
+<main class="page-content" aria-label="Content">
+      <div class="wrapper">
+        <article class="post">
+
+  <header class="post-header">
+    <h1 class="post-title">Video Output</h1>
+  </header>
+
+  <div class="post-content">
+    <p>huff has three ways to send its output outside the app window: <strong>Syphon</strong> (macOS), <strong>Spout</strong> (Windows), and the <strong>canvas mirror window</strong> (all platforms via WebSocket).</p>
+
+<hr />
+
+<h2 id="syphon-macos">Syphon (macOS)</h2>
+
+<p>Syphon lets huff share its canvas as a named texture that any Syphon-enabled application can receive in real time — without capture cards or screen recording.</p>
+
+<p><strong>Compatible receivers:</strong> Resolume Avenue/Arena, VDMX, MadMapper, CoGe, Millumin, Modul8, VDMX5, Max/MSP (Jitter), Processing (Syphon library), and anything supporting the Syphon protocol.</p>
+
+<h3 id="usage">Usage</h3>
+
+<ol>
+  <li>Click the <strong>SYPHON</strong> button in the top bar.</li>
+  <li>Set the output <strong>resolution</strong> (default: 1280×720).</li>
+  <li>Set the <strong>FPS cap</strong> (default: 30fps — do not set higher than your canvas frame rate).</li>
+  <li>Click <strong>▶ Start</strong>. The sender appears as <code class="language-plaintext highlighter-rouge">huff</code> in any Syphon receiver.</li>
+  <li>Click <strong>■ Stop</strong> to close the server.</li>
+</ol>
+
+<div class="img-placeholder">
+  <span class="ph-label">📸 SCREENSHOT PLACEHOLDER</span>
+  <span>huff Syphon panel with active server + Resolume showing the huff source in its source browser<br />
+  <em>Suggested AI prompt: "macOS screen showing Syphon texture sharing between two apps, neon colour palette, glitch art aesthetic"</em></span>
+</div>
+
+<h3 id="how-it-works">How It Works</h3>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>canvas.getImageData()
+  → raw RGBA bytes
+  → "HUFFSYPH" prefix + width (u32 LE) + height (u32 LE) + pixels
+  → binary WebSocket to port 8787
+  → Rust relay intercepts on b"HUFFSYPH"
+  → syphon::push_frame()
+  → MTLTexture CPU upload
+  → SyphonMetalServer.publishFrameTexture()
+  → Syphon clients
+</code></pre></div></div>
+
+<div class="callout warning">
+  <strong>CPU round-trip:</strong> The pipeline reads pixels back from the WebView canvas via <code>getImageData()</code>, then re-uploads them to a Metal texture in Rust. This is not zero-copy. It works well at 720p/30fps. See <a href="/caveats">Caveats</a> for details.
+</div>
+
+<h3 id="installation-notes">Installation Notes</h3>
+
+<p>The Syphon.framework is <strong>bundled inside the huff app bundle</strong> — no separate installation is required. The framework is declared in <code class="language-plaintext highlighter-rouge">tauri.conf.json</code> under <code class="language-plaintext highlighter-rouge">bundle.macOS.frameworks</code> and Tauri copies it into the bundle automatically.</p>
+
+<hr />
+
+<h2 id="spout-windows">Spout (Windows)</h2>
+
+<p>Spout is the Windows equivalent of Syphon. huff shares its canvas as a named D3D11 texture via the SpoutDX bridge.</p>
+
+<p><strong>Compatible receivers:</strong> Resolume Arena, TouchDesigner, MadMapper, Notch, and anything supporting the Spout2 protocol.</p>
+
+<h3 id="usage-1">Usage</h3>
+
+<ol>
+  <li>Install the <a href="https://spout.zeal.co/">Spout2 runtime</a> if not already present.</li>
+  <li>Click the <strong>SPOUT</strong> button in the top bar.</li>
+  <li>Set resolution and FPS cap.</li>
+  <li>Click <strong>▶ Start</strong>. The sender appears as <code class="language-plaintext highlighter-rouge">huff</code> in Spout receivers.</li>
+</ol>
+
+<div class="img-placeholder">
+  <span class="ph-label">📸 SCREENSHOT PLACEHOLDER</span>
+  <span>huff Spout panel active + TouchDesigner receiving the huff Spout source<br />
+  <em>Replace with: screenshot of SpoutReceiver or TouchDesigner showing the huff feed</em></span>
+</div>
+
+<h3 id="how-it-works-1">How It Works</h3>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>canvas.getImageData()
+  → raw RGBA bytes
+  → "HUFFSPOUT" prefix + width (u32 LE) + height (u32 LE) + pixels
+  → binary WebSocket to port 8787
+  → Rust relay intercepts on b"HUFFSPOUT"
+  → spout::push_frame()
+  → spoutdx_send_image()
+  → SpoutDX D3D11 UpdateSubresource
+  → Spout2 receivers
+</code></pre></div></div>
+
+<h3 id="binary-layout">Binary Layout</h3>
+
+<p>The magic-byte protocol that huff uses over the WebSocket:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Syphon frame:
+  Bytes  0–7   : b"HUFFSYPH"  (8 bytes)
+  Bytes  8–11  : width  u32 little-endian
+  Bytes  12–15 : height u32 little-endian
+  Bytes  16+   : raw RGBA8 pixels (width × height × 4 bytes)
+
+Spout frame:
+  Bytes  0–8   : b"HUFFSPOUT"  (9 bytes)
+  Bytes  9–12  : width  u32 little-endian
+  Bytes  13–16 : height u32 little-endian
+  Bytes  17+   : raw RGBA8 pixels (width × height × 4 bytes)
+</code></pre></div></div>
+
+<p>The Rust relay inspects the first bytes of every binary WebSocket message. If neither prefix matches, the message is forwarded to <code class="language-plaintext highlighter-rouge">canvas</code> role clients as normal.</p>
+
+<hr />
+
+<h2 id="canvas-mirror-window">Canvas Mirror Window</h2>
+
+<p>The canvas window (<code class="language-plaintext highlighter-rouge">canvas.html</code>) connects to the embedded WebSocket relay on port <code class="language-plaintext highlighter-rouge">8787</code> and renders frames as they arrive.</p>
+
+<p><strong>Usage:</strong></p>
+<ul>
+  <li>The window opens automatically with the app (it is declared as a second Tauri window in <code class="language-plaintext highlighter-rouge">tauri.conf.json</code>).</li>
+  <li>Press <strong>F</strong> in the canvas window to toggle fullscreen.</li>
+  <li>Move it to a second monitor or projector.</li>
+</ul>
+
+<p><strong>Independent use:</strong> You can also open <code class="language-plaintext highlighter-rouge">canvas.html</code> directly in a browser while the app is running — navigate to <code class="language-plaintext highlighter-rouge">file:///path/to/huff/src/canvas.html</code>. The browser connects to the same relay.</p>
+
+<p><strong>OBS capture:</strong> The canvas window is a clean output with no UI chrome. Use OBS <strong>Window Capture</strong> source pointed at the canvas window for recording or streaming.</p>
+
+<div class="callout note">
+  <strong>Frame rate:</strong> The canvas window receives JPEG-encoded frames. The encode quality is proportional to the QUALITY slider. At quality=1 frames arrive at roughly the p5 draw rate. Reducing quality also reduces WS bandwidth.
+</div>
+
+  </div>
+
+</article>
+
+      </div>
+    </main><footer class="site-footer h-card">
+  <data class="u-url" href="/huff/"></data>
+
+  <div class="wrapper">
+
+    <h2 class="footer-heading">huff</h2>
+
+    <div class="footer-col-wrapper">
+      <div class="footer-col footer-col-1">
+        <ul class="contact-list">
+          <li class="p-name">huff</li></ul>
+      </div>
+
+      <div class="footer-col footer-col-2"><ul class="social-media-list"></ul>
+</div>
+
+      <div class="footer-col footer-col-3">
+        <p>Real-time datamosh &amp; glitch-art for desktop. Tauri · p5.js · Rust · Syphon · Spout · MIDI · OSC.</p>
+      </div>
+    </div>
+
+  </div>
+
+</footer>
+</body>
+
+</html>

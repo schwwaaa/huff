@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1"><!-- Begin Jekyll SEO tag v2.8.0 -->
+<title>How it Works | huff</title>
+<meta name="generator" content="Jekyll v3.10.0" />
+<meta property="og:title" content="How it Works" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="Real-time datamosh &amp; glitch-art for desktop. Tauri · p5.js · Rust · Syphon · Spout · MIDI · OSC." />
+<meta property="og:description" content="Real-time datamosh &amp; glitch-art for desktop. Tauri · p5.js · Rust · Syphon · Spout · MIDI · OSC." />
+<link rel="canonical" href="http://localhost:4000/huff/how-it-works/" />
+<meta property="og:url" content="http://localhost:4000/huff/how-it-works/" />
+<meta property="og:site_name" content="huff" />
+<meta property="og:type" content="website" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:title" content="How it Works" />
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"WebPage","description":"Real-time datamosh &amp; glitch-art for desktop. Tauri · p5.js · Rust · Syphon · Spout · MIDI · OSC.","headline":"How it Works","url":"http://localhost:4000/huff/how-it-works/"}</script>
+<!-- End Jekyll SEO tag -->
+<link rel="stylesheet" href="/huff/assets/main.css"><link type="application/atom+xml" rel="alternate" href="http://localhost:4000/huff/feed.xml" title="huff" /></head>
+<body><header class="site-header" role="banner">
+
+  <div class="wrapper"><a class="site-title" rel="author" href="/huff/">huff</a><nav class="site-nav">
+        <input type="checkbox" id="nav-trigger" class="nav-trigger" />
+        <label for="nav-trigger">
+          <span class="menu-icon">
+            <svg viewBox="0 0 18 15" width="18px" height="15px">
+              <path d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0 h15.032C17.335,0,18,0.665,18,1.484L18,1.484z M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0 c0-0.82,0.665-1.484,1.484-1.484h15.032C17.335,6.031,18,6.696,18,7.516L18,7.516z M18,13.516C18,14.335,17.335,15,16.516,15H1.484 C0.665,15,0,14.335,0,13.516l0,0c0-0.82,0.665-1.483,1.484-1.483h15.032C17.335,12.031,18,12.695,18,13.516L18,13.516z"/>
+            </svg>
+          </span>
+        </label>
+
+        <div class="trigger"><a class="page-link" href="/huff/">huff</a><a class="page-link" href="/huff/how-it-works/">How it Works</a><a class="page-link" href="/huff/installation/">Installation</a><a class="page-link" href="/huff/interface/">The Interface</a><a class="page-link" href="/huff/midi/">MIDI</a><a class="page-link" href="/huff/osc/">OSC</a><a class="page-link" href="/huff/output/">Video Output</a><a class="page-link" href="/huff/parameter-reference/">Parameter Reference</a><a class="page-link" href="/huff/architecture/">Architecture</a><a class="page-link" href="/huff/caveats/">Caveats &amp; Known Limitations</a><a class="page-link" href="/huff/troubleshooting/">Troubleshooting</a></div>
+      </nav></div>
+</header>
+<main class="page-content" aria-label="Content">
+      <div class="wrapper">
+        <article class="post">
+
+  <header class="post-header">
+    <h1 class="post-title">How it Works</h1>
+  </header>
+
+  <div class="post-content">
+    <p>huff processes video through a sequential chain of effect passes each frame. Understanding the architecture helps you predict how parameter changes interact and why certain combinations produce the results they do.</p>
+
+<hr />
+
+<h2 id="effect-pipeline">Effect Pipeline</h2>
+
+<p>Each frame, source material passes through up to eight independent effect passes. Each pass is independently toggleable. When a pass is disabled it is completely skipped — there is no bleed-through. The order is fixed.</p>
+
+<div class="diagram-wrap">
+<svg viewBox="0 0 760 520" xmlns="http://www.w3.org/2000/svg" font-family="'SF Mono', 'Fira Code', monospace">
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#ff4444" />
+    </marker>
+    <marker id="arr-dim" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 Z" fill="rgba(255,255,255,0.25)" />
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="760" height="520" fill="#0d0d0f" rx="12" />
+
+  <!-- Title -->
+  <text x="380" y="32" text-anchor="middle" fill="#ff4444" font-size="13" font-weight="700" letter-spacing="2">EFFECT PIPELINE — PER FRAME</text>
+
+  <!-- SOURCE box -->
+  <rect x="260" y="50" width="240" height="48" rx="6" fill="rgba(255,68,68,0.12)" stroke="#ff4444" stroke-width="1.5" />
+  <text x="380" y="70" text-anchor="middle" fill="#ff4444" font-size="11" font-weight="700" letter-spacing="1">SOURCE</text>
+  <text x="380" y="87" text-anchor="middle" fill="rgba(255,255,255,0.45)" font-size="9.5">video file  ·  webcam  ·  ring seed</text>
+
+  <!-- Arrow source → ring -->
+  <line x1="380" y1="98" x2="380" y2="122" stroke="#ff4444" stroke-width="1.5" marker-end="url(#arr)" />
+
+  <!-- FRAME RING -->
+  <rect x="200" y="122" width="360" height="56" rx="6" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.2)" stroke-width="1.5" stroke-dasharray="5,3" />
+  <text x="380" y="143" text-anchor="middle" fill="rgba(255,255,255,0.7)" font-size="11" font-weight="700" letter-spacing="1">FRAME RING BUFFER</text>
+  <text x="380" y="161" text-anchor="middle" fill="rgba(255,255,255,0.35)" font-size="9">192 MB cap  ·  up to 60 frames  ·  ImageData[]</text>
+
+  <!-- Ring frame labels -->
+  <text x="215" y="198" fill="rgba(255,255,255,0.25)" font-size="9">[t-1]</text>
+  <text x="255" y="198" fill="rgba(255,255,255,0.2)" font-size="9">[t-2]</text>
+  <text x="295" y="198" fill="rgba(255,255,255,0.15)" font-size="9">[t-3]</text>
+  <text x="330" y="198" fill="rgba(255,255,255,0.1)" font-size="9">···</text>
+  <text x="363" y="198" fill="rgba(255,255,255,0.08)" font-size="9">[t-N]</text>
+
+  <!-- Effect passes — 7 boxes in two rows -->
+  <!-- Row 1: Trails, Feedback, Glitch, Scanlines -->
+  <!-- Pass arrows from ring -->
+  <line x1="380" y1="178" x2="380" y2="220" stroke="rgba(255,255,255,0.15)" stroke-width="1" marker-end="url(#arr-dim)" />
+
+  <!-- PASS 1 TRAILS -->
+  <rect x="30" y="218" width="140" height="42" rx="5" fill="rgba(180,100,255,0.1)" stroke="rgba(180,100,255,0.4)" stroke-width="1" />
+  <text x="100" y="234" text-anchor="middle" fill="rgba(180,100,255,0.9)" font-size="9.5" font-weight="700" letter-spacing="0.5">PASS 1 · TRAILS</text>
+  <text x="100" y="249" text-anchor="middle" fill="rgba(255,255,255,0.35)" font-size="8.5">ghost frames composited</text>
+
+  <!-- PASS 2 FEEDBACK -->
+  <rect x="188" y="218" width="140" height="42" rx="5" fill="rgba(68,136,255,0.1)" stroke="rgba(68,136,255,0.4)" stroke-width="1" />
+  <text x="258" y="234" text-anchor="middle" fill="rgba(68,136,255,0.9)" font-size="9.5" font-weight="700" letter-spacing="0.5">PASS 2 · FEEDBACK</text>
+  <text x="258" y="249" text-anchor="middle" fill="rgba(255,255,255,0.35)" font-size="8.5">zoom / translate / rotate</text>
+
+  <!-- PASS 3 GLITCH -->
+  <rect x="346" y="218" width="140" height="42" rx="5" fill="rgba(255,68,68,0.12)" stroke="rgba(255,68,68,0.5)" stroke-width="1" />
+  <text x="416" y="234" text-anchor="middle" fill="#ff4444" font-size="9.5" font-weight="700" letter-spacing="0.5">PASS 3 · GLITCH</text>
+  <text x="416" y="249" text-anchor="middle" fill="rgba(255,255,255,0.35)" font-size="8.5">tile displacement from ring</text>
+
+  <!-- PASS 4 SCANLINES -->
+  <rect x="504" y="218" width="140" height="42" rx="5" fill="rgba(255,170,0,0.1)" stroke="rgba(255,170,0,0.4)" stroke-width="1" />
+  <text x="574" y="234" text-anchor="middle" fill="rgba(255,170,0,0.9)" font-size="9.5" font-weight="700" letter-spacing="0.5">PASS 4 · SCANLINES</text>
+  <text x="574" y="249" text-anchor="middle" fill="rgba(255,255,255,0.35)" font-size="8.5">horizontal band displacement</text>
+
+  <!-- Row connector arrows (pass 1→2→3→4) -->
+  <line x1="170" y1="239" x2="188" y2="239" stroke="rgba(255,255,255,0.2)" stroke-width="1" marker-end="url(#arr-dim)" />
+  <line x1="328" y1="239" x2="346" y2="239" stroke="rgba(255,255,255,0.2)" stroke-width="1" marker-end="url(#arr-dim)" />
+  <line x1="486" y1="239" x2="504" y2="239" stroke="rgba(255,255,255,0.2)" stroke-width="1" marker-end="url(#arr-dim)" />
+
+  <!-- Row 2: Flow Warp, Solarize, Symmetry -->
+  <!-- Turn arrow row1 → row2 -->
+  <line x1="644" y1="239" x2="674" y2="239" stroke="rgba(255,255,255,0.15)" stroke-width="1" />
+  <line x1="674" y1="239" x2="674" y2="310" stroke="rgba(255,255,255,0.15)" stroke-width="1" />
+  <line x1="674" y1="310" x2="506" y2="310" stroke="rgba(255,255,255,0.15)" stroke-width="1" marker-end="url(#arr-dim)" />
+
+  <!-- PASS 5 FLOW WARP -->
+  <rect x="346" y="290" width="160" height="42" rx="5" fill="rgba(0,200,220,0.08)" stroke="rgba(0,200,220,0.4)" stroke-width="1" />
+  <text x="426" y="306" text-anchor="middle" fill="rgba(0,200,220,0.9)" font-size="9.5" font-weight="700" letter-spacing="0.5">PASS 5 · FLOW WARP</text>
+  <text x="426" y="321" text-anchor="middle" fill="rgba(255,255,255,0.35)" font-size="8.5">noise UV distortion</text>
+
+  <!-- PASS 6 SOLARIZE -->
+  <rect x="178" y="290" width="160" height="42" rx="5" fill="rgba(255,220,80,0.08)" stroke="rgba(255,220,80,0.4)" stroke-width="1" />
+  <text x="258" y="306" text-anchor="middle" fill="rgba(255,220,80,0.9)" font-size="9.5" font-weight="700" letter-spacing="0.5">PASS 6 · SOLARIZE</text>
+  <text x="258" y="321" text-anchor="middle" fill="rgba(255,255,255,0.35)" font-size="8.5">luma-threshold inversion</text>
+
+  <!-- PASS 7 SYMMETRY -->
+  <rect x="10" y="290" width="160" height="42" rx="5" fill="rgba(80,255,140,0.08)" stroke="rgba(80,255,140,0.35)" stroke-width="1" />
+  <text x="90" y="306" text-anchor="middle" fill="rgba(80,255,140,0.85)" font-size="9.5" font-weight="700" letter-spacing="0.5">PASS 7 · SYMMETRY</text>
+  <text x="90" y="321" text-anchor="middle" fill="rgba(255,255,255,0.35)" font-size="8.5">mirror fold at axis</text>
+
+  <!-- Row 2 connector arrows -->
+  <line x1="346" y1="311" x2="338" y2="311" stroke="rgba(255,255,255,0.2)" stroke-width="1" marker-end="url(#arr-dim)" />
+  <line x1="178" y1="311" x2="170" y2="311" stroke="rgba(255,255,255,0.2)" stroke-width="1" marker-end="url(#arr-dim)" />
+
+  <!-- Arrow pass 7 → output -->
+  <line x1="90" y1="332" x2="90" y2="380" stroke="rgba(255,255,255,0.15)" stroke-width="1" />
+  <line x1="90" y1="380" x2="380" y2="380" stroke="rgba(255,255,255,0.15)" stroke-width="1" marker-end="url(#arr-dim)" />
+
+  <!-- OUTPUT FRAME box -->
+  <rect x="240" y="378" width="280" height="48" rx="6" fill="rgba(255,68,68,0.12)" stroke="#ff4444" stroke-width="1.5" />
+  <text x="380" y="397" text-anchor="middle" fill="#ff4444" font-size="11" font-weight="700" letter-spacing="1">OUTPUT FRAME</text>
+  <text x="380" y="413" text-anchor="middle" fill="rgba(255,255,255,0.4)" font-size="9">→ Canvas window  · Syphon  · Spout  · WS relay</text>
+
+  <!-- Ring update arrow -->
+  <line x1="380" y1="426" x2="380" y2="454" stroke="rgba(255,255,255,0.12)" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arr-dim)" />
+  <text x="380" y="468" text-anchor="middle" fill="rgba(255,255,255,0.2)" font-size="9">pushed to ring → becomes [t-1] next frame</text>
+
+  <!-- Ring read arrows (dashed lines from ring to effect boxes) -->
+  <line x1="245" y1="178" x2="100" y2="218" stroke="rgba(255,255,255,0.1)" stroke-width="1" stroke-dasharray="3,3" />
+  <line x1="290" y1="178" x2="258" y2="218" stroke="rgba(255,255,255,0.1)" stroke-width="1" stroke-dasharray="3,3" />
+  <line x1="380" y1="178" x2="416" y2="218" stroke="rgba(255,255,255,0.1)" stroke-width="1" stroke-dasharray="3,3" />
+  <line x1="460" y1="178" x2="574" y2="218" stroke="rgba(255,255,255,0.1)" stroke-width="1" stroke-dasharray="3,3" />
+  <line x1="380" y1="178" x2="426" y2="290" stroke="rgba(255,255,255,0.08)" stroke-width="1" stroke-dasharray="3,3" />
+
+  <!-- Legend -->
+  <rect x="490" y="450" width="255" height="58" rx="5" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.08)" stroke-width="1" />
+  <text x="500" y="467" fill="rgba(255,255,255,0.5)" font-size="9" font-weight="700" letter-spacing="1">LEGEND</text>
+  <line x1="500" y1="478" x2="520" y2="478" stroke="#ff4444" stroke-width="1.5" marker-end="url(#arr)" />
+  <text x="525" y="481" fill="rgba(255,255,255,0.4)" font-size="9">main data flow</text>
+  <line x1="500" y1="494" x2="520" y2="494" stroke="rgba(255,255,255,0.25)" stroke-width="1" stroke-dasharray="3,2" />
+  <text x="525" y="497" fill="rgba(255,255,255,0.4)" font-size="9">ring read (past frames)</text>
+</svg>
+
+</div>
+
+<p><strong>Reading the diagram:</strong>
+The frame ring sits at the centre. Every time-based effect (Trails, Glitch, Scanlines, Flow Warp) reads from it. The ring is updated at the end of each frame — passes always read the <em>previous</em> frame’s ring state, never the current one being assembled.</p>
+
+<hr />
+
+<h2 id="ui--effect-data-flow">UI → Effect Data Flow</h2>
+
+<p>All parameter control — sliders, MIDI CC, OSC messages — converges on the same DOM element values. The p5.js draw loop reads these values directly on every frame. There is no debounce, no interpolation layer, and no intermediate state object.</p>
+
+<div class="diagram-wrap">
+<svg viewBox="0 0 720 400" xmlns="http://www.w3.org/2000/svg" font-family="'SF Mono', 'Fira Code', monospace">
+  <defs>
+    <marker id="a2" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#ff4444" />
+    </marker>
+    <marker id="a2b" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 Z" fill="rgba(180,100,255,0.8)" />
+    </marker>
+    <marker id="a2c" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 Z" fill="rgba(0,200,220,0.8)" />
+    </marker>
+  </defs>
+
+  <rect width="720" height="400" fill="#0d0d0f" rx="12" />
+  <text x="360" y="30" text-anchor="middle" fill="#ff4444" font-size="13" font-weight="700" letter-spacing="2">UI → EFFECT DATA FLOW</text>
+
+  <!-- INPUT SOURCES row -->
+  <!-- Slider -->
+  <rect x="30" y="55" width="140" height="50" rx="5" fill="rgba(255,68,68,0.1)" stroke="rgba(255,68,68,0.4)" stroke-width="1" />
+  <text x="100" y="75" text-anchor="middle" fill="rgba(255,68,68,0.9)" font-size="10" font-weight="700">SLIDER / TOGGLE</text>
+  <text x="100" y="91" text-anchor="middle" fill="rgba(255,255,255,0.35)" font-size="8.5">controls window (WebView)</text>
+
+  <!-- MIDI -->
+  <rect x="200" y="55" width="140" height="50" rx="5" fill="rgba(180,100,255,0.1)" stroke="rgba(180,100,255,0.4)" stroke-width="1" />
+  <text x="270" y="72" text-anchor="middle" fill="rgba(180,100,255,0.9)" font-size="10" font-weight="700">MIDI CC</text>
+  <text x="270" y="86" text-anchor="middle" fill="rgba(255,255,255,0.35)" font-size="8.5">USB controller / IAC Bus</text>
+  <text x="270" y="98" text-anchor="middle" fill="rgba(255,255,255,0.25)" font-size="8">midir (Rust native)</text>
+
+  <!-- OSC -->
+  <rect x="370" y="55" width="140" height="50" rx="5" fill="rgba(0,200,220,0.08)" stroke="rgba(0,200,220,0.4)" stroke-width="1" />
+  <text x="440" y="72" text-anchor="middle" fill="rgba(0,200,220,0.9)" font-size="10" font-weight="700">OSC MESSAGE</text>
+  <text x="440" y="86" text-anchor="middle" fill="rgba(255,255,255,0.35)" font-size="8.5">TouchOSC / Max / Pd / TD</text>
+  <text x="440" y="98" text-anchor="middle" fill="rgba(255,255,255,0.25)" font-size="8">UDP port 9000 · rosc (Rust)</text>
+
+  <!-- Preset -->
+  <rect x="540" y="55" width="140" height="50" rx="5" fill="rgba(255,220,80,0.08)" stroke="rgba(255,220,80,0.35)" stroke-width="1" />
+  <text x="610" y="72" text-anchor="middle" fill="rgba(255,220,80,0.9)" font-size="10" font-weight="700">PRESET LOAD</text>
+  <text x="610" y="86" text-anchor="middle" fill="rgba(255,255,255,0.35)" font-size="8.5">JSON snapshot</text>
+  <text x="610" y="98" text-anchor="middle" fill="rgba(255,255,255,0.25)" font-size="8">localStorage</text>
+
+  <!-- Arrows down to DOM -->
+  <line x1="100" y1="105" x2="100" y2="155" stroke="#ff4444" stroke-width="1.5" marker-end="url(#a2)" />
+  <line x1="270" y1="105" x2="270" y2="155" stroke="rgba(180,100,255,0.8)" stroke-width="1.5" marker-end="url(#a2b)" />
+  <line x1="440" y1="105" x2="440" y2="155" stroke="rgba(0,200,220,0.8)" stroke-width="1.5" marker-end="url(#a2c)" />
+  <line x1="610" y1="105" x2="440" y2="155" stroke="rgba(255,220,80,0.6)" stroke-width="1.5" marker-end="url(#a2)" />
+
+  <!-- MIDI path annotation -->
+  <text x="280" y="133" fill="rgba(180,100,255,0.5)" font-size="8">Tauri "midi-event"</text>
+  <text x="450" y="133" fill="rgba(0,200,220,0.5)" font-size="8">Tauri "osc-message"</text>
+
+  <!-- DOM ELEMENT box -->
+  <rect x="180" y="155" width="360" height="52" rx="6" fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.2)" stroke-width="1.5" />
+  <text x="360" y="177" text-anchor="middle" fill="rgba(255,255,255,0.8)" font-size="11" font-weight="700">DOM ELEMENT  (input / checkbox)</text>
+  <text x="360" y="196" text-anchor="middle" fill="rgba(255,255,255,0.35)" font-size="9">e.g.  els.corrupt.value = "0.35"   ← all inputs converge here</text>
+
+  <!-- Arrow DOM → draw() -->
+  <line x1="360" y1="207" x2="360" y2="247" stroke="rgba(255,255,255,0.3)" stroke-width="1.5" marker-end="url(#a2)" />
+
+  <!-- p5 draw() box -->
+  <rect x="200" y="247" width="320" height="52" rx="6" fill="rgba(255,68,68,0.1)" stroke="#ff4444" stroke-width="1.5" />
+  <text x="360" y="268" text-anchor="middle" fill="#ff4444" font-size="11" font-weight="700">p5 draw()  loop</text>
+  <text x="360" y="285" text-anchor="middle" fill="rgba(255,255,255,0.35)" font-size="9">reads els.* on every requestAnimationFrame tick</text>
+
+  <!-- Arrow draw → effect -->
+  <line x1="360" y1="299" x2="360" y2="335" stroke="rgba(255,255,255,0.3)" stroke-width="1.5" marker-end="url(#a2)" />
+
+  <!-- Effect output box -->
+  <rect x="200" y="335" width="320" height="44" rx="6" fill="rgba(80,255,140,0.06)" stroke="rgba(80,255,140,0.35)" stroke-width="1" />
+  <text x="360" y="355" text-anchor="middle" fill="rgba(80,255,140,0.85)" font-size="11" font-weight="700">Effect chain executes</text>
+  <text x="360" y="371" text-anchor="middle" fill="rgba(255,255,255,0.35)" font-size="9">applyGlitch() · applyTrails() · applyFlowWarp() ···</text>
+
+  <!-- Key insight annotation -->
+  <rect x="30" y="247" width="155" height="60" rx="5" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.08)" stroke-width="1" />
+  <text x="107" y="265" text-anchor="middle" fill="rgba(255,255,255,0.5)" font-size="8.5" font-weight="700">KEY INSIGHT</text>
+  <text x="107" y="280" text-anchor="middle" fill="rgba(255,255,255,0.35)" font-size="8">No debounce.</text>
+  <text x="107" y="292" text-anchor="middle" fill="rgba(255,255,255,0.35)" font-size="8">No smoothing layer.</text>
+  <text x="107" y="304" text-anchor="middle" fill="rgba(255,255,255,0.35)" font-size="8">Next frame = live value.</text>
+</svg>
+
+</div>
+
+<p><strong>What this means in practice:</strong></p>
+<ul>
+  <li>Moving a slider and receiving a MIDI CC produce identical results — both write the same DOM element</li>
+  <li>There is no latency between receiving a MIDI CC and it affecting the output; the next <code class="language-plaintext highlighter-rouge">draw()</code> frame picks it up</li>
+  <li>Smoothing/interpolation of parameter changes is not built in — if you need it, do it in your MIDI controller or OSC sender</li>
+</ul>
+
+<hr />
+
+<h2 id="frame-output-pipeline">Frame Output Pipeline</h2>
+
+<p>At the end of each <code class="language-plaintext highlighter-rouge">draw()</code> call, huff routes the composited output frame to one or more destinations. Syphon and Spout use a magic-byte prefix on the same WebSocket connection as the canvas mirror — Rust inspects the first bytes and routes accordingly.</p>
+
+<div class="diagram-wrap">
+<svg viewBox="0 0 720 360" xmlns="http://www.w3.org/2000/svg" font-family="'SF Mono', 'Fira Code', monospace">
+  <defs>
+    <marker id="a3" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 Z" fill="rgba(255,255,255,0.4)" />
+    </marker>
+    <marker id="a3r" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#ff4444" />
+    </marker>
+    <marker id="a3p" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 Z" fill="rgba(180,100,255,0.8)" />
+    </marker>
+    <marker id="a3c" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 Z" fill="rgba(0,200,220,0.8)" />
+    </marker>
+  </defs>
+
+  <rect width="720" height="360" fill="#0d0d0f" rx="12" />
+  <text x="360" y="30" text-anchor="middle" fill="#ff4444" font-size="13" font-weight="700" letter-spacing="2">FRAME OUTPUT PIPELINE</text>
+
+  <!-- gBuf -->
+  <rect x="260" y="50" width="200" height="48" rx="6" fill="rgba(255,68,68,0.12)" stroke="#ff4444" stroke-width="1.5" />
+  <text x="360" y="70" text-anchor="middle" fill="#ff4444" font-size="11" font-weight="700">p5 gBuf</text>
+  <text x="360" y="87" text-anchor="middle" fill="rgba(255,255,255,0.4)" font-size="9">composited output canvas</text>
+
+  <!-- 4 output branches -->
+  <!-- Branch arrows -->
+  <line x1="310" y1="98" x2="100" y2="140" stroke="rgba(255,255,255,0.25)" stroke-width="1.5" marker-end="url(#a3)" />
+  <line x1="345" y1="98" x2="260" y2="140" stroke="rgba(255,255,255,0.25)" stroke-width="1.5" marker-end="url(#a3)" />
+  <line x1="390" y1="98" x2="460" y2="140" stroke="rgba(180,100,255,0.7)" stroke-width="1.5" marker-end="url(#a3p)" />
+  <line x1="420" y1="98" x2="620" y2="140" stroke="rgba(0,200,220,0.7)" stroke-width="1.5" marker-end="url(#a3c)" />
+
+  <!-- OUTPUT 1: Screen preview -->
+  <rect x="20" y="140" width="160" height="50" rx="5" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.2)" stroke-width="1" />
+  <text x="100" y="161" text-anchor="middle" fill="rgba(255,255,255,0.7)" font-size="10" font-weight="700">SCREEN PREVIEW</text>
+  <text x="100" y="178" text-anchor="middle" fill="rgba(255,255,255,0.3)" font-size="8.5">controls window · direct draw</text>
+
+  <!-- OUTPUT 2: WS Mirror -->
+  <rect x="200" y="140" width="160" height="50" rx="5" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.2)" stroke-width="1" />
+  <text x="280" y="158" text-anchor="middle" fill="rgba(255,255,255,0.7)" font-size="10" font-weight="700">WS MIRROR</text>
+  <text x="280" y="172" text-anchor="middle" fill="rgba(255,255,255,0.3)" font-size="8.5">JPEG encode → port 8787</text>
+  <text x="280" y="184" text-anchor="middle" fill="rgba(255,255,255,0.2)" font-size="8">canvas.html receives</text>
+
+  <!-- OUTPUT 3: Syphon -->
+  <rect x="380" y="140" width="160" height="50" rx="5" fill="rgba(180,100,255,0.08)" stroke="rgba(180,100,255,0.4)" stroke-width="1" />
+  <text x="460" y="158" text-anchor="middle" fill="rgba(180,100,255,0.9)" font-size="10" font-weight="700">SYPHON</text>
+  <text x="460" y="172" text-anchor="middle" fill="rgba(255,255,255,0.3)" font-size="8.5">macOS · HUFFSYPH prefix</text>
+  <text x="460" y="184" text-anchor="middle" fill="rgba(255,255,255,0.2)" font-size="8">port 8787 → Rust intercept</text>
+
+  <!-- OUTPUT 4: Spout -->
+  <rect x="560" y="140" width="140" height="50" rx="5" fill="rgba(0,200,220,0.06)" stroke="rgba(0,200,220,0.4)" stroke-width="1" />
+  <text x="630" y="158" text-anchor="middle" fill="rgba(0,200,220,0.9)" font-size="10" font-weight="700">SPOUT</text>
+  <text x="630" y="172" text-anchor="middle" fill="rgba(255,255,255,0.3)" font-size="8.5">Windows · HUFFSPOUT prefix</text>
+  <text x="630" y="184" text-anchor="middle" fill="rgba(255,255,255,0.2)" font-size="8">port 8787 → Rust intercept</text>
+
+  <!-- Syphon detailed path -->
+  <line x1="460" y1="190" x2="460" y2="225" stroke="rgba(180,100,255,0.5)" stroke-width="1" marker-end="url(#a3p)" />
+  <rect x="380" y="225" width="160" height="60" rx="5" fill="rgba(180,100,255,0.05)" stroke="rgba(180,100,255,0.2)" stroke-width="1" />
+  <text x="460" y="243" text-anchor="middle" fill="rgba(180,100,255,0.7)" font-size="9" font-weight="700">syphon::push_frame()</text>
+  <text x="460" y="257" text-anchor="middle" fill="rgba(255,255,255,0.25)" font-size="8">MTLTexture CPU upload</text>
+  <text x="460" y="269" text-anchor="middle" fill="rgba(255,255,255,0.25)" font-size="8">SyphonMetalServer</text>
+  <text x="460" y="282" text-anchor="middle" fill="rgba(255,255,255,0.18)" font-size="7.5">→ Resolume · VDMX · MadMapper ···</text>
+
+  <!-- Spout detailed path -->
+  <line x1="630" y1="190" x2="630" y2="225" stroke="rgba(0,200,220,0.5)" stroke-width="1" marker-end="url(#a3c)" />
+  <rect x="555" y="225" width="150" height="60" rx="5" fill="rgba(0,200,220,0.04)" stroke="rgba(0,200,220,0.2)" stroke-width="1" />
+  <text x="630" y="243" text-anchor="middle" fill="rgba(0,200,220,0.7)" font-size="9" font-weight="700">spout::push_frame()</text>
+  <text x="630" y="257" text-anchor="middle" fill="rgba(255,255,255,0.25)" font-size="8">spoutdx_send_image()</text>
+  <text x="630" y="269" text-anchor="middle" fill="rgba(255,255,255,0.25)" font-size="8">D3D11 UpdateSubresource</text>
+  <text x="630" y="282" text-anchor="middle" fill="rgba(255,255,255,0.18)" font-size="7.5">→ Resolume · TouchDesigner ···</text>
+
+  <!-- CPU roundtrip annotation -->
+  <rect x="20" y="305" width="340" height="42" rx="5" fill="rgba(255,170,0,0.06)" stroke="rgba(255,170,0,0.25)" stroke-width="1" />
+  <text x="190" y="322" text-anchor="middle" fill="rgba(255,170,0,0.8)" font-size="9" font-weight="700">⚠  CPU ROUND-TRIP  (Syphon + Spout)</text>
+  <text x="190" y="337" text-anchor="middle" fill="rgba(255,255,255,0.3)" font-size="8">getImageData() → WS → Rust → GPU  ·  throttled to configured FPS cap</text>
+
+  <!-- Shared WS label -->
+  <text x="360" y="118" text-anchor="middle" fill="rgba(255,255,255,0.2)" font-size="8">all three routes use port 8787  ·  magic-byte prefix distinguishes them</text>
+</svg>
+
+</div>
+
+<p><strong>The CPU round-trip note:</strong>
+Both Syphon and Spout currently use <code class="language-plaintext highlighter-rouge">getImageData()</code> to read pixels from the WebView canvas back to CPU, send them over localhost WebSocket, then re-upload to GPU in Rust. This is a full GPU→CPU→GPU trip per frame. It works reliably at 720p/30fps but is not zero-copy. See <a href="caveats#cpu-pixel-readback-for-syphon-and-spout">Caveats</a> for details.</p>
+
+<hr />
+
+<h2 id="frame-ring-buffer">Frame Ring Buffer</h2>
+
+<p>The ring buffer is the shared memory between passes. It stores raw <code class="language-plaintext highlighter-rouge">ImageData</code> objects — RGBA pixel arrays at canvas resolution.</p>
+
+<div class="diagram-wrap">
+<svg viewBox="0 0 720 220" xmlns="http://www.w3.org/2000/svg" font-family="'SF Mono', 'Fira Code', monospace">
+  <defs>
+    <marker id="a4" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 Z" fill="rgba(255,255,255,0.4)" />
+    </marker>
+    <marker id="a4r" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#ff4444" />
+    </marker>
+  </defs>
+
+  <rect width="720" height="220" fill="#0d0d0f" rx="12" />
+  <text x="360" y="28" text-anchor="middle" fill="#ff4444" font-size="12" font-weight="700" letter-spacing="2">FRAME RING BUFFER</text>
+
+  <!-- Ring slots -->
+  <!-- Current frame (being built) -->
+  <rect x="20" y="50" width="70" height="90" rx="5" fill="rgba(255,68,68,0.18)" stroke="#ff4444" stroke-width="2" />
+  <text x="55" y="88" text-anchor="middle" fill="#ff4444" font-size="9" font-weight="700">current</text>
+  <text x="55" y="102" text-anchor="middle" fill="rgba(255,68,68,0.7)" font-size="8">(building)</text>
+  <text x="55" y="154" text-anchor="middle" fill="rgba(255,255,255,0.2)" font-size="7.5">t</text>
+
+  <!-- t-1 -->
+  <rect x="105" y="50" width="70" height="90" rx="5" fill="rgba(255,255,255,0.1)" stroke="rgba(255,255,255,0.35)" stroke-width="1.5" />
+  <text x="140" y="92" text-anchor="middle" fill="rgba(255,255,255,0.8)" font-size="9" font-weight="700">[t-1]</text>
+  <text x="140" y="106" text-anchor="middle" fill="rgba(255,255,255,0.3)" font-size="7.5">prev frame</text>
+  <text x="140" y="154" text-anchor="middle" fill="rgba(255,255,255,0.35)" font-size="7.5">DEPTH 0</text>
+
+  <!-- t-2 -->
+  <rect x="190" y="55" width="70" height="80" rx="5" fill="rgba(255,255,255,0.07)" stroke="rgba(255,255,255,0.25)" stroke-width="1" />
+  <text x="225" y="93" text-anchor="middle" fill="rgba(255,255,255,0.6)" font-size="9">[t-2]</text>
+  <text x="225" y="154" text-anchor="middle" fill="rgba(255,255,255,0.25)" font-size="7.5">DEPTH 0.03</text>
+
+  <!-- t-3 -->
+  <rect x="275" y="60" width="70" height="70" rx="5" fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.18)" stroke-width="1" />
+  <text x="310" y="95" text-anchor="middle" fill="rgba(255,255,255,0.45)" font-size="9">[t-3]</text>
+  <text x="310" y="154" text-anchor="middle" fill="rgba(255,255,255,0.2)" font-size="7.5">···</text>
+
+  <!-- t-N/2 -->
+  <rect x="360" y="65" width="70" height="60" rx="5" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.12)" stroke-width="1" />
+  <text x="395" y="97" text-anchor="middle" fill="rgba(255,255,255,0.3)" font-size="9">[t-N/2]</text>
+  <text x="395" y="154" text-anchor="middle" fill="rgba(255,255,255,0.18)" font-size="7.5">DEPTH 0.5</text>
+
+  <!-- dots -->
+  <text x="465" y="100" fill="rgba(255,255,255,0.2)" font-size="14">···</text>
+
+  <!-- t-N -->
+  <rect x="510" y="70" width="70" height="55" rx="5" fill="rgba(255,255,255,0.02)" stroke="rgba(255,255,255,0.08)" stroke-width="1" />
+  <text x="545" y="100" text-anchor="middle" fill="rgba(255,255,255,0.2)" font-size="9">[t-N]</text>
+  <text x="545" y="154" text-anchor="middle" fill="rgba(255,255,255,0.15)" font-size="7.5">192MB cap</text>
+
+  <!-- Arrow showing ring push direction -->
+  <line x1="595" y1="95" x2="630" y2="95" stroke="rgba(255,255,255,0.15)" stroke-width="1" />
+  <path d="M630,80 Q680,80 680,95 Q680,145 640,155 Q560,165 20,155 Q5,154 5,140 L5,95 Q5,80 20,80 L25,80" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#a4)" />
+  <text x="686" y="118" fill="rgba(255,255,255,0.15)" font-size="8" transform="rotate(90,686,118)">ring wraps</text>
+
+  <!-- Quality annotation -->
+  <rect x="20" y="168" width="310" height="38" rx="5" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.08)" stroke-width="1" />
+  <text x="175" y="183" text-anchor="middle" fill="rgba(255,255,255,0.5)" font-size="8.5" font-weight="700">QUALITY SLIDER → ring depth</text>
+  <text x="175" y="197" text-anchor="middle" fill="rgba(255,255,255,0.3)" font-size="8">0 = 4 frames  ·  0.5 = 30 frames  ·  1.0 = 60 frames (or 192MB cap)</text>
+
+  <!-- Depth annotation -->
+  <rect x="345" y="168" width="360" height="38" rx="5" fill="rgba(255,68,68,0.06)" stroke="rgba(255,68,68,0.2)" stroke-width="1" />
+  <text x="525" y="183" text-anchor="middle" fill="rgba(255,68,68,0.7)" font-size="8.5" font-weight="700">DEPTH + SCATTER → which slot effects read</text>
+  <text x="525" y="197" text-anchor="middle" fill="rgba(255,255,255,0.3)" font-size="8">DEPTH 0 = only [t-1]  ·  DEPTH 0.5 = up to [t-N/2]  ·  SCATTER = per-tile randomisation</text>
+</svg>
+
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th>Parameter</th>
+      <th>Effect on ring</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>QUALITY</strong></td>
+      <td>Controls ring depth: 0→4 frames, 1→60 frames</td>
+    </tr>
+    <tr>
+      <td><strong>DEPTH</strong></td>
+      <td>How far back effects sample into the ring (0–50% of ring depth)</td>
+    </tr>
+    <tr>
+      <td><strong>DEPTH SCATTER</strong></td>
+      <td>Per-tile randomisation of the back index</td>
+    </tr>
+    <tr>
+      <td><strong>192 MB cap</strong></td>
+      <td>Ring depth is also capped by pixel budget: at 1080p (~8 MB/frame) max ≈ 24 frames regardless of quality</td>
+    </tr>
+  </tbody>
+</table>
+
+<hr />
+
+<h2 id="ai-generated-concept-images">AI-Generated Concept Images</h2>
+
+<div class="img-placeholder">
+  <span class="ph-label">🤖 AI IMAGE PLACEHOLDER</span>
+  <span>Suggested prompt for generation:<br /><br />
+  <em>"Abstract glitch art, datamosh aesthetic, horizontal scanline displacement, temporal tile corruption, deep reds and blacks, digital noise, layered translucent frames offset in time, no text, square format"</em><br /><br />
+  Replace with generated image showing the visual output of huff's effect chain</span>
+</div>
+
+<div class="img-placeholder">
+  <span class="ph-label">🤖 AI IMAGE PLACEHOLDER</span>
+  <span>Suggested prompt for generation:<br /><br />
+  <em>"Technical diagram, dark background, data flow chart showing: WebGL canvas → frame ring buffer → 7 effect nodes (Trails, Feedback, Glitch, Scanlines, Flow Warp, Solarize, Symmetry) → output routes (Syphon, Spout, WebSocket). Monospace labels, neon red accent lines, clean infographic style"</em><br /><br />
+  Replace with a polished stylised version of the effect pipeline diagram</span>
+</div>
+
+  </div>
+
+</article>
+
+      </div>
+    </main><footer class="site-footer h-card">
+  <data class="u-url" href="/huff/"></data>
+
+  <div class="wrapper">
+
+    <h2 class="footer-heading">huff</h2>
+
+    <div class="footer-col-wrapper">
+      <div class="footer-col footer-col-1">
+        <ul class="contact-list">
+          <li class="p-name">huff</li></ul>
+      </div>
+
+      <div class="footer-col footer-col-2"><ul class="social-media-list"></ul>
+</div>
+
+      <div class="footer-col footer-col-3">
+        <p>Real-time datamosh &amp; glitch-art for desktop. Tauri · p5.js · Rust · Syphon · Spout · MIDI · OSC.</p>
+      </div>
+    </div>
+
+  </div>
+
+</footer>
+</body>
+
+</html>

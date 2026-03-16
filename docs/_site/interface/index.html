@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1"><!-- Begin Jekyll SEO tag v2.8.0 -->
+<title>The Interface | huff</title>
+<meta name="generator" content="Jekyll v3.10.0" />
+<meta property="og:title" content="The Interface" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="Real-time datamosh &amp; glitch-art for desktop. Tauri · p5.js · Rust · Syphon · Spout · MIDI · OSC." />
+<meta property="og:description" content="Real-time datamosh &amp; glitch-art for desktop. Tauri · p5.js · Rust · Syphon · Spout · MIDI · OSC." />
+<link rel="canonical" href="http://localhost:4000/huff/interface/" />
+<meta property="og:url" content="http://localhost:4000/huff/interface/" />
+<meta property="og:site_name" content="huff" />
+<meta property="og:type" content="website" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:title" content="The Interface" />
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"WebPage","description":"Real-time datamosh &amp; glitch-art for desktop. Tauri · p5.js · Rust · Syphon · Spout · MIDI · OSC.","headline":"The Interface","url":"http://localhost:4000/huff/interface/"}</script>
+<!-- End Jekyll SEO tag -->
+<link rel="stylesheet" href="/huff/assets/main.css"><link type="application/atom+xml" rel="alternate" href="http://localhost:4000/huff/feed.xml" title="huff" /></head>
+<body><header class="site-header" role="banner">
+
+  <div class="wrapper"><a class="site-title" rel="author" href="/huff/">huff</a><nav class="site-nav">
+        <input type="checkbox" id="nav-trigger" class="nav-trigger" />
+        <label for="nav-trigger">
+          <span class="menu-icon">
+            <svg viewBox="0 0 18 15" width="18px" height="15px">
+              <path d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0 h15.032C17.335,0,18,0.665,18,1.484L18,1.484z M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0 c0-0.82,0.665-1.484,1.484-1.484h15.032C17.335,6.031,18,6.696,18,7.516L18,7.516z M18,13.516C18,14.335,17.335,15,16.516,15H1.484 C0.665,15,0,14.335,0,13.516l0,0c0-0.82,0.665-1.483,1.484-1.483h15.032C17.335,12.031,18,12.695,18,13.516L18,13.516z"/>
+            </svg>
+          </span>
+        </label>
+
+        <div class="trigger"><a class="page-link" href="/huff/">huff</a><a class="page-link" href="/huff/how-it-works/">How it Works</a><a class="page-link" href="/huff/installation/">Installation</a><a class="page-link" href="/huff/interface/">The Interface</a><a class="page-link" href="/huff/midi/">MIDI</a><a class="page-link" href="/huff/osc/">OSC</a><a class="page-link" href="/huff/output/">Video Output</a><a class="page-link" href="/huff/parameter-reference/">Parameter Reference</a><a class="page-link" href="/huff/architecture/">Architecture</a><a class="page-link" href="/huff/caveats/">Caveats &amp; Known Limitations</a><a class="page-link" href="/huff/troubleshooting/">Troubleshooting</a></div>
+      </nav></div>
+</header>
+<main class="page-content" aria-label="Content">
+      <div class="wrapper">
+        <article class="post">
+
+  <header class="post-header">
+    <h1 class="post-title">The Interface</h1>
+  </header>
+
+  <div class="post-content">
+    <p>huff opens two windows. The <strong>controls window</strong> is your workspace — all parameters, toggles, and configuration panels live here. The <strong>canvas window</strong> is the fullscreen output that receives the processed frames over the embedded WebSocket relay.</p>
+
+<div class="img-placeholder">
+  <span class="ph-label">📸 SCREENSHOT PLACEHOLDER</span>
+  <span>Annotated screenshot of the controls window with group labels highlighted<br />
+  <em>Replace with: annotated UI overview showing all collapsed groups</em></span>
+</div>
+
+<p>The controls are organised into collapsible <strong>groups</strong>. Click a group label to collapse or expand it. Collapsing a group does not disable its effects — use the <strong>ON</strong> toggle inside each group for that.</p>
+
+<hr />
+
+<h2 id="keyboard-shortcuts">Keyboard Shortcuts</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>Key</th>
+      <th>Action</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="language-plaintext highlighter-rouge">P</code></td>
+      <td>Toggle controls panel visibility</td>
+    </tr>
+    <tr>
+      <td><code class="language-plaintext highlighter-rouge">F</code></td>
+      <td>Toggle fullscreen on the output canvas window</td>
+    </tr>
+  </tbody>
+</table>
+
+<hr />
+
+<h2 id="source-group">Source Group</h2>
+
+<p>Controls the input material fed into the effect chain.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Control</th>
+      <th>Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>File</strong></td>
+      <td>Load a video file. Drag-and-drop also works. Supported formats: any format your system’s video decoder handles (MP4, MOV, WebM, etc.).</td>
+    </tr>
+    <tr>
+      <td><strong>Camera</strong></td>
+      <td>Select a webcam from the dropdown. Click <strong>↻ Refresh</strong> to scan for newly connected devices.</td>
+    </tr>
+    <tr>
+      <td><strong>▶ Play / ⏸ Pause</strong></td>
+      <td>Toggle video playback.</td>
+    </tr>
+    <tr>
+      <td><strong>BASE VIDEO</strong></td>
+      <td>Show the raw source frame underneath the glitch output.</td>
+    </tr>
+    <tr>
+      <td><strong>BASE MIX</strong></td>
+      <td>Opacity of the base video layer. 0 = fully glitched output, 1 = raw source on top.</td>
+    </tr>
+    <tr>
+      <td><strong>BASE BG</strong></td>
+      <td>Background fill colour when no tile covers a pixel: Black, Green (chroma key), Blue, or White.</td>
+    </tr>
+    <tr>
+      <td><strong>SEED ON LOAD</strong></td>
+      <td>Prime the frame ring with the first video frame immediately on file load, rather than waiting for the ring to fill naturally over 60 frames.</td>
+    </tr>
+    <tr>
+      <td><strong>QUALITY</strong></td>
+      <td>Scales the frame ring depth (0 → 4 frames, 1 → 60 frames) and controls the Solarize frame-skip rate. This is the single most impactful performance lever.</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="callout">
+  <strong>QUALITY tip:</strong> On slower machines, lower QUALITY first before touching individual effects. At quality=0 the ring holds only 4 frames and every temporal effect becomes much cheaper to compute.
+</div>
+
+<hr />
+
+<h2 id="glitch-group">Glitch Group</h2>
+
+<p>The core datamosh engine. Reads tiles from past frames and blits them onto the current frame at noise-driven positions.</p>
+
+<div class="img-placeholder">
+  <span class="ph-label">📸 SCREENSHOT PLACEHOLDER</span>
+  <span>Close-up of the Glitch group controls panel<br />
+  <em>Suggested AI prompt: "Datamosh tile displacement glitch art, blocky pixel corruption, temporal artefacts, dark background, vivid colours displaced in rectangular chunks"</em></span>
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th>Control</th>
+      <th>Range</th>
+      <th>Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>ON</strong></td>
+      <td>toggle</td>
+      <td>Enable/disable the glitch pass entirely.</td>
+    </tr>
+    <tr>
+      <td><strong>CORRUPT %</strong></td>
+      <td>0–7</td>
+      <td>Fraction of grid tiles displaced per frame. 0 = nothing moves. 7 = every tile replaced.</td>
+    </tr>
+    <tr>
+      <td><strong>CORRUPT DRIFT</strong></td>
+      <td>0–1</td>
+      <td>Noise-driven oscillation of the corruption density. The percentage breathes slowly when &gt; 0.</td>
+    </tr>
+    <tr>
+      <td><strong>PIXEL SIZE</strong></td>
+      <td>150–2000</td>
+      <td>Tile size in pixels. Larger = blockier datamosh. Smaller = fine grain displacement.</td>
+    </tr>
+    <tr>
+      <td><strong>DEPTH</strong></td>
+      <td>0–0.5</td>
+      <td>How far back in the ring tiles are sampled. 0 = only the previous frame. 0.5 = half the ring depth.</td>
+    </tr>
+    <tr>
+      <td><strong>DEPTH SCATTER</strong></td>
+      <td>0–1</td>
+      <td>Per-tile randomisation of the lookback index. 0 = all tiles from the same frame. 1 = each tile independently randomised.</td>
+    </tr>
+    <tr>
+      <td><strong>GLITCH SIZE</strong></td>
+      <td>1–60</td>
+      <td>Spatial scaling of each tile relative to PIXEL SIZE.</td>
+    </tr>
+    <tr>
+      <td><strong>OPACITY</strong></td>
+      <td>0–1</td>
+      <td>Alpha of each blit tile. Lower values create translucent displacement artefacts.</td>
+    </tr>
+    <tr>
+      <td><strong>JITTER</strong></td>
+      <td>0–1</td>
+      <td>Magnitude of per-tile position noise on top of the regular grid.</td>
+    </tr>
+    <tr>
+      <td><strong>SMEAR</strong></td>
+      <td>0–200</td>
+      <td>Number of duplicate stamps trailed behind each tile in the smear direction.</td>
+    </tr>
+    <tr>
+      <td><strong>SMEAR ANGLE</strong></td>
+      <td>0–360</td>
+      <td>Direction of the smear trail in degrees. 0 = noise-driven direction per frame.</td>
+    </tr>
+    <tr>
+      <td><strong>SPEED</strong></td>
+      <td>0–10</td>
+      <td>Phase velocity of the noise field driving tile selection and placement.</td>
+    </tr>
+    <tr>
+      <td><strong>FINE SPEED</strong></td>
+      <td>0–5</td>
+      <td>Secondary noise phase multiplied with SPEED.</td>
+    </tr>
+    <tr>
+      <td><strong>MULT</strong></td>
+      <td>0–5</td>
+      <td>Global speed multiplier applied on top of SPEED × FINE SPEED.</td>
+    </tr>
+    <tr>
+      <td><strong>GLITCH X / Y</strong></td>
+      <td>-1–1</td>
+      <td>Base offset applied to all tile destination positions.</td>
+    </tr>
+    <tr>
+      <td><strong>SEED</strong></td>
+      <td>—</td>
+      <td>Randomisation seed. Same seed + parameters = same output. Use to lock a pattern.</td>
+    </tr>
+  </tbody>
+</table>
+
+<hr />
+
+<h2 id="feedback-group">Feedback Group</h2>
+
+<p>Composites the previous output frame back onto itself with a spatial transform, creating infinite zoom, drift, and rotation effects.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Control</th>
+      <th>Range</th>
+      <th>Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>FEEDBACK</strong></td>
+      <td>0–3</td>
+      <td>Contribution of the previous frame. 0 = no feedback. Values &gt; 1 over-expose.</td>
+    </tr>
+    <tr>
+      <td><strong>PERSISTENCE</strong></td>
+      <td>0–10</td>
+      <td>Decay rate between frames. Higher = trails linger longer.</td>
+    </tr>
+    <tr>
+      <td><strong>FB X</strong></td>
+      <td>-1–1</td>
+      <td>Horizontal translation per frame. Creates lateral drift.</td>
+    </tr>
+    <tr>
+      <td><strong>FB Y</strong></td>
+      <td>-1–1</td>
+      <td>Vertical translation per frame. Creates vertical drift.</td>
+    </tr>
+    <tr>
+      <td><strong>FB Z</strong></td>
+      <td>0.98–1.03</td>
+      <td>Zoom per frame. &lt; 1 = implode inward. &gt; 1 = explode outward.</td>
+    </tr>
+    <tr>
+      <td><strong>FB θ</strong></td>
+      <td>-2–2</td>
+      <td>Rotation in degrees per frame. Creates spinning feedback tunnels.</td>
+    </tr>
+    <tr>
+      <td><strong>↺ Reset Motion</strong></td>
+      <td>button</td>
+      <td>Returns FB X/Y/Z/θ to neutral (0, 0, 1.0, 0).</td>
+    </tr>
+  </tbody>
+</table>
+
+<hr />
+
+<h2 id="scanlines-group">Scanlines Group</h2>
+
+<p>Displaces horizontal bands of pixels by sampling from past frames.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Control</th>
+      <th>Range</th>
+      <th>Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>ON</strong></td>
+      <td>toggle</td>
+      <td>Enable/disable the scanline pass.</td>
+    </tr>
+    <tr>
+      <td><strong>BANDS</strong></td>
+      <td>0–30</td>
+      <td>Number of active displacement bands per frame.</td>
+    </tr>
+    <tr>
+      <td><strong>BAND HEIGHT</strong></td>
+      <td>0–1</td>
+      <td>Relative height of each band.</td>
+    </tr>
+    <tr>
+      <td><strong>RAND SIZE</strong></td>
+      <td>toggle</td>
+      <td>Randomise band height per band.</td>
+    </tr>
+    <tr>
+      <td><strong>SHIFT</strong></td>
+      <td>0–0.5</td>
+      <td>Maximum horizontal displacement as a fraction of canvas width.</td>
+    </tr>
+    <tr>
+      <td><strong>SKEW</strong></td>
+      <td>-1–1</td>
+      <td>Position-based horizontal offset making bands angle diagonally.</td>
+    </tr>
+    <tr>
+      <td><strong>DRIFT</strong></td>
+      <td>0–3</td>
+      <td>Vertical drift speed of band positions.</td>
+    </tr>
+    <tr>
+      <td><strong>SPEED</strong></td>
+      <td>0–5</td>
+      <td>Overall speed multiplier for band drift.</td>
+    </tr>
+    <tr>
+      <td><strong>GAP</strong></td>
+      <td>0–200</td>
+      <td>Snaps band positions to a regular grid spacing. Creates rhythmic rather than random placement.</td>
+    </tr>
+    <tr>
+      <td><strong>OPACITY</strong></td>
+      <td>0–1</td>
+      <td>Alpha of displaced band content.</td>
+    </tr>
+  </tbody>
+</table>
+
+<hr />
+
+<h2 id="clusters-group">Clusters Group</h2>
+
+<p>Biases tile placement toward radial cluster zones rather than uniform scatter.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Control</th>
+      <th>Range</th>
+      <th>Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>ON</strong></td>
+      <td>toggle</td>
+      <td>Enable cluster-biased tile placement (Glitch must also be ON).</td>
+    </tr>
+    <tr>
+      <td><strong>CENTERS</strong></td>
+      <td>1–20</td>
+      <td>Number of cluster centres.</td>
+    </tr>
+    <tr>
+      <td><strong>SPREAD</strong></td>
+      <td>1–300</td>
+      <td>Radius around each centre within which tiles are distributed.</td>
+    </tr>
+    <tr>
+      <td><strong>MIN RAD</strong></td>
+      <td>0–150</td>
+      <td>Minimum distance from centre — creates a hollow ring.</td>
+    </tr>
+    <tr>
+      <td><strong>SPATIAL GAP</strong></td>
+      <td>0–200</td>
+      <td>Minimum pixel distance between any two tiles. Prevents overlap.</td>
+    </tr>
+    <tr>
+      <td><strong>BIAS</strong></td>
+      <td>0–1</td>
+      <td>Fraction of tiles forced into clusters. Remainder placed randomly.</td>
+    </tr>
+    <tr>
+      <td><strong>DRIFT</strong></td>
+      <td>0–5</td>
+      <td>Noise-driven movement of cluster centre positions.</td>
+    </tr>
+    <tr>
+      <td><strong>SPEED</strong></td>
+      <td>0–15</td>
+      <td>Speed of cluster centre physics simulation. 0 = static.</td>
+    </tr>
+    <tr>
+      <td><strong>INERTIA</strong></td>
+      <td>0.01–0.99</td>
+      <td>Momentum of cluster centres. High = smooth slow movement. Low = jittery.</td>
+    </tr>
+  </tbody>
+</table>
+
+<hr />
+
+<h2 id="solarize-group">Solarize Group</h2>
+
+<p>Per-pixel luminance-threshold colour inversion with per-channel RGB scaling.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Control</th>
+      <th>Range</th>
+      <th>Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>ON</strong></td>
+      <td>toggle</td>
+      <td>Enable/disable.</td>
+    </tr>
+    <tr>
+      <td><strong>THRESH</strong></td>
+      <td>0–1</td>
+      <td>Luminance threshold. Pixels above this are inverted.</td>
+    </tr>
+    <tr>
+      <td><strong>AMOUNT</strong></td>
+      <td>0–1</td>
+      <td>Inversion strength. 0 = no effect, 1 = full inversion.</td>
+    </tr>
+    <tr>
+      <td><strong>SOL R / G / B</strong></td>
+      <td>0–2</td>
+      <td>Per-channel multiplier applied after inversion. Values &gt; 1 over-expose that channel.</td>
+    </tr>
+  </tbody>
+</table>
+
+<hr />
+
+<h2 id="flow-warp-group">Flow Warp Group</h2>
+
+<p>Distorts UV coordinates using a noise field, creating liquid or heat-haze displacement.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Control</th>
+      <th>Range</th>
+      <th>Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>ON</strong></td>
+      <td>toggle</td>
+      <td>Enable/disable.</td>
+    </tr>
+    <tr>
+      <td><strong>STRENGTH</strong></td>
+      <td>0–20</td>
+      <td>Maximum pixel displacement.</td>
+    </tr>
+    <tr>
+      <td><strong>SCALE</strong></td>
+      <td>40–200</td>
+      <td>Spatial scale of the noise field. Lower = finer cells, higher = broader sweeps.</td>
+    </tr>
+    <tr>
+      <td><strong>PULSE</strong></td>
+      <td>0–200</td>
+      <td>Frames back in the ring to sample during warp. Adds temporal smear.</td>
+    </tr>
+    <tr>
+      <td><strong>IMPLODE</strong></td>
+      <td>0–1</td>
+      <td>Centripetal pull toward the canvas centre added on top of the noise warp.</td>
+    </tr>
+  </tbody>
+</table>
+
+<hr />
+
+<h2 id="symmetry-group">Symmetry Group</h2>
+
+<p>Mirrors the frame about one or both axes.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Control</th>
+      <th>Options</th>
+      <th>Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>SYMM</strong></td>
+      <td>toggle</td>
+      <td>Enable/disable.</td>
+    </tr>
+    <tr>
+      <td><strong>MODE</strong></td>
+      <td>V / H / HV</td>
+      <td>Vertical mirror, horizontal mirror, or both.</td>
+    </tr>
+    <tr>
+      <td><strong>SYM POS</strong></td>
+      <td>0–1</td>
+      <td>Position of the mirror axis. 0.5 = centred.</td>
+    </tr>
+  </tbody>
+</table>
+
+<hr />
+
+<h2 id="trails-group">Trails Group</h2>
+
+<p>Blends multiple past frames as translucent ghost layers.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Control</th>
+      <th>Range</th>
+      <th>Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>ON</strong></td>
+      <td>toggle</td>
+      <td>Enable/disable.</td>
+    </tr>
+    <tr>
+      <td><strong>TRAIL LAYERS</strong></td>
+      <td>0–10</td>
+      <td>Number of ghost frames composited.</td>
+    </tr>
+    <tr>
+      <td><strong>TRAIL DEPTH</strong></td>
+      <td>0–1</td>
+      <td>How far back in the ring to pull trail frames from.</td>
+    </tr>
+    <tr>
+      <td><strong>LUMA KEY</strong></td>
+      <td>0–1</td>
+      <td>Drops dark pixels from trail frames. Only bright areas trail.</td>
+    </tr>
+  </tbody>
+</table>
+
+<hr />
+
+<h2 id="presets">Presets</h2>
+
+<p>Presets save a complete snapshot of all parameter values to <code class="language-plaintext highlighter-rouge">localStorage</code>. They survive app restarts.</p>
+
+<ul>
+  <li><strong>Save</strong> — type a name and click Save. Overwrites if the name exists.</li>
+  <li><strong>Load</strong> — select from dropdown, click Load.</li>
+  <li><strong>Delete</strong> — select and click Delete.</li>
+</ul>
+
+<p><strong>Factory presets</strong> are always present and cannot be deleted:</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Preset</th>
+      <th>Character</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="language-plaintext highlighter-rouge">clean</code></td>
+      <td>All effects off — raw source passthrough</td>
+    </tr>
+    <tr>
+      <td><code class="language-plaintext highlighter-rouge">chaos</code></td>
+      <td>High corruption, deep ring, fast clusters</td>
+    </tr>
+    <tr>
+      <td><code class="language-plaintext highlighter-rouge">melt</code></td>
+      <td>Slow feedback zoom with deep scanlines</td>
+    </tr>
+    <tr>
+      <td><code class="language-plaintext highlighter-rouge">mirror</code></td>
+      <td>Symmetry-forward with light solarise</td>
+    </tr>
+    <tr>
+      <td><code class="language-plaintext highlighter-rouge">pulse</code></td>
+      <td>Rhythmic cluster glitch with trails</td>
+    </tr>
+    <tr>
+      <td><code class="language-plaintext highlighter-rouge">solar</code></td>
+      <td>Solarise dominant, flow warp texture</td>
+    </tr>
+    <tr>
+      <td><code class="language-plaintext highlighter-rouge">vapor</code></td>
+      <td>Soft trails, slow feedback rotation</td>
+    </tr>
+  </tbody>
+</table>
+
+  </div>
+
+</article>
+
+      </div>
+    </main><footer class="site-footer h-card">
+  <data class="u-url" href="/huff/"></data>
+
+  <div class="wrapper">
+
+    <h2 class="footer-heading">huff</h2>
+
+    <div class="footer-col-wrapper">
+      <div class="footer-col footer-col-1">
+        <ul class="contact-list">
+          <li class="p-name">huff</li></ul>
+      </div>
+
+      <div class="footer-col footer-col-2"><ul class="social-media-list"></ul>
+</div>
+
+      <div class="footer-col footer-col-3">
+        <p>Real-time datamosh &amp; glitch-art for desktop. Tauri · p5.js · Rust · Syphon · Spout · MIDI · OSC.</p>
+      </div>
+    </div>
+
+  </div>
+
+</footer>
+</body>
+
+</html>

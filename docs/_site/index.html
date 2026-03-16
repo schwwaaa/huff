@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1"><!-- Begin Jekyll SEO tag v2.8.0 -->
+<title>huff | Real-time datamosh &amp; glitch-art for desktop. Tauri · p5.js · Rust · Syphon · Spout · MIDI · OSC.</title>
+<meta name="generator" content="Jekyll v3.10.0" />
+<meta property="og:title" content="huff" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="Real-time datamosh &amp; glitch-art for desktop. Tauri · p5.js · Rust · Syphon · Spout · MIDI · OSC." />
+<meta property="og:description" content="Real-time datamosh &amp; glitch-art for desktop. Tauri · p5.js · Rust · Syphon · Spout · MIDI · OSC." />
+<link rel="canonical" href="http://localhost:4000/huff/" />
+<meta property="og:url" content="http://localhost:4000/huff/" />
+<meta property="og:site_name" content="huff" />
+<meta property="og:type" content="website" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:title" content="huff" />
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"WebSite","description":"Real-time datamosh &amp; glitch-art for desktop. Tauri · p5.js · Rust · Syphon · Spout · MIDI · OSC.","headline":"huff","name":"huff","url":"http://localhost:4000/huff/"}</script>
+<!-- End Jekyll SEO tag -->
+<link rel="stylesheet" href="/huff/assets/main.css"><link type="application/atom+xml" rel="alternate" href="http://localhost:4000/huff/feed.xml" title="huff" /></head>
+<body><header class="site-header" role="banner">
+
+  <div class="wrapper"><a class="site-title" rel="author" href="/huff/">huff</a><nav class="site-nav">
+        <input type="checkbox" id="nav-trigger" class="nav-trigger" />
+        <label for="nav-trigger">
+          <span class="menu-icon">
+            <svg viewBox="0 0 18 15" width="18px" height="15px">
+              <path d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0 h15.032C17.335,0,18,0.665,18,1.484L18,1.484z M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0 c0-0.82,0.665-1.484,1.484-1.484h15.032C17.335,6.031,18,6.696,18,7.516L18,7.516z M18,13.516C18,14.335,17.335,15,16.516,15H1.484 C0.665,15,0,14.335,0,13.516l0,0c0-0.82,0.665-1.483,1.484-1.483h15.032C17.335,12.031,18,12.695,18,13.516L18,13.516z"/>
+            </svg>
+          </span>
+        </label>
+
+        <div class="trigger"><a class="page-link" href="/huff/">huff</a><a class="page-link" href="/huff/how-it-works/">How it Works</a><a class="page-link" href="/huff/installation/">Installation</a><a class="page-link" href="/huff/interface/">The Interface</a><a class="page-link" href="/huff/midi/">MIDI</a><a class="page-link" href="/huff/osc/">OSC</a><a class="page-link" href="/huff/output/">Video Output</a><a class="page-link" href="/huff/parameter-reference/">Parameter Reference</a><a class="page-link" href="/huff/architecture/">Architecture</a><a class="page-link" href="/huff/caveats/">Caveats &amp; Known Limitations</a><a class="page-link" href="/huff/troubleshooting/">Troubleshooting</a></div>
+      </nav></div>
+</header>
+<main class="page-content" aria-label="Content">
+      <div class="wrapper">
+        <article class="post">
+
+  <header class="post-header">
+    <h1 class="post-title">huff</h1>
+  </header>
+
+  <div class="post-content">
+    <div style="text-align:center;margin:2rem 0 1rem">
+  <img src="assets/img/icon.png" width="90" alt="huff icon" style="border-radius:16px" />
+</div>
+
+<div style="text-align:center;margin-bottom:2rem">
+  <strong style="font-size:1.4rem">Real-time datamosh &amp; glitch-art for desktop.</strong><br />
+  <span style="opacity:0.6;font-size:0.95rem">Tauri · p5.js · Rust · Syphon · Spout · MIDI · OSC</span>
+</div>
+
+<div class="badge-strip" style="justify-content:center">
+  <img src="https://img.shields.io/badge/version-1.0.2--beta-ff4444?style=flat-square" alt="version" />
+  <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey?style=flat-square" alt="platform" />
+  <img src="https://img.shields.io/badge/Tauri-v1-blueviolet?style=flat-square" alt="tauri" />
+  <img src="https://img.shields.io/badge/license-ISC-green?style=flat-square" alt="license" />
+</div>
+
+<hr />
+
+<p>huff is a desktop application for creating real-time datamosh, glitch-art, and feedback effects. Load a video file or connect a webcam, then sculpt the image through a live effect chain — datamosh tile displacement, feedback loops, flow warps, symmetry folds, solarise, scanline corruption, and ghost trails.</p>
+
+<p>It ships with a <strong>two-window architecture</strong>: a controls panel and a separate fullscreen output window that receives the processed frames over a local WebSocket relay. The output window can be recorded, mirrored to a projector, or shared directly to VJ software via <strong>Syphon</strong> (macOS) or <strong>Spout</strong> (Windows).</p>
+
+<p>huff is built for <strong>performers and artists</strong> who want a tool that behaves predictably under pressure — MIDI-mappable, OSC-receivable, and hot-swappable mid-set.</p>
+
+<div class="img-placeholder">
+  <span class="ph-label">📸 SCREENSHOT PLACEHOLDER</span>
+  <span>huff controls window + output window side by side<br />
+  <em>Replace with: screenshot of the full app in use, ideally during a live performance</em></span>
+</div>
+
+<hr />
+
+<h2 id="features">Features</h2>
+
+<ul>
+  <li><strong>Datamosh / glitch tiles</strong> — temporal tile displacement sampled from a 60-frame ring buffer with cluster physics, spatial gap, smear, and depth scatter</li>
+  <li><strong>Feedback loop</strong> — zoom, translate X/Y, and rotate the buffer back onto itself each frame</li>
+  <li><strong>Flow warp</strong> — noise-field optical-flow UV distortion with pulse and implosion modes</li>
+  <li><strong>Symmetry</strong> — vertical, horizontal, or both axes with a moveable split position</li>
+  <li><strong>Solarise</strong> — luminance-threshold colour inversion with per-channel R/G/B tinting</li>
+  <li><strong>Scanline bands</strong> — drifting horizontal displacement bands sampled from past frames with gap quantisation and skew</li>
+  <li><strong>Trails</strong> — stacked ghost frames with luma keying for motion-smear</li>
+  <li><strong>Camera input</strong> — live webcam feed alongside or instead of video files</li>
+  <li><strong>Syphon (macOS)</strong> — zero-install Metal texture sharing to Resolume, VDMX, MadMapper, CoGe, and any Syphon receiver</li>
+  <li><strong>Spout (Windows)</strong> — D3D11 texture sharing to Resolume Arena, TouchDesigner, MadMapper, and any Spout2 receiver</li>
+  <li><strong>MIDI</strong> — full CC/note input via native Rust <code class="language-plaintext highlighter-rouge">midir</code>; JSON map files; hardware + virtual ports</li>
+  <li><strong>OSC</strong> — UDP listener on port 9000; JSON map files; TouchOSC, Max/MSP, Pure Data, SuperCollider, TouchDesigner</li>
+  <li><strong>Presets</strong> — save/recall named parameter snapshots; 7 factory presets included</li>
+  <li><strong>Keyboard shortcuts</strong> — <code class="language-plaintext highlighter-rouge">P</code> toggles controls panel, <code class="language-plaintext highlighter-rouge">F</code> toggles output fullscreen</li>
+</ul>
+
+<hr />
+
+<h2 id="quick-start">Quick Start</h2>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 1. Download from Releases, or build from source:</span>
+git clone https://github.com/your-org/huff.git
+<span class="nb">cd </span>huff <span class="o">&amp;&amp;</span> npm <span class="nb">install</span> <span class="o">&amp;&amp;</span> npm run dev
+
+<span class="c"># 2. Load a video file or start your webcam in the Source group</span>
+<span class="c"># 3. Enable Glitch — move CORRUPT % above 0</span>
+<span class="c"># 4. Open canvas.html in a second monitor window → press F for fullscreen</span>
+</code></pre></div></div>
+
+<hr />
+
+<h2 id="documentation">Documentation</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>Section</th>
+      <th>What’s covered</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><a href="how-it-works">How it Works</a></td>
+      <td>Effect pipeline, data flow diagrams, frame output architecture</td>
+    </tr>
+    <tr>
+      <td><a href="installation">Installation</a></td>
+      <td>macOS DMG, Windows installer, build from source</td>
+    </tr>
+    <tr>
+      <td><a href="interface">The Interface</a></td>
+      <td>Every control group, every parameter explained</td>
+    </tr>
+    <tr>
+      <td><a href="midi">MIDI</a></td>
+      <td>Connecting devices, map format, virtual ports</td>
+    </tr>
+    <tr>
+      <td><a href="osc">OSC</a></td>
+      <td>Setup, map format, TouchOSC, Max/MSP, TouchDesigner</td>
+    </tr>
+    <tr>
+      <td><a href="output">Video Output</a></td>
+      <td>Syphon, Spout, canvas mirror window</td>
+    </tr>
+    <tr>
+      <td><a href="parameter-reference">Parameter Reference</a></td>
+      <td>Complete ID/range table for MIDI + OSC maps</td>
+    </tr>
+    <tr>
+      <td><a href="architecture">Architecture</a></td>
+      <td>File structure, Rust internals, WebSocket relay</td>
+    </tr>
+    <tr>
+      <td><a href="caveats">Caveats</a></td>
+      <td>Known limitations, platform notes, edge cases</td>
+    </tr>
+    <tr>
+      <td><a href="troubleshooting">Troubleshooting</a></td>
+      <td>Common problems and fixes</td>
+    </tr>
+  </tbody>
+</table>
+
+  </div>
+
+</article>
+
+      </div>
+    </main><footer class="site-footer h-card">
+  <data class="u-url" href="/huff/"></data>
+
+  <div class="wrapper">
+
+    <h2 class="footer-heading">huff</h2>
+
+    <div class="footer-col-wrapper">
+      <div class="footer-col footer-col-1">
+        <ul class="contact-list">
+          <li class="p-name">huff</li></ul>
+      </div>
+
+      <div class="footer-col footer-col-2"><ul class="social-media-list"></ul>
+</div>
+
+      <div class="footer-col footer-col-3">
+        <p>Real-time datamosh &amp; glitch-art for desktop. Tauri · p5.js · Rust · Syphon · Spout · MIDI · OSC.</p>
+      </div>
+    </div>
+
+  </div>
+
+</footer>
+</body>
+
+</html>

@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.sitemaps.org/schemas/sitemap/0.9 http://www.sitemaps.org/schemas/sitemap/0.9/sitemap.xsd" xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+<url>
+<loc>http://localhost:4000/huff/architecture/</loc>
+</url>
+<url>
+<loc>http://localhost:4000/huff/caveats/</loc>
+</url>
+<url>
+<loc>http://localhost:4000/huff/how-it-works/</loc>
+</url>
+<url>
+<loc>http://localhost:4000/huff/</loc>
+</url>
+<url>
+<loc>http://localhost:4000/huff/installation/</loc>
+</url>
+<url>
+<loc>http://localhost:4000/huff/interface/</loc>
+</url>
+<url>
+<loc>http://localhost:4000/huff/midi/</loc>
+</url>
+<url>
+<loc>http://localhost:4000/huff/osc/</loc>
+</url>
+<url>
+<loc>http://localhost:4000/huff/output/</loc>
+</url>
+<url>
+<loc>http://localhost:4000/huff/parameter-reference/</loc>
+</url>
+<url>
+<loc>http://localhost:4000/huff/troubleshooting/</loc>
+</url>
+</urlset>

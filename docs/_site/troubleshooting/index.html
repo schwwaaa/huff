@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1"><!-- Begin Jekyll SEO tag v2.8.0 -->
+<title>Troubleshooting | huff</title>
+<meta name="generator" content="Jekyll v3.10.0" />
+<meta property="og:title" content="Troubleshooting" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="Real-time datamosh &amp; glitch-art for desktop. Tauri · p5.js · Rust · Syphon · Spout · MIDI · OSC." />
+<meta property="og:description" content="Real-time datamosh &amp; glitch-art for desktop. Tauri · p5.js · Rust · Syphon · Spout · MIDI · OSC." />
+<link rel="canonical" href="http://localhost:4000/huff/troubleshooting/" />
+<meta property="og:url" content="http://localhost:4000/huff/troubleshooting/" />
+<meta property="og:site_name" content="huff" />
+<meta property="og:type" content="website" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:title" content="Troubleshooting" />
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"WebPage","description":"Real-time datamosh &amp; glitch-art for desktop. Tauri · p5.js · Rust · Syphon · Spout · MIDI · OSC.","headline":"Troubleshooting","url":"http://localhost:4000/huff/troubleshooting/"}</script>
+<!-- End Jekyll SEO tag -->
+<link rel="stylesheet" href="/huff/assets/main.css"><link type="application/atom+xml" rel="alternate" href="http://localhost:4000/huff/feed.xml" title="huff" /></head>
+<body><header class="site-header" role="banner">
+
+  <div class="wrapper"><a class="site-title" rel="author" href="/huff/">huff</a><nav class="site-nav">
+        <input type="checkbox" id="nav-trigger" class="nav-trigger" />
+        <label for="nav-trigger">
+          <span class="menu-icon">
+            <svg viewBox="0 0 18 15" width="18px" height="15px">
+              <path d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0 h15.032C17.335,0,18,0.665,18,1.484L18,1.484z M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0 c0-0.82,0.665-1.484,1.484-1.484h15.032C17.335,6.031,18,6.696,18,7.516L18,7.516z M18,13.516C18,14.335,17.335,15,16.516,15H1.484 C0.665,15,0,14.335,0,13.516l0,0c0-0.82,0.665-1.483,1.484-1.483h15.032C17.335,12.031,18,12.695,18,13.516L18,13.516z"/>
+            </svg>
+          </span>
+        </label>
+
+        <div class="trigger"><a class="page-link" href="/huff/">huff</a><a class="page-link" href="/huff/how-it-works/">How it Works</a><a class="page-link" href="/huff/installation/">Installation</a><a class="page-link" href="/huff/interface/">The Interface</a><a class="page-link" href="/huff/midi/">MIDI</a><a class="page-link" href="/huff/osc/">OSC</a><a class="page-link" href="/huff/output/">Video Output</a><a class="page-link" href="/huff/parameter-reference/">Parameter Reference</a><a class="page-link" href="/huff/architecture/">Architecture</a><a class="page-link" href="/huff/caveats/">Caveats &amp; Known Limitations</a><a class="page-link" href="/huff/troubleshooting/">Troubleshooting</a></div>
+      </nav></div>
+</header>
+<main class="page-content" aria-label="Content">
+      <div class="wrapper">
+        <article class="post">
+
+  <header class="post-header">
+    <h1 class="post-title">Troubleshooting</h1>
+  </header>
+
+  <div class="post-content">
+    <h2 id="canvas-window-shows-ws-disconnected">Canvas window shows “WS: disconnected”</h2>
+
+<p>The canvas window connects to the Rust WebSocket relay at <code class="language-plaintext highlighter-rouge">ws://127.0.0.1:8787</code>. If it stays disconnected:</p>
+
+<ol>
+  <li><strong>Check that huff is fully started.</strong> The relay starts asynchronously during setup — wait a second after launch before the canvas window connects.</li>
+  <li><strong>Check port 8787 is not in use</strong> by another application. See <a href="caveats#port-8787-must-be-free">Caveats — Port 8787</a> for how to check.</li>
+  <li><strong>If you opened <code class="language-plaintext highlighter-rouge">canvas.html</code> directly in a browser</strong> (outside the Tauri app), the relay is not running. Start a standalone relay: <code class="language-plaintext highlighter-rouge">node src/ws-server.js</code></li>
+  <li>On some systems the WebView connects via IPv6 (<code class="language-plaintext highlighter-rouge">[::1]</code>). huff binds both — if one fails the other should succeed within 1–2 seconds.</li>
+</ol>
+
+<hr />
+
+<h2 id="camera-not-appearing-or-not-starting">Camera not appearing or not starting</h2>
+
+<p><strong>No camera in the dropdown:</strong></p>
+<ul>
+  <li>Click <strong>↻ Refresh</strong> in the Source group. Devices connected after app launch do not appear until you refresh.</li>
+  <li>On macOS, check System Preferences → Security &amp; Privacy → Camera → confirm huff is listed and allowed.</li>
+  <li>On Windows, check Settings → Privacy → Camera → allow apps to access the camera.</li>
+</ul>
+
+<p><strong>Camera in the dropdown but Start produces no output:</strong></p>
+<ul>
+  <li>On macOS distribution builds: the app must be codesigned with the camera entitlement. In dev mode (<code class="language-plaintext highlighter-rouge">npm run dev</code>) this is injected automatically. See <a href="caveats#camera-permissions-require-codesigning-for-distribution">Caveats — Camera Permissions</a>.</li>
+  <li>Try a different browser in the OS to confirm the camera works at all (<code class="language-plaintext highlighter-rouge">camera test</code> websites).</li>
+</ul>
+
+<hr />
+
+<h2 id="midi-device-not-appearing-or-not-responding">MIDI device not appearing or not responding</h2>
+
+<p><strong>Device not in the list:</strong></p>
+<ul>
+  <li>Click <strong>↻ Refresh</strong> in the MIDI panel. The list is polled on demand, not live.</li>
+  <li>On macOS, confirm the device appears in <strong>Audio MIDI Setup</strong> (Applications → Utilities).</li>
+  <li>On Windows, check Device Manager → Sound, video and game controllers.</li>
+</ul>
+
+<p><strong>Device connected but not responding:</strong></p>
+<ul>
+  <li>Confirm the correct port is selected and <strong>Connect</strong> was clicked (status shows the port name when active).</li>
+  <li>Check the <code class="language-plaintext highlighter-rouge">channel</code> field in your map file. <code class="language-plaintext highlighter-rouge">-1</code> accepts all channels. If your controller sends on channel 2 (index <code class="language-plaintext highlighter-rouge">1</code>) and your map says <code class="language-plaintext highlighter-rouge">"channel": 0</code>, it will be filtered out.</li>
+  <li>Click <strong>Debug: log all ports to console</strong> in the MIDI panel and check the browser console (right-click the controls window → Inspect → Console). This logs all detected ports and any CC messages received.</li>
+</ul>
+
+<hr />
+
+<h2 id="syphon-not-appearing-in-receivers">Syphon not appearing in receivers</h2>
+
+<ol>
+  <li>Confirm the Syphon panel shows <strong>active</strong> (not just “Start clicked”).</li>
+  <li>In your receiver (Resolume, VDMX, etc.), trigger a manual re-scan of Syphon sources. Some apps only scan on launch.</li>
+  <li>Confirm both apps are on the same user account. Syphon uses shared memory and does not work across user sessions or sandboxed environments.</li>
+  <li>If you are running huff from the <code class="language-plaintext highlighter-rouge">npm run dev</code> command (unsigned), Syphon should still work — the framework is loaded at runtime, not via App Store validation.</li>
+</ol>
+
+<hr />
+
+<h2 id="spout-init-failed-windows">Spout init failed (Windows)</h2>
+
+<p>The Spout panel shows an error on Start:</p>
+
+<ol>
+  <li><strong>Install the Spout2 runtime</strong> from <a href="https://spout.zeal.co/">spout.zeal.co</a>. The bridge DLL bundled with huff requires the Spout2 system components to be installed separately.</li>
+  <li>Confirm <code class="language-plaintext highlighter-rouge">spout_bridge.dll</code> is present next to <code class="language-plaintext highlighter-rouge">huff.exe</code> in the installation directory. If it is missing, reinstall.</li>
+  <li>On Windows 10, ensure <strong>WebView2 Runtime</strong> is installed (required for the app to run at all).</li>
+</ol>
+
+<hr />
+
+<h2 id="high-memory-usage">High memory usage</h2>
+
+<p>The frame ring grows with resolution and quality. At 1080p + quality=1 the ring can hold up to ~192 MB.</p>
+
+<p><strong>To reduce memory:</strong></p>
+<ul>
+  <li>Lower the <strong>QUALITY</strong> slider. At quality=0 the ring holds only 4 frames regardless of resolution.</li>
+  <li>Reduce the canvas resolution. huff uses the window size — make the controls window smaller.</li>
+  <li>Disable <strong>Trails</strong> and <strong>Flow Warp</strong> — both read the full ring depth and keep it alive.</li>
+</ul>
+
+<hr />
+
+<h2 id="glitch--effects-stop-responding-to-controls">Glitch / effects stop responding to controls</h2>
+
+<p>All controls write directly to DOM elements that the p5 draw loop reads each frame. If controls appear unresponsive:</p>
+
+<ol>
+  <li>Check that <strong>ON</strong> is toggled for the relevant effect group.</li>
+  <li>Check that the overall <strong>SYSTEM</strong> toggle (if present) is enabled.</li>
+  <li>If CORRUPT % is at 0, no tiles will be displaced regardless of other settings.</li>
+  <li>If QUALITY is at 0, the ring holds only 4 frames — DEPTH and DEPTH SCATTER will have very little range.</li>
+</ol>
+
+<hr />
+
+<h2 id="output-looks-frozen--only-one-frame">Output looks frozen / only one frame</h2>
+
+<ul>
+  <li>The p5 draw loop may have halted due to a JS error. Right-click the controls window → <strong>Inspect</strong> → <strong>Console</strong> to check for errors.</li>
+  <li>If the video file is paused, the source is static — effects will still run but the input is not changing.</li>
+  <li>On Windows, some configurations cause the WebView to throttle requestAnimationFrame when the window is not in focus. Keep the controls window visible or move it to a secondary monitor with focus.</li>
+</ul>
+
+<hr />
+
+<h2 id="port-already-in-use-error-on-launch">“Port already in use” error on launch</h2>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[huff] IPv4 listener error: Address already in use
+</code></pre></div></div>
+
+<p>Another process is using port 8787. See <a href="caveats#port-8787-must-be-free">Caveats — Port 8787</a> for how to identify and resolve it. As a quick workaround, change the port in <code class="language-plaintext highlighter-rouge">src-tauri/src/main.rs</code> and <code class="language-plaintext highlighter-rouge">src/index.html</code> and rebuild.</p>
+
+<hr />
+
+<h2 id="npm-run-dev-fails-on-first-run"><code class="language-plaintext highlighter-rouge">npm run dev</code> fails on first run</h2>
+
+<p><strong><code class="language-plaintext highlighter-rouge">cargo not found</code>:</strong> Install Rust via <a href="https://rustup.rs">rustup.rs</a>.</p>
+
+<p><strong><code class="language-plaintext highlighter-rouge">tauri: command not found</code>:</strong> Run <code class="language-plaintext highlighter-rouge">npm install</code> first — Tauri CLI is a dev dependency installed into <code class="language-plaintext highlighter-rouge">node_modules/.bin/</code>.</p>
+
+<p><strong>Build fails with missing system library (Linux):</strong> Install the WebKitGTK development packages for your distribution. See <a href="installation#building-from-source">Installation — Linux extra</a>.</p>
+
+<p><strong>Build fails with Xcode errors (macOS):</strong> Run <code class="language-plaintext highlighter-rouge">xcode-select --install</code> to install the Command Line Tools.</p>
+
+<hr />
+
+<h2 id="tauri-build-fails-on-macos-with-code-signing-errors">tauri build fails on macOS with code signing errors</h2>
+
+<p>If you are not distributing the app and just want a local build:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># Build without code signing</span>
+<span class="nv">CODESIGN_IDENTITY</span><span class="o">=</span><span class="s2">"-"</span> npx tauri build
+</code></pre></div></div>
+
+<p>For a fully signed and notarised build, see <a href="https://developer.apple.com/documentation/security/notarizing_macos_software_before_distribution">Apple’s notarisation documentation</a>.</p>
+
+<hr />
+
+<h2 id="getting-more-help">Getting More Help</h2>
+
+<ul>
+  <li><strong>Open an issue</strong> on the <a href="../../issues">GitHub repository</a> with the console output (right-click the controls window → Inspect → Console) and your OS/version.</li>
+  <li>Include the huff version (<code class="language-plaintext highlighter-rouge">v2.0 · beta · 2025</code> shown in the About overlay, accessible from the top bar).</li>
+  <li>On macOS, run <code class="language-plaintext highlighter-rouge">system_profiler SPSoftwareDataType</code> for OS version. On Windows, <code class="language-plaintext highlighter-rouge">winver</code>.</li>
+</ul>
+
+  </div>
+
+</article>
+
+      </div>
+    </main><footer class="site-footer h-card">
+  <data class="u-url" href="/huff/"></data>
+
+  <div class="wrapper">
+
+    <h2 class="footer-heading">huff</h2>
+
+    <div class="footer-col-wrapper">
+      <div class="footer-col footer-col-1">
+        <ul class="contact-list">
+          <li class="p-name">huff</li></ul>
+      </div>
+
+      <div class="footer-col footer-col-2"><ul class="social-media-list"></ul>
+</div>
+
+      <div class="footer-col footer-col-3">
+        <p>Real-time datamosh &amp; glitch-art for desktop. Tauri · p5.js · Rust · Syphon · Spout · MIDI · OSC.</p>
+      </div>
+    </div>
+
+  </div>
+
+</footer>
+</body>
+
+</html>
