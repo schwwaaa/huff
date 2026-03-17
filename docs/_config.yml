@@ -12,7 +12,6 @@ minima:
 
 # Navigation order for the sidebar / header links
 header_pages:
-  - index.md
   - how-it-works.md
   - installation.md
   - interface.md

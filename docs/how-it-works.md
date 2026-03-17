@@ -65,20 +65,3 @@ The ring buffer is the shared memory between passes. It stores raw `ImageData` o
 | **DEPTH SCATTER** | Per-tile randomisation of the back index |
 | **192 MB cap** | Ring depth is also capped by pixel budget: at 1080p (~8 MB/frame) max ≈ 24 frames regardless of quality |
 
----
-
-## AI-Generated Concept Images
-
-<div class="img-placeholder">
-  <span class="ph-label">🤖 AI IMAGE PLACEHOLDER</span>
-  <span>Suggested prompt for generation:<br/><br/>
-  <em>"Abstract glitch art, datamosh aesthetic, horizontal scanline displacement, temporal tile corruption, deep reds and blacks, digital noise, layered translucent frames offset in time, no text, square format"</em><br/><br/>
-  Replace with generated image showing the visual output of huff's effect chain</span>
-</div>
-
-<div class="img-placeholder">
-  <span class="ph-label">🤖 AI IMAGE PLACEHOLDER</span>
-  <span>Suggested prompt for generation:<br/><br/>
-  <em>"Technical diagram, dark background, data flow chart showing: WebGL canvas → frame ring buffer → 7 effect nodes (Trails, Feedback, Glitch, Scanlines, Flow Warp, Solarize, Symmetry) → output routes (Syphon, Spout, WebSocket). Monospace labels, neon red accent lines, clean infographic style"</em><br/><br/>
-  Replace with a polished stylised version of the effect pipeline diagram</span>
-</div>
