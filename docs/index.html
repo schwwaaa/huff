@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>huff — real-time datamosh & glitch-art</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css"/>
+<link href="https://fonts.googleapis.com/css2?family=VT323&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+:root {
+  --gray:   #C0C0C0;
+  --light:  #FFFFFF;
+  --mid:    #808080;
+  --dark:   #404040;
+  --red:    #ff4647;
+  --black:  #000000;
+  --green:  #00FF00;
+  --dgreen: #00CC00;
+  --teal:   #008080;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  background: var(--teal);
+  background-image: repeating-linear-gradient(
+    45deg, rgba(0,0,0,.06) 0px, rgba(0,0,0,.06) 1px,
+    transparent 1px, transparent 5px
+  );
+  font-family: 'VT323', 'Courier New', monospace;
+  color: #000;
+  min-height: 100vh;
+  padding-bottom: 40px;
+}
+
+/* ── Bevel utils ── */
+.raised  { border: none; border-top: 2px solid var(--light); border-left: 2px solid var(--light); border-bottom: 2px solid var(--dark); border-right: 2px solid var(--dark); }
+.inset   { border: none; border-top: 2px solid var(--dark);  border-left: 2px solid var(--dark);  border-bottom: 2px solid var(--light); border-right: 2px solid var(--light); }
+.raised-sm { border-top: 1px solid var(--light); border-left: 1px solid var(--light); border-bottom: 1px solid var(--dark); border-right: 1px solid var(--dark); }
+.inset-sm  { border-top: 1px solid var(--dark);  border-left: 1px solid var(--dark);  border-bottom: 1px solid var(--light); border-right: 1px solid var(--light); }
+
+/* ── Taskbar ── */
+.taskbar {
+  position: sticky; top: 0; z-index: 1000;
+  background: var(--gray);
+  border-top: 2px solid var(--light);
+  border-bottom: 2px solid var(--dark);
+  padding: 3px 8px;
+  display: flex; align-items: center; gap: 4px; flex-wrap: wrap;
+}
+.taskbar-brand {
+  background: linear-gradient(90deg, var(--red), #cc2222);
+  color: #fff; font-size: 16px;
+  padding: 2px 12px; letter-spacing: .08em;
+  border-top: 2px solid #ff9999; border-left: 2px solid #ff9999;
+  border-bottom: 2px solid #770000; border-right: 2px solid #770000;
+  white-space: nowrap; text-decoration: none;
+}
+.taskbar-btn {
+  background: var(--gray); color: #000;
+  font-family: 'VT323', monospace; font-size: 14px;
+  padding: 2px 10px; text-decoration: none;
+  white-space: nowrap; display: inline-block;
+}
+.taskbar-btn:hover { background: #D4D0C8; color: #000; }
+.taskbar-clock {
+  margin-left: auto; font-family: 'Share Tech Mono', monospace;
+  font-size: 13px; padding: 2px 10px;
+}
+
+/* ── Window chrome ── */
+.window {
+  background: var(--gray);
+  border-top: 3px solid var(--light); border-left: 3px solid var(--light);
+  border-bottom: 3px solid var(--dark); border-right: 3px solid var(--dark);
+  margin-bottom: 0;
+}
+.win-titlebar {
+  background: linear-gradient(90deg, var(--red), #cc2222);
+  color: #fff; font-size: 15px;
+  padding: 3px 8px;
+  display: flex; align-items: center; justify-content: space-between;
+  letter-spacing: .06em; user-select: none;
+}
+.win-titlebar-title::before { content: '■ '; font-size: 10px; }
+.win-controls { display: flex; gap: 2px; }
+.win-btn {
+  background: var(--gray); color: #000;
+  font-family: 'VT323', monospace; font-size: 12px;
+  border-top: 1px solid var(--light); border-left: 1px solid var(--light);
+  border-bottom: 1px solid var(--dark); border-right: 1px solid var(--dark);
+  width: 18px; height: 16px;
+  display: flex; align-items: center; justify-content: center;
+}
+.win-body { padding: 12px 14px; }
+
+/* ── Terminal block ── */
+.term {
+  background: var(--black);
+  border-top: 2px solid var(--dark); border-left: 2px solid var(--dark);
+  border-bottom: 2px solid var(--light); border-right: 2px solid var(--light);
+  padding: 10px 14px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 13px; color: var(--green); line-height: 1.65;
+  overflow-x: auto;
+}
+.term .comment { color: #006600; }
+.term .dim     { color: #009900; }
+
+/* ── Buttons ── */
+.dl-btn {
+  font-family: 'VT323', monospace; font-size: 16px;
+  letter-spacing: .08em; padding: 5px 16px;
+  background: var(--gray); color: #000;
+  text-decoration: none; display: inline-flex; align-items: center; gap: 6px;
+  white-space: nowrap;
+  border-top: 2px solid var(--light); border-left: 2px solid var(--light);
+  border-bottom: 2px solid var(--dark); border-right: 2px solid var(--dark);
+}
+.dl-btn:hover { background: #D4D0C8; color: #000; }
+.dl-btn:active { border-top-color: var(--dark); border-left-color: var(--dark); border-bottom-color: var(--light); border-right-color: var(--light); transform: translate(1px,1px); }
+.dl-btn.primary {
+  background: var(--black); color: var(--green);
+  border-top-color: #666; border-left-color: #666;
+  font-size: 17px;
+}
+.dl-btn.primary:hover { background: #001400; color: var(--green); }
+
+/* ── Badge ── */
+.badge-pill {
+  font-family: 'Share Tech Mono', monospace; font-size: 11px;
+  padding: 2px 8px; background: var(--black); color: var(--green);
+  border-top: 1px solid var(--dark); border-left: 1px solid var(--dark);
+  border-bottom: 1px solid var(--light); border-right: 1px solid var(--light);
+  display: inline-block; white-space: nowrap;
+}
+.badge-pill.red { background: var(--red); color: #fff; }
+
+/* ── Section label ── */
+.section-label {
+  font-size: 13px; font-weight: bold; letter-spacing: .18em;
+  text-transform: uppercase; color: var(--red);
+  border-bottom: 2px solid var(--mid);
+  padding-bottom: 3px; margin-bottom: 8px;
+}
+
+/* ── Feature grid ── */
+.feat-item {
+  background: var(--black);
+  border-top: 1px solid var(--dark); border-left: 1px solid var(--dark);
+  border-bottom: 1px solid var(--light); border-right: 1px solid var(--light);
+  padding: 8px 10px; height: 100%;
+}
+.feat-name {
+  font-size: 14px; font-weight: bold; color: var(--green);
+  letter-spacing: .06em; margin-bottom: 4px;
+}
+.feat-desc {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px; color: var(--dgreen); line-height: 1.5;
+}
+
+/* ── Tables ── */
+.win-table {
+  width: 100%; border-collapse: collapse;
+  font-family: 'Share Tech Mono', monospace; font-size: 12px;
+}
+.win-table th {
+  background: var(--gray); text-align: left;
+  font-family: 'VT323', monospace; font-size: 13px;
+  letter-spacing: .1em; color: var(--red);
+  padding: 3px 8px; border-bottom: 2px solid var(--mid);
+}
+.win-table td {
+  padding: 4px 8px; border-bottom: 1px solid #B8B8B8;
+  color: #222; vertical-align: top;
+}
+.win-table tr:nth-child(even) td { background: #D4D0C8; }
+.win-table td:first-child { font-weight: bold; white-space: nowrap; }
+
+/* ── Callout ── */
+.callout {
+  background: var(--black); border-left: 3px solid var(--red);
+  border-top: 1px solid var(--dark); border-bottom: 1px solid var(--light);
+  border-right: 1px solid var(--light);
+  padding: 8px 12px;
+  font-family: 'Share Tech Mono', monospace; font-size: 12px;
+  color: #AAAAAA; line-height: 1.6;
+}
+.callout strong { color: var(--green); }
+.callout.warn   { border-left-color: #FFFF00; }
+.callout.warn strong { color: #FFFF00; }
+
+/* ── Statusbar ── */
+.statusbar {
+  border-top: 2px solid var(--mid); padding: 3px 10px;
+  font-family: 'Share Tech Mono', monospace; font-size: 11px;
+  color: #404040; display: flex; gap: 10px; flex-wrap: wrap;
+}
+.statusbar span {
+  border-top: 1px solid var(--dark); border-left: 1px solid var(--dark);
+  border-bottom: 1px solid var(--light); border-right: 1px solid var(--light);
+  padding: 1px 8px;
+}
+
+/* ── Media carousel ── */
+.carousel-window .win-body { padding: 8px; }
+.media-slide {
+  background: var(--black);
+  border-top: 2px solid var(--dark); border-left: 2px solid var(--dark);
+  border-bottom: 2px solid var(--light); border-right: 2px solid var(--light);
+  display: flex; align-items: center; justify-content: center;
+  min-height: 320px; position: relative; overflow: hidden;
+}
+.media-slide img, .media-slide video {
+  max-width: 100%; max-height: 480px;
+  object-fit: contain; display: block;
+}
+.media-placeholder {
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 10px; padding: 24px;
+  color: var(--dgreen); font-family: 'Share Tech Mono', monospace;
+  font-size: 13px; text-align: center; width: 100%;
+}
+.media-placeholder .ph-icon { font-size: 36px; color: var(--green); }
+.carousel-caption-bar {
+  background: var(--gray);
+  border-top: 2px solid var(--mid);
+  padding: 4px 12px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 12px; color: #333;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.carousel-nav-btn {
+  font-family: 'VT323', monospace; font-size: 16px;
+  padding: 2px 14px; background: var(--gray); color: #000;
+  cursor: pointer;
+  border-top: 2px solid var(--light); border-left: 2px solid var(--light);
+  border-bottom: 2px solid var(--dark); border-right: 2px solid var(--dark);
+  border-radius: 0; display: inline-block;
+}
+.carousel-nav-btn:hover { background: #D4D0C8; }
+.carousel-indicators-win {
+  display: flex; gap: 4px; align-items: center;
+}
+.carousel-dot {
+  width: 12px; height: 12px; background: var(--mid); cursor: pointer;
+  border-top: 1px solid var(--dark); border-left: 1px solid var(--dark);
+  border-bottom: 1px solid var(--light); border-right: 1px solid var(--light);
+}
+.carousel-dot.active { background: var(--red); }
+
+/* ── Hero icon ── */
+.hero-icon-box {
+  width: 88px; height: 88px;
+  background: var(--black);
+  border-top: 2px solid var(--dark); border-left: 2px solid var(--dark);
+  border-bottom: 2px solid var(--light); border-right: 2px solid var(--light);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--green); font-size: 22px; font-weight: bold; letter-spacing: .08em;
+  flex-shrink: 0;
+}
+.hero-icon-box img { width: 100%; height: 100%; object-fit: cover; }
+
+/* ── Mobile tweaks ── */
+@media (max-width: 576px) {
+  .taskbar-btn { font-size: 12px; padding: 2px 6px; }
+  .taskbar-brand { font-size: 14px; padding: 2px 8px; }
+  .win-titlebar { font-size: 13px; }
+  .term { font-size: 11px; }
+  .dl-btn { font-size: 14px; padding: 4px 12px; }
+  .dl-btn.primary { font-size: 15px; }
+  .media-slide { min-height: 200px; }
+}
+</style>
+</head>
+<body>
+
+<!-- ── TASKBAR ── -->
+<div class="taskbar">
+  <a class="taskbar-brand" href="#">■ huff</a>
+  <a class="taskbar-btn raised-sm" href="#features">Features</a>
+  <a class="taskbar-btn raised-sm" href="#how-it-works">How It Works</a>
+  <a class="taskbar-btn raised-sm" href="#midi-osc">MIDI/OSC</a>
+  <a class="taskbar-btn raised-sm" href="#output">Output</a>
+  <a class="taskbar-btn raised-sm" href="#caveats">Caveats</a>
+  <a class="taskbar-btn raised-sm" href="docs/how-it-works.html">Docs →</a>
+  <div class="taskbar-clock raised-sm" id="clock">--:--:--</div>
+</div>
+
+<div class="container-fluid px-2 px-md-3 mt-3">
+<div class="d-flex flex-column gap-3">
+
+  <!-- ══════════════════════════════════════════
+       HERO
+  ══════════════════════════════════════════ -->
+  <div class="window">
+    <div class="win-titlebar">
+      <span class="win-titlebar-title">huff — real-time datamosh &amp; glitch-art</span>
+      <div class="win-controls">
+        <div class="win-btn">_</div><div class="win-btn">□</div><div class="win-btn">✕</div>
+      </div>
+    </div>
+    <div class="win-body">
+      <div class="d-flex align-items-start gap-3 flex-wrap">
+        <div class="hero-icon-box flex-shrink-0">
+          <img src="icon-name.jpg" alt="huff icon" onerror="this.parentElement.textContent='huff'"/>
+        </div>
+        <div class="flex-grow-1">
+          <div style="font-size:clamp(22px,5vw,36px);font-weight:bold;letter-spacing:.1em;color:var(--red);line-height:1">huff</div>
+          <div style="font-size:clamp(13px,3vw,17px);color:#404040;margin-top:4px;letter-spacing:.04em;line-height:1.4">
+            Real-time datamosh &amp; glitch-art for desktop.<br/>
+            Load a video or webcam. Sculpt it live.
+          </div>
+          <div class="d-flex flex-wrap gap-2 mt-2">
+            <span class="badge-pill red">v1.0.2-beta</span>
+            <span class="badge-pill">macOS</span>
+            <span class="badge-pill">Windows</span>
+            <span class="badge-pill">Tauri · p5.js · Rust</span>
+            <span class="badge-pill">ISC License</span>
+          </div>
+          <div class="d-flex flex-wrap gap-2 mt-3">
+            <a class="dl-btn primary" href="https://gumroad.com" target="_blank">🛒 Buy on Gumroad</a>
+            <a class="dl-btn" href="https://github.com" target="_blank">GitHub →</a>
+          </div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:#666;margin-top:6px">
+            Paid license includes macOS Universal DMG &amp; Windows x64 installer.
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="statusbar">
+      <span>Tauri v1</span>
+      <span>p5.js</span>
+      <span>Rust + midir + rosc</span>
+      <span>Syphon · Spout · MIDI · OSC</span>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════
+       ABOUT
+  ══════════════════════════════════════════ -->
+  <div class="window">
+    <div class="win-titlebar">
+      <span class="win-titlebar-title">About</span>
+      <div class="win-controls"><div class="win-btn">✕</div></div>
+    </div>
+    <div class="win-body">
+      <div class="term">
+        <div>huff is a desktop application for creating real-time datamosh, glitch-art,</div>
+        <div>and feedback effects. Load a video file or connect a webcam, then sculpt</div>
+        <div>the image through a live effect chain.</div>
+        <br/>
+        <div>Two-window architecture: a controls panel and a separate fullscreen output</div>
+        <div>window connected over a local WebSocket relay. The output window can be</div>
+        <div>sent to a projector, recorded in OBS, or shared to VJ software via</div>
+        <div>Syphon (macOS) or Spout (Windows).</div>
+        <br/>
+        <div>Built for performers and artists who need a tool that behaves predictably</div>
+        <div>under pressure — MIDI-mappable, OSC-receivable, hot-swappable mid-set.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════
+       MEDIA CAROUSEL
+  ══════════════════════════════════════════ -->
+  <div class="window carousel-window" id="media">
+    <div class="win-titlebar">
+      <span class="win-titlebar-title">Media</span>
+      <div class="win-controls"><div class="win-btn">✕</div></div>
+    </div>
+    <div class="win-body">
+      <div class="media-slide" id="mediaSlide">
+        <!-- Slides injected by JS -->
+      </div>
+      <div class="carousel-caption-bar mt-1">
+        <button class="carousel-nav-btn" id="prevBtn">◄ Prev</button>
+        <div class="d-flex flex-column align-items-center gap-1">
+          <div class="carousel-indicators-win" id="carouselDots"></div>
+          <div style="font-size:11px;color:#555" id="slideCaption">Screenshot 1 of 4</div>
+        </div>
+        <button class="carousel-nav-btn" id="nextBtn">Next ►</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════
+       FEATURES
+  ══════════════════════════════════════════ -->
+  <div class="window" id="features">
+    <div class="win-titlebar">
+      <span class="win-titlebar-title">Features</span>
+      <div class="win-controls"><div class="win-btn">✕</div></div>
+    </div>
+    <div class="win-body">
+      <div class="row g-2">
+        <div class="col-12 col-sm-6 col-lg-4">
+          <div class="feat-item">
+            <div class="feat-name">DATAMOSH</div>
+            <div class="feat-desc">Temporal tile displacement from a 60-frame ring buffer. Cluster physics, spatial gap, smear, depth scatter.</div>
+          </div>
+        </div>
+        <div class="col-12 col-sm-6 col-lg-4">
+          <div class="feat-item">
+            <div class="feat-name">FEEDBACK LOOP</div>
+            <div class="feat-desc">Zoom, translate X/Y, and rotate the buffer back onto itself each frame. Creates drift and rotation tunnels.</div>
+          </div>
+        </div>
+        <div class="col-12 col-sm-6 col-lg-4">
+          <div class="feat-item">
+            <div class="feat-name">FLOW WARP</div>
+            <div class="feat-desc">Noise-field UV distortion with pulse and implosion modes. Liquid or heat-haze displacement.</div>
+          </div>
+        </div>
+        <div class="col-12 col-sm-6 col-lg-4">
+          <div class="feat-item">
+            <div class="feat-name">SYMMETRY</div>
+            <div class="feat-desc">Vertical, horizontal, or both axes with a moveable split position.</div>
+          </div>
+        </div>
+        <div class="col-12 col-sm-6 col-lg-4">
+          <div class="feat-item">
+            <div class="feat-name">SOLARISE</div>
+            <div class="feat-desc">Luminance-threshold colour inversion with per-channel R/G/B multipliers.</div>
+          </div>
+        </div>
+        <div class="col-12 col-sm-6 col-lg-4">
+          <div class="feat-item">
+            <div class="feat-name">SCANLINE BANDS</div>
+            <div class="feat-desc">Drifting horizontal displacement bands sampled from past frames. Gap quantisation and skew.</div>
+          </div>
+        </div>
+        <div class="col-12 col-sm-6 col-lg-4">
+          <div class="feat-item">
+            <div class="feat-name">TRAILS</div>
+            <div class="feat-desc">Stacked ghost frames with luma keying for motion smear.</div>
+          </div>
+        </div>
+        <div class="col-12 col-sm-6 col-lg-4">
+          <div class="feat-item">
+            <div class="feat-name">CAMERA INPUT</div>
+            <div class="feat-desc">Live webcam feed alongside or instead of video files.</div>
+          </div>
+        </div>
+        <div class="col-12 col-sm-6 col-lg-4">
+          <div class="feat-item">
+            <div class="feat-name">SYPHON (macOS)</div>
+            <div class="feat-desc">Metal texture sharing. Resolume, VDMX, MadMapper, CoGe, Millumin. Framework bundled — no separate install.</div>
+          </div>
+        </div>
+        <div class="col-12 col-sm-6 col-lg-4">
+          <div class="feat-item">
+            <div class="feat-name">SPOUT (Windows)</div>
+            <div class="feat-desc">D3D11 texture sharing. Resolume Arena, TouchDesigner, MadMapper. Requires Spout2 runtime.</div>
+          </div>
+        </div>
+        <div class="col-12 col-sm-6 col-lg-4">
+          <div class="feat-item">
+            <div class="feat-name">MIDI</div>
+            <div class="feat-desc">Full CC/note input via native Rust midir. JSON map files. USB hardware + virtual ports (IAC / loopMIDI).</div>
+          </div>
+        </div>
+        <div class="col-12 col-sm-6 col-lg-4">
+          <div class="feat-item">
+            <div class="feat-name">OSC</div>
+            <div class="feat-desc">UDP listener on port 9000. JSON map files. TouchOSC, Max/MSP, Pure Data, SuperCollider, TouchDesigner.</div>
+          </div>
+        </div>
+        <div class="col-12 col-sm-6 col-lg-4">
+          <div class="feat-item">
+            <div class="feat-name">PRESETS</div>
+            <div class="feat-desc">Save/recall named parameter snapshots. 7 factory presets: clean, chaos, melt, mirror, pulse, solar, vapor.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════
+       HOW IT WORKS
+  ══════════════════════════════════════════ -->
+  <div class="window" id="how-it-works">
+    <div class="win-titlebar">
+      <span class="win-titlebar-title">How It Works</span>
+      <div class="win-controls"><div class="win-btn">✕</div></div>
+    </div>
+    <div class="win-body d-flex flex-column gap-3">
+      <div class="section-label">Effect Pipeline (fixed order)</div>
+      <div class="term">
+        <div>  SOURCE (video / webcam)</div>
+        <div>    ↓</div>
+        <div>  [1] SCANLINE BANDS  — horizontal displacement from ring</div>
+        <div>  [2] FLOW WARP       — noise-field UV distortion</div>
+        <div>  [3] GLITCH          — tile displacement from ring buffer</div>
+        <div>  [4] FEEDBACK        — previous frame zoomed/rotated back</div>
+        <div>  [5] SYMMETRY        — axis mirror</div>
+        <div>  [6] SOLARISE        — luminance-threshold inversion</div>
+        <div>  [7] TRAILS          — ghost frame blend</div>
+        <div>  [8] BASE VIDEO MIX  — raw source composited on top</div>
+        <div>    ↓</div>
+        <div>  RING BUFFER UPDATE  — frame written for next pass</div>
+        <div>    ↓</div>
+        <div>  OUTPUT → WebSocket relay → Canvas / Syphon / Spout</div>
+      </div>
+      <div class="callout">
+        Each pass is independently toggleable. Disabled passes are completely skipped — no bleed-through. All controls (sliders, MIDI CC, OSC) write directly to DOM elements. The p5 draw loop reads them on every frame — <strong>no debounce, no interpolation layer.</strong>
+      </div>
+      <div class="section-label">Frame Ring Buffer</div>
+      <div class="table-responsive">
+        <table class="win-table">
+          <thead><tr><th>Resolution</th><th>Bytes/frame</th><th>Max frames (quality=1)</th></tr></thead>
+          <tbody>
+            <tr><td>720p (1280×720)</td><td>~3.7 MB</td><td>51 frames</td></tr>
+            <tr><td>1080p (1920×1080)</td><td>~8.3 MB</td><td>23 frames</td></tr>
+            <tr><td>1440p (2560×1440)</td><td>~14.7 MB</td><td>13 frames</td></tr>
+            <tr><td>4K (3840×2160)</td><td>~33.2 MB</td><td>5 frames</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout warn">
+        <strong>720p or 1080p is the practical sweet spot.</strong> At 4K the ring holds only 5 frames — temporal effects lose most of their depth. Ring is capped at 192 MB total.
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════
+       VIDEO OUTPUT
+  ══════════════════════════════════════════ -->
+  <div class="window" id="output">
+    <div class="win-titlebar">
+      <span class="win-titlebar-title">Video Output</span>
+      <div class="win-controls"><div class="win-btn">✕</div></div>
+    </div>
+    <div class="win-body d-flex flex-column gap-3">
+      <div class="table-responsive">
+        <table class="win-table">
+          <thead><tr><th>Method</th><th>Platform</th><th>Compatible With</th><th>Notes</th></tr></thead>
+          <tbody>
+            <tr>
+              <td>Syphon</td><td>macOS only</td>
+              <td>Resolume, VDMX, MadMapper, CoGe, Millumin, Modul8, Max/MSP Jitter</td>
+              <td>Framework bundled. No separate install. Metal texture sharing.</td>
+            </tr>
+            <tr>
+              <td>Spout</td><td>Windows only</td>
+              <td>Resolume Arena, TouchDesigner, MadMapper, Notch</td>
+              <td>Requires Spout2 runtime install. D3D11 shared texture.</td>
+            </tr>
+            <tr>
+              <td>Canvas window</td><td>All platforms</td>
+              <td>OBS, browser, projector direct</td>
+              <td>Opens automatically. Press F for fullscreen. Openable in any browser on LAN.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout warn">
+        <strong>CPU round-trip on Syphon/Spout:</strong> getImageData() → loopback WebSocket → GPU re-upload. Not zero-copy. Works reliably at 720p/30fps. 4K is not practical via this path — use OBS window capture instead.
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════
+       CAVEATS
+  ══════════════════════════════════════════ -->
+  <div class="window" id="caveats">
+    <div class="win-titlebar">
+      <span class="win-titlebar-title">Caveats &amp; Known Limitations</span>
+      <div class="win-controls"><div class="win-btn">✕</div></div>
+    </div>
+    <div class="win-body d-flex flex-column gap-2">
+      <div class="term" style="font-size:12px;line-height:1.8">
+        <div><span style="color:#fff">Syphon (macOS) and Spout (Windows) only.</span> No cross-platform texture sharing — use OBS window capture for recording or streaming on any platform.</div>
+        <br/>
+        <div><span style="color:#fff">720p / 1080p recommended.</span> The frame ring buffer caps at 192 MB. At 4K you get ~5 frames of history — temporal effects lose most of their range.</div>
+        <br/>
+        <div><span style="color:#fff">One instance at a time.</span> huff uses a fixed local port. Running two copies simultaneously will cause the second to lose its output window.</div>
+        <br/>
+        <div><span style="color:#fff">Windows SmartScreen warning on first launch.</span> Expected for unsigned builds — click More info → Run anyway. One-time only.</div>
+        <br/>
+        <div><span style="color:#fff">macOS camera access requires a codesigned build</span> for distribution. Dev builds work out of the box.</div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- DOCS NAV -->
+  <div class="window">
+    <div class="win-titlebar">
+      <span class="win-titlebar-title">Documentation</span>
+      <div class="win-controls"><div class="win-btn">✕</div></div>
+    </div>
+    <div class="win-body">
+      <div class="row g-2">
+        <div class="col-6 col-sm-4 col-md-3">
+          <a href="docs/how-it-works.html" style="display:block;background:var(--black);border-top:1px solid var(--dark);border-left:1px solid var(--dark);border-bottom:1px solid var(--light);border-right:1px solid var(--light);padding:8px 10px;text-decoration:none;">
+            <div style="font-family:'VT323',monospace;font-size:14px;color:var(--green);letter-spacing:.06em">HOW IT WORKS</div>
+            <div style="font-family:'Share Tech Mono',monospace;font-size:10px;color:#006600;margin-top:3px">Effect pipeline, ring buffer, data flow</div>
+          </a>
+        </div>
+        <div class="col-6 col-sm-4 col-md-3">
+          <a href="docs/installation.html" style="display:block;background:var(--black);border-top:1px solid var(--dark);border-left:1px solid var(--dark);border-bottom:1px solid var(--light);border-right:1px solid var(--light);padding:8px 10px;text-decoration:none;">
+            <div style="font-family:'VT323',monospace;font-size:14px;color:var(--green);letter-spacing:.06em">INSTALLATION</div>
+            <div style="font-family:'Share Tech Mono',monospace;font-size:10px;color:#006600;margin-top:3px">macOS, Windows, build from source</div>
+          </a>
+        </div>
+        <div class="col-6 col-sm-4 col-md-3">
+          <a href="docs/interface.html" style="display:block;background:var(--black);border-top:1px solid var(--dark);border-left:1px solid var(--dark);border-bottom:1px solid var(--light);border-right:1px solid var(--light);padding:8px 10px;text-decoration:none;">
+            <div style="font-family:'VT323',monospace;font-size:14px;color:var(--green);letter-spacing:.06em">THE INTERFACE</div>
+            <div style="font-family:'Share Tech Mono',monospace;font-size:10px;color:#006600;margin-top:3px">Every control group explained</div>
+          </a>
+        </div>
+        <div class="col-6 col-sm-4 col-md-3">
+          <a href="docs/midi.html" style="display:block;background:var(--black);border-top:1px solid var(--dark);border-left:1px solid var(--dark);border-bottom:1px solid var(--light);border-right:1px solid var(--light);padding:8px 10px;text-decoration:none;">
+            <div style="font-family:'VT323',monospace;font-size:14px;color:var(--green);letter-spacing:.06em">MIDI</div>
+            <div style="font-family:'Share Tech Mono',monospace;font-size:10px;color:#006600;margin-top:3px">Connecting devices, map format</div>
+          </a>
+        </div>
+        <div class="col-6 col-sm-4 col-md-3">
+          <a href="docs/osc.html" style="display:block;background:var(--black);border-top:1px solid var(--dark);border-left:1px solid var(--dark);border-bottom:1px solid var(--light);border-right:1px solid var(--light);padding:8px 10px;text-decoration:none;">
+            <div style="font-family:'VT323',monospace;font-size:14px;color:var(--green);letter-spacing:.06em">OSC</div>
+            <div style="font-family:'Share Tech Mono',monospace;font-size:10px;color:#006600;margin-top:3px">Setup, map format, TouchOSC, Max/MSP</div>
+          </a>
+        </div>
+        <div class="col-6 col-sm-4 col-md-3">
+          <a href="docs/output.html" style="display:block;background:var(--black);border-top:1px solid var(--dark);border-left:1px solid var(--dark);border-bottom:1px solid var(--light);border-right:1px solid var(--light);padding:8px 10px;text-decoration:none;">
+            <div style="font-family:'VT323',monospace;font-size:14px;color:var(--green);letter-spacing:.06em">VIDEO OUTPUT</div>
+            <div style="font-family:'Share Tech Mono',monospace;font-size:10px;color:#006600;margin-top:3px">Syphon, Spout, canvas mirror window</div>
+          </a>
+        </div>
+        <div class="col-6 col-sm-4 col-md-3">
+          <a href="docs/parameter-reference.html" style="display:block;background:var(--black);border-top:1px solid var(--dark);border-left:1px solid var(--dark);border-bottom:1px solid var(--light);border-right:1px solid var(--light);padding:8px 10px;text-decoration:none;">
+            <div style="font-family:'VT323',monospace;font-size:14px;color:var(--green);letter-spacing:.06em">PARAM REFERENCE</div>
+            <div style="font-family:'Share Tech Mono',monospace;font-size:10px;color:#006600;margin-top:3px">All IDs, ranges, and types for MIDI/OSC</div>
+          </a>
+        </div>
+        <div class="col-6 col-sm-4 col-md-3">
+          <a href="docs/troubleshooting.html" style="display:block;background:var(--black);border-top:1px solid var(--dark);border-left:1px solid var(--dark);border-bottom:1px solid var(--light);border-right:1px solid var(--light);padding:8px 10px;text-decoration:none;">
+            <div style="font-family:'VT323',monospace;font-size:14px;color:var(--green);letter-spacing:.06em">TROUBLESHOOTING</div>
+            <div style="font-family:'Share Tech Mono',monospace;font-size:10px;color:#006600;margin-top:3px">Common problems and fixes</div>
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /flex col -->
+</div><!-- /container -->
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js"></script>
+<script>
+function tick() {
+  document.getElementById('clock').textContent =
+    new Date().toLocaleTimeString('en-US', {hour12: false});
+}
+tick(); setInterval(tick, 1000);
+
+const slides = [
+  { type:'placeholder', label:'Controls window — all parameters and groups',   icon:'🖥', desc:'Replace with: screenshot of the huff controls window' },
+  { type:'placeholder', label:'Output window — fullscreen datamosh output',    icon:'📺', desc:'Replace with: screenshot of fullscreen glitch output' },
+  { type:'placeholder', label:'Syphon panel — sharing to Resolume',            icon:'📡', desc:'Replace with: Syphon panel + receiver screenshot' },
+  { type:'placeholder', label:'MIDI panel — nanoKONTROL2 connected',           icon:'🎛', desc:'Replace with: MIDI overlay with active connection' },
+];
+
+let current = 0;
+const slideEl   = document.getElementById('mediaSlide');
+const captionEl = document.getElementById('slideCaption');
+const dotsEl    = document.getElementById('carouselDots');
+
+function buildDots() {
+  dotsEl.innerHTML = '';
+  slides.forEach((_, i) => {
+    const d = document.createElement('div');
+    d.className = 'carousel-dot' + (i === current ? ' active' : '');
+    d.onclick = () => { current = i; render(); };
+    dotsEl.appendChild(d);
+  });
+}
+
+function render() {
+  const s = slides[current];
+  if (s.type === 'image') {
+    slideEl.innerHTML = `<img src="${s.src}" alt="${s.label}"/>`;
+  } else if (s.type === 'video') {
+    slideEl.innerHTML = `<video src="${s.src}" controls loop autoplay muted style="max-width:100%;max-height:480px"></video>`;
+  } else {
+    slideEl.innerHTML = `
+      <div class="media-placeholder">
+        <div class="ph-icon">${s.icon}</div>
+        <div style="color:var(--green);font-size:14px">${s.label}</div>
+        <div style="color:#005500;font-size:11px;max-width:360px">${s.desc}</div>
+      </div>`;
+  }
+  captionEl.textContent = `${current + 1} of ${slides.length} — ${s.label}`;
+  buildDots();
+}
+
+document.getElementById('prevBtn').onclick = () => { current = (current - 1 + slides.length) % slides.length; render(); };
+document.getElementById('nextBtn').onclick = () => { current = (current + 1) % slides.length; render(); };
+render();
+</script>
+</body>
+</html>

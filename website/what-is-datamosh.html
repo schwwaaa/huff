@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>What is Datamosh? — huff</title>
+<meta name="description" content="Datamoshing is the art of corrupting video compression artefacts into something beautiful. Learn how it works and why it matters."/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=DM+Sans:ital,wght@0,300;0,400;1,300&display=swap" rel="stylesheet"/>
+<style>
+:root {
+  --red:#ff3333; --bg:#080808; --bg2:#0e0e0e;
+  --line:rgba(255,255,255,0.07); --dim:rgba(255,255,255,0.4);
+  --text:rgba(255,255,255,0.88);
+  --mono:'DM Mono',monospace; --sans:'DM Sans',sans-serif; --display:'Bebas Neue',sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html{scroll-behavior:smooth;}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-weight:300;line-height:1.6;overflow-x:hidden;cursor:crosshair;}
+body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.06) 2px,rgba(0,0,0,0.06) 4px);pointer-events:none;z-index:999;}
+
+nav{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;align-items:center;justify-content:space-between;padding:20px 40px;background:linear-gradient(to bottom,rgba(8,8,8,0.95) 0%,transparent 100%);}
+.nav-logo{font-family:var(--display);font-size:1.8rem;letter-spacing:0.05em;color:var(--red);text-decoration:none;line-height:1;}
+.nav-links{display:flex;gap:28px;list-style:none;}
+.nav-links a{font-family:var(--mono);font-size:0.7rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--dim);text-decoration:none;transition:color 0.2s;}
+.nav-links a:hover,.nav-links a.active{color:var(--red);}
+
+/* Page hero */
+.page-hero{padding:140px 40px 80px;border-bottom:1px solid var(--line);position:relative;overflow:hidden;}
+.page-hero::before{content:'DATAMOSH';position:absolute;font-family:var(--display);font-size:22vw;color:rgba(255,255,255,0.018);top:50%;left:50%;transform:translate(-50%,-50%);white-space:nowrap;pointer-events:none;letter-spacing:-0.02em;}
+.page-hero-inner{max-width:800px;position:relative;z-index:2;}
+.eyebrow{font-family:var(--mono);font-size:0.68rem;letter-spacing:0.25em;text-transform:uppercase;color:var(--red);margin-bottom:20px;display:flex;align-items:center;gap:10px;}
+.eyebrow::before{content:'';display:block;width:24px;height:1px;background:var(--red);}
+h1{font-family:var(--display);font-size:clamp(3.5rem,8vw,7rem);line-height:0.92;color:#fff;margin-bottom:28px;letter-spacing:0.01em;}
+.hero-lead{font-size:1.15rem;color:var(--dim);line-height:1.8;max-width:600px;}
+
+/* Content layout */
+.content{max-width:780px;margin:0 auto;padding:80px 40px;}
+.content h2{font-family:var(--display);font-size:2.8rem;letter-spacing:0.02em;color:#fff;margin:60px 0 20px;}
+.content h2:first-child{margin-top:0;}
+.content p{color:var(--dim);font-size:1rem;line-height:1.85;margin-bottom:20px;}
+.content p strong{color:var(--text);font-weight:400;}
+.content em{color:var(--red);font-style:normal;}
+
+/* Callout quote */
+.callout-quote{border-left:3px solid var(--red);padding:20px 28px;margin:40px 0;background:rgba(255,51,51,0.05);}
+.callout-quote p{color:var(--text);font-size:1.1rem;line-height:1.7;margin:0;font-style:italic;}
+
+/* Three-step explainer */
+.steps{display:grid;grid-template-columns:1fr 1fr 1fr;gap:2px;margin:48px 0;}
+@media(max-width:640px){.steps{grid-template-columns:1fr;}}
+.step{padding:32px 24px;background:var(--bg2);border:1px solid var(--line);}
+.step-num{font-family:var(--display);font-size:3.5rem;color:var(--red);line-height:1;margin-bottom:14px;opacity:0.8;}
+.step-title{font-family:var(--display);font-size:1.4rem;color:#fff;letter-spacing:0.02em;margin-bottom:10px;}
+.step-desc{font-size:0.85rem;color:var(--dim);line-height:1.7;}
+
+/* Compression diagram */
+.diagram-block{background:var(--bg2);border:1px solid var(--line);padding:40px;margin:48px 0;overflow-x:auto;}
+
+/* Technique comparison */
+.technique-grid{display:grid;grid-template-columns:1fr 1fr;gap:2px;margin:40px 0;}
+@media(max-width:580px){.technique-grid{grid-template-columns:1fr;}}
+.technique-item{padding:28px 24px;background:var(--bg2);border:1px solid var(--line);}
+.technique-name{font-family:var(--display);font-size:1.5rem;color:#fff;letter-spacing:0.03em;margin-bottom:8px;}
+.technique-desc{font-size:0.84rem;color:var(--dim);line-height:1.7;}
+
+/* History timeline */
+.timeline{margin:48px 0;}
+.timeline-item{display:flex;gap:28px;padding:28px 0;border-bottom:1px solid var(--line);}
+.timeline-item:last-child{border-bottom:none;}
+.timeline-year{font-family:var(--display);font-size:2rem;color:var(--red);min-width:80px;line-height:1;opacity:0.8;}
+.timeline-content h3{font-family:var(--display);font-size:1.2rem;color:#fff;letter-spacing:0.03em;margin-bottom:6px;}
+.timeline-content p{font-size:0.85rem;color:var(--dim);line-height:1.7;margin:0;}
+
+/* Reveal */
+.reveal{opacity:0;transform:translateY(24px);transition:opacity 0.7s cubic-bezier(0.16,1,0.3,1),transform 0.7s cubic-bezier(0.16,1,0.3,1);}
+.reveal.visible{opacity:1;transform:none;}
+
+/* Nav CTA */
+.next-page{display:flex;justify-content:space-between;align-items:center;padding:40px;border-top:1px solid var(--line);margin-top:0;}
+.next-page a{font-family:var(--mono);font-size:0.75rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--dim);text-decoration:none;transition:color 0.15s;}
+.next-page a:hover{color:var(--red);}
+.next-page .next{color:var(--text);}
+footer{border-top:1px solid var(--line);padding:32px 40px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px;}
+.footer-logo{font-family:var(--display);font-size:1.4rem;color:var(--red);text-decoration:none;letter-spacing:0.05em;}
+.footer-copy{font-family:var(--mono);font-size:0.65rem;color:rgba(255,255,255,0.2);}
+</style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-logo" href="index.html">huff</a>
+  <ul class="nav-links">
+    <li><a href="what-is-datamosh.html" class="active">What is Datamosh?</a></li>
+    <li><a href="effects.html">Effects</a></li>
+    <li><a href="use-cases.html">Use Cases</a></li>
+    <li><a href="index.html#download">Download</a></li>
+  </ul>
+</nav>
+
+<section class="page-hero">
+  <div class="page-hero-inner">
+    <div class="eyebrow">The art form</div>
+    <h1>What is<br/>Datamosh?</h1>
+    <p class="hero-lead">A guide for the curious — from video compression basics to live performance art.</p>
+  </div>
+</section>
+
+<div class="content">
+
+  <p class="reveal">Datamoshing is what happens when you deliberately corrupt video compression. Not a filter, not an effect preset — a genuine breakdown of how digital video works, weaponised as an aesthetic tool.</p>
+
+  <p class="reveal">The results are unmistakable: colours bleeding across hard cuts, objects smearing through space, ghost images from earlier in the video haunting the present frame. It looks broken because it <em>is</em> broken, in precisely the right way.</p>
+
+  <div class="callout-quote reveal">
+    <p>"Datamosh is the digital equivalent of double-exposure film. The medium's own failure becomes the medium."</p>
+  </div>
+
+  <h2 class="reveal">How video compression works</h2>
+
+  <p class="reveal">To understand datamoshing, you need to understand one thing about how video is stored: <strong>most frames don't exist.</strong></p>
+
+  <p class="reveal">Modern video codecs (H.264, HEVC, VP9) work by only storing complete images at intervals — these are called <em>I-frames</em> (intra-frames, or keyframes). Everything in between is stored as <em>P-frames</em> (predictive frames): instead of a full image, a P-frame says "take the previous frame, move this block here, change that region's colour by this amount." The frame is reconstructed from instructions, not pixels.</p>
+
+  <div class="diagram-block reveal">
+    <svg viewBox="0 0 680 160" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:680px" font-family="'DM Mono',monospace">
+      <!-- I-frame -->
+      <rect x="10" y="30" width="90" height="100" rx="4" fill="rgba(255,51,51,0.15)" stroke="#ff3333" stroke-width="1.5"/>
+      <text x="55" y="72" text-anchor="middle" fill="#ff3333" font-size="12" font-weight="500">I</text>
+      <text x="55" y="88" text-anchor="middle" fill="#ff3333" font-size="9">KEYFRAME</text>
+      <text x="55" y="100" text-anchor="middle" fill="rgba(255,255,255,0.3)" font-size="8">full image</text>
+
+      <!-- Arrow -->
+      <line x1="100" y1="80" x2="118" y2="80" stroke="rgba(255,255,255,0.2)" stroke-width="1" marker-end="url(#a)"/>
+
+      <!-- P-frames -->
+      <defs><marker id="a" markerWidth="6" markerHeight="5" refX="6" refY="2.5" orient="auto"><path d="M0,0 L6,2.5 L0,5 Z" fill="rgba(255,255,255,0.25)"/></marker></defs>
+
+      <rect x="120" y="45" width="70" height="70" rx="3" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.2)" stroke-width="1"/>
+      <text x="155" y="78" text-anchor="middle" fill="rgba(255,255,255,0.6)" font-size="11">P</text>
+      <text x="155" y="93" text-anchor="middle" fill="rgba(255,255,255,0.25)" font-size="7.5">delta</text>
+
+      <line x1="190" y1="80" x2="208" y2="80" stroke="rgba(255,255,255,0.15)" stroke-width="1" marker-end="url(#a)"/>
+
+      <rect x="210" y="45" width="70" height="70" rx="3" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.15)" stroke-width="1"/>
+      <text x="245" y="78" text-anchor="middle" fill="rgba(255,255,255,0.5)" font-size="11">P</text>
+      <text x="245" y="93" text-anchor="middle" fill="rgba(255,255,255,0.2)" font-size="7.5">delta</text>
+
+      <line x1="280" y1="80" x2="298" y2="80" stroke="rgba(255,255,255,0.15)" stroke-width="1" marker-end="url(#a)"/>
+
+      <rect x="300" y="45" width="70" height="70" rx="3" fill="rgba(255,255,255,0.02)" stroke="rgba(255,255,255,0.12)" stroke-width="1"/>
+      <text x="335" y="78" text-anchor="middle" fill="rgba(255,255,255,0.4)" font-size="11">P</text>
+      <text x="335" y="93" text-anchor="middle" fill="rgba(255,255,255,0.15)" font-size="7.5">delta</text>
+
+      <line x1="370" y1="80" x2="388" y2="80" stroke="rgba(255,255,255,0.1)" stroke-width="1" marker-end="url(#a)"/>
+
+      <!-- Second I-frame -->
+      <rect x="390" y="30" width="90" height="100" rx="4" fill="rgba(255,51,51,0.15)" stroke="#ff3333" stroke-width="1.5"/>
+      <text x="435" y="72" text-anchor="middle" fill="#ff3333" font-size="12" font-weight="500">I</text>
+      <text x="435" y="88" text-anchor="middle" fill="#ff3333" font-size="9">KEYFRAME</text>
+      <text x="435" y="100" text-anchor="middle" fill="rgba(255,255,255,0.3)" font-size="8">scene cut</text>
+
+      <line x1="480" y1="80" x2="498" y2="80" stroke="rgba(255,255,255,0.2)" stroke-width="1" marker-end="url(#a)"/>
+
+      <rect x="500" y="45" width="70" height="70" rx="3" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.2)" stroke-width="1"/>
+      <text x="535" y="78" text-anchor="middle" fill="rgba(255,255,255,0.6)" font-size="11">P</text>
+      <text x="535" y="93" text-anchor="middle" fill="rgba(255,255,255,0.25)" font-size="7.5">delta</text>
+
+      <text x="610" y="75" fill="rgba(255,255,255,0.2)" font-size="16">···</text>
+
+      <!-- Labels -->
+      <text x="55"  y="148" text-anchor="middle" fill="rgba(255,255,255,0.25)" font-size="8">~100KB</text>
+      <text x="155" y="148" text-anchor="middle" fill="rgba(255,255,255,0.18)" font-size="8">~2KB</text>
+      <text x="245" y="148" text-anchor="middle" fill="rgba(255,255,255,0.18)" font-size="8">~2KB</text>
+      <text x="435" y="148" text-anchor="middle" fill="rgba(255,255,255,0.25)" font-size="8">~100KB</text>
+    </svg>
+    <p style="font-family:'DM Mono',monospace;font-size:0.72rem;color:rgba(255,255,255,0.25);margin-top:14px;margin-bottom:0;letter-spacing:0.04em;">I-FRAMES store complete images. P-FRAMES store only the changes from the previous frame.</p>
+  </div>
+
+  <h2 class="reveal">The glitch</h2>
+
+  <p class="reveal">Datamoshing happens when you remove or replace the I-frames. When the decoder hits a cut but finds no keyframe to reset from, it has to keep applying the motion instructions from the <em>old</em> clip onto the <em>new</em> one. The motion data from one scene gets applied to the pixels of an entirely different scene.</p>
+
+  <p class="reveal">The result: colours and motion from the first clip bleed through the imagery of the second. Objects from scene one smear through scene two. The visual information from one moment in time physically inhabits another. This is <strong>temporal displacement</strong> made visible.</p>
+
+  <div class="steps reveal">
+    <div class="step">
+      <div class="step-num">01</div>
+      <div class="step-title">Source Video</div>
+      <p class="step-desc">A normal video file with I-frames at every scene cut, P-frames filling the gaps.</p>
+    </div>
+    <div class="step">
+      <div class="step-num">02</div>
+      <div class="step-title">Remove I-frames</div>
+      <p class="step-desc">At a scene cut, delete the keyframe. The decoder has no reference image to reset to.</p>
+    </div>
+    <div class="step">
+      <div class="step-num">03</div>
+      <div class="step-title">Temporal Bleed</div>
+      <p class="step-desc">Motion instructions from scene one get applied to scene two's content. Time bleeds across the cut.</p>
+    </div>
+  </div>
+
+  <h2 class="reveal">Datamoshing vs traditional glitch</h2>
+
+  <div class="technique-grid reveal">
+    <div class="technique-item">
+      <div class="technique-name">Datamosh</div>
+      <p class="technique-desc">Structural — exploits the temporal architecture of compressed video. The artefacts are caused by genuine temporal displacement. Cannot be replicated with a filter.</p>
+    </div>
+    <div class="technique-item">
+      <div class="technique-name">VHS / Tape</div>
+      <p class="technique-desc">Electromagnetic — signal degradation from magnetic tape dropout, tracking errors, head switching. Analogue in origin. Horizontal tearing, chroma noise, sync loss.</p>
+    </div>
+    <div class="technique-item">
+      <div class="technique-name">Pixel Sort</div>
+      <p class="technique-desc">Algorithmic — pixels within a frame are re-sorted by brightness or hue within threshold bands. A single-frame operation with no temporal component.</p>
+    </div>
+    <div class="technique-item">
+      <div class="technique-name">Feedback</div>
+      <p class="technique-desc">Recursive — the output becomes the input. Zoom, rotation, and translation applied each loop creates infinite regress. Analogue video feedback predates digital.</p>
+    </div>
+  </div>
+
+  <h2 class="reveal">A brief history</h2>
+
+  <div class="timeline reveal">
+    <div class="timeline-item">
+      <div class="timeline-year">1990s</div>
+      <div class="timeline-content">
+        <h3>Analogue precursors</h3>
+        <p>Video artists like Nam June Paik and Steina Vasulka build hardware synthesisers to corrupt video signals. The aesthetic of broken TV becomes intentional art.</p>
+      </div>
+    </div>
+    <div class="timeline-item">
+      <div class="timeline-year">2000s</div>
+      <div class="timeline-content">
+        <h3>Codec era begins</h3>
+        <p>H.264 and similar codecs become standard. Artists discover that hex-editing video files — removing or duplicating I-frames — produces dramatic temporal artefacts. Early datamoshing is manual and painstaking.</p>
+      </div>
+    </div>
+    <div class="timeline-item">
+      <div class="timeline-year">2009</div>
+      <div class="timeline-content">
+        <h3>Mainstream visibility</h3>
+        <p>Chairlift's <em>Evident Utensil</em> music video brings datamoshing to a mainstream audience. The codec artefact becomes a recognised aesthetic rather than an accident.</p>
+      </div>
+    </div>
+    <div class="timeline-item">
+      <div class="timeline-year">2010s</div>
+      <div class="timeline-content">
+        <h3>Live performance</h3>
+        <p>Tools like Avisynth scripts and custom Max/MSP patches bring real-time datamoshing to VJ performances. The aesthetic migrates from post-production to live.</p>
+      </div>
+    </div>
+    <div class="timeline-item">
+      <div class="timeline-year">Now</div>
+      <div class="timeline-content">
+        <h3>Real-time, MIDI-mapped</h3>
+        <p>huff brings datamosh and related glitch effects to a native desktop app with live MIDI/OSC control and direct output to professional VJ software.</p>
+      </div>
+    </div>
+  </div>
+
+  <h2 class="reveal">What huff adds</h2>
+
+  <p class="reveal">Traditional datamoshing works on rendered files. You export, corrupt, re-import. It's a post-production technique.</p>
+
+  <p class="reveal">huff does it in the frame buffer — in real time, at 30–60 fps, in response to MIDI knobs and OSC sliders. Instead of removing I-frames from a codec stream, huff maintains its own ring of captured frames and samples from them in real time per tile. The visual result matches what codec datamoshing produces, but it runs live and responds instantly to control input.</p>
+
+  <p class="reveal">Then it layers six more effects on top: feedback loops, noise-field warping, scanline displacement, solarise, symmetry folding, and ghost trails. None of these exist in codec datamoshing. huff treats the datamosh aesthetic as a starting point, not a destination.</p>
+
+</div>
+
+<div class="next-page">
+  <a href="index.html">← Back to huff</a>
+  <a href="effects.html" class="next">Explore the effects →</a>
+</div>
+
+<footer>
+  <a class="footer-logo" href="index.html">huff</a>
+  <span class="footer-copy">huff v1.0.2 · ISC licence</span>
+</footer>
+
+<script>
+const obs = new IntersectionObserver(
+  e => e.forEach(x => { if(x.isIntersecting) x.target.classList.add('visible'); }),
+  {threshold:0.08,rootMargin:'0px 0px -30px 0px'}
+);
+document.querySelectorAll('.reveal').forEach(el => obs.observe(el));
+</script>
+</body>
+</html>

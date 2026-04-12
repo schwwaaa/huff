@@ -6,73 +6,14 @@
     <title>huff</title>
     <link rel="icon" href="../src-tauri/icons/icon.png">
 
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=VT323&family=Share+Tech+Mono&display=swap" rel="stylesheet">
-
     <style>
-        /*
-        ███████████████████████████████████████████████████
-        █  HUFF v2.0 :: AOL WAREZ / PUNTER AESTHETIC     █
-        █  circa 1997 :: Win95 gray + phosphor green      █
-        █  "AOL Hell" "TOE" "Punter" "Phreaker" vibes     █
-        ███████████████████████████████████████████████████
-        */
-
-        @keyframes blink {
-            0%,49%{opacity:1} 50%,100%{opacity:0}
-        }
-        @keyframes cursor-blink {
-            0%,49%{border-right-color:#00FF00} 50%,100%{border-right-color:transparent}
-        }
-        @keyframes marquee-scroll {
-            0%   { transform: translateX(100%); }
-            100% { transform: translateX(-100%); }
-        }
-        @keyframes green-pulse {
-            0%,100%{text-shadow:0 0 4px #00FF00,0 0 10px #00FF00}
-            50%{text-shadow:0 0 2px #00CC00}
-        }
-
-        :root {
-            /* Win95 chrome */
-            --win-bg:     #C0C0C0;
-            --win-light:  #FFFFFF;
-            --win-mid:    #808080;
-            --win-dark:   #404040;
-            --title-bg:   #ff4647;
-            --title-text: #FFFFFF;
-            /* Terminal */
-            --term-bg:    #000000;
-            --term-green: #00FF00;
-            --term-dgreen:#00CC00;
-            --term-red:   #FF0000;
-            --term-yel:   #FFFF00;
-            --term-cyan:  #00FFFF;
-            --term-mag:   #FF00FF;
-            color-scheme: dark;
-        }
+        :root { color-scheme: dark; }
 
         html, body {
             margin: 0; height: 100%;
-            background: var(--term-bg);
-            color: var(--term-green);
-            font-family: 'VT323', 'Courier New', monospace;
+            background: black; color: #e8eaf0;
+            font-family: 'Arial Black', 'Arial Bold', Arial, sans-serif;
             overflow: hidden;
-            font-size: 14px;
-        }
-
-        /* Phosphor scanline texture over everything */
-        body::after {
-            content: '';
-            position: fixed; inset: 0; z-index: 9999; pointer-events: none;
-            background: repeating-linear-gradient(
-                0deg,
-                rgba(0,0,0,0)       0px,
-                rgba(0,0,0,0)       2px,
-                rgba(0,255,0,0.015) 2px,
-                rgba(0,255,0,0.015) 3px
-            );
         }
 
         canvas {
@@ -80,652 +21,437 @@
             width: 100% !important; height: 100% !important; display: block;
         }
 
+        /* ── icon watermark behind header ── */
         #huff-bg {
             position: fixed; inset: 0; z-index: 0;
             background: url('icon-name.jpg') center/cover no-repeat;
-            opacity: .04; filter: grayscale(1); pointer-events: none;
+            opacity: .07; filter: grayscale(1); pointer-events: none;
         }
 
-        /* ═══════════════════════════════════════════════
-           MAIN PANEL — Win95 window with title bar
-        ═══════════════════════════════════════════════ */
+        /* ── main panel ── */
         header {
-            position: fixed; top: 6px; left: 6px; right: 6px; z-index: 10;
-            background: var(--win-bg);
-            border-top:    2px solid var(--win-light);
-            border-left:   2px solid var(--win-light);
-            border-bottom: 2px solid var(--win-dark);
-            border-right:  2px solid var(--win-dark);
-            padding: 0;
-            display: flex; flex-direction: column; gap: 0;
-            max-height: calc(100vh - 18px); overflow-y: auto;
+            position: fixed; top: 8px; left: 8px; right: 8px; z-index: 10;
+            padding: 7px 9px;
+            border: 1.5px solid rgba(255,70,70,.5);
+            background: rgba(0,0,0,.93);
+            border-radius: 10px;
+            backdrop-filter: blur(8px);
+            display: flex; flex-direction: column; gap: 6px;
+            max-height: calc(100vh - 20px); overflow-y: auto;
         }
-        header::-webkit-scrollbar { width: 16px; background: var(--win-bg); }
-        header::-webkit-scrollbar-thumb {
-            background: var(--win-bg);
-            border-top:    2px solid var(--win-light);
-            border-left:   2px solid var(--win-light);
-            border-bottom: 2px solid var(--win-dark);
-            border-right:  2px solid var(--win-dark);
-        }
-        header::-webkit-scrollbar-track { background: var(--win-mid); }
+        header::-webkit-scrollbar { width: 4px; }
+        header::-webkit-scrollbar-thumb { background: #ff464660; border-radius: 2px; }
 
-        /* Win95 title bar injected via a wrapper — we fake it on topbar */
+        /* ── top transport bar ── */
         .topbar {
-            display: flex; align-items: center; gap: 4px; flex-wrap: wrap;
-            padding: 3px 4px 3px 5px;
-            background: var(--win-bg);
-            border-bottom: 1px solid var(--win-mid);
+            display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
         }
-
-        /* Title bar strip at very top */
-        header::before {
-            content: '[MAIN CONTROL]';
-            display: block;
-            background: linear-gradient(90deg, var(--title-bg) 0%, #ff4647 100%);
-            color: var(--title-text);
-            font-family: 'VT323', monospace;
-            font-size: 14px;
-            padding: 2px 6px;
-            letter-spacing: .05em;
-            white-space: nowrap;
-            overflow: hidden;
-            border-bottom: 1px solid var(--win-dark);
-        }
-
         .topbar-title {
-            font-family: 'VT323', monospace;
-            font-size: 15px; font-weight: normal;
+            font-size: 15px; font-weight: 900;
+            font-family: 'Arial Black', 'Arial Bold', Arial, sans-serif;
             letter-spacing: .08em;
-            color: var(--term-bg);
-            text-transform: uppercase; flex-shrink: 0;
-            background: var(--win-bg);
-            border-top:    1px solid var(--win-light);
-            border-left:   1px solid var(--win-light);
-            border-bottom: 1px solid var(--win-dark);
-            border-right:  1px solid var(--win-dark);
-            padding: 1px 6px;
+            color: #ff4646; text-transform: uppercase; flex-shrink: 0;
         }
+        .topbar-sep { width:1px; height:18px; background: #ffffff22; flex-shrink:0; }
 
-        .topbar-sep {
-            width: 1px; height: 14px;
-            background: var(--win-mid);
-            border-right: 1px solid var(--win-light);
-            flex-shrink: 0;
-        }
-
-        /* ═══════════════════════════════════════════════
-           GROUPS — raised bevel boxes
-        ═══════════════════════════════════════════════ */
-        .groups {
-            display: flex; flex-wrap: wrap; gap: 4px;
-            align-items: flex-start;
-            padding: 4px 5px;
-            background: var(--win-bg);
-        }
+        /* ── group layout ── */
+        .groups { display: flex; flex-wrap: wrap; gap: 5px; align-items: flex-start; }
 
         .group {
             display: flex; flex-direction: column; gap: 0;
-            background: var(--win-bg);
-            border-top:    2px solid var(--win-light);
-            border-left:   2px solid var(--win-light);
-            border-bottom: 2px solid var(--win-dark);
-            border-right:  2px solid var(--win-dark);
-            flex-shrink: 0; overflow: hidden;
+            background: rgba(255,255,255,.04);
+            border: 1px solid rgba(255,255,255,.1);
+            border-radius: 7px; flex-shrink: 0; overflow: hidden;
             width: fit-content; max-width: 100%;
         }
-        .group:hover {
-            border-top-color:  var(--win-light);
-            border-left-color: var(--win-light);
-        }
-
-        /* Group label = mini title bar */
+        /* clickable header row */
         .group-label {
-            font-family: 'VT323', monospace;
-            font-size: 12px; font-weight: normal; letter-spacing: .1em;
-            text-transform: uppercase;
-            color: var(--title-text);
-            background: linear-gradient(90deg, var(--title-bg) 0%, #ff4647 100%);
-            padding: 1px 5px; cursor: pointer;
+            font-size: 9px; font-weight: 700; letter-spacing: .16em;
+            text-transform: uppercase; color: #ff4646;
+            padding: 4px 7px; cursor: pointer;
             display: flex; align-items: center; justify-content: space-between; gap: 6px;
             user-select: none; white-space: nowrap;
         }
-        .group-label:hover {
-            background: linear-gradient(90deg, #ff4647 0%, #1090E0 100%);
-        }
-        .group-label::after {
-            content: '▾'; font-size: 10px; opacity: .9; transition: transform .1s;
-        }
+        .group-label:hover { background: rgba(255,70,70,.07); }
+        .group-label::after { content: '▾'; font-size: 8px; opacity: .6; transition: transform .15s; }
         .group.collapsed .group-label::after { transform: rotate(-90deg); }
 
+        /* collapsible body */
         .group-body {
-            padding: 3px 5px 4px;
-            border-top: 1px solid var(--win-mid);
-            background: var(--win-bg);
+            padding: 4px 6px 5px;
+            border-top: 1px solid rgba(255,255,255,.07);
         }
         .group.collapsed .group-body { display: none; }
-        .group-row { display: flex; flex-wrap: wrap; gap: 3px; align-items: center; }
+        .group-row { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
 
-        /* ═══════════════════════════════════════════════
-           CTRL CHIPS — inset terminal boxes
-        ═══════════════════════════════════════════════ */
+        /* ── individual control chip ── */
         .ctrl {
             display: inline-flex; align-items: center; gap: 4px;
-            padding: 1px 5px;
-            background: var(--term-bg);
-            border-top:    1px solid var(--win-dark);
-            border-left:   1px solid var(--win-dark);
-            border-bottom: 1px solid var(--win-light);
-            border-right:  1px solid var(--win-light);
+            padding: 2px 6px;
+            background: rgba(255,255,255,.04);
+            border: 1px solid rgba(255,255,255,.1);
+            border-radius: 5px;
+            transition: border-color .12s;
         }
-        .ctrl:hover {
-            border-top-color: var(--win-mid);
-            border-left-color: var(--win-mid);
-        }
+        .ctrl:hover { border-color: rgba(255,70,70,.4); }
         .ctrl label {
-            font-family: 'VT323', monospace;
-            font-size: 11px; color: var(--term-dgreen);
-            white-space: nowrap; letter-spacing: .06em; text-transform: uppercase;
+            font-size: 9px; color: rgba(255,255,255,.5);
+            white-space: nowrap; letter-spacing: .04em; text-transform: uppercase;
             user-select: none;
         }
         .ctrl .val {
-            font-family: 'Share Tech Mono', monospace;
-            font-size: 11px; color: var(--term-yel);
-            min-width: 24px; text-align: right;
+            font-size: 9px; color: #ff6060; min-width: 22px; text-align: right;
         }
 
         /* midi states */
-        .ctrl.midi-armed {
-            background: #330000 !important;
-            border-top-color:    var(--term-red) !important;
-            border-left-color:   var(--term-red) !important;
-            border-bottom-color: #FF6666 !important;
-            border-right-color:  #FF6666 !important;
-        }
-        .ctrl.midi-armed label { color: var(--term-red) !important; animation: blink .6s step-end infinite; }
-        .ctrl.midi-bound {
-            border-top-color:  var(--term-mag) !important;
-            border-left-color: var(--term-mag) !important;
-        }
+        .ctrl.midi-armed { border-color: #ff4646 !important; background: rgba(255,70,70,.1); }
+        .ctrl.midi-bound { border-color: rgba(255,160,0,.5); }
 
-        /* ═══════════════════════════════════════════════
-           INPUTS
-        ═══════════════════════════════════════════════ */
+        /* ── inputs ── */
         input[type=range] {
             -webkit-appearance: none; appearance: none;
-            width: 68px; height: 4px;
-            background: var(--win-mid);
-            border-top:  1px solid var(--win-dark);
-            border-left: 1px solid var(--win-dark);
+            width: 70px; height: 2px;
+            background: rgba(255,255,255,.2); border-radius: 1px;
             outline: none; cursor: pointer; flex-shrink: 0;
         }
         input[type=range]::-webkit-slider-thumb {
             -webkit-appearance: none;
-            width: 11px; height: 14px;
-            background: var(--win-bg);
-            border-top:    2px solid var(--win-light);
-            border-left:   2px solid var(--win-light);
-            border-bottom: 2px solid var(--win-dark);
-            border-right:  2px solid var(--win-dark);
+            width: 9px; height: 9px; border-radius: 50%; background: #ff4646;
         }
         input[type=range]::-moz-range-thumb {
-            width: 11px; height: 14px;
-            background: var(--win-bg); border: none;
+            width: 9px; height: 9px; border-radius: 50%; background: #ff4646; border: none;
         }
         input[type=number] {
-            width: 60px;
-            background: var(--term-bg);
-            border-top:    1px solid var(--win-dark);
-            border-left:   1px solid var(--win-dark);
-            border-bottom: 1px solid var(--win-light);
-            border-right:  1px solid var(--win-light);
-            color: var(--term-green); padding: 1px 3px;
-            font-size: 12px; font-family: 'Share Tech Mono', monospace;
+            width: 62px; background: rgba(0,0,0,.5);
+            border: 1px solid rgba(255,255,255,.12); border-radius: 4px;
+            color: #e8eaf0; padding: 1px 4px; font-size: 10px; font-family: inherit;
         }
         select {
-            background: var(--term-bg);
-            border-top:    1px solid var(--win-dark);
-            border-left:   1px solid var(--win-dark);
-            border-bottom: 1px solid var(--win-light);
-            border-right:  1px solid var(--win-light);
-            color: var(--term-green);
-            padding: 1px 2px; font-size: 12px;
-            font-family: 'VT323', monospace; cursor: pointer;
+            background: rgba(0,0,0,.6); border: 1px solid rgba(255,255,255,.12);
+            border-radius: 4px; color: #e8eaf0;
+            padding: 1px 3px; font-size: 10px; font-family: inherit; cursor: pointer;
         }
-        input[type=checkbox] { accent-color: var(--term-green); width: 12px; height: 12px; cursor: pointer; }
+        input[type=checkbox] { accent-color: #ff4646; width: 11px; height: 11px; cursor: pointer; }
 
-        /* ═══════════════════════════════════════════════
-           BUTTONS — classic Win95 raised bevel
-        ═══════════════════════════════════════════════ */
+        /* ── buttons (transport + meta) ── */
         button {
-            cursor: pointer;
-            font-family: 'VT323', monospace;
-            font-size: 13px; font-weight: normal; letter-spacing: .06em;
-            padding: 2px 8px;
-            background: var(--win-bg); color: var(--term-bg);
-            border-top:    2px solid var(--win-light);
-            border-left:   2px solid var(--win-light);
-            border-bottom: 2px solid var(--win-dark);
-            border-right:  2px solid var(--win-dark);
-            white-space: nowrap; text-transform: uppercase;
-            transition: none;
+            cursor: pointer; font-family: inherit; font-size: 11px;
+            padding: 4px 9px; border-radius: 7px;
+            border: 1px solid rgba(255,255,255,.15);
+            background: rgba(255,255,255,.06); color: #e8eaf0;
+            white-space: nowrap; transition: background .12s, border-color .12s;
         }
-        button:hover {
-            background: #D4D0C8;
-        }
-        button:active {
-            border-top-color:    var(--win-dark);
-            border-left-color:   var(--win-dark);
-            border-bottom-color: var(--win-light);
-            border-right-color:  var(--win-light);
-            transform: translate(1px, 1px);
-        }
-        button:disabled { opacity: .4; cursor: default; }
+        button:hover  { background: rgba(255,255,255,.13); border-color: rgba(255,255,255,.3); }
+        button:disabled { opacity: .35; cursor: default; }
+        .btn-red  { background: #ff4646; border-color: #ff4646; color: #000; font-weight: 700; }
+        .btn-red:hover { background: #ff6060; border-color: #ff6060; }
+        .btn-dim  { border-color: rgba(255,70,70,.4); color: #ff7070; }
+        .btn-dim:hover { background: rgba(255,70,70,.1); border-color: rgba(255,70,70,.7); }
+        .btn-dim.midi-armed { background: #ff4646; border-color: #ff4646; color: #000; }
 
-        /* Primary "danger" button — black bg, green text */
-        .btn-red {
-            background: var(--term-bg);
-            color: var(--term-green);
-            border-top-color:  var(--win-light);
-            border-left-color: var(--win-light);
-            font-weight: normal;
-        }
-        .btn-red:hover { background: #001100; color: var(--term-green); }
-
-        /* Dim secondary */
-        .btn-dim {
-            background: var(--win-bg);
-            color: #404040;
-        }
-        .btn-dim:hover { color: var(--term-bg); }
-        .btn-dim.midi-armed {
-            background: var(--term-bg);
-            color: var(--term-red);
-            border-top-color: #FF6666;
-            border-left-color: #FF6666;
-            animation: blink .5s step-end infinite;
-        }
-
-        /* ═══════════════════════════════════════════════
-           STATUS PILLS — inset terminal readouts
-        ═══════════════════════════════════════════════ */
+        /* ── status pills (inline in topbar) ── */
         .pill {
-            font-family: 'VT323', monospace;
-            font-size: 12px; padding: 1px 6px;
-            background: var(--term-bg);
-            border-top:    1px solid var(--win-dark);
-            border-left:   1px solid var(--win-dark);
-            border-bottom: 1px solid var(--win-light);
-            border-right:  1px solid var(--win-light);
-            color: var(--term-green); white-space: nowrap; flex-shrink: 0;
-            letter-spacing: .04em;
+            font-size: 10px; padding: 3px 8px; border-radius: 999px;
+            border: 1px solid rgba(255,255,255,.15); background: rgba(255,255,255,.06);
+            color: rgba(255,255,255,.5); white-space: nowrap; flex-shrink: 0;
         }
-        #status   { color: var(--term-dgreen); }
-        #midiPill {
-            color: var(--term-mag);
-            display: none;
-        }
-        #oscPill  {
-            color: var(--term-cyan);
-            display: none;
-        }
+        #status   { color: rgba(255,255,255,.5); }
+        #midiPill { color: rgba(255,160,0,.85);  border-color: rgba(255,160,0,.25); display: none; }
+        #oscPill  { color: rgba(80,220,120,.85); border-color: rgba(80,220,120,.25); display: none; }
 
-        /* ═══════════════════════════════════════════════
-           MODAL OVERLAYS
-        ═══════════════════════════════════════════════ */
-        #aboutOverlay, #midiOverlay, #syphonOverlay, #spoutOverlay, #oscOverlay {
+        /* ── about modal ── */
+        #aboutOverlay {
             display: none; position: fixed; inset: 0; z-index: 1000;
-            /* classic Win95 "desktop" tile pattern behind modals */
-            background: #008080;
-            background-image: repeating-linear-gradient(
-                45deg,
-                rgba(0,0,0,.08) 0px, rgba(0,0,0,.08) 1px,
-                transparent 1px, transparent 4px
-            );
+            background: rgba(0,0,0,.72); backdrop-filter: blur(10px);
             align-items: center; justify-content: center;
         }
-        #aboutOverlay.open, #midiOverlay.open, #syphonOverlay.open,
-        #spoutOverlay.open, #oscOverlay.open { display: flex; }
-
-        /* ═══════════════════════════════════════════════
-           MODAL BOXES — Win95 dialog windows
-        ═══════════════════════════════════════════════ */
-        #aboutBox, #midiBox, #syphonBox, #spoutBox, #oscBox {
-            position: relative;
-            background: var(--win-bg);
-            border-top:    3px solid var(--win-light);
-            border-left:   3px solid var(--win-light);
-            border-bottom: 3px solid var(--win-dark);
-            border-right:  3px solid var(--win-dark);
-            font-family: 'VT323', monospace;
-            padding: 0;
-            overflow: hidden;
-        }
-        /* Title bar on each modal */
-        #aboutBox::before  { content: '■  ABOUT HUFF'; }
-        #midiBox::before   { content: '■  MIDI CONFIGURATION'; }
-        #syphonBox::before { content: '■  SYPHON OUTPUT'; }
-        #spoutBox::before  { content: '■  SPOUT OUTPUT'; }
-        #oscBox::before    { content: '■  OSC CONFIGURATION'; }
-        #aboutBox::before, #midiBox::before, #syphonBox::before,
-        #spoutBox::before, #oscBox::before {
-            display: block;
-            background: linear-gradient(90deg, var(--title-bg) 0%, #ff4647 100%);
-            color: var(--title-text);
-            font-family: 'VT323', monospace;
-            font-size: 14px; padding: 3px 8px;
-            letter-spacing: .07em;
-            border-bottom: 1px solid var(--win-dark);
-        }
-
-        /* ── About ── */
+        #aboutOverlay.open { display: flex; }
         #aboutBox {
-            max-width: 440px; width: 90%;
+            position: relative;
+            background: #090909; border: 2px solid #ff4646; border-radius: 14px;
+            padding: 30px 34px 26px; max-width: 450px; width: 90%;
         }
-        #aboutBox > * { padding: 0 18px; }
-        #aboutBox > *:first-child { padding-top: 0; }
-        /* override padding for the pseudo-el title */
         #aboutBox .a-icon {
-            float: right; width: 64px; height: 64px;
+            float: right; width: 68px; height: 68px; border-radius: 10px;
             background: url('icon-name.jpg') center/cover no-repeat;
-            margin: 12px 0 8px 14px;
-            border-top:    1px solid var(--win-dark);
-            border-left:   1px solid var(--win-dark);
-            border-bottom: 1px solid var(--win-light);
-            border-right:  1px solid var(--win-light);
+            margin: 0 0 10px 16px;
+            border: 1px solid rgba(255,255,255,.12);
             flex-shrink: 0;
         }
         #aboutBox h1 {
-            font-family: 'VT323', monospace;
-            font-size: 28px; font-weight: normal; letter-spacing: .14em;
-            color: var(--term-green); margin: 12px 0 2px;
-            text-transform: uppercase;
-            text-shadow: 1px 1px 0 #003300;
+            font-size: 28px; font-weight: 900; letter-spacing: .1em;
+            color: #ff4646; margin: 0 0 3px; text-transform: uppercase;
         }
-        #aboutBox .build {
-            font-size: 12px; letter-spacing: .1em;
-            color: #606060; margin-bottom: 10px;
-            font-family: 'Share Tech Mono', monospace;
-        }
-        #aboutBox p {
-            font-size: 13px; line-height: 1.55; color: var(--term-bg);
-            margin: 0 0 10px; padding: 0 18px;
-        }
-        #aboutBox .links { font-size: 12px; color: #404040; padding: 0 18px 16px; }
-        #aboutBox .links a { color: var(--title-bg); text-decoration: underline; }
+        #aboutBox .build { font-size: 10px; letter-spacing: .1em; color: rgba(255,255,255,.3); margin-bottom: 18px; }
+        #aboutBox p  { font-size: 12px; line-height: 1.75; color: rgba(255,255,255,.65); margin: 0 0 13px; }
+        #aboutBox .links { font-size: 11px; color: rgba(255,255,255,.35); }
+        #aboutBox .links a { color: #ff4646; text-decoration: none; }
         #aboutClose {
-            position: absolute; top: 3px; right: 5px;
-            background: var(--win-bg); border: none;
-            border-top:    1px solid var(--win-light);
-            border-left:   1px solid var(--win-light);
-            border-bottom: 1px solid var(--win-dark);
-            border-right:  1px solid var(--win-dark);
-            font-size: 12px; color: var(--term-bg);
-            cursor: pointer; padding: 0 4px; line-height: 1.3;
-            font-family: 'VT323', monospace;
+            position: absolute; top: 12px; right: 15px;
+            background: none; border: none; font-size: 22px;
+            color: rgba(255,255,255,.3); cursor: pointer; padding: 0; line-height: 1;
         }
-        #aboutClose:hover { background: #D4D0C8; }
-        #aboutClose:active { border-top-color: var(--win-dark); border-left-color: var(--win-dark); border-bottom-color: var(--win-light); border-right-color: var(--win-light); }
+        #aboutClose:hover { color: #fff; }
 
-        /* ── MIDI ── */
-        #midiBox {
-            max-width: 580px; width: 94%; max-height: 88vh; overflow-y: auto;
+        /* ── MIDI modal overlay ─────────────────────────────── */
+        #midiOverlay {
+            display: none; position: fixed; inset: 0; z-index: 1000;
+            background: rgba(0,0,0,.78); backdrop-filter: blur(10px);
+            align-items: center; justify-content: center;
         }
-        #midiBox > *:not(button#midiClose) { padding-left: 14px; padding-right: 14px; }
+        #midiOverlay.open { display: flex; }
+        #midiBox {
+            position: relative;
+            background: #090909; border: 2px solid rgba(255,160,0,.6);
+            border-radius: 14px; padding: 24px 28px 22px;
+            max-width: 600px; width: 94%;
+            max-height: 88vh; overflow-y: auto;
+            font-size: 12px;
+        }
         #midiBox h2 {
-            font-size: 16px; font-weight: normal; letter-spacing: .12em;
-            color: var(--term-mag); text-transform: uppercase; margin: 12px 0 3px;
+            font-size: 15px; font-weight: 900; letter-spacing: .12em;
+            color: rgba(255,160,0,.9); text-transform: uppercase;
+            margin: 0 0 4px;
         }
         #midiBox .midi-sub {
-            font-size: 11px; color: #505050; letter-spacing: .05em; margin-bottom: 12px;
+            font-size: 10px; color: rgba(255,255,255,.3);
+            letter-spacing: .05em; margin-bottom: 18px;
         }
         #midiClose {
-            position: absolute; top: 3px; right: 5px;
-            background: var(--win-bg);
-            border-top: 1px solid var(--win-light); border-left: 1px solid var(--win-light);
-            border-bottom: 1px solid var(--win-dark); border-right: 1px solid var(--win-dark);
-            font-size: 12px; color: var(--term-bg); cursor: pointer;
-            padding: 0 4px; line-height: 1.3; font-family: 'VT323', monospace;
+            position: absolute; top: 12px; right: 15px;
+            background: none; border: none; font-size: 22px;
+            color: rgba(255,255,255,.3); cursor: pointer; padding: 0; line-height: 1;
         }
-        #midiClose:hover { background: #D4D0C8; }
+        #midiClose:hover { color: #fff; }
 
+        /* status section */
         #midiStatusRow {
-            display: flex; align-items: center; gap: 8px;
-            background: var(--term-bg);
-            border-top:    1px solid var(--win-dark);
-            border-left:   1px solid var(--win-dark);
-            border-bottom: 1px solid var(--win-light);
-            border-right:  1px solid var(--win-light);
-            padding: 6px 10px; margin-bottom: 12px; flex-wrap: wrap;
+            display: flex; align-items: center; gap: 10px;
+            background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.08);
+            border-radius: 8px; padding: 9px 12px; margin-bottom: 16px; flex-wrap: wrap;
         }
-        #midiPortList { font-size: 12px; color: var(--term-green); flex: 1; min-width: 100px; }
+        #midiPortList { font-size: 11px; color: rgba(255,255,255,.5); flex: 1; min-width: 100px; }
         #midiBridgeStatus {
-            font-size: 11px; padding: 1px 6px;
-            border-top:  1px solid var(--win-dark); border-left:  1px solid var(--win-dark);
-            border-bottom: 1px solid var(--win-light); border-right: 1px solid var(--win-light);
-            background: var(--term-bg); color: var(--term-mag);
-            white-space: nowrap; font-family: 'Share Tech Mono', monospace;
+            font-size: 10px; padding: 2px 8px; border-radius: 999px;
+            border: 1px solid rgba(255,160,0,.3); color: rgba(255,160,0,.7);
+            white-space: nowrap;
         }
-        #midiBridgeStatus.connected { color: var(--term-green); }
-        #midiBridgeStatus.error     { color: var(--term-red); animation: blink .5s step-end infinite; }
+        #midiBridgeStatus.connected { color: #50dc78; border-color: rgba(80,220,120,.4); }
+        #midiBridgeStatus.error     { color: #ff6060; border-color: rgba(255,60,60,.3); }
 
+        /* map loader section */
         .midi-section-label {
-            font-size: 12px; font-weight: normal; letter-spacing: .14em;
-            text-transform: uppercase; color: var(--term-mag);
-            margin: 10px 0 5px;
-            font-family: 'VT323', monospace;
+            font-size: 9px; font-weight: 700; letter-spacing: .14em;
+            text-transform: uppercase; color: rgba(255,160,0,.6);
+            margin: 16px 0 7px;
         }
-        #midiMapRow { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 4px; }
+        #midiMapRow { display: flex; gap: 7px; align-items: center; flex-wrap: wrap; }
         #midiMapName {
-            font-size: 11px; color: var(--term-green); padding: 2px 6px;
-            background: var(--term-bg);
-            border-top: 1px solid var(--win-dark); border-left: 1px solid var(--win-dark);
-            border-bottom: 1px solid var(--win-light); border-right: 1px solid var(--win-light);
-            flex: 1; min-width: 110px; font-family: 'Share Tech Mono', monospace;
+            font-size: 11px; color: #e8eaf0; padding: 3px 8px;
+            background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.12);
+            border-radius: 5px; flex: 1; min-width: 120px;
         }
 
+        /* map table */
         #midiMapTable {
-            width: 100%; border-collapse: collapse; margin-top: 4px; font-size: 11px;
+            width: 100%; border-collapse: collapse;
+            margin-top: 6px; font-size: 10px;
         }
         #midiMapTable th {
-            text-align: left; font-size: 10px; letter-spacing: .12em;
-            text-transform: uppercase; color: var(--term-mag);
-            padding: 3px 5px; border-bottom: 1px solid #808080;
-            font-family: 'VT323', monospace; background: var(--win-bg);
+            text-align: left; font-size: 9px; letter-spacing: .1em;
+            text-transform: uppercase; color: rgba(255,255,255,.3);
+            padding: 4px 6px; border-bottom: 1px solid rgba(255,255,255,.07);
         }
         #midiMapTable td {
-            padding: 2px 5px; border-bottom: 1px solid #D0D0D0;
-            color: var(--term-bg); vertical-align: middle;
-            font-family: 'Share Tech Mono', monospace; font-size: 10px;
+            padding: 3px 6px; border-bottom: 1px solid rgba(255,255,255,.04);
+            color: rgba(255,255,255,.65); vertical-align: middle;
         }
-        #midiMapTable tr:hover td { background: #D4D0C8; }
-        #midiMapTable .cc-cell { color: var(--term-bg); font-weight: bold; }
-        #midiMapTable .type-cell { color: var(--title-bg); }
-        #midiMapTable .dis { opacity: .35; text-decoration: line-through; }
+        #midiMapTable tr:hover td { background: rgba(255,255,255,.03); }
+        #midiMapTable .cc-cell { color: rgba(255,160,0,.8); font-weight: 700; }
+        #midiMapTable .type-cell { color: rgba(150,200,255,.7); }
+        #midiMapTable .dis { opacity: .3; text-decoration: line-through; }
 
+        /* activity flash */
         .ctrl.midi-active {
-            background: #220000 !important;
-            border-top-color: var(--term-red) !important; border-left-color: var(--term-red) !important;
-            transition: none !important;
+            border-color: rgba(255,160,0,.9) !important;
+            background: rgba(255,160,0,.12) !important;
+            transition: border-color .05s, background .05s !important;
         }
-        .ctrl.midi-active label { color: var(--term-red) !important; }
 
-        /* ── Syphon modal ── */
+        /* ── Syphon modal (purple accent) ───────────────────────────── */
+        #syphonOverlay {
+            display: none; position: fixed; inset: 0; z-index: 1000;
+            background: rgba(0,0,0,.78); backdrop-filter: blur(10px);
+            align-items: center; justify-content: center;
+        }
+        #syphonOverlay.open { display: flex; }
         #syphonBox {
-            max-width: 500px; width: 94%; font-size: 13px; padding: 0;
+            position: relative;
+            background: #090909; border: 2px solid rgba(180,100,255,.5);
+            border-radius: 14px; padding: 24px 28px 22px;
+            max-width: 520px; width: 94%;
+            font-size: 12px;
         }
         #syphonBox h2 {
-            font-size: 16px; font-weight: normal; letter-spacing: .1em;
-            color: var(--term-cyan); text-transform: uppercase; margin: 12px 14px 3px;
+            font-size: 15px; font-weight: 900; letter-spacing: .12em;
+            color: rgba(180,100,255,.9); text-transform: uppercase;
+            margin: 0 0 4px;
         }
         #syphonBox .syph-sub {
-            font-size: 10px; color: #606060; letter-spacing: .05em; margin: 0 14px 12px;
+            font-size: 10px; color: rgba(255,255,255,.3);
+            letter-spacing: .05em; margin-bottom: 18px;
         }
         #syphonClose {
-            position: absolute; top: 3px; right: 5px;
-            background: var(--win-bg);
-            border-top: 1px solid var(--win-light); border-left: 1px solid var(--win-light);
-            border-bottom: 1px solid var(--win-dark); border-right: 1px solid var(--win-dark);
-            font-size: 12px; color: var(--term-bg); cursor: pointer;
-            padding: 0 4px; line-height: 1.3; font-family: 'VT323', monospace;
+            position: absolute; top: 12px; right: 15px;
+            background: none; border: none; font-size: 22px;
+            color: rgba(255,255,255,.3); cursor: pointer; padding: 0; line-height: 1;
         }
-        #syphonClose:hover { background: #D4D0C8; }
+        #syphonClose:hover { color: #fff; }
         #syphonStatus {
-            background: var(--term-bg);
-            border-top: 1px solid var(--win-dark); border-left: 1px solid var(--win-dark);
-            border-bottom: 1px solid var(--win-light); border-right: 1px solid var(--win-light);
-            margin: 0 14px 10px; padding: 8px 10px; font-size: 11px;
-            color: var(--term-dgreen); line-height: 1.6;
-            font-family: 'Share Tech Mono', monospace;
+            background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.08);
+            border-radius: 8px; padding: 10px 14px; font-size: 11px;
+            color: rgba(255,255,255,.35); margin-bottom: 14px; line-height: 1.6;
         }
-        #syphonStatus.active { color: var(--term-cyan); }
-        #syphonStatus.error  { color: var(--term-red); animation: blink .6s step-end infinite; }
-        .syph-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 0 14px 8px; }
-        .syph-label { font-size: 12px; color: #505050; letter-spacing:.05em; width: 52px; }
+        #syphonStatus.active { color: rgba(180,100,255,.9); border-color: rgba(180,100,255,.3); }
+        #syphonStatus.error  { color: #ff6060; }
+        .syph-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+        .syph-label { font-size: 10px; color: rgba(255,255,255,.35); letter-spacing:.05em; width: 52px; }
         .syph-row select, .syph-row input[type=number] {
-            background: var(--term-bg);
-            border-top: 1px solid var(--win-dark); border-left: 1px solid var(--win-dark);
-            border-bottom: 1px solid var(--win-light); border-right: 1px solid var(--win-light);
-            color: var(--term-green); padding: 2px 5px; font-size: 12px;
+            background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.12);
+            color: #e8eaf0; border-radius: 5px; padding: 3px 7px; font-size: 11px;
         }
         #syphonToggleBtn {
-            background: var(--term-bg); color: var(--term-cyan);
-            border-top: 2px solid var(--win-light); border-left: 2px solid var(--win-light);
-            border-bottom: 2px solid var(--win-dark); border-right: 2px solid var(--win-dark);
-            padding: 3px 14px; font-size: 13px; font-family: 'VT323', monospace;
-            cursor: pointer; letter-spacing: .08em; text-transform: uppercase;
-            margin: 0 14px 14px;
+            padding: 6px 18px; border-radius: 6px; border: none; cursor: pointer;
+            font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase;
+            background: rgba(180,100,255,.2); color: rgba(180,100,255,.9);
+            border: 1px solid rgba(180,100,255,.4); transition: background .15s;
         }
-        #syphonToggleBtn:hover { background: #001111; }
-        #syphonToggleBtn.active { color: var(--term-green); animation: blink 1s step-end infinite; }
+        #syphonToggleBtn:hover { background: rgba(180,100,255,.35); }
+        #syphonToggleBtn.active { background: rgba(180,100,255,.5); color: #fff; }
 
-        /* ── Spout modal ── */
+        /* ── Spout modal (cyan accent) ──────────────────────────────────── */
+        #spoutOverlay {
+            display: none; position: fixed; inset: 0; z-index: 1000;
+            background: rgba(0,0,0,.78); backdrop-filter: blur(10px);
+            align-items: center; justify-content: center;
+        }
+        #spoutOverlay.open { display: flex; }
         #spoutBox {
-            max-width: 500px; width: 94%; font-size: 13px; padding: 0;
+            position: relative;
+            background: #090909; border: 2px solid rgba(0,200,220,.5);
+            border-radius: 14px; padding: 24px 28px 22px;
+            max-width: 520px; width: 94%; font-size: 12px;
         }
         #spoutBox h2 {
-            font-size: 16px; font-weight: normal; letter-spacing: .1em;
-            color: var(--term-yel); text-transform: uppercase; margin: 12px 14px 3px;
+            font-size: 15px; font-weight: 900; letter-spacing: .12em;
+            color: rgba(0,200,220,.9); text-transform: uppercase; margin: 0 0 4px;
         }
         #spoutBox .spout-sub {
-            font-size: 10px; color: #606060; letter-spacing: .05em; margin: 0 14px 12px;
+            font-size: 10px; color: rgba(255,255,255,.3);
+            letter-spacing: .05em; margin-bottom: 18px;
         }
         #spoutClose {
-            position: absolute; top: 3px; right: 5px;
-            background: var(--win-bg);
-            border-top: 1px solid var(--win-light); border-left: 1px solid var(--win-light);
-            border-bottom: 1px solid var(--win-dark); border-right: 1px solid var(--win-dark);
-            font-size: 12px; color: var(--term-bg); cursor: pointer;
-            padding: 0 4px; line-height: 1.3; font-family: 'VT323', monospace;
+            position: absolute; top: 12px; right: 15px;
+            background: none; border: none; font-size: 22px;
+            color: rgba(255,255,255,.3); cursor: pointer; padding: 0; line-height: 1;
         }
-        #spoutClose:hover { background: #D4D0C8; }
+        #spoutClose:hover { color: #fff; }
         #spoutStatus {
-            background: var(--term-bg);
-            border-top: 1px solid var(--win-dark); border-left: 1px solid var(--win-dark);
-            border-bottom: 1px solid var(--win-light); border-right: 1px solid var(--win-light);
-            margin: 0 14px 10px; padding: 8px 10px; font-size: 11px;
-            color: var(--term-dgreen); line-height: 1.6;
-            font-family: 'Share Tech Mono', monospace;
+            background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.08);
+            border-radius: 8px; padding: 10px 14px; font-size: 11px;
+            color: rgba(255,255,255,.35); margin-bottom: 14px; line-height: 1.6;
         }
-        #spoutStatus.active { color: var(--term-yel); }
-        #spoutStatus.error  { color: var(--term-red); animation: blink .6s step-end infinite; }
-        .spout-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 0 14px 8px; }
-        .spout-label { font-size: 12px; color: #505050; letter-spacing:.05em; width: 52px; }
+        #spoutStatus.active { color: rgba(0,200,220,.9); border-color: rgba(0,200,220,.3); }
+        #spoutStatus.error  { color: #ff6060; }
+        .spout-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+        .spout-label { font-size: 10px; color: rgba(255,255,255,.35); letter-spacing:.05em; width: 52px; }
         .spout-row select, .spout-row input[type=number] {
-            background: var(--term-bg);
-            border-top: 1px solid var(--win-dark); border-left: 1px solid var(--win-dark);
-            border-bottom: 1px solid var(--win-light); border-right: 1px solid var(--win-light);
-            color: var(--term-green); padding: 2px 5px; font-size: 12px;
+            background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.12);
+            color: #e8eaf0; border-radius: 5px; padding: 3px 7px; font-size: 11px;
         }
         #spoutToggleBtn {
-            background: var(--term-bg); color: var(--term-yel);
-            border-top: 2px solid var(--win-light); border-left: 2px solid var(--win-light);
-            border-bottom: 2px solid var(--win-dark); border-right: 2px solid var(--win-dark);
-            padding: 3px 14px; font-size: 13px; font-family: 'VT323', monospace;
-            cursor: pointer; letter-spacing: .08em; text-transform: uppercase;
-            margin: 0 14px 14px;
+            padding: 6px 18px; border-radius: 6px; border: none; cursor: pointer;
+            font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase;
+            background: rgba(0,200,220,.2); color: rgba(0,200,220,.9);
+            border: 1px solid rgba(0,200,220,.4); transition: background .15s;
         }
-        #spoutToggleBtn:hover { background: #111100; }
-        #spoutToggleBtn.active { color: var(--term-green); animation: blink 1s step-end infinite; }
+        #spoutToggleBtn:hover  { background: rgba(0,200,220,.35); }
+        #spoutToggleBtn.active { background: rgba(0,200,220,.5); color: #fff; }
 
-        /* ── OSC modal ── */
+        /* ── OSC modal ───────────────────────────────────────────────────── */
+        #oscOverlay {
+            display: none; position: fixed; inset: 0; z-index: 1000;
+            background: rgba(0,0,0,.78); backdrop-filter: blur(10px);
+            align-items: center; justify-content: center;
+        }
+        #oscOverlay.open { display: flex; }
         #oscBox {
-            max-width: 580px; width: 94%;
+            position: relative;
+            background: #090909; border: 2px solid rgba(80,220,120,.5);
+            border-radius: 14px; padding: 24px 28px 22px;
+            max-width: 600px; width: 94%;
             max-height: 88vh; overflow-y: auto;
-            font-size: 13px;
+            font-size: 12px;
         }
         #oscBox h2 {
-            font-size: 16px; font-weight: normal; letter-spacing: .1em;
-            color: var(--term-green); text-transform: uppercase; margin: 12px 14px 3px;
+            font-size: 15px; font-weight: 900; letter-spacing: .12em;
+            color: rgba(80,220,120,.9); text-transform: uppercase;
+            margin: 0 0 4px;
         }
         #oscBox .osc-sub {
-            font-size: 10px; color: #606060; letter-spacing: .05em; margin: 0 14px 12px;
+            font-size: 10px; color: rgba(255,255,255,.3);
+            letter-spacing: .05em; margin-bottom: 18px;
         }
         #oscClose {
-            position: absolute; top: 3px; right: 5px;
-            background: var(--win-bg);
-            border-top: 1px solid var(--win-light); border-left: 1px solid var(--win-light);
-            border-bottom: 1px solid var(--win-dark); border-right: 1px solid var(--win-dark);
-            font-size: 12px; color: var(--term-bg); cursor: pointer;
-            padding: 0 4px; line-height: 1.3; font-family: 'VT323', monospace;
+            position: absolute; top: 12px; right: 15px;
+            background: none; border: none; font-size: 22px;
+            color: rgba(255,255,255,.3); cursor: pointer; padding: 0; line-height: 1;
         }
-        #oscClose:hover { background: #D4D0C8; }
+        #oscClose:hover { color: #fff; }
         .osc-section-label {
-            font-size: 12px; font-weight: normal; letter-spacing: .14em;
-            text-transform: uppercase; color: var(--term-green);
-            margin: 10px 14px 5px; font-family: 'VT323', monospace;
+            font-size: 9px; font-weight: 700; letter-spacing: .14em;
+            text-transform: uppercase; color: rgba(80,220,120,.6);
+            margin: 16px 0 7px;
         }
         #oscStatusBox {
-            background: var(--term-bg);
-            border-top: 1px solid var(--win-dark); border-left: 1px solid var(--win-dark);
-            border-bottom: 1px solid var(--win-light); border-right: 1px solid var(--win-light);
-            margin: 0 14px 6px; padding: 7px 10px;
-            font-size: 11px; min-height: 24px; line-height: 1.5;
-            color: var(--term-dgreen); font-family: 'Share Tech Mono', monospace;
+            background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.08);
+            border-radius: 8px; padding: 9px 12px; margin-bottom: 6px;
+            font-size: 11px; min-height: 28px; line-height: 1.5;
+            color: rgba(255,255,255,.4);
         }
-        #oscStatusBox.ok    { color: var(--term-green); }
-        #oscStatusBox.error { color: var(--term-red); animation: blink .5s step-end infinite; }
-        #oscMapRow { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin: 0 14px 4px; }
+        #oscStatusBox.ok    { color: #50dc78; }
+        #oscStatusBox.error { color: #ff6060; }
+        #oscMapRow { display: flex; gap: 7px; align-items: center; flex-wrap: wrap; }
         #oscMapName {
-            font-size: 11px; color: var(--term-green); padding: 2px 6px;
-            background: var(--term-bg);
-            border-top: 1px solid var(--win-dark); border-left: 1px solid var(--win-dark);
-            border-bottom: 1px solid var(--win-light); border-right: 1px solid var(--win-light);
-            flex: 1; min-width: 110px; font-family: 'Share Tech Mono', monospace;
+            font-size: 11px; color: #e8eaf0; padding: 3px 8px;
+            background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.12);
+            border-radius: 5px; flex: 1; min-width: 120px;
         }
         #oscMapTable {
-            width: 100%; border-collapse: collapse; margin: 4px 0; font-size: 10px;
+            width: 100%; border-collapse: collapse;
+            margin-top: 6px; font-size: 10px;
         }
         #oscMapTable th {
-            text-align: left; font-size: 10px; letter-spacing: .12em;
-            text-transform: uppercase; color: var(--term-green);
-            padding: 3px 5px; border-bottom: 1px solid #808080;
-            font-family: 'VT323', monospace; background: var(--win-bg);
+            text-align: left; font-size: 9px; letter-spacing: .1em;
+            text-transform: uppercase; color: rgba(255,255,255,.3);
+            padding: 4px 6px; border-bottom: 1px solid rgba(255,255,255,.07);
         }
         #oscMapTable td {
-            padding: 2px 5px; border-bottom: 1px solid #D0D0D0;
-            color: var(--term-bg); vertical-align: middle;
-            font-family: 'Share Tech Mono', monospace; font-size: 9px;
+            padding: 3px 6px; border-bottom: 1px solid rgba(255,255,255,.04);
+            color: rgba(255,255,255,.65); vertical-align: middle;
         }
-        #oscMapTable tr:hover td { background: #D4D0C8; }
-        #oscMapTable .addr-cell  { color: var(--title-bg); font-family: 'Share Tech Mono', monospace; }
-        #oscMapTable .type-cell  { color: #006666; }
-        #oscMapTable .dis        { opacity: .32; text-decoration: line-through; }
+        #oscMapTable tr:hover td { background: rgba(255,255,255,.03); }
+        #oscMapTable .addr-cell  { color: rgba(80,220,120,.85); font-family: monospace; font-size: 10px; }
+        #oscMapTable .type-cell  { color: rgba(150,200,255,.7); }
+        #oscMapTable .dis        { opacity: .3; text-decoration: line-through; }
         .ctrl.osc-active {
-            background: #001A00 !important;
-            border-top-color: var(--term-green) !important; border-left-color: var(--term-green) !important;
-            transition: none !important;
+            border-color: rgba(80,220,120,.9) !important;
+            background: rgba(80,220,120,.1) !important;
+            transition: border-color .05s, background .05s !important;
         }
-        .ctrl.osc-active label { color: var(--term-green) !important; }
 
-        /* ── groups inside modal content pads ── */
-        #midiBox .group-body, #oscBox .group-body { padding-left: 14px; padding-right: 14px; }
-
-        /* file input */
-        input[type=file] {
-            font-size: 11px; color: var(--term-dgreen); max-width: 155px;
-            font-family: 'VT323', monospace;
-        }
+        /* file input tweak */
+        input[type=file] { font-size: 11px; color: rgba(255,255,255,.55); max-width: 155px; }
     </style>
 
     <!-- keep form defaults; block Enter submitting -->
@@ -748,8 +474,8 @@
         :root { color-scheme: dark; }
         #openCanvasBtn {
             position: fixed; top: 8px; right: 122px; z-index: 9999;
-            background: var(--win-bg); color: var(--term-bg); border-top: 2px solid var(--win-light); border-left: 2px solid var(--win-light); border-bottom: 2px solid var(--win-dark); border-right: 2px solid var(--win-dark);
-            border-radius: 0; padding: 3px 10px; font: normal 13px 'VT323', monospace; cursor: pointer; letter-spacing: .06em; text-transform: uppercase;
+            background: #202434; color: #e8eaf0; border: 1px solid #1c2030;
+            border-radius: 8px; padding: 6px 10px; font: 12px ui-sans-serif, system-ui; cursor: pointer;
         }
     </style>
 
@@ -772,7 +498,7 @@
         <div id="aboutBox">
             <button id="aboutClose">×</button>
             <div class="a-icon"></div>
-            <h1 style="font-family:'VT323',monospace;font-weight:normal;letter-spacing:.14em">huff</h1>
+            <h1 style="font-family:'Arial Black','Arial Bold',Arial,sans-serif;font-weight:900;letter-spacing:.06em">huff</h1>
             <div class="build">v2.0 · beta · 2025</div>
             <p>Real-time datamosh &amp; glitch-art engine. Load a video or connect a camera,
             then sculpt temporal tile displacement, feedback loops, flow warps, symmetry,

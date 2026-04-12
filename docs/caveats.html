@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css"/>
+<link href="https://fonts.googleapis.com/css2?family=VT323&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<title>Caveats & Known Limitations — huff docs</title>
+
+<style>
+:root {
+  --gray:  #C0C0C0; --light: #FFFFFF; --mid: #808080; --dark: #404040;
+  --red:   #ff4647; --black: #000000; --green: #00FF00; --dgreen: #00CC00;
+  --teal:  #008080;
+}
+*,*::before,*::after{box-sizing:border-box;}
+body {
+  background:var(--teal);
+  background-image:repeating-linear-gradient(45deg,rgba(0,0,0,.06) 0px,rgba(0,0,0,.06) 1px,transparent 1px,transparent 5px);
+  font-family:'VT323','Courier New',monospace;
+  color:#000; min-height:100vh; padding-bottom:40px;
+}
+.raised    {border-top:2px solid var(--light);border-left:2px solid var(--light);border-bottom:2px solid var(--dark);border-right:2px solid var(--dark);}
+.inset     {border-top:2px solid var(--dark);border-left:2px solid var(--dark);border-bottom:2px solid var(--light);border-right:2px solid var(--light);}
+.raised-sm {border-top:1px solid var(--light);border-left:1px solid var(--light);border-bottom:1px solid var(--dark);border-right:1px solid var(--dark);}
+/* Taskbar */
+.taskbar {
+  position:sticky;top:0;z-index:1000;
+  background:var(--gray);
+  border-top:2px solid var(--light);border-bottom:2px solid var(--dark);
+  padding:3px 8px;display:flex;align-items:center;gap:4px;flex-wrap:wrap;
+}
+.taskbar-brand {
+  background:linear-gradient(90deg,var(--red),#cc2222);color:#fff;
+  font-size:16px;padding:2px 12px;letter-spacing:.08em;
+  border-top:2px solid #ff9999;border-left:2px solid #ff9999;
+  border-bottom:2px solid #770000;border-right:2px solid #770000;
+  white-space:nowrap;text-decoration:none;
+}
+.taskbar-btn {
+  background:var(--gray);color:#000;font-family:'VT323',monospace;
+  font-size:14px;padding:2px 10px;text-decoration:none;
+  white-space:nowrap;display:inline-block;
+}
+.taskbar-btn:hover{background:#D4D0C8;color:#000;}
+.taskbar-clock{margin-left:auto;font-family:'Share Tech Mono',monospace;font-size:13px;padding:2px 10px;}
+/* Window */
+.window{background:var(--gray);border-top:3px solid var(--light);border-left:3px solid var(--light);border-bottom:3px solid var(--dark);border-right:3px solid var(--dark);}
+.win-titlebar{background:linear-gradient(90deg,var(--red),#cc2222);color:#fff;font-size:15px;padding:3px 8px;display:flex;align-items:center;justify-content:space-between;letter-spacing:.06em;user-select:none;}
+.win-titlebar-title::before{content:'■ ';font-size:10px;}
+.win-controls{display:flex;gap:2px;}
+.win-btn{background:var(--gray);color:#000;font-family:'VT323',monospace;font-size:12px;border-top:1px solid var(--light);border-left:1px solid var(--light);border-bottom:1px solid var(--dark);border-right:1px solid var(--dark);width:18px;height:16px;display:flex;align-items:center;justify-content:center;}
+.win-body{padding:14px 16px;}
+/* Sidebar nav */
+.doc-nav {
+  background:var(--gray);
+  border-top:2px solid var(--light);border-left:2px solid var(--light);
+  border-bottom:2px solid var(--dark);border-right:2px solid var(--dark);
+}
+.doc-nav .nav-title {
+  background:linear-gradient(90deg,var(--red),#cc2222);
+  color:#fff;font-size:13px;padding:3px 8px;letter-spacing:.08em;
+}
+.doc-nav-list{list-style:none;margin:0;padding:4px 0;}
+.doc-nav-list li a {
+  display:block;padding:3px 10px;font-size:14px;letter-spacing:.05em;
+  color:#000;text-decoration:none;
+}
+.doc-nav-list li a:hover{background:#D4D0C8;}
+.doc-nav-list li a.active{background:var(--black);color:var(--green);}
+.doc-nav-sep{height:1px;background:var(--mid);margin:3px 6px;}
+/* Term */
+.term{background:var(--black);border-top:2px solid var(--dark);border-left:2px solid var(--dark);border-bottom:2px solid var(--light);border-right:2px solid var(--light);padding:10px 14px;font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--green);line-height:1.65;overflow-x:auto;}
+.term .comment{color:#006600;}
+.term .dim{color:#009900;}
+/* Section label */
+.section-label{font-size:13px;font-weight:bold;letter-spacing:.18em;text-transform:uppercase;color:var(--red);border-bottom:2px solid var(--mid);padding-bottom:3px;margin-bottom:10px;}
+/* Tables */
+.win-table{width:100%;border-collapse:collapse;font-family:'Share Tech Mono',monospace;font-size:12px;}
+.win-table th{background:var(--gray);text-align:left;font-family:'VT323',monospace;font-size:13px;letter-spacing:.1em;color:var(--red);padding:3px 8px;border-bottom:2px solid var(--mid);}
+.win-table td{padding:4px 8px;border-bottom:1px solid #B8B8B8;color:#222;vertical-align:top;}
+.win-table tr:nth-child(even) td{background:#D4D0C8;}
+.win-table td:first-child{font-weight:bold;white-space:nowrap;}
+.win-table code{font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--black);}
+/* Callout */
+.callout{background:var(--black);border-left:3px solid var(--red);border-top:1px solid var(--dark);border-bottom:1px solid var(--light);border-right:1px solid var(--light);padding:8px 12px;font-family:'Share Tech Mono',monospace;font-size:12px;color:#AAAAAA;line-height:1.6;}
+.callout strong{color:var(--green);}
+.callout.warn{border-left-color:#FFFF00;}
+.callout.warn strong{color:#FFFF00;}
+.callout.note{border-left-color:var(--green);}
+/* Breadcrumb */
+.breadcrumb-win{font-size:12px;font-family:'Share Tech Mono',monospace;color:#555;padding:4px 0 8px;letter-spacing:.04em;}
+.breadcrumb-win a{color:var(--red);text-decoration:none;}
+.breadcrumb-win a:hover{text-decoration:underline;}
+/* Back btn */
+.back-btn{font-family:'VT323',monospace;font-size:14px;padding:2px 10px;background:var(--gray);color:#000;text-decoration:none;display:inline-block;border-top:2px solid var(--light);border-left:2px solid var(--light);border-bottom:2px solid var(--dark);border-right:2px solid var(--dark);}
+.back-btn:hover{background:#D4D0C8;color:#000;}
+/* Content typography */
+.doc-content h2{font-size:20px;font-weight:bold;letter-spacing:.1em;color:var(--red);margin:20px 0 8px;text-transform:uppercase;}
+.doc-content h3{font-size:16px;font-weight:bold;letter-spacing:.08em;color:#333;margin:14px 0 6px;text-transform:uppercase;}
+.doc-content p{font-family:'Share Tech Mono',monospace;font-size:12px;line-height:1.7;margin-bottom:10px;color:#222;}
+.doc-content ul,.doc-content ol{font-family:'Share Tech Mono',monospace;font-size:12px;line-height:1.8;padding-left:20px;margin-bottom:10px;color:#222;}
+.doc-content li{margin-bottom:2px;}
+.doc-content code{font-family:'Share Tech Mono',monospace;font-size:11px;background:#D4D0C8;padding:1px 4px;color:#000;}
+.doc-content strong{color:#000;}
+.doc-content a{color:var(--red);}
+.doc-content a:hover{color:#cc0000;}
+.doc-content hr{border:none;border-top:2px solid var(--mid);margin:16px 0;}
+/* Mobile */
+@media(max-width:767px){
+  .taskbar-btn{font-size:12px;padding:2px 6px;}
+  .win-titlebar{font-size:13px;}
+  .term{font-size:11px;}
+  .doc-nav{margin-bottom:10px;}
+}
+</style>
+</head>
+<body>
+<div class="taskbar">
+  <a class="taskbar-brand" href="../index.html">■ huff</a>
+  <a class="taskbar-btn raised-sm" href="../index.html">Home</a>
+  <a class="taskbar-btn raised-sm" href="how-it-works.html">How It Works</a>
+  <a class="taskbar-btn raised-sm" href="installation.html">Install</a>
+  <a class="taskbar-btn raised-sm" href="interface.html">Interface</a>
+  <a class="taskbar-btn raised-sm" href="midi.html">MIDI</a>
+  <a class="taskbar-btn raised-sm" href="osc.html">OSC</a>
+  <a class="taskbar-btn raised-sm" href="output.html">Output</a>
+  <div class="taskbar-clock raised-sm" id="clock">--:--:--</div>
+</div>
+<div class="container-fluid px-2 px-md-3 mt-3">
+  <div class="row g-3">
+    <div class="col-12 col-md-3 col-lg-2">
+      <div class="doc-nav">
+  <div class="nav-title">■ DOCUMENTATION</div>
+  <ul class="doc-nav-list">
+    <li><a href="../index.html">← Back to huff</a></li>
+    <li><div class="doc-nav-sep"></div></li>
+    <li><a href="how-it-works.html">How It Works</a></li>
+<li><a href="installation.html">Installation</a></li>
+<li><a href="interface.html">The Interface</a></li>
+<li><a href="midi.html">MIDI</a></li>
+<li><a href="osc.html">OSC</a></li>
+<li><a href="output.html">Video Output</a></li>
+<li><a href="parameter-reference.html">Parameter Reference</a></li>
+<li><a href="architecture.html">Architecture</a></li>
+<li><a href="caveats.html" class="active">Caveats</a></li>
+<li><a href="troubleshooting.html">Troubleshooting</a></li>
+
+  </ul>
+</div>
+    </div>
+    <div class="col-12 col-md-9 col-lg-10">
+      <div class="window">
+        <div class="win-titlebar">
+          <span class="win-titlebar-title">Caveats & Known Limitations</span>
+          <div class="win-controls"><div class="win-btn">_</div><div class="win-btn">□</div><div class="win-btn">✕</div></div>
+        </div>
+        <div class="win-body doc-content">
+          
+<h2>CPU Pixel Readback for Syphon and Spout</h2>
+<p>Both Syphon and Spout routes use <code>getImageData()</code> to read the canvas pixels back from the GPU to CPU inside the WebView, ship them over the loopback WebSocket, then re-upload to a Metal or D3D11 texture in Rust. This is a full <strong>GPU → CPU → GPU</strong> round-trip per frame.</p>
+<div class="callout warn"><strong>Why zero-copy isn't implemented:</strong> The WebView (WKWebView on macOS, WebView2 on Windows) does not expose its render surface as a native texture handle. This is a Tauri/browser architecture constraint, not a fixable bug. At 720p/30fps the readback costs roughly 3–6ms per frame — well within budget. Do not set the FPS cap higher than your canvas draw rate. For 4K output use OBS window capture.</div>
+<hr/>
+
+<h2>Frame Ring Memory at High Resolution</h2>
+<div class="table-responsive"><table class="win-table">
+  <thead><tr><th>Resolution</th><th>Bytes/frame</th><th>Max frames (quality=1)</th></tr></thead>
+  <tbody>
+    <tr><td>720p (1280×720)</td><td>~3.7 MB</td><td>51 frames</td></tr>
+    <tr><td>1080p (1920×1080)</td><td>~8.3 MB</td><td>23 frames</td></tr>
+    <tr><td>1440p (2560×1440)</td><td>~14.7 MB</td><td>13 frames</td></tr>
+    <tr><td>4K (3840×2160)</td><td>~33.2 MB</td><td>5 frames</td></tr>
+  </tbody>
+</table></div>
+<p>At 4K the datamosh effect loses most of its temporal depth. <strong>720p or 1080p is the practical sweet spot.</strong></p>
+<hr/>
+
+<h2>Syphon is macOS-Only. Spout is Windows-Only.</h2>
+<p>No cross-platform texture sharing equivalent exists. Options for cross-platform output:</p>
+<ul>
+  <li><strong>OBS window capture → NDI</strong> (via OBS-NDI plugin) for network distribution</li>
+  <li><strong>OBS window capture → stream/record</strong> directly</li>
+  <li><strong>Canvas mirror window</strong> opened in any browser on the local network</li>
+</ul>
+<hr/>
+
+<h2>Camera Permissions Require Codesigning (macOS)</h2>
+<p>In distribution builds on macOS, the app must be codesigned with the <code>NSCameraUsageDescription</code> entitlement for the camera permission dialog to appear. Without codesigning, <code>getUserMedia()</code> will fail silently on macOS 12+.</p>
+<hr/>
+
+<h2>Port 8787 Must Be Free</h2>
+<p>huff binds the WS relay on <code>127.0.0.1:8787</code> at startup. If another application is using this port, the canvas window shows "WS: disconnected" and never receives frames.</p>
+<div class="term"><span class="comment"># macOS / Linux — find what is using the port</span>
+lsof -i :8787
+
+<span class="comment"># Windows</span>
+netstat -ano | findstr :8787</div>
+<p style="margin-top:8px">To change the port: edit <code>const PORT: u16 = 8787;</code> in <code>src-tauri/src/main.rs</code> and <code>__getWSURL__</code> in <code>src/index.html</code>, then rebuild.</p>
+<hr/>
+
+<h2>No Multi-Instance Support</h2>
+<p>Running two huff instances simultaneously causes a port conflict on 8787. Build two copies from source with different PORT values if you need parallel instances.</p>
+<hr/>
+
+<h2>MIDI/OSC Maps Stored in localStorage</h2>
+<div class="callout"><strong>Best practice:</strong> Always save your maps as JSON files alongside your project. Treat localStorage as a cache, not a primary store. Maps are lost if you clear WebView data or reinstall.</div>
+<hr/>
+
+<h2>Linux is Untested</h2>
+<p>The Tauri scaffolding supports Linux and build prerequisites are documented in <a href="installation.html">Installation</a>. No binary has been tested against a Linux runtime in this release. Syphon and Spout do not exist on Linux. The canvas mirror window and MIDI/OSC will work if the build succeeds.</p>
+<hr/>
+
+<h2>Feedback Instability at High Values</h2>
+<p>FEEDBACK above ~2.5 combined with non-neutral FB Z can cause the buffer to saturate (full white or full black) within seconds. This is natural behaviour for a positive-feedback system. Recovery: lower FEEDBACK to 0 or click <strong>↺ Reset</strong> in the Feedback group. The buffer clears over the next few frames.</p>
+<hr/>
+
+<h2>Cluster Physics State Not Saved in Presets</h2>
+<p>Cluster centre positions and velocities are runtime JavaScript state and are not serialised into preset files. Loading a preset restores all slider values but cluster centres will be at whatever position they were at load time.</p>
+
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js"></script>
+<script>
+function tick(){document.getElementById('clock').textContent=new Date().toLocaleTimeString('en-US',{hour12:false});}
+tick();setInterval(tick,1000);
+</script>
+</body>
+</html>
