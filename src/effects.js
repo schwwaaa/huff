@@ -1,22 +1,22 @@
 // effects.js
-// Perf notes:
-//  - frameRing stores ImageData; drawRingRegion uses a single shared canvas
-//  - applySolarize downsamples to max 640px wide before pixel math (big Windows win)
-//  - applyTrails runs independently — not nested inside tile loop
-//  - applyScanlines is a standalone pass, called separately from applyGlitch
-//  - applyFlowWarp uses native drawImage throughout
-//  - applyTrails supports luma keying via downsampled pixel pass (trailLumaKey)
+// Enhancement notes:
+//  - All frameRing accesses updated to FrameRing API: frameRing.fromEnd(n)
+//    replaces frameRing[frameRing.length - 1 - n]. O(1) in both cases, but
+//    fromEnd() is explicit and works correctly without an array reference.
+//  - applyFlowWarp pre-allocates Float32Array displacement buffers — avoids
+//    per-frame GC pressure from repeated typed-array construction.
+//  - blitTrailLumaKeyed is fully self-contained (no dependency on drawRingRegion).
+//  - applyGlitch does not re-seed random — draw() seeds once per frame.
+//  - Cluster physics centers use p5 seeded random() for reproducibility.
 
-// ─── Ring frame helpers ────────────────────────────────────────────────────
+// ─── Ring frame helpers ────────────────────────────────────────────────────────
 
 let _ringCanvas = null;
 let _ringCtx    = null;
 
-// ─── Cluster physics state ─────────────────────────────────────────────────
-// Each entry: { x, y, vx, vy, noiseOffX, noiseOffY }
-// Persists across frames so centers carry momentum between draws.
-let _cluPhysics  = [];
-let _cluPhysT    = 0;   // internal time accumulator for steering noise
+// ─── Cluster physics state ─────────────────────────────────────────────────────
+let _cluPhysics = [];
+let _cluPhysT   = 0;
 
 function drawRingRegion(target, imgData, sx, sy, sw, sh, dx, dy, dw, dh) {
   if (!_ringCanvas) {
@@ -24,20 +24,20 @@ function drawRingRegion(target, imgData, sx, sy, sw, sh, dx, dy, dw, dh) {
     _ringCtx    = _ringCanvas.getContext('2d');
   }
   if (_ringCanvas.width !== imgData.width || _ringCanvas.height !== imgData.height) {
-    _ringCanvas.width  = imgData.width;
-    _ringCanvas.height = imgData.height;
+    _ringCanvas.width       = imgData.width;
+    _ringCanvas.height      = imgData.height;
     _ringCtx.putImageData(imgData, 0, 0);
-    _ringCanvas._lastFrame = imgData;
+    _ringCanvas._lastFrame  = imgData;
   } else if (_ringCanvas._lastFrame !== imgData) {
     _ringCtx.putImageData(imgData, 0, 0);
-    _ringCanvas._lastFrame = imgData;
+    _ringCanvas._lastFrame  = imgData;
   }
   target.drawingContext.drawImage(_ringCanvas, sx, sy, sw, sh, dx, dy, dw, dh);
 }
 
-// ─── Luma-keyed trail blit ─────────────────────────────────────────────────
-// Downsamples the ring ImageData, zeroes alpha for pixels below luma threshold,
-// then scales the masked result back to full res. Same perf trick as solarize.
+// ─── Luma-keyed trail blit ────────────────────────────────────────────────────
+// Self-contained — initialises _ringCanvas itself rather than relying on
+// drawRingRegion having run first. Safe to call in any order.
 
 let _trailLumaCanvas = null, _trailLumaCtx = null;
 const TRAIL_LUMA_MAX_W = 640;
@@ -49,24 +49,30 @@ function blitTrailLumaKeyed(ctx, imgData, alpha, lumaThresh) {
   const sh = Math.max(1, Math.round(h * scale));
 
   if (!_trailLumaCanvas || _trailLumaCanvas.width !== sw || _trailLumaCanvas.height !== sh) {
-    _trailLumaCanvas = document.createElement('canvas');
+    _trailLumaCanvas        = document.createElement('canvas');
     _trailLumaCanvas.width  = sw;
     _trailLumaCanvas.height = sh;
-    _trailLumaCtx = _trailLumaCanvas.getContext('2d', { willReadFrequently: true });
+    _trailLumaCtx = _trailLumaCanvas.getContext('2d', { willReadFrequently:true });
   }
 
-  // Ensure _ringCanvas has this frame
-  if (!_ringCanvas) return;
+  // Ensure _ringCanvas exists and holds this frame — do not assume drawRingRegion ran first.
+  if (!_ringCanvas) {
+    _ringCanvas = document.createElement('canvas');
+    _ringCtx    = _ringCanvas.getContext('2d');
+  }
+  if (_ringCanvas.width !== imgData.width || _ringCanvas.height !== imgData.height) {
+    _ringCanvas.width       = imgData.width;
+    _ringCanvas.height      = imgData.height;
+    _ringCanvas._lastFrame  = null; // force re-upload after dimension change
+  }
   if (_ringCanvas._lastFrame !== imgData) {
     _ringCtx.putImageData(imgData, 0, 0);
     _ringCanvas._lastFrame = imgData;
   }
 
-  // Downsample into luma canvas
   _trailLumaCtx.clearRect(0, 0, sw, sh);
   _trailLumaCtx.drawImage(_ringCanvas, 0, 0, sw, sh);
 
-  // Pixel pass: zero alpha below luma threshold, scale surviving alpha by trail alpha
   const imageData = _trailLumaCtx.getImageData(0, 0, sw, sh);
   const pix = imageData.data;
   const t   = lumaThresh * 255;
@@ -75,24 +81,20 @@ function blitTrailLumaKeyed(ctx, imgData, alpha, lumaThresh) {
     if (lum < t) {
       pix[i + 3] = 0;
     } else {
-      // Smooth rolloff above threshold so hard edges don't pop
-      const roll = Math.min(1, (lum - t) / (Math.max(1, 255 - t)));
+      const roll = Math.min(1, (lum - t) / Math.max(1, 255 - t));
       pix[i + 3] = Math.round(roll * alpha * 255);
     }
   }
   _trailLumaCtx.putImageData(imageData, 0, 0);
-
-  // Scale back up onto gBuf — no save/restore needed, alpha already baked in
   ctx.drawImage(_trailLumaCanvas, 0, 0, w, h);
 }
 
-// ─── Trails (independent full-frame ghost pass) ────────────────────────────
-// Call this from draw() before the tile / scanline passes so ghosts sit underneath.
-// Requires: frameRing.length > 1, trailLayers > 0, trailDepth > 0
+// ─── Trails ───────────────────────────────────────────────────────────────────
+// Call before scanlines and glitch so ghost frames sit underneath.
 
 function applyTrails() {
   if (!els.trailOn?.checked) return;
-  const trailLayers = parseInt(els.trailLayers?.value  ?? '0',   10);
+  const trailLayers = parseInt(els.trailLayers?.value  ?? '0', 10);
   const trailDepth  = parseFloat(els.trailDepth?.value  ?? '0');
   const lumaKey     = parseFloat(els.trailLumaKey?.value ?? '0');
   if (trailLayers <= 0 || trailDepth <= 0 || frameRing.length < 2) return;
@@ -102,11 +104,10 @@ function applyTrails() {
   const ctx     = gBuf.drawingContext;
 
   for (let g = 1; g <= trailLayers; g++) {
-    const back  = Math.min(frameRing.length - 1, g * step);
-    const src   = frameRing[frameRing.length - 1 - back];
+    const back = Math.min(frameRing.length - 1, g * step);
+    const src  = frameRing.fromEnd(back);
     if (!src) continue;
 
-    // Fade from opaque at g=1 to near-transparent at g=trailLayers
     const alpha = (1 - (g - 1) / trailLayers) * 0.65;
 
     if (lumaKey > 0) {
@@ -120,10 +121,10 @@ function applyTrails() {
   }
 }
 
-// ─── Scanlines (band displacement pass) ───────────────────────────────────
-// Extracted from applyGlitch so it can be toggled independently.
-// Controlled by: els.clusters (ON), clusterCount, clusterRadius, scanAlpha,
-//                scanShift, scanDrift, scanSpeed, scanGap, scanSkew, depth.
+// ─── Scanlines ────────────────────────────────────────────────────────────────
+// ORDER DEPENDENCY: draw() calls randomSeed(baseSeed + frameCount) before this.
+// applyScanlines must run before applyGlitch — glitch consumes random state and
+// would change scanline positions if run first. Do not reorder in draw().
 
 function applyScanlines(density) {
   if (!els.clusters?.checked) return;
@@ -132,9 +133,9 @@ function applyScanlines(density) {
   const baseRadius = parseInt(els.clusterRadius.value, 10);
   if (scanBands <= 0 || frameRing.length < 2) return;
 
-  const depth      = parseFloat(els.depth.value);
-  const maxBackSc  = Math.max(1, Math.floor((frameRing.length - 1) * depth));
-  const randSize   = !!els.scanRandSize?.checked;
+  const depth     = parseFloat(els.depth.value);
+  const maxBackSc = Math.max(1, Math.floor((frameRing.length - 1) * depth));
+  const randSize  = !!els.scanRandSize?.checked;
   const bandHeight = randSize
     ? Math.max(4, Math.floor(random(baseRadius * 0.5, baseRadius * 4) * 3))
     : Math.max(4, Math.floor(baseRadius * 3));
@@ -150,24 +151,27 @@ function applyScanlines(density) {
     const bH_n = randSize
       ? Math.max(4, Math.floor(random(baseRadius * 0.5, baseRadius * 4) * 3))
       : bandHeight;
-    const driftY = noise(n * 4.1 + nPhaseY * 0.4 * driftSpeed * speedMul) * height;
-    // scanGap: enforce regular spacing between band positions
+    const driftY  = noise(n * 4.1 + nPhaseY * 0.4 * driftSpeed * speedMul) * height;
     const gappedY = scanGap > 0
-      ? (Math.floor(driftY / Math.max(1, bH_n + scanGap)) * (bH_n + scanGap))
+      ? Math.floor(driftY / Math.max(1, bH_n + scanGap)) * (bH_n + scanGap)
       : driftY;
-    const bTop   = Math.max(0, Math.floor(gappedY));
-    const bBot   = Math.min(height, bTop + bH_n);
-    const bH     = bBot - bTop;
+    const bTop = Math.max(0, Math.floor(gappedY));
+    const bBot = Math.min(height, bTop + bH_n);
+    const bH   = bBot - bTop;
     if (bH <= 0) continue;
 
-    const back   = frameRing.length - 1 - Math.floor(random(1, maxBackSc + 1));
-    const src    = frameRing[Math.max(0, back)];
-    // scanSkew: adds a position-based horizontal offset to each band
+    // Convert random offset to fromEnd index — clamp to valid range
+    const offset = Math.floor(random(1, maxBackSc + 1));
+    const src    = frameRing.fromEnd(Math.min(offset, frameRing.length - 1));
+    if (!src) continue;
+
     const skewOffset = Math.floor(scanSkew * bTop);
-    const shiftX = Math.floor(map(noise(n * 2.3 + nPhaseX * 0.5 * speedMul), 0, 1, -width * shiftScale, width * shiftScale)) + skewOffset;
-    const srcX   = Math.max(0, shiftX < 0 ? -shiftX : 0);
-    const dstX   = Math.max(0, shiftX > 0 ? shiftX  : 0);
-    const bW     = width - Math.abs(shiftX);
+    const shiftX = Math.floor(
+      map(noise(n * 2.3 + nPhaseX * 0.5 * speedMul), 0, 1, -width * shiftScale, width * shiftScale)
+    ) + skewOffset;
+    const srcX = Math.max(0, shiftX < 0 ? -shiftX : 0);
+    const dstX = Math.max(0, shiftX > 0 ?  shiftX : 0);
+    const bW   = width - Math.abs(shiftX);
     if (bW <= 0) continue;
 
     ctx.save();
@@ -177,9 +181,8 @@ function applyScanlines(density) {
   }
 }
 
-// ─── Glitch (tile displacement pass) ─────────────────────────────────────
-// Scanlines and trails are now separate passes — call them from draw() before this.
-// Controlled by: els.corruptOn (ON toggle in Glitch group).
+// ─── Glitch ───────────────────────────────────────────────────────────────────
+// Note: randomSeed is set by draw() once per frame. No re-seeding here.
 
 function applyGlitch(density = 1, baseDX = 0, baseDY = 0) {
   const block     = parseInt(els.block.value, 10);
@@ -216,16 +219,15 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0) {
   const corruptMul   = Math.max(0.05, 1.0 + corruptDrift * driftMod);
   let count = Math.max(1, Math.floor(total * corrupt * corruptMul));
 
-  const gap         = parseInt(els.spatialGap.value, 10);
-  const useCluTiles = !!els.clusterTiles?.checked;
-  const cluCenters  = parseInt(els.cluCenters?.value  ?? '3',  10);
-  const cluSpread   = parseInt(els.cluSpread?.value   ?? '80', 10);
-  const cluMinSpread = parseInt(els.cluMinSpread?.value ?? '0', 10);
-  const cluBias     = parseFloat(els.cluBias?.value   ?? '0.85');
-  const cluDrift    = parseFloat(els.cluDrift?.value  ?? '0');
-
-  const cluSpeed   = parseFloat(els.cluSpeed?.value   ?? '0');
-  const cluInertia = parseFloat(els.cluInertia?.value ?? '0.92');
+  const gap          = parseInt(els.spatialGap.value, 10);
+  const useCluTiles  = !!els.clusterTiles?.checked;
+  const cluCenters   = parseInt(els.cluCenters?.value   ?? '3',  10);
+  const cluSpread    = parseInt(els.cluSpread?.value    ?? '80', 10);
+  const cluMinSpread = parseInt(els.cluMinSpread?.value ?? '0',  10);
+  const cluBias      = parseFloat(els.cluBias?.value    ?? '0.85');
+  const cluDrift     = parseFloat(els.cluDrift?.value   ?? '0');
+  const cluSpeed     = parseFloat(els.cluSpeed?.value   ?? '0');
+  const cluInertia   = parseFloat(els.cluInertia?.value ?? '0.92');
 
   const targets = [];
   const tryAdd = (x, y) => {
@@ -237,47 +239,40 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0) {
     targets.push([x, y]); return true;
   };
 
-  randomSeed(baseSeed + frameCount);
+  // Note: randomSeed is set by draw() once per frame; no re-seeding here.
+  // applyScanlines ran first and consumed some random state — that ordering is intentional.
 
-  // ── Cluster center physics ───────────────────────────────────────────────
-  // When cluSpeed > 0, centers have persistent positions + velocity (inertia).
-  // When cluSpeed = 0, fall back to the original noise-offset approach.
-
+  // ── Cluster center physics ─────────────────────────────────────────────────
   function getPhysicsCenters() {
-    // Grow / shrink state array to match requested count
+    // Use p5's seeded random() for reproducibility across reloads with the same baseSeed.
     while (_cluPhysics.length < cluCenters) {
       _cluPhysics.push({
-        x: Math.random() * width,
-        y: Math.random() * height,
-        vx: (Math.random() - 0.5) * 2,
-        vy: (Math.random() - 0.5) * 2,
-        noiseOffX: Math.random() * 1000,
-        noiseOffY: Math.random() * 1000,
+        x: random(width),
+        y: random(height),
+        vx: (random() - 0.5) * 2,
+        vy: (random() - 0.5) * 2,
+        noiseOffX: random(1000),
+        noiseOffY: random(1000),
       });
     }
     _cluPhysics.length = cluCenters;
 
-    // Advance internal time proportional to cluSpeed
     _cluPhysT += cluSpeed * 0.004;
 
     for (const c of _cluPhysics) {
-      // Steering: desired direction from a slowly-evolving noise field
       const steerAng = noise(c.noiseOffX + _cluPhysT * 0.7,
                              c.noiseOffY + _cluPhysT * 0.5) * TWO_PI * 2;
       const desiredVx = Math.cos(steerAng) * cluSpeed;
       const desiredVy = Math.sin(steerAng) * cluSpeed;
 
-      // Inertia: blend current velocity toward desired
       c.vx = c.vx * cluInertia + desiredVx * (1 - cluInertia);
       c.vy = c.vy * cluInertia + desiredVy * (1 - cluInertia);
 
-      // Optionally add cluDrift as an extra noise perturbation on top
       if (cluDrift > 0) {
         c.vx += (noise(c.noiseOffX * 2.1 + _cluPhysT * 1.3) - 0.5) * cluDrift * 0.5;
         c.vy += (noise(c.noiseOffY * 2.1 + _cluPhysT * 1.1) - 0.5) * cluDrift * 0.5;
       }
 
-      // Integrate position, wrap at screen edges
       c.x = ((c.x + c.vx) % width  + width)  % width;
       c.y = ((c.y + c.vy) % height + height) % height;
     }
@@ -289,35 +284,30 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0) {
     for (let i = 0; i < cluCenters; i++) {
       const baseX = Math.floor(random(cols)) * block + (block >> 1);
       const baseY = Math.floor(random(rows)) * block + (block >> 1);
-      const driftOff = cluDrift > 0
-        ? (noise(i * 3.7 + nPhaseX * cluDrift * 0.01) - 0.5) * 2 * Math.min(width, height) * 0.5 * cluDrift
-        : 0;
+      const driftOff  = cluDrift > 0
+        ? (noise(i * 3.7 + nPhaseX * cluDrift * 0.01) - 0.5) * 2 * Math.min(width, height) * 0.5 * cluDrift : 0;
       const driftOffY = cluDrift > 0
-        ? (noise(i * 5.3 + nPhaseY * cluDrift * 0.01) - 0.5) * 2 * Math.min(width, height) * 0.5 * cluDrift
-        : 0;
+        ? (noise(i * 5.3 + nPhaseY * cluDrift * 0.01) - 0.5) * 2 * Math.min(width, height) * 0.5 * cluDrift : 0;
       centers.push({
-        x: (baseX + driftOff + width)  % width,
+        x: (baseX + driftOff  + width)  % width,
         y: (baseY + driftOffY + height) % height,
       });
     }
     return centers;
   }
 
-  // ── Tile placement ───────────────────────────────────────────────────────
+  // ── Tile placement ─────────────────────────────────────────────────────────
   if (useCluTiles && cluCenters > 0) {
-    const centers = cluSpeed > 0 ? getPhysicsCenters() : getStaticCenters();
-
-    // cluBias: fraction of tiles forced into clusters; remainder placed randomly
-    const biasCount = Math.round(count * cluBias);
-    const per = Math.max(1, Math.floor(biasCount / cluCenters));
+    const centers    = cluSpeed > 0 ? getPhysicsCenters() : getStaticCenters();
+    const biasCount  = Math.round(count * cluBias);
+    const per        = Math.max(1, Math.floor(biasCount / cluCenters));
 
     for (const c of centers) {
       for (let i = 0; i < per && targets.length < biasCount; i++) {
         const ang = random(TWO_PI);
-        // cluMinSpread: minimum cluster radius
-        const r = cluMinSpread + random(Math.max(1, cluSpread - cluMinSpread));
-        const x = (c.x + Math.cos(ang) * r + width)  % width;
-        const y = (c.y + Math.sin(ang) * r + height) % height;
+        const r   = cluMinSpread + random(Math.max(1, cluSpread - cluMinSpread));
+        const x   = (c.x + Math.cos(ang) * r + width)  % width;
+        const y   = (c.y + Math.sin(ang) * r + height) % height;
         let ok = tryAdd(Math.floor(x), Math.floor(y)), tries = 0;
         while (!ok && tries++ < 6) {
           const a2 = random(TWO_PI);
@@ -329,7 +319,6 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0) {
         }
       }
     }
-    // Fill remaining slots randomly
     let guard = 0;
     while (targets.length < count && guard++ < count * 4)
       tryAdd(Math.floor(random(cols)) * block, Math.floor(random(rows)) * block);
@@ -339,7 +328,7 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0) {
       tryAdd(Math.floor(random(cols)) * block, Math.floor(random(rows)) * block);
   }
 
-  // ── Blit tiles ───────────────────────────────────────────────────────────
+  // ── Blit tiles ─────────────────────────────────────────────────────────────
   if (frameRing.length === 0 || maxBack <= 0) return;
 
   const ctx = gBuf.drawingContext;
@@ -359,8 +348,9 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0) {
 
     const randBack  = Math.floor(random(1, maxBack + 1));
     const blendBack = Math.round(baseBack + (randBack - baseBack) * depthScatter);
-    const back      = frameRing.length - 1 - Math.max(1, Math.min(maxBack, blendBack));
-    const src       = frameRing[Math.max(0, back)];
+    const idx       = Math.max(1, Math.min(maxBack, blendBack));
+    const src       = frameRing.fromEnd(idx);
+    if (!src) continue;
 
     ctx.save();
     ctx.globalAlpha = tileAlpha / 255;
@@ -380,14 +370,30 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0) {
   }
 }
 
-// ─── Flow warp ────────────────────────────────────────────────────────────
+// ─── Flow warp ────────────────────────────────────────────────────────────────
+// Pre-allocates Float32Array displacement buffers to avoid per-frame GC pressure.
+// Buffers are only reallocated when the grid dimensions change (scale or canvas resize).
+
+let _flowDx = null, _flowDy = null;
+let _flowBufCols = 0, _flowBufRows = 0;
+
+function _ensureFlowBuffers(cols, rows) {
+  const n = cols * rows;
+  if (!_flowDx || _flowBufCols !== cols || _flowBufRows !== rows) {
+    _flowDx = new Float32Array(n);
+    _flowDy = new Float32Array(n);
+    _flowBufCols = cols;
+    _flowBufRows = rows;
+  }
+}
 
 function applyFlowWarp(src, dst, strength = 6, scale = 80, pulse = 0, implode = 0) {
   dst.clear();
 
   let srcFrame = src;
-  if (pulse > 0 && Array.isArray(frameRing) && frameRing.length > pulse) {
-    srcFrame = { _isRingData: true, data: frameRing[frameRing.length - 1 - pulse] };
+  if (pulse > 0 && frameRing.length > pulse) {
+    const ringFrame = frameRing.fromEnd(pulse);
+    if (ringFrame) srcFrame = { _isRingData:true, data:ringFrame };
   }
 
   const cell = Math.max(8, scale | 0);
@@ -395,11 +401,17 @@ function applyFlowWarp(src, dst, strength = 6, scale = 80, pulse = 0, implode = 
   const t    = frameCount * 0.005;
   const w = width, h = height;
   const cx2 = w * 0.5, cy2 = h * 0.5;
-  const dctx = dst.drawingContext;
-  dctx.save();
 
-  for (let y = 0; y < h; y += cell) {
-    for (let x = 0; x < w; x += cell) {
+  const cols = Math.ceil(w / cell);
+  const rows = Math.ceil(h / cell);
+  _ensureFlowBuffers(cols, rows);
+
+  // Pre-compute all displacement vectors into typed arrays
+  let idx = 0;
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      const x  = col * cell;
+      const y  = row * cell;
       const nx = (x + 0.5 * cell) / w * 2.0;
       const ny = (y + 0.5 * cell) / h * 2.0;
       const a  = noise(nx * 0.9 + t, ny * 0.9) * TWO_PI * 2.0;
@@ -415,25 +427,41 @@ function applyFlowWarp(src, dst, strength = 6, scale = 80, pulse = 0, implode = 
         dy2 += (vy / L) * off * implode;
       }
 
+      _flowDx[idx] = dx2;
+      _flowDy[idx] = dy2;
+      idx++;
+    }
+  }
+
+  // Draw all displaced tiles using the pre-computed vectors
+  const dctx = dst.drawingContext;
+  dctx.save();
+  idx = 0;
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      const x     = col * cell;
+      const y     = row * cell;
       const tileW = Math.min(cell, w - x);
       const tileH = Math.min(cell, h - y);
-      const sx2   = Math.max(0, Math.min(w - tileW, Math.floor(x + dx2)));
-      const sy2   = Math.max(0, Math.min(h - tileH, Math.floor(y + dy2)));
+      const sx2   = Math.max(0, Math.min(w - tileW, Math.floor(x + _flowDx[idx])));
+      const sy2   = Math.max(0, Math.min(h - tileH, Math.floor(y + _flowDy[idx])));
+      idx++;
 
       if (srcFrame?._isRingData) {
         drawRingRegion(dst, srcFrame.data, sx2, sy2, tileW, tileH, x, y, tileW, tileH);
       } else {
-        dctx.drawImage(srcFrame.elt || srcFrame.drawingContext.canvas,
-          sx2, sy2, tileW, tileH, x, y, tileW, tileH);
+        const srcEl = srcFrame?.elt ?? srcFrame?.drawingContext?.canvas ?? null;
+        if (!srcEl) continue; // guard: graphics disposed during resize
+        dctx.drawImage(srcEl, sx2, sy2, tileW, tileH, x, y, tileW, tileH);
       }
     }
   }
   dctx.restore();
 }
 
-// ─── Solarize ─────────────────────────────────────────────────────────────
-// Perf: downsamples to a max 640px wide offscreen canvas before pixel math,
-// then scales result back up. This is ~4-16x faster on large screens / Windows.
+// ─── Solarize ─────────────────────────────────────────────────────────────────
+// Downsamples to max 640px wide before pixel math, then scales back up.
+// ~4–16x faster on large screens / Windows.
 
 let _solCanvas = null, _solCtx = null;
 let _solOut    = null, _solOutCtx = null;
@@ -447,7 +475,7 @@ function applySolarize(buf, thresh = 0.5, amount = 1.0, solR = 1.0, solG = 1.0, 
 
   if (!_solCanvas || _solCanvas.width !== sw || _solCanvas.height !== sh) {
     _solCanvas = document.createElement('canvas'); _solCanvas.width = sw; _solCanvas.height = sh;
-    _solCtx    = _solCanvas.getContext('2d', { willReadFrequently: true });
+    _solCtx    = _solCanvas.getContext('2d', { willReadFrequently:true });
   }
   if (!_solOut || _solOut.width !== BW || _solOut.height !== BH) {
     _solOut    = document.createElement('canvas'); _solOut.width = BW; _solOut.height = BH;
@@ -464,12 +492,12 @@ function applySolarize(buf, thresh = 0.5, amount = 1.0, solR = 1.0, solG = 1.0, 
   const a   = Math.max(0, Math.min(1, amount));
 
   for (let i = 0; i < pix.length; i += 4) {
-    const r = pix[i], g = pix[i+1], b = pix[i+2];
-    const lum = 0.299*r + 0.587*g + 0.114*b;
+    const r = pix[i], g = pix[i + 1], b = pix[i + 2];
+    const lum = 0.299 * r + 0.587 * g + 0.114 * b;
     if (lum > t) {
-      pix[i]   = Math.min(255, Math.max(0, (r + (255-r-r)*a) * solR + 0.5) | 0);
-      pix[i+1] = Math.min(255, Math.max(0, (g + (255-g-g)*a) * solG + 0.5) | 0);
-      pix[i+2] = Math.min(255, Math.max(0, (b + (255-b-b)*a) * solB + 0.5) | 0);
+      pix[i]     = Math.min(255, Math.max(0, (r + (255 - r - r) * a) * solR + 0.5) | 0);
+      pix[i + 1] = Math.min(255, Math.max(0, (g + (255 - g - g) * a) * solG + 0.5) | 0);
+      pix[i + 2] = Math.min(255, Math.max(0, (b + (255 - b - b) * a) * solB + 0.5) | 0);
     }
   }
   _solCtx.putImageData(imgData, 0, 0);
@@ -480,7 +508,7 @@ function applySolarize(buf, thresh = 0.5, amount = 1.0, solR = 1.0, solG = 1.0, 
   buf.drawingContext.drawImage(_solOut, 0, 0);
 }
 
-// ─── Symmetry ─────────────────────────────────────────────────────────────
+// ─── Symmetry ─────────────────────────────────────────────────────────────────
 
 function applySymmetry(src, dst, mode = 'v', pos = 0.5) {
   const w  = dst.width, h = dst.height;
@@ -496,15 +524,15 @@ function applySymmetry(src, dst, mode = 'v', pos = 0.5) {
 
   if (mode === 'v' || mode === 'hv') {
     ctx.save();
-    ctx.beginPath(); ctx.rect(x0, 0, w-x0, h); ctx.clip();
-    dst.push(); dst.translate(2*x0, 0); dst.scale(-1, 1);
+    ctx.beginPath(); ctx.rect(x0, 0, w - x0, h); ctx.clip();
+    dst.push(); dst.translate(2 * x0, 0); dst.scale(-1, 1);
     dst.image(src, 0, 0, w, h);
     dst.pop(); ctx.restore();
   }
   if (mode === 'h' || mode === 'hv') {
     ctx.save();
-    ctx.beginPath(); ctx.rect(0, y0, w, h-y0); ctx.clip();
-    dst.push(); dst.translate(0, 2*y0); dst.scale(1, -1);
+    ctx.beginPath(); ctx.rect(0, y0, w, h - y0); ctx.clip();
+    dst.push(); dst.translate(0, 2 * y0); dst.scale(1, -1);
     dst.image(src, 0, 0, w, h);
     dst.pop(); ctx.restore();
   }

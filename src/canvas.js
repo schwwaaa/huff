@@ -1,21 +1,24 @@
 /* canvas.js — p5 lifecycle + buffers + UI
- * Key fixes in this version:
- *  - Video waits readyState >= 3 (HAVE_FUTURE_DATA) — eliminates jitter on load
- *  - requestVideoFrameCallback for exact decode-sync blitting
- *  - Feedback uses drawingContext.drawImage — no gBuf.get() allocation per frame
- *  - Solarize frame-skips based on quality setting (big Windows perf win)
- *  - playBtn toggles label
- *  - frameRing capped at 192MB
- *  - applyTrails / applyScanlines / applyGlitch are independent toggleable passes
+ * Enhancements over previous version:
+ *  - FrameRing replaces plain array — O(1) push/read, no shift() cost
+ *  - allocBuffers uses double-buffer swap — resize never exposes disposed graphics to draw()
+ *  - Preset save / load (JSON export + file import)
+ *  - 10-step undo stack with Ctrl+Z (debounced 300 ms snapshot)
+ *  - showToast() — visible error/status feedback for camera, file, and decode failures
+ *  - "UI hidden" persistent indicator when header is toggled off with P
+ *  - WS mirror JPEG quality and target FPS dynamically follow the quality slider
+ *  - hookUI split into focused sub-functions
  */
 
-window.$  = window.$  || (id  => document.getElementById(id));
+// ─── Module-local DOM helpers ─────────────────────────────────────────────────
+// Not stomped onto window — window.$ preserved for any legacy references.
+const _$ = id  => document.getElementById(id);
+window.$  = window.$  || _$;
 window.$$ = window.$$ || (sel => document.querySelector(sel));
 
 let videoEl, currentBlobUrl = null;
 let gCur, gBuf, gWarp, gTemp;
-let _fbCanvas = null, _fbCtx = null; // reusable feedback offscreen canvas
-let frameRing = [];
+let _fbCanvas = null, _fbCtx = null;
 let canvas, chunks = [];
 let playing = false;
 
@@ -23,15 +26,229 @@ const els = {};
 let baseSeed = 1, seededOnce = false;
 let nPhaseX = 0, nPhaseY = 1000;
 
-// ─── video helpers ──────────────────────────────────────────────────────────
+// ─── FrameRing ────────────────────────────────────────────────────────────────
+// Replaces the plain array + shift() pattern.
+//   push(frame)   — O(1), auto-evicts oldest when at capacity
+//   fromEnd(n)    — O(1), n=0 is newest, n=1 is one before, etc.
+//   resize(cap)   — adjusts capacity, retaining most-recent frames
+//   clear()       — empties the ring
+//   .length       — number of frames currently held
+
+class FrameRing {
+  constructor(cap) {
+    this._cap  = Math.max(4, cap);
+    this._buf  = new Array(this._cap).fill(null);
+    this._head = 0;
+    this._size = 0;
+  }
+
+  get length()   { return this._size; }
+  get capacity() { return this._cap;  }
+
+  push(frame) {
+    this._buf[this._head] = frame;
+    this._head = (this._head + 1) % this._cap;
+    if (this._size < this._cap) this._size++;
+  }
+
+  fromEnd(n) {
+    if (n < 0 || n >= this._size) return null;
+    return this._buf[(this._head - 1 - n + this._cap * 2) % this._cap];
+  }
+
+  resize(newCap) {
+    newCap = Math.max(4, newCap);
+    if (newCap === this._cap) return;
+    const keep   = Math.min(this._size, newCap);
+    const newBuf = new Array(newCap).fill(null);
+    for (let i = 0; i < keep; i++) newBuf[keep - 1 - i] = this.fromEnd(i);
+    this._buf  = newBuf;
+    this._head = keep % newCap;
+    this._size = keep;
+    this._cap  = newCap;
+  }
+
+  clear() {
+    this._buf.fill(null);
+    this._head = 0;
+    this._size = 0;
+  }
+}
+
+let frameRing = new FrameRing(120);
+
+// ─── Toast feedback ───────────────────────────────────────────────────────────
+// Visible on-screen feedback for errors and status events.
+// isError=true → red, 5 s; isError=false → green, 2.5 s
+
+function showToast(msg, isError = false) {
+  let t = _$('_toast');
+  if (!t) {
+    t = document.createElement('div');
+    t.id = '_toast';
+    Object.assign(t.style, {
+      position:'fixed', top:'12px', left:'50%', transform:'translateX(-50%)',
+      fontFamily:'monospace', fontSize:'13px', padding:'6px 16px',
+      borderRadius:'4px', pointerEvents:'none', zIndex:'999999',
+      display:'none', transition:'opacity 0.3s',
+    });
+    document.body.appendChild(t);
+  }
+  const errStyle = { background:'#600', color:'#f88', border:'1px solid #f44' };
+  const okStyle  = { background:'rgba(0,0,0,0.78)', color:'#0f0', border:'1px solid #0f0' };
+  Object.assign(t.style, isError ? errStyle : okStyle);
+  t.textContent    = msg;
+  t.style.display  = 'block';
+  t.style.opacity  = '1';
+  clearTimeout(t._tid);
+  t._tid = setTimeout(() => {
+    t.style.opacity = '0';
+    setTimeout(() => { t.style.display = 'none'; }, 320);
+  }, isError ? 5000 : 2500);
+}
+
+// ─── UI-hidden indicator ──────────────────────────────────────────────────────
+// A persistent pill at the bottom of the screen shown whenever the header panel
+// is hidden, so the user always knows how to bring it back.
+
+function _syncUIIndicator() {
+  const h      = document.querySelector('header');
+  const hidden = h && h.style.display === 'none';
+  let ind = _$('_uiInd');
+  if (!ind) {
+    ind = document.createElement('div');
+    ind.id = '_uiInd';
+    Object.assign(ind.style, {
+      position:'fixed', bottom:'10px', left:'50%', transform:'translateX(-50%)',
+      background:'rgba(0,0,0,0.72)', color:'#0f0', fontFamily:'monospace',
+      padding:'3px 14px', borderRadius:'3px', fontSize:'12px',
+      pointerEvents:'none', zIndex:'999998', display:'none',
+    });
+    ind.textContent = 'UI hidden  ·  P to show';
+    document.body.appendChild(ind);
+  }
+  ind.style.display = hidden ? 'block' : 'none';
+}
+
+function toggleUI() {
+  const h = document.querySelector('header');
+  if (!h) return;
+  h.style.display = (h.style.display === 'none') ? '' : 'none';
+  _syncUIIndicator();
+}
+
+// ─── Preset system ────────────────────────────────────────────────────────────
+// capturePreset()        — snapshot all control values into a plain object
+// applyPreset(data)      — restore all control values from a snapshot
+// savePreset()           — download snapshot as a .json file
+// loadPresetFromFile(f)  — load snapshot from a File object
+
+const PRESET_IDS = [
+  'quality','depth','corrupt','block','glitchSpeed','glitchSpeedFine',
+  'glitchSize','glitchSmear','glitchBaseX','glitchBaseY',
+  'glitchSpeedMul','glitchAlpha','glitchJitter','glitchSmearAngle','seed',
+  'corruptOn','feedback','persistence','fbX','fbY','fbZ','fbTheta',
+  'clusters','clusterTiles','clusterCount','clusterRadius','spatialGap',
+  'cluCenters','cluSpread','cluMinSpread','cluBias','cluDrift','cluSpeed','cluInertia',
+  'flowOn','flowStrength','flowScale','flowPulse','flowImpl',
+  'baseOn','baseMix','seedOnLoad',
+  'symOn','symMode','symPos',
+  'solarizeOn','solarizeThresh','solarizeAmt','solarizeR','solarizeG','solarizeB',
+  'scanAlpha','scanShift','scanDrift','scanSpeed','scanGap','scanSkew','scanRandSize',
+  'depthScatter','corruptDrift',
+  'trailOn','trailLayers','trailDepth','trailLumaKey',
+  'bgMode',
+];
+
+function capturePreset() {
+  const data = { _v: 1 };
+  PRESET_IDS.forEach(id => {
+    const el = _$(id);
+    if (!el) return;
+    data[id] = (el.type === 'checkbox') ? el.checked : el.value;
+  });
+  return data;
+}
+
+function applyPreset(data) {
+  if (!data) return;
+  PRESET_IDS.forEach(id => {
+    if (!(id in data)) return;
+    const el = _$(id);
+    if (!el) return;
+    if (el.type === 'checkbox') el.checked = !!data[id];
+    else el.value = data[id];
+    el.dispatchEvent(new Event('input',  { bubbles:true }));
+    el.dispatchEvent(new Event('change', { bubbles:true }));
+  });
+  updateLabels();
+  setSeedFromUI();
+}
+
+function savePreset() {
+  const blob = new Blob([JSON.stringify(capturePreset(), null, 2)], { type:'application/json' });
+  const a    = document.createElement('a');
+  a.href     = URL.createObjectURL(blob);
+  a.download = `huff-preset-${Date.now()}.json`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  showToast('Preset saved');
+}
+
+function loadPresetFromFile(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const data = JSON.parse(e.target.result);
+      snapshotForUndo();
+      applyPreset(data);
+      showToast('Preset loaded');
+    } catch {
+      showToast('Invalid preset file', true);
+    }
+  };
+  reader.onerror = () => showToast('Could not read preset file', true);
+  reader.readAsText(file);
+}
+
+// ─── Undo stack ───────────────────────────────────────────────────────────────
+// Any slider or checkbox change schedules a debounced snapshot (300 ms).
+// Ctrl+Z / Cmd+Z pops and restores the previous snapshot.
+
+const _undoStack = [];
+const UNDO_MAX   = 10;
+let   _undoTimer = null;
+
+function snapshotForUndo() {
+  clearTimeout(_undoTimer);
+  _undoTimer = setTimeout(() => {
+    const snap = capturePreset();
+    const last = _undoStack[_undoStack.length - 1];
+    if (last && JSON.stringify(last) === JSON.stringify(snap)) return;
+    _undoStack.push(snap);
+    if (_undoStack.length > UNDO_MAX) _undoStack.shift();
+  }, 300);
+}
+
+function undo() {
+  if (_undoStack.length === 0) { showToast('Nothing to undo'); return; }
+  applyPreset(_undoStack.pop());
+  const n = _undoStack.length;
+  showToast(`Undo  (${n} step${n !== 1 ? 's' : ''} left)`);
+}
+
+// ─── video helpers ────────────────────────────────────────────────────────────
 
 function cloakVideo(p5Vid) {
   const v = p5Vid && (p5Vid.elt || p5Vid);
   if (!v || v._cloaked) return;
   v._cloaked = true;
   v.setAttribute('playsinline', '');
-  Object.assign(v.style, { position:'fixed', left:'-10000px', top:'0',
-    width:'1px', height:'1px', opacity:'0', pointerEvents:'none' });
+  Object.assign(v.style, {
+    position:'fixed', left:'-10000px', top:'0',
+    width:'1px', height:'1px', opacity:'0', pointerEvents:'none',
+  });
 }
 
 function blitVideoInto(target) {
@@ -50,13 +267,56 @@ async function primeCameraPermissionOnce() {
   } catch(e) { console.warn('primeCam:', e); }
 }
 
-// Sync-accurate frame pump — uses rVFC where available, falls back to RAF
-// Video blitting is handled directly in draw() — no separate pump loop needed.
-function pumpVideoFrames() {
-  // no-op — kept for call-site compatibility
+// ─── Video frame pump ─────────────────────────────────────────────────────────
+// requestVideoFrameCallback fires once per decoded video frame — independent of
+// draw() rate. gCur and frameRing stay in sync with actual video decode.
+
+let _rafPumpLast = 0;
+
+function _pushToRing() {
+  if (!gCur) return;
+  try {
+    const Q   = parseFloat(els.quality?.value ?? '1');
+    const bpf = gCur.width * gCur.height * 4;
+    let cap = Math.max(4, Math.round(60 * (Q * 2)));
+    cap = Math.min(cap, Math.max(4, Math.floor(192 * 1024 * 1024 / bpf)));
+    frameRing.resize(cap);                    // O(1) when cap unchanged
+    gCur.loadPixels();
+    if (gCur.pixels.length > 0) {
+      frameRing.push(new ImageData(
+        new Uint8ClampedArray(gCur.pixels.buffer.slice(0)),
+        gCur.width, gCur.height
+      ));
+    }
+  } catch(e) {}
 }
 
-// ─── p5 setup / resize ──────────────────────────────────────────────────────
+function _blitAndPush() {
+  if (!playing || !videoEl?.elt || !gCur) return;
+  try {
+    const ctx = gCur.drawingContext;
+    ctx.clearRect(0, 0, gCur.width, gCur.height);
+    ctx.drawImage(videoEl.elt, 0, 0, gCur.width, gCur.height);
+    _pushToRing();
+  } catch(e) {}
+}
+
+function pumpVideoFrames() {
+  if (!videoEl?.elt) return;
+  const v = videoEl.elt;
+  if (v.requestVideoFrameCallback) {
+    const onFrame = () => { _blitAndPush(); if (playing) v.requestVideoFrameCallback(onFrame); };
+    v.requestVideoFrameCallback(onFrame);
+  } else {
+    const tick = (ts) => {
+      if (ts - _rafPumpLast >= (1000 / 60)) { _rafPumpLast = ts; _blitAndPush(); }
+      if (playing) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }
+}
+
+// ─── p5 setup / resize ───────────────────────────────────────────────────────
 
 function setup() {
   canvas = createCanvas(windowWidth, windowHeight);
@@ -67,51 +327,45 @@ function setup() {
   hookUI();
   updateLabels();
   setSeedFromUI();
-
-  window.addEventListener('keydown', e => {
-    if (e.key === 'p' || e.key === 'P') {
-      const h = document.querySelector('header');
-      h.style.display = h.style.display === 'none' ? '' : 'none';
-      e.preventDefault();
-    }
-    if (e.key === 'f' || e.key === 'F') {
-      if (!document.fullscreenElement) document.documentElement.requestFullscreen();
-      else document.exitFullscreen();
-      e.preventDefault();
-    }
-  }, true);
-
-  document.addEventListener('fullscreenchange', () => {
-    const v = videoEl?.elt;
-    if (v && playing && v.paused) v.play().catch(() => {});
-  });
+  _syncUIIndicator();
 }
 window.setup = setup;
 
 function allocBuffers() {
+  // Build new buffers BEFORE disposing old ones.
+  // draw() may be mid-frame during a resize; this prevents it from accessing
+  // a half-rebuilt set. References are swapped atomically after construction.
+  const nCur  = createGraphics(width, height);
+  const nBuf  = createGraphics(width, height);
+  const nWarp = createGraphics(width, height);
+  const nTemp = createGraphics(width, height);
+
   [gCur, gBuf, gWarp, gTemp].forEach(g => { try { if (g) g.remove(); } catch {} });
-  gCur = createGraphics(width, height); gBuf = createGraphics(width, height);
-  gWarp = createGraphics(width, height); gTemp = createGraphics(width, height);
+
+  gCur = nCur; gBuf = nBuf; gWarp = nWarp; gTemp = nTemp;
   _fbCanvas = null; _fbCtx = null;
 }
 
 function windowResized() {
   resizeCanvas(windowWidth, windowHeight);
-  allocBuffers(); clearAll(); updateDim();
+  allocBuffers();
+  clearAll();
+  updateDim();
 }
 window.windowResized = windowResized;
 
 function clearAll() {
-  [gBuf, gWarp, gTemp].forEach(g => g.clear());
-  frameRing.length = 0;
+  [gBuf, gWarp, gTemp].forEach(g => { try { g.clear(); } catch {} });
+  frameRing.clear();
   seededOnce = false;
 }
 
-// ─── UI wiring ──────────────────────────────────────────────────────────────
+// ─── UI wiring ────────────────────────────────────────────────────────────────
+// Split into focused sub-functions so each concern is independently readable.
 
 function hookUI() {
   [
-    'file','playBtn','refreshBtn','resetBtn',
+    'file','playBtn','pauseBtn','refreshBtn','resetBtn',
     'camStartBtn','camStopBtn','camRefreshBtn','cams','corruptOn',
     'quality','qualityVal','depth','depthVal','corrupt','corruptVal','block','blockVal',
     'glitchSpeed','glitchSpeedVal','glitchSpeedFine','glitchSpeedFineVal',
@@ -137,48 +391,66 @@ function hookUI() {
     'depthScatter','depthScatterVal','corruptDrift','corruptDriftVal',
     'trailOn','trailLayers','trailLayersVal','trailDepth','trailDepthVal',
     'trailLumaKey','trailLumaKeyVal',
-    'scanRandSize',
-    'bgMode',
-  ].forEach(k => els[k] = $(k));
+    'scanRandSize','bgMode','dim',
+  ].forEach(k => els[k] = _$(k));
 
-  els.file.addEventListener('change', onFile);
+  hookFile();
+  hookTransport();
+  hookCamera();
+  hookVolume();
+  hookSliders();
+  hookPresets();
+  hookKeyboard();
 
-  // ── PLAY button ─────────────────────────────────────────────────────────
-  if (els.playBtn) {
-    els.playBtn.addEventListener('click', async () => {
-      if (!videoEl) return;
-      const v = videoEl.elt;
-      try { await v.play(); } catch { try { v.muted = true; await v.play(); } catch {} }
-      playing = true;
-    });
-  }
+  updateDim();
+  try { listCameras(); } catch {}
+}
 
-  // ── PAUSE button ────────────────────────────────────────────────────────
-  const pauseBtn = document.getElementById('pauseBtn');
-  if (pauseBtn) {
-    pauseBtn.addEventListener('click', () => {
-      if (!videoEl) return;
-      videoEl.elt.pause();
-      playing = false;
-    });
-  }
+function hookFile() {
+  els.file?.addEventListener('change', onFile);
+}
 
-  els.refreshBtn.addEventListener('click', refreshGlitch);
-  els.seed.addEventListener('change', setSeedFromUI);
+function hookTransport() {
+  els.playBtn?.addEventListener('click', async () => {
+    if (!videoEl) return;
+    const v = videoEl.elt;
+    try { await v.play(); } catch { try { v.muted = true; await v.play(); } catch {} }
+    playing = true;
+  });
 
-  // Volume slider — controls live video element directly
-  const volSlider = document.getElementById('volumeSlider');
-  if (volSlider) {
-    volSlider.addEventListener('input', () => {
-      const vol = parseFloat(volSlider.value);
-      if (videoEl && videoEl.elt) {
-        videoEl.elt.muted  = (vol === 0);
-        videoEl.elt.volume = vol;
-      }
-    });
-  }
+  els.pauseBtn?.addEventListener('click', () => {
+    if (!videoEl) return;
+    videoEl.elt.pause();
+    playing = false;
+  });
 
-  [
+  els.refreshBtn?.addEventListener('click', refreshGlitch);
+  els.seed?.addEventListener('change', setSeedFromUI);
+}
+
+function hookCamera() {
+  els.camStartBtn?.addEventListener('click',  () => startCamera(els.cams?.value || null));
+  els.camStopBtn?.addEventListener('click',   stopCamera);
+  els.camRefreshBtn?.addEventListener('click', listCameras);
+  els.cams?.addEventListener('change', () => {
+    try { if (videoEl?.elt?.srcObject) startCamera(els.cams.value || null); } catch {}
+  });
+}
+
+function hookVolume() {
+  const volSlider = _$('volumeSlider');
+  if (!volSlider) return;
+  volSlider.addEventListener('input', () => {
+    const vol = parseFloat(volSlider.value);
+    if (videoEl?.elt) {
+      videoEl.elt.volume = vol;
+      videoEl.elt.muted  = (vol === 0);
+    }
+  });
+}
+
+function hookSliders() {
+  const sliderIds = [
     'quality','depth','corrupt','block','glitchSpeed','glitchSpeedFine',
     'glitchSize','glitchSmear','glitchBaseX','glitchBaseY',
     'feedback','persistence','fbX','fbY','fbZ','fbTheta',
@@ -189,28 +461,72 @@ function hookUI() {
     'flowStrength','flowScale','flowPulse','flowImpl','baseMix','symPos','glitchSpeedMul',
     'depthScatter','corruptDrift','trailLayers','trailDepth','trailLumaKey',
     'solarizeThresh','solarizeAmt','solarizeR','solarizeG','solarizeB',
-  ].forEach(id => els[id]?.addEventListener('input', updateLabels));
+  ];
+
+  sliderIds.forEach(id => {
+    els[id]?.addEventListener('input', () => { updateLabels(); snapshotForUndo(); });
+  });
+
+  // Checkboxes and selects also get snapshotted for undo
+  ['corruptOn','clusters','clusterTiles','flowOn','baseOn','symOn','solarizeOn',
+   'trailOn','scanRandSize','seedOnLoad','bgMode','symMode'].forEach(id => {
+    _$(id)?.addEventListener('change', snapshotForUndo);
+  });
 
   els.baseOn?.addEventListener('change', () => {
-    els.baseMix.disabled = !els.baseOn.checked; updateLabels();
+    if (els.baseMix) els.baseMix.disabled = !els.baseOn.checked;
+    updateLabels();
   });
-
-  els.camStartBtn?.addEventListener('click',  () => startCamera(els.cams?.value || null));
-  els.camStopBtn?.addEventListener('click',   stopCamera);
-  els.camRefreshBtn?.addEventListener('click', listCameras);
-  els.cams?.addEventListener('change', () => {
-    try { if (videoEl?.elt?.srcObject) startCamera(els.cams.value || null); } catch {}
-  });
-
-  updateDim();
-  try { listCameras(); } catch {}
 }
 
-function updateDim() { if (els.dim) els.dim.textContent = `${width}×${height}`; }
+function hookPresets() {
+  _$('presetSaveBtn')?.addEventListener('click', savePreset);
+
+  const loadBtn   = _$('presetLoadBtn');
+  const loadInput = _$('presetLoadInput');
+  if (loadBtn && loadInput) {
+    loadBtn.addEventListener('click', () => loadInput.click());
+    loadInput.addEventListener('change', () => {
+      loadPresetFromFile(loadInput.files?.[0]);
+      loadInput.value = '';
+    });
+  }
+
+  // resetBtn is preset-adjacent — snapshot before wiping
+  els.resetBtn?.addEventListener('click', () => { snapshotForUndo(); refreshGlitch(); });
+}
+
+function hookKeyboard() {
+  window.addEventListener('keydown', e => {
+    if ((e.key === 'p' || e.key === 'P') && !e.ctrlKey && !e.metaKey) {
+      toggleUI(); e.preventDefault(); return;
+    }
+    if ((e.key === 'f' || e.key === 'F') && !e.ctrlKey && !e.metaKey) {
+      if (!document.fullscreenElement) document.documentElement.requestFullscreen?.();
+      else document.exitFullscreen?.();
+      e.preventDefault(); return;
+    }
+    if (e.key === 'z' && (e.ctrlKey || e.metaKey) && !e.shiftKey) {
+      undo(); e.preventDefault(); return;
+    }
+  }, true);
+
+  document.addEventListener('fullscreenchange', () => {
+    const v = videoEl?.elt;
+    if (v && playing && v.paused) v.play().catch(() => {});
+  });
+}
+
+// ─── label / dim helpers ──────────────────────────────────────────────────────
+
+function updateDim() {
+  if (els.dim) els.dim.textContent = `${width}×${height}`;
+}
 
 function updateLabels() {
-  const f2 = v => (+v).toFixed(2);
+  const f2  = v => (+v).toFixed(2);
   const set = (el, valEl, fmt) => { if (el && valEl) valEl.textContent = fmt(el.value); };
+
   set(els.quality,          els.qualityVal,          f2);
   set(els.depth,            els.depthVal,            f2);
   set(els.corrupt,          els.corruptVal,          f2);
@@ -264,7 +580,7 @@ function updateLabels() {
   set(els.solarizeB,        els.solarizeBVal,        f2);
   if (els.baseMix && els.baseMixVal) {
     els.baseMixVal.textContent = f2(els.baseMix.value);
-    els.baseMix.disabled = !els.baseOn?.checked;
+    if (els.baseMix) els.baseMix.disabled = !els.baseOn?.checked;
   }
 }
 
@@ -274,14 +590,13 @@ function setSeedFromUI() {
   noiseSeed(baseSeed);
 }
 
-// ─── file loading ────────────────────────────────────────────────────────────
+// ─── file loading ─────────────────────────────────────────────────────────────
 
 function onFile(ev) {
   const input = ev.target;
-  const file = input.files?.[0]; if (!file) return;
+  const file  = input.files?.[0]; if (!file) return;
   queueMicrotask(() => { try { input.value = ''; } catch {} });
 
-  // Teardown previous
   try { videoEl?.elt?.srcObject?.getTracks().forEach(t => t.stop()); } catch {}
   try { if (videoEl) videoEl.remove(); } catch {}
   videoEl = null;
@@ -303,9 +618,12 @@ function onFile(ev) {
   try { v.disableRemotePlayback = true; } catch {}
 
   let primed = false;
+  let poller;
+
   const startPlayback = async () => {
     if (primed) return;
     if (v.readyState < 3 || v.videoWidth === 0) return;
+    clearInterval(poller);
     primed = true;
     clearAll(); updateDim();
     try { blitVideoInto(gCur); } catch {}
@@ -321,37 +639,51 @@ function onFile(ev) {
       window.addEventListener('pointerdown', gesture, true);
       window.addEventListener('keydown',     gesture, true);
     }
+
     try { videoEl.elt.loop = true; } catch {}
     playing = true;
     enableTransport(true);
+    pumpVideoFrames();
 
-    const volSlider = document.getElementById('volumeSlider');
+    const volSlider = _$('volumeSlider');
     const vol = volSlider ? parseFloat(volSlider.value) : 1;
-    try { v.muted = (vol === 0); v.volume = vol; } catch {}
+    try { v.volume = vol; v.muted = (vol === 0); } catch {}
   };
 
-  v.addEventListener('canplay',        startPlayback, { once: true });
-  v.addEventListener('canplaythrough', startPlayback, { once: true });
-  v.addEventListener('loadeddata',     startPlayback, { once: true });
+  v.addEventListener('canplay',        startPlayback, { once:true });
+  v.addEventListener('canplaythrough', startPlayback, { once:true });
+  v.addEventListener('loadeddata',     startPlayback, { once:true });
+
   let poll = 0;
-  const poller = setInterval(() => { startPlayback(); if (primed || ++poll > 40) clearInterval(poller); }, 100);
-  v.addEventListener('error', () => { clearInterval(poller); enableTransport(true); }, { once: true });
+  poller = setInterval(() => {
+    startPlayback();
+    if (primed || ++poll > 40) clearInterval(poller);
+  }, 100);
+
+  v.addEventListener('error', () => {
+    clearInterval(poller);
+    enableTransport(true);
+    const code = v.error?.code ?? '?';
+    showToast(`Video decode error (code ${code}) — try a different file`, true);
+    console.error('[huff] video error', v.error);
+  }, { once:true });
+
   v.load();
 }
 
 function enableTransport(en) {
   ['playBtn','pauseBtn','refreshBtn'].forEach(id => {
-    const b = document.getElementById(id); if (b) b.disabled = !en;
+    const b = _$(id); if (b) b.disabled = !en;
   });
 }
 
-// ─── draw loop ───────────────────────────────────────────────────────────────
+// ─── draw loop ────────────────────────────────────────────────────────────────
 
 function draw() {
   const bg = els.bgMode?.value || 'black';
   if      (bg === 'white') background(255);
-  else if (bg === 'green') background(0,255,0);
-  else if (bg === 'blue')  background(0,0,255);
+  else if (bg === 'green') background(0, 255, 0);
+  else if (bg === 'blue')  background(0, 0, 255);
   else                     background(0);
 
   if (!videoEl) { drawWaiting(); return; }
@@ -359,22 +691,17 @@ function draw() {
   randomSeed(baseSeed + frameCount);
   noiseSeed(baseSeed);
 
-  // Always blit the current video frame into gCur
-  if (playing) { try { blitVideoInto(gCur); } catch {} }
-
-  // Seed gBuf with current frame on first draw
   if (!seededOnce) {
     gBuf.image(gCur, 0, 0, gBuf.width, gBuf.height);
     seededOnce = true;
   }
 
-  // Persistence decay on gBuf
   const pers = parseFloat(els.persistence?.value ?? '0.7');
   if (pers < 1) {
     const ctx = gBuf.drawingContext;
     ctx.save();
     ctx.globalCompositeOperation = 'destination-out';
-    ctx.fillStyle = `rgba(0,0,0,${map(1-pers,0,1,1,20)/255})`;
+    ctx.fillStyle = `rgba(0,0,0,${map(1 - pers, 0, 1, 1, 20) / 255})`;
     ctx.fillRect(0, 0, gBuf.width, gBuf.height);
     ctx.restore();
   }
@@ -386,23 +713,16 @@ function draw() {
   nPhaseX += density * 0.01;
   nPhaseY += density * 0.011;
 
-  const Q      = parseFloat(els.quality?.value ?? '1');
-  const everyN = Q >= 0.9 ? 1 : Q >= 0.7 ? 2 : Q >= 0.5 ? 3 : 4;
-
-  // ── Trails — runs before all tile passes so ghosts sit underneath ─────────
+  // ORDER: Trails → Scanlines → Glitch (scanlines must precede glitch; see effects.js)
   applyTrails();
-
-  // ── Scanlines — independent of glitch tiles, toggled by clusters checkbox ─
   applyScanlines(density);
 
-  // ── Glitch tiles — toggled by corruptOn in Glitch group ───────────────────
   if (els.corruptOn?.checked) {
     applyGlitch(density,
       parseInt(els.glitchBaseX?.value ?? '0', 10),
       parseInt(els.glitchBaseY?.value ?? '0', 10));
   }
 
-  // ── Feedback ─────────────────────────────────────────────────────────────
   const fb = parseFloat(els.feedback?.value ?? '0');
   if (fb > 0) {
     const fx = parseFloat(els.fbX?.value    ?? '0');
@@ -413,26 +733,26 @@ function draw() {
     const gCanvas = gBuf.elt || gBuf.drawingContext.canvas;
     if (!_fbCanvas || _fbCanvas.width !== gBuf.width || _fbCanvas.height !== gBuf.height) {
       _fbCanvas = document.createElement('canvas');
-      _fbCanvas.width = gBuf.width; _fbCanvas.height = gBuf.height;
-      _fbCtx = _fbCanvas.getContext('2d', { alpha: true });
+      _fbCanvas.width  = gBuf.width;
+      _fbCanvas.height = gBuf.height;
+      _fbCtx = _fbCanvas.getContext('2d', { alpha:true });
     }
-    _fbCtx.clearRect(0,0,_fbCanvas.width,_fbCanvas.height);
+    _fbCtx.clearRect(0, 0, _fbCanvas.width, _fbCanvas.height);
     _fbCtx.drawImage(gCanvas, 0, 0);
 
     const ctx = gBuf.drawingContext;
     ctx.save();
     ctx.clearRect(0, 0, gBuf.width, gBuf.height);
     ctx.globalAlpha = Math.min(1, fb);
-    ctx.translate(gBuf.width/2 + fx, gBuf.height/2 + fy);
+    ctx.translate(gBuf.width / 2 + fx, gBuf.height / 2 + fy);
     ctx.rotate(ft);
     ctx.scale(fz, fz);
-    ctx.drawImage(_fbCanvas, -gBuf.width/2, -gBuf.height/2, gBuf.width, gBuf.height);
+    ctx.drawImage(_fbCanvas, -gBuf.width / 2, -gBuf.height / 2, gBuf.width, gBuf.height);
     ctx.restore();
   }
 
-  // ── Flow ─────────────────────────────────────────────────────────────────
   const flowS = parseInt(els.flowStrength?.value ?? '0', 10);
-  if (els.flowOn?.checked && flowS > 0 && (frameCount % everyN === 0)) {
+  if (els.flowOn?.checked && flowS > 0) {
     applyFlowWarp(gBuf, gWarp, flowS,
       parseInt(els.flowScale?.value  ?? '80', 10),
       parseInt(els.flowPulse?.value  ?? '0',  10),
@@ -440,14 +760,12 @@ function draw() {
     [gBuf, gWarp] = [gWarp, gBuf];
   }
 
-  // ── Symmetry ─────────────────────────────────────────────────────────────
   if (els.symOn?.checked) {
     applySymmetry(gBuf, gTemp, els.symMode?.value || 'v', parseFloat(els.symPos?.value ?? '0.5'));
     [gBuf, gTemp] = [gTemp, gBuf];
   }
 
-  // ── Solarize ─────────────────────────────────────────────────────────────
-  if (els.solarizeOn?.checked && (frameCount % everyN === 0)) {
+  if (els.solarizeOn?.checked) {
     applySolarize(gBuf,
       parseFloat(els.solarizeThresh?.value ?? '0.5'),
       parseFloat(els.solarizeAmt?.value    ?? '1.0'),
@@ -456,34 +774,21 @@ function draw() {
       parseFloat(els.solarizeB?.value      ?? '1.0'));
   }
 
-  // ── Composite to screen ───────────────────────────────────────────────────
-  // Always draw the live video frame as base, then gBuf (FX) on top.
-  // When no FX are active, gBuf mirrors gCur so video is always visible.
-  const anyFxActive = els.corruptOn?.checked || els.trailOn?.checked ||
-    els.clusters?.checked || els.flowOn?.checked || els.symOn?.checked ||
-    els.solarizeOn?.checked || parseFloat(els.feedback?.value ?? '0') > 0;
+  const anyFxActive =
+    els.corruptOn?.checked || els.trailOn?.checked   ||
+    els.clusters?.checked  || els.flowOn?.checked    ||
+    els.symOn?.checked     || els.solarizeOn?.checked ||
+    parseFloat(els.feedback?.value ?? '0') > 0;
 
   if (anyFxActive) {
-    // Draw base video first (behind FX)
     if (els.baseOn?.checked && parseFloat(els.baseMix?.value ?? '0') > 0) {
       push(); tint(255, parseFloat(els.baseMix.value) * 255);
       image(gCur, 0, 0, width, height); pop();
     }
     image(gBuf, 0, 0, width, height);
   } else {
-    // No FX — just show clean video, and keep gBuf in sync with gCur
     image(gCur, 0, 0, width, height);
     gBuf.image(gCur, 0, 0, gBuf.width, gBuf.height);
-  }
-
-  // ── Frame ring ────────────────────────────────────────────────────────────
-  const bytesPerFrame = width * height * 4;
-  let ringCap = Math.max(4, Math.round(60 * (Q * 2)));
-  ringCap = Math.min(ringCap, Math.max(4, Math.floor(192*1024*1024 / bytesPerFrame)));
-  gCur.loadPixels();
-  if (gCur.pixels.length > 0) {
-    frameRing.push(new ImageData(new Uint8ClampedArray(gCur.pixels.buffer.slice(0)), gCur.width, gCur.height));
-    while (frameRing.length > ringCap) frameRing.shift();
   }
 }
 
@@ -493,33 +798,37 @@ function refreshGlitch() {
 }
 
 function drawWaiting() {
-  noStroke(); fill(255,20); rect(0,0,width,height);
-  fill(220); textAlign(CENTER,CENTER); textSize(14);
-  text('Load a video or start a camera  ·  P: toggle UI  ·  F: fullscreen', width/2, height/2);
+  noStroke(); fill(255, 20); rect(0, 0, width, height);
+  fill(220); textAlign(CENTER, CENTER); textSize(14);
+  text('Load a video or start a camera  ·  P: toggle UI  ·  F: fullscreen  ·  Ctrl+Z: undo', width / 2, height / 2);
 }
 
-// ─── camera ──────────────────────────────────────────────────────────────────
+// ─── camera ───────────────────────────────────────────────────────────────────
 
 async function listCameras() {
   try {
     await primeCameraPermissionOnce();
     const devs = await navigator.mediaDevices.enumerateDevices();
-    const vids = devs.filter(d => d.kind === 'videoinput');
+    const vids  = devs.filter(d => d.kind === 'videoinput');
     if (!els.cams) return vids.length;
     const prev = els.cams.value;
     els.cams.innerHTML = '';
-    vids.forEach((d,i) => {
+    vids.forEach((d, i) => {
       const o = document.createElement('option');
-      o.value = d.deviceId||''; o.textContent = d.label||`Camera ${i+1}`;
+      o.value = d.deviceId || '';
+      o.textContent = d.label || `Camera ${i + 1}`;
       els.cams.appendChild(o);
     });
-    if (prev && Array.from(els.cams.options).some(o => o.value===prev)) els.cams.value = prev;
+    if (prev && Array.from(els.cams.options).some(o => o.value === prev)) els.cams.value = prev;
     return vids.length;
-  } catch(e) { console.warn('enumerateDevices:',e); return 0; }
+  } catch(e) {
+    console.warn('enumerateDevices:', e);
+    return 0;
+  }
 }
 
 function stopCamera() {
-  try { videoEl?.elt?.srcObject?.getTracks().forEach(t=>t.stop()); } catch {}
+  try { videoEl?.elt?.srcObject?.getTracks().forEach(t => t.stop()); } catch {}
   try { if (videoEl) videoEl.remove(); } catch {}
   videoEl = null; playing = false;
   try { enableTransport(false); } catch {}
@@ -529,61 +838,102 @@ function startCamera(deviceId) {
   stopCamera();
   const video = deviceId?.length
     ? { deviceId:{ exact:deviceId }, width:{ ideal:1920 }, height:{ ideal:1080 } }
-    : { facingMode:{ ideal:'user' }, width:{ ideal:1920 }, height:{ ideal:1080 } };
+    : { facingMode:{ ideal:'user'  }, width:{ ideal:1920 }, height:{ ideal:1080 } };
   try {
     videoEl = createCapture({ video, audio:false }, () => {
       try { enableTransport(true); } catch {}
       listCameras();
       const v = videoEl.elt;
-      try { v.setAttribute('playsinline',''); v.muted=true; } catch {}
-      const kick = () => { try { v.play().catch(()=>{}); pumpVideoFrames(); } catch {} };
-      if (v.readyState >= 1) kick(); else v.addEventListener('loadedmetadata', kick, {once:true});
+      try { v.setAttribute('playsinline', ''); v.muted = true; } catch {}
+      const kick = () => {
+        try {
+          playing = true;  // set only after stream is confirmed ready
+          v.play().catch(() => {});
+          pumpVideoFrames();
+        } catch {}
+      };
+      if (v.readyState >= 1) kick();
+      else v.addEventListener('loadedmetadata', kick, { once:true });
     });
     try { cloakVideo(videoEl); } catch {}
-    playing = true;
-  } catch(e) { console.warn('startCamera:',e); try { enableTransport(true); } catch {} }
+  } catch(e) {
+    console.warn('startCamera:', e);
+    const msg = (e?.name === 'NotAllowedError') ? 'Camera permission denied'
+              : (e?.name === 'NotFoundError')   ? 'No camera found'
+              : `Camera error: ${e?.message ?? e}`;
+    showToast(msg, true);
+    try { enableTransport(false); } catch {}
+  }
 }
 
-// ─── ws-mirror ───────────────────────────────────────────────────────────────
-(function() {
-  const STREAM_MAX_W=1280, STREAM_MAX_H=1280, STREAM_Q=0.76, TARGET_FPS=30;
-  function setWSStatus(txt) { const el=$('status'); if(el) el.textContent=txt; }
-  function findCanvas() {
-    try { if(typeof canvas!=='undefined'&&canvas?.elt instanceof HTMLCanvasElement) return canvas.elt; } catch {}
-    return document.querySelector('canvas')||null;
-  }
-  const wsUrl = (typeof __getWSURL__==='function') ? __getWSURL__() : (window.WS_MIRROR_URL||'ws://127.0.0.1:8787');
-  const openBtn = $('openCanvasBtn');
-  if (openBtn) openBtn.addEventListener('click', ()=>
-    window.open('canvas.html?ws='+encodeURIComponent(wsUrl)+'&mode=stretch&autofs=1',
-      'canvas-mirror','popup=yes,noopener,noreferrer,width=1280,height=720'));
+// ─── ws-mirror ────────────────────────────────────────────────────────────────
+// Streams the canvas to canvas.html via a local WebSocket relay.
+// JPEG quality and target FPS both follow the quality slider dynamically.
 
-  const tcv=document.createElement('canvas'), ttx=tcv.getContext('2d',{alpha:false});
-  let ws=null, connected=false, sending=false;
+(function() {
+  const STREAM_MAX_W = 1280, STREAM_MAX_H = 1280;
+
+  function setWSStatus(txt) { const el = _$('status'); if (el) el.textContent = txt; }
+
+  function findCanvas() {
+    try {
+      if (typeof canvas !== 'undefined' && canvas?.elt instanceof HTMLCanvasElement) return canvas.elt;
+    } catch {}
+    return document.querySelector('canvas') || null;
+  }
+
+  const wsUrl   = (typeof __getWSURL__ === 'function') ? __getWSURL__() : (window.WS_MIRROR_URL || 'ws://127.0.0.1:8787');
+  const openBtn = _$('openCanvasBtn');
+  if (openBtn) {
+    openBtn.addEventListener('click', () =>
+      window.open(
+        'canvas.html?ws=' + encodeURIComponent(wsUrl) + '&mode=stretch&autofs=1',
+        'canvas-mirror', 'popup=yes,noopener,noreferrer,width=1280,height=720'
+      )
+    );
+  }
+
+  const tcv = document.createElement('canvas');
+  const ttx = tcv.getContext('2d', { alpha:false });
+  let ws = null, connected = false, sending = false;
 
   function ensureWS() {
-    if (ws&&(ws.readyState===WebSocket.OPEN||ws.readyState===WebSocket.CONNECTING)) return;
-    ws=new WebSocket(wsUrl); ws.binaryType='arraybuffer';
-    ws.onopen =()=>{ connected=true;  setWSStatus('WS: connected');    try{ws.send(JSON.stringify({type:'hello',role:'index'}));}catch{} };
-    ws.onerror=()=>{};
-    ws.onclose=()=>{ connected=false; setWSStatus('WS: disconnected'); setTimeout(ensureWS,1500); };
+    if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
+    ws = new WebSocket(wsUrl);
+    ws.binaryType = 'arraybuffer';
+    ws.onopen  = () => { connected = true;  setWSStatus('WS: connected');    try { ws.send(JSON.stringify({ type:'hello', role:'index' })); } catch {} };
+    ws.onerror = () => {};
+    ws.onclose = () => { connected = false; setWSStatus('WS: disconnected'); setTimeout(ensureWS, 1500); };
   }
   ensureWS();
 
+  // Read quality slider each frame so JPEG compression and FPS adapt in real time.
+  function _q() { return parseFloat(_$('quality')?.value ?? '1'); }
+  function streamJpegQ() { return Math.max(0.3, Math.min(0.97, 0.5 + _q() * 0.47)); }
+  function targetPeriod() { return 1000 / Math.round(15 + _q() * 45); } // 15–60 fps
+
   async function sendFrame(cnv) {
-    if (!connected||!ws||ws.readyState!==1||sending) return;
-    sending=true;
+    if (!connected || !ws || ws.readyState !== 1 || sending) return;
+    sending = true;
     try {
-      const sw=cnv.width,sh=cnv.height,scale=Math.min(1,STREAM_MAX_W/sw,STREAM_MAX_H/sh);
-      const tw=Math.max(1,Math.round(sw*scale)),th=Math.max(1,Math.round(sh*scale));
-      if (tcv.width!==tw||tcv.height!==th){tcv.width=tw;tcv.height=th;}
-      ttx.drawImage(cnv,0,0,tw,th);
-      await new Promise(r=>tcv.toBlob(b=>{try{if(b)ws.send(b);}catch{}r();},'image/jpeg',STREAM_Q));
-    } finally { sending=false; }
+      const sw = cnv.width, sh = cnv.height;
+      const scale = Math.min(1, STREAM_MAX_W / sw, STREAM_MAX_H / sh);
+      const tw = Math.max(1, Math.round(sw * scale));
+      const th = Math.max(1, Math.round(sh * scale));
+      if (tcv.width !== tw || tcv.height !== th) { tcv.width = tw; tcv.height = th; }
+      ttx.drawImage(cnv, 0, 0, tw, th);
+      const q = streamJpegQ();
+      await new Promise(r => tcv.toBlob(b => { try { if (b) ws.send(b); } catch {} r(); }, 'image/jpeg', q));
+    } finally { sending = false; }
   }
-  const period=1000/TARGET_FPS; let last=0;
-  requestAnimationFrame(function pump(ts){
-    if (ts-last>=period){last=ts;const c=findCanvas();if(c)sendFrame(c).catch(()=>{});}
+
+  let last = 0;
+  requestAnimationFrame(function pump(ts) {
+    if (ts - last >= targetPeriod()) {
+      last = ts;
+      const c = findCanvas();
+      if (c) sendFrame(c).catch(() => {});
+    }
     requestAnimationFrame(pump);
   });
 })();

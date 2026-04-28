@@ -19,7 +19,7 @@
 </head>
 <body>
   <div data-tauri-drag-region class="custom-titlebar">
-    <span>huff broken</span>
+    <span>huff · canvas mirror</span>
   </div>
   <canvas id="mirror"></canvas>
   <script>
@@ -68,32 +68,49 @@
     document.addEventListener('webkitfullscreenchange', fit);
     if (autofs) setTimeout(()=>{ goFullscreen(); }, 120);
 
-const ws = new WebSocket(wsURL);
-ws.binaryType = 'arraybuffer';
+// ── WebSocket with exponential-backoff reconnect ─────────────────────────
+let ws;
+let _wsDelay = 1000; // start at 1 s, doubles up to 16 s
+const WS_DELAY_MAX = 16000;
 
-ws.onopen = () => {
-  console.log('[canvas ws] connected to', wsURL);
-  try { ws.send(JSON.stringify({ type:'hello', role:'canvas' })); } catch(e) { console.error(e); }
-};
+function connectWS() {
+  ws = new WebSocket(wsURL);
+  ws.binaryType = 'arraybuffer';
 
-ws.onerror = (ev) => {
-  console.error('[canvas ws] error', ev);
-};
+  ws.onopen = () => {
+    console.log('[canvas ws] connected to', wsURL);
+    _wsDelay = 1000; // reset backoff on successful connection
+    try { ws.send(JSON.stringify({ type:'hello', role:'canvas' })); } catch(e) { console.error(e); }
+  };
 
-ws.onclose = (ev) => {
-  console.warn('[canvas ws] closed', ev.code, ev.reason);
-};
-    ws.onmessage = async (ev) => {
-      if (typeof ev.data === 'string') return;
-      try {
-        const blob = new Blob([ev.data]);
-        const bmp  = await createImageBitmap(blob, { imageOrientation:'none', premultiplyAlpha:'premultiply' });
-        const dw = cvs.width, dh = cvs.height;
-        ctx.clearRect(0,0,dw,dh);
-        ctx.drawImage(bmp, 0, 0, dw, dh);
-        bmp.close?.();
-      } catch(e){ /* ignore */ }
-    };
+  ws.onerror = (ev) => {
+    console.error('[canvas ws] error', ev);
+  };
+
+  ws.onclose = (ev) => {
+    console.warn('[canvas ws] closed', ev.code, ev.reason, `— reconnecting in ${_wsDelay}ms`);
+    setTimeout(() => {
+      _wsDelay = Math.min(_wsDelay * 2, WS_DELAY_MAX);
+      connectWS();
+    }, _wsDelay);
+  };
+
+  ws.onmessage = async (ev) => {
+    if (typeof ev.data === 'string') return;
+    try {
+      const blob = new Blob([ev.data]);
+      const bmp  = await createImageBitmap(blob, { imageOrientation:'none', premultiplyAlpha:'premultiply' });
+      const dw = cvs.width, dh = cvs.height;
+      ctx.clearRect(0,0,dw,dh);
+      ctx.drawImage(bmp, 0, 0, dw, dh);
+      bmp.close?.();
+    } catch(e) {
+      console.warn('[canvas ws] bad frame', e);
+    }
+  };
+}
+
+connectWS();
   </script>
 </body>
 </html>
