@@ -19,7 +19,7 @@ window.$$ = window.$$ || (sel => document.querySelector(sel));
 let videoEl, currentBlobUrl = null;
 let gCur, gBuf, gWarp, gTemp;
 let _fbCanvas = null, _fbCtx = null;
-let canvas, chunks = [];
+let canvas;
 let playing = false;
 
 const els = {};
@@ -170,19 +170,51 @@ function capturePreset() {
   return data;
 }
 
+// ─── Undo suppression flag ────────────────────────────────────────────────────
+// Set true during applyPreset so individual control events don't each
+// trigger a debounced snapshot. One clean snapshot is pushed at the end.
+let _suppressUndo = false;
+
+function _clampToElement(el, val) {
+  if (el.type === 'range' || el.type === 'number') {
+    const min = parseFloat(el.min);
+    const max = parseFloat(el.max);
+    const num = parseFloat(val);
+    if (!isNaN(min) && !isNaN(max) && !isNaN(num)) {
+      return String(Math.max(min, Math.min(max, num)));
+    }
+  }
+  return String(val);
+}
+
 function applyPreset(data) {
   if (!data) return;
-  PRESET_IDS.forEach(id => {
-    if (!(id in data)) return;
-    const el = _$(id);
-    if (!el) return;
-    if (el.type === 'checkbox') el.checked = !!data[id];
-    else el.value = data[id];
-    el.dispatchEvent(new Event('input',  { bubbles:true }));
-    el.dispatchEvent(new Event('change', { bubbles:true }));
-  });
-  updateLabels();
-  setSeedFromUI();
+  _suppressUndo = true;
+  try {
+    PRESET_IDS.forEach(id => {
+      if (!(id in data)) return;
+      const el = _$(id);
+      if (!el) return;
+      if (el.type === 'checkbox') {
+        el.checked = !!data[id];
+      } else {
+        el.value = _clampToElement(el, data[id]);
+      }
+      el.dispatchEvent(new Event('input',  { bubbles:true }));
+      el.dispatchEvent(new Event('change', { bubbles:true }));
+    });
+    updateLabels();
+    setSeedFromUI();
+  } finally {
+    _suppressUndo = false;
+  }
+  // Push exactly one snapshot representing the fully-applied state
+  const snap = capturePreset();
+  const last = _undoStack[_undoStack.length - 1];
+  if (!last || JSON.stringify(last) !== JSON.stringify(snap)) {
+    _undoStack.push(snap);
+    if (_undoStack.length > UNDO_MAX) _undoStack.shift();
+  }
 }
 
 function savePreset() {
@@ -221,6 +253,7 @@ const UNDO_MAX   = 10;
 let   _undoTimer = null;
 
 function snapshotForUndo() {
+  if (_suppressUndo) return;
   clearTimeout(_undoTimer);
   _undoTimer = setTimeout(() => {
     const snap = capturePreset();
@@ -268,10 +301,32 @@ async function primeCameraPermissionOnce() {
 }
 
 // ─── Video frame pump ─────────────────────────────────────────────────────────
-// requestVideoFrameCallback fires once per decoded video frame — independent of
-// draw() rate. gCur and frameRing stay in sync with actual video decode.
+// Two separate concerns, now handled separately:
+//
+//  _syncGCur()   — called every draw() at 60fps. Blits the current decoded
+//                  frame from videoEl.elt into gCur. The <video> element always
+//                  holds the most recently decoded frame, so this is safe to
+//                  call every rAF — it just holds the last frame between video
+//                  decode events. This keeps gCur current at 60fps.
+//
+//  _pushToRing() — called only via requestVideoFrameCallback, which fires once
+//                  per genuinely new decoded frame. Pushes a pixel snapshot of
+//                  gCur into frameRing at authentic video frame rate.
+//
+// Previously _blitAndPush did both in one function triggered at video rate.
+// That meant gCur was stale for 2–3 draw() calls between video frames, causing
+// effects to run against unchanged content and creating visual instability.
 
 let _rafPumpLast = 0;
+
+function _syncGCur() {
+  if (!playing || !videoEl?.elt || !gCur) return;
+  try {
+    const ctx = gCur.drawingContext;
+    ctx.clearRect(0, 0, gCur.width, gCur.height);
+    ctx.drawImage(videoEl.elt, 0, 0, gCur.width, gCur.height);
+  } catch(e) {}
+}
 
 function _pushToRing() {
   if (!gCur) return;
@@ -280,7 +335,7 @@ function _pushToRing() {
     const bpf = gCur.width * gCur.height * 4;
     let cap = Math.max(4, Math.round(60 * (Q * 2)));
     cap = Math.min(cap, Math.max(4, Math.floor(192 * 1024 * 1024 / bpf)));
-    frameRing.resize(cap);                    // O(1) when cap unchanged
+    frameRing.resize(cap);
     gCur.loadPixels();
     if (gCur.pixels.length > 0) {
       frameRing.push(new ImageData(
@@ -291,25 +346,16 @@ function _pushToRing() {
   } catch(e) {}
 }
 
-function _blitAndPush() {
-  if (!playing || !videoEl?.elt || !gCur) return;
-  try {
-    const ctx = gCur.drawingContext;
-    ctx.clearRect(0, 0, gCur.width, gCur.height);
-    ctx.drawImage(videoEl.elt, 0, 0, gCur.width, gCur.height);
-    _pushToRing();
-  } catch(e) {}
-}
-
 function pumpVideoFrames() {
   if (!videoEl?.elt) return;
   const v = videoEl.elt;
   if (v.requestVideoFrameCallback) {
-    const onFrame = () => { _blitAndPush(); if (playing) v.requestVideoFrameCallback(onFrame); };
+    const onFrame = () => { _pushToRing(); if (playing) v.requestVideoFrameCallback(onFrame); };
     v.requestVideoFrameCallback(onFrame);
   } else {
+    // Fallback: push to ring at up to 60fps, relying on gCur being updated by draw()
     const tick = (ts) => {
-      if (ts - _rafPumpLast >= (1000 / 60)) { _rafPumpLast = ts; _blitAndPush(); }
+      if (ts - _rafPumpLast >= (1000 / 60)) { _rafPumpLast = ts; _pushToRing(); }
       if (playing) requestAnimationFrame(tick);
     };
     requestAnimationFrame(tick);
@@ -317,6 +363,31 @@ function pumpVideoFrames() {
 }
 
 // ─── p5 setup / resize ───────────────────────────────────────────────────────
+
+// ─── FPS counter ──────────────────────────────────────────────────────────────
+// Updated once per second using a manual frame counter rather than p5's
+// frameRate() so it reflects real render performance, not a smoothed average.
+let _fpsFrames = 0, _fpsLastMs = 0;
+
+function _tickFPS() {
+  _fpsFrames++;
+  const now = millis();
+  if (now - _fpsLastMs >= 1000) {
+    const fps = Math.round(_fpsFrames * 1000 / (now - _fpsLastMs));
+    _fpsFrames = 0;
+    _fpsLastMs = now;
+    let el = _$('_fpsDisplay');
+    if (!el) {
+      el = document.createElement('span');
+      el.id = '_fpsDisplay';
+      Object.assign(el.style, { marginLeft:'10px', color:'#0f0', fontFamily:'monospace', fontSize:'12px' });
+      const status = _$('status');
+      if (status) status.parentNode?.insertBefore(el, status.nextSibling);
+      else document.body.appendChild(el);
+    }
+    el.textContent = `${fps} fps`;
+  }
+}
 
 function setup() {
   canvas = createCanvas(windowWidth, windowHeight);
@@ -358,6 +429,7 @@ function clearAll() {
   [gBuf, gWarp, gTemp].forEach(g => { try { g.clear(); } catch {} });
   frameRing.clear();
   seededOnce = false;
+  if (typeof resetClusterPhysics === 'function') resetClusterPhysics();
 }
 
 // ─── UI wiring ────────────────────────────────────────────────────────────────
@@ -605,6 +677,12 @@ function onFile(ev) {
   playing = false;
   enableTransport(false);
 
+  // seedOnLoad: randomize seed for each new file so visuals feel fresh
+  if (els.seedOnLoad?.checked && els.seed) {
+    els.seed.value = Math.floor(Math.random() * 99999) + 1;
+    setSeedFromUI();
+  }
+
   currentBlobUrl = URL.createObjectURL(file);
   videoEl = createVideo([currentBlobUrl], () => {});
   cloakVideo(videoEl);
@@ -680,6 +758,8 @@ function enableTransport(en) {
 // ─── draw loop ────────────────────────────────────────────────────────────────
 
 function draw() {
+  _tickFPS();
+
   const bg = els.bgMode?.value || 'black';
   if      (bg === 'white') background(255);
   else if (bg === 'green') background(0, 255, 0);
@@ -688,13 +768,24 @@ function draw() {
 
   if (!videoEl) { drawWaiting(); return; }
 
+  // Keep gCur current at 60fps. The <video> element always holds the latest
+  // decoded frame so this is always safe — between video decode events it just
+  // holds the previous frame, which is exactly what we want.
+  _syncGCur();
+
   randomSeed(baseSeed + frameCount);
-  noiseSeed(baseSeed);
 
   if (!seededOnce) {
     gBuf.image(gCur, 0, 0, gBuf.width, gBuf.height);
     seededOnce = true;
   }
+
+  const mul     = parseFloat(els.glitchSpeedMul?.value  ?? '1');
+  const coarse  = parseFloat(els.glitchSpeed?.value     ?? '0.8') * mul;
+  const fine    = parseFloat(els.glitchSpeedFine?.value ?? '1')   * mul;
+  const density = coarse * fine;
+  nPhaseX += density * 0.01;
+  nPhaseY += density * 0.011;
 
   const pers = parseFloat(els.persistence?.value ?? '0.7');
   if (pers < 1) {
@@ -705,13 +796,6 @@ function draw() {
     ctx.fillRect(0, 0, gBuf.width, gBuf.height);
     ctx.restore();
   }
-
-  const mul     = parseFloat(els.glitchSpeedMul?.value ?? '1');
-  const coarse  = parseFloat(els.glitchSpeed?.value    ?? '0.8') * mul;
-  const fine    = parseFloat(els.glitchSpeedFine?.value ?? '1')  * mul;
-  const density = coarse * fine;
-  nPhaseX += density * 0.01;
-  nPhaseY += density * 0.011;
 
   // ORDER: Trails → Scanlines → Glitch (scanlines must precede glitch; see effects.js)
   applyTrails();
@@ -848,12 +932,27 @@ function startCamera(deviceId) {
       const kick = () => {
         try {
           playing = true;  // set only after stream is confirmed ready
-          v.play().catch(() => {});
+          v.play().catch(err => {
+            showToast(`Camera play failed: ${err?.message ?? err}`, true);
+            playing = false;
+          });
           pumpVideoFrames();
         } catch {}
       };
       if (v.readyState >= 1) kick();
       else v.addEventListener('loadedmetadata', kick, { once:true });
+
+      // Handle mid-stream device disconnection
+      v.addEventListener('ended', () => {
+        if (playing) { showToast('Camera stream ended unexpectedly', true); playing = false; }
+      });
+      try {
+        v.srcObject?.getTracks().forEach(track => {
+          track.addEventListener('ended', () => {
+            if (playing) { showToast('Camera disconnected', true); playing = false; stopCamera(); }
+          });
+        });
+      } catch {}
     });
     try { cloakVideo(videoEl); } catch {}
   } catch(e) {
@@ -896,14 +995,26 @@ function startCamera(deviceId) {
   const tcv = document.createElement('canvas');
   const ttx = tcv.getContext('2d', { alpha:false });
   let ws = null, connected = false, sending = false;
+  let _wsDelay = 1500;
+  const WS_DELAY_MAX = 30000;
 
   function ensureWS() {
     if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
     ws = new WebSocket(wsUrl);
     ws.binaryType = 'arraybuffer';
-    ws.onopen  = () => { connected = true;  setWSStatus('WS: connected');    try { ws.send(JSON.stringify({ type:'hello', role:'index' })); } catch {} };
+    ws.onopen  = () => {
+      connected = true;
+      _wsDelay = 1500; // reset backoff on successful connection
+      setWSStatus('WS: connected');
+      try { ws.send(JSON.stringify({ type:'hello', role:'index' })); } catch {}
+    };
     ws.onerror = () => {};
-    ws.onclose = () => { connected = false; setWSStatus('WS: disconnected'); setTimeout(ensureWS, 1500); };
+    ws.onclose = () => {
+      connected = false;
+      setWSStatus('WS: disconnected');
+      setTimeout(ensureWS, _wsDelay);
+      _wsDelay = Math.min(_wsDelay * 2, WS_DELAY_MAX);
+    };
   }
   ensureWS();
 
