@@ -9,33 +9,65 @@
 //  - applyGlitch does not re-seed random — draw() seeds once per frame.
 //  - Cluster physics centers use p5 seeded random() for reproducibility.
 
-// ─── Ring frame helpers ────────────────────────────────────────────────────────
+// ─── Ring canvas LRU cache ────────────────────────────────────────────────────
+// Replaces the single shared _ringCanvas. Caches up to RING_CACHE_SIZE canvases
+// keyed by ImageData object identity. When the same ImageData is requested again
+// (e.g. the same trail frame accessed by multiple layers) the putImageData upload
+// is skipped entirely. Eviction is LRU — least-recently-used entries are dropped
+// first, which naturally aligns with how old ring frames age out.
 
-let _ringCanvas = null;
-let _ringCtx    = null;
+// Cache sized to hold max trail layers + glitch tile frames simultaneously.
+// At 8 trail layers + up to 16 unique glitch depth frames, 8 was too small
+// and caused repeated putImageData uploads for evicted-then-re-requested frames.
+const RING_CACHE_SIZE = 24;
+const _ringCacheMap   = new Map(); // ImageData → { canvas, ctx }
+const _ringCacheOrder = [];        // oldest-first insertion order
+
+function _getRingCanvas(imgData) {
+  if (_ringCacheMap.has(imgData)) {
+    // Promote to most-recently-used
+    const idx = _ringCacheOrder.indexOf(imgData);
+    if (idx !== -1) { _ringCacheOrder.splice(idx, 1); _ringCacheOrder.push(imgData); }
+    return _ringCacheMap.get(imgData);
+  }
+
+  let entry;
+  if (_ringCacheOrder.length >= RING_CACHE_SIZE) {
+    // Evict LRU entry — reuse its canvas to avoid a fresh allocation
+    const oldest = _ringCacheOrder.shift();
+    entry = _ringCacheMap.get(oldest);
+    _ringCacheMap.delete(oldest);
+    if (entry.canvas.width !== imgData.width || entry.canvas.height !== imgData.height) {
+      entry.canvas.width  = imgData.width;
+      entry.canvas.height = imgData.height;
+    }
+  } else {
+    const c = document.createElement('canvas');
+    c.width = imgData.width; c.height = imgData.height;
+    entry = { canvas: c, ctx: c.getContext('2d') };
+  }
+
+  entry.ctx.putImageData(imgData, 0, 0);
+  _ringCacheMap.set(imgData, entry);
+  _ringCacheOrder.push(imgData);
+  return entry;
+}
+
+function drawRingRegion(target, imgData, sx, sy, sw, sh, dx, dy, dw, dh) {
+  const { canvas } = _getRingCanvas(imgData);
+  target.drawingContext.drawImage(canvas, sx, sy, sw, sh, dx, dy, dw, dh);
+}
 
 // ─── Cluster physics state ─────────────────────────────────────────────────────
 let _cluPhysics = [];
 let _cluPhysT   = 0;
 
-function drawRingRegion(target, imgData, sx, sy, sw, sh, dx, dy, dw, dh) {
-  if (!_ringCanvas) {
-    _ringCanvas = document.createElement('canvas');
-    _ringCtx    = _ringCanvas.getContext('2d');
-  }
-  if (_ringCanvas.width !== imgData.width || _ringCanvas.height !== imgData.height) {
-    _ringCanvas.width       = imgData.width;
-    _ringCanvas.height      = imgData.height;
-    _ringCtx.putImageData(imgData, 0, 0);
-    _ringCanvas._lastFrame  = imgData;
-  } else if (_ringCanvas._lastFrame !== imgData) {
-    _ringCtx.putImageData(imgData, 0, 0);
-    _ringCanvas._lastFrame  = imgData;
-  }
-  target.drawingContext.drawImage(_ringCanvas, sx, sy, sw, sh, dx, dy, dw, dh);
+// Called by canvas.js clearAll() so Refresh wipes physics momentum
+function resetClusterPhysics() {
+  _cluPhysics.length = 0;
+  _cluPhysT = 0;
 }
-
-// ─── Luma-keyed trail blit ────────────────────────────────────────────────────
+window.resetClusterPhysics = resetClusterPhysics;
 // Self-contained — initialises _ringCanvas itself rather than relying on
 // drawRingRegion having run first. Safe to call in any order.
 
@@ -55,23 +87,11 @@ function blitTrailLumaKeyed(ctx, imgData, alpha, lumaThresh) {
     _trailLumaCtx = _trailLumaCanvas.getContext('2d', { willReadFrequently:true });
   }
 
-  // Ensure _ringCanvas exists and holds this frame — do not assume drawRingRegion ran first.
-  if (!_ringCanvas) {
-    _ringCanvas = document.createElement('canvas');
-    _ringCtx    = _ringCanvas.getContext('2d');
-  }
-  if (_ringCanvas.width !== imgData.width || _ringCanvas.height !== imgData.height) {
-    _ringCanvas.width       = imgData.width;
-    _ringCanvas.height      = imgData.height;
-    _ringCanvas._lastFrame  = null; // force re-upload after dimension change
-  }
-  if (_ringCanvas._lastFrame !== imgData) {
-    _ringCtx.putImageData(imgData, 0, 0);
-    _ringCanvas._lastFrame = imgData;
-  }
+  // Use the shared LRU ring cache instead of a private _ringCanvas
+  const { canvas: ringCvs } = _getRingCanvas(imgData);
 
   _trailLumaCtx.clearRect(0, 0, sw, sh);
-  _trailLumaCtx.drawImage(_ringCanvas, 0, 0, sw, sh);
+  _trailLumaCtx.drawImage(ringCvs, 0, 0, sw, sh);
 
   const imageData = _trailLumaCtx.getImageData(0, 0, sw, sh);
   const pix = imageData.data;
@@ -91,6 +111,11 @@ function blitTrailLumaKeyed(ctx, imgData, alpha, lumaThresh) {
 
 // ─── Trails ───────────────────────────────────────────────────────────────────
 // Call before scanlines and glitch so ghost frames sit underneath.
+//
+// When trailLayers > maxBack/step, multiple layers intentionally land on the
+// same deep frame. Their alpha values accumulate, creating a bright persistent
+// smear at the oldest accessible frame. This is the "dynamic" quality of the
+// effect — do not spread layers out to eliminate duplicates.
 
 function applyTrails() {
   if (!els.trailOn?.checked) return;
@@ -110,15 +135,20 @@ function applyTrails() {
 
     const alpha = (1 - (g - 1) / trailLayers) * 0.65;
 
+    // Reset to 1.0 before every layer.
+    // blitTrailLumaKeyed bakes alpha into pixel data then calls ctx.drawImage —
+    // a non-1.0 globalAlpha here multiplies in again and nerfes luma key output.
+    ctx.globalAlpha = 1.0;
+
     if (lumaKey > 0) {
       blitTrailLumaKeyed(ctx, src, alpha, lumaKey);
     } else {
-      ctx.save();
       ctx.globalAlpha = alpha;
       drawRingRegion(gBuf, src, 0, 0, width, height, 0, 0, width, height);
-      ctx.restore();
     }
   }
+
+  ctx.globalAlpha = 1.0;
 }
 
 // ─── Scanlines ────────────────────────────────────────────────────────────────
@@ -230,14 +260,40 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0) {
   const cluInertia   = parseFloat(els.cluInertia?.value ?? '0.92');
 
   const targets = [];
-  const tryAdd = (x, y) => {
-    if (gap <= 0) { targets.push([x, y]); return true; }
-    for (const t of targets) {
-      const dx = x - t[0], dy = y - t[1];
-      if (dx * dx + dy * dy < gap * gap) return false;
-    }
-    targets.push([x, y]); return true;
-  };
+
+  // ── Spatial index — O(1) gap enforcement ──────────────────────────────────
+  // Divide the canvas into cells of size `gap`. Each cell stores the actual
+  // tile positions it contains. Checking a candidate only requires scanning
+  // the 3×3 neighbourhood of cells, not all existing targets.
+  let tryAdd;
+  if (gap <= 0) {
+    tryAdd = (x, y) => { targets.push([x, y]); return true; };
+  } else {
+    const cellSize = gap;
+    const gridW    = Math.ceil(width  / cellSize) + 2;
+    const gridCells = new Map(); // cell key → [[x,y],…]
+
+    tryAdd = (x, y) => {
+      const gx = Math.floor(x / cellSize);
+      const gy = Math.floor(y / cellSize);
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const pts = gridCells.get((gy + dy) * gridW + (gx + dx));
+          if (!pts) continue;
+          for (const p of pts) {
+            const ddx = x - p[0], ddy = y - p[1];
+            if (ddx * ddx + ddy * ddy < gap * gap) return false;
+          }
+        }
+      }
+      const key  = gy * gridW + gx;
+      const cell = gridCells.get(key) ?? [];
+      cell.push([x, y]);
+      gridCells.set(key, cell);
+      targets.push([x, y]);
+      return true;
+    };
+  }
 
   // Note: randomSeed is set by draw() once per frame; no re-seeding here.
   // applyScanlines ran first and consumed some random state — that ordering is intentional.
@@ -339,12 +395,19 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0) {
     const oy = Math.floor(map(noise(nPhaseY + i * 0.017), 0, 1, -block * 2, block * 2) * jitter);
     cx = (cx + ox + width)  % width;
     cy = (cy + oy + height) % height;
-    cx = Math.max(0, Math.min(width  - 1, cx + baseDX));
-    cy = Math.max(0, Math.min(height - 1, cy + baseDY));
 
+    // Tile size from the natural position — partial tiles at canvas edges are fine
+    // and match the original behaviour. Do NOT use a fixed tileW clamped to
+    // canvas-minus-tileW: that stacks all edge tiles at one coordinate (the band bug).
     const w = Math.min(block * (size / 20), width  - cx);
     const h = Math.min(block * (size / 20), height - cy);
     if (w <= 0 || h <= 0) continue;
+
+    // Apply base offset to the destination position only, clamped so the tile
+    // fits within the canvas. Source (cx, cy) is unchanged — tiles shift where
+    // they appear but sample from their natural ring position.
+    const dstX = Math.max(0, Math.min(width  - w, cx + baseDX));
+    const dstY = Math.max(0, Math.min(height - h, cy + baseDY));
 
     const randBack  = Math.floor(random(1, maxBack + 1));
     const blendBack = Math.round(baseBack + (randBack - baseBack) * depthScatter);
@@ -354,13 +417,13 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0) {
 
     ctx.save();
     ctx.globalAlpha = tileAlpha / 255;
-    drawRingRegion(gBuf, src, cx, cy, w, h, cx, cy, w, h);
+    drawRingRegion(gBuf, src, cx, cy, w, h, dstX, dstY, w, h);
     ctx.restore();
 
     if (smearLen > 0) {
       for (let s = 1; s <= smearLen; s++) {
-        const sx2 = Math.max(0, Math.min(width  - w, cx + Math.round(dxUnit * s * block) + baseDX));
-        const sy2 = Math.max(0, Math.min(height - h, cy + Math.round(dyUnit * s * block) + baseDY));
+        const sx2 = Math.max(0, Math.min(width  - w, dstX + Math.round(dxUnit * s * block)));
+        const sy2 = Math.max(0, Math.min(height - h, dstY + Math.round(dyUnit * s * block)));
         ctx.save();
         ctx.globalAlpha = tileAlpha / 255;
         drawRingRegion(gBuf, src, cx, cy, w, h, sx2, sy2, w, h);

@@ -336,13 +336,10 @@ function _pushToRing() {
     let cap = Math.max(4, Math.round(60 * (Q * 2)));
     cap = Math.min(cap, Math.max(4, Math.floor(192 * 1024 * 1024 / bpf)));
     frameRing.resize(cap);
-    gCur.loadPixels();
-    if (gCur.pixels.length > 0) {
-      frameRing.push(new ImageData(
-        new Uint8ClampedArray(gCur.pixels.buffer.slice(0)),
-        gCur.width, gCur.height
-      ));
-    }
+    // getImageData returns an owned ImageData directly — no p5 loadPixels()
+    // intermediate and no .buffer.slice() copy. One GPU readback, one allocation.
+    const imgData = gCur.drawingContext.getImageData(0, 0, gCur.width, gCur.height);
+    if (imgData.data.length > 0) frameRing.push(imgData);
   } catch(e) {}
 }
 
@@ -350,10 +347,24 @@ function pumpVideoFrames() {
   if (!videoEl?.elt) return;
   const v = videoEl.elt;
   if (v.requestVideoFrameCallback) {
-    const onFrame = () => { _pushToRing(); if (playing) v.requestVideoFrameCallback(onFrame); };
+    const onFrame = () => {
+      // A new decoded frame is now in videoEl.elt. Update gCur immediately
+      // so the ring snapshot captures this frame, not the previous draw's frame.
+      // requestVideoFrameCallback fires before the rAF for the same display tick,
+      // so without this blit, _pushToRing would read gCur from the prior draw().
+      if (playing && gCur) {
+        try {
+          const ctx = gCur.drawingContext;
+          ctx.clearRect(0, 0, gCur.width, gCur.height);
+          ctx.drawImage(v, 0, 0, gCur.width, gCur.height);
+        } catch(e) {}
+        _pushToRing();
+      }
+      if (playing) v.requestVideoFrameCallback(onFrame);
+    };
     v.requestVideoFrameCallback(onFrame);
   } else {
-    // Fallback: push to ring at up to 60fps, relying on gCur being updated by draw()
+    // Fallback: push to ring at up to 60fps via rAF
     const tick = (ts) => {
       if (ts - _rafPumpLast >= (1000 / 60)) { _rafPumpLast = ts; _pushToRing(); }
       if (playing) requestAnimationFrame(tick);
