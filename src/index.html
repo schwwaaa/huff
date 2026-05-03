@@ -155,6 +155,49 @@
         }
 
         /* ═══════════════════════════════════════════════
+           TRANSPORT ROW — seek bar + time display
+        ═══════════════════════════════════════════════ */
+        .transport-row {
+            display: flex; align-items: center; gap: 5px;
+            padding: 2px 5px 3px;
+            background: var(--win-bg);
+            border-bottom: 1px solid var(--win-mid);
+        }
+        #seekBar {
+            -webkit-appearance: none; appearance: none;
+            flex: 1; height: 4px; min-width: 80px;
+            background: var(--win-mid);
+            border-top:  1px solid var(--win-dark);
+            border-left: 1px solid var(--win-dark);
+            outline: none; cursor: pointer;
+        }
+        #seekBar::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 11px; height: 14px;
+            background: var(--win-bg);
+            border-top:    2px solid var(--win-light);
+            border-left:   2px solid var(--win-light);
+            border-bottom: 2px solid var(--win-dark);
+            border-right:  2px solid var(--win-dark);
+        }
+        #seekBar::-moz-range-thumb {
+            width: 11px; height: 14px;
+            background: var(--win-bg); border: none;
+        }
+        #timeDisplay {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 11px; color: var(--term-yel);
+            white-space: nowrap; flex-shrink: 0;
+            padding: 1px 4px;
+            background: var(--term-bg);
+            border-top:    1px solid var(--win-dark);
+            border-left:   1px solid var(--win-dark);
+            border-bottom: 1px solid var(--win-light);
+            border-right:  1px solid var(--win-light);
+            min-width: 80px; text-align: center;
+        }
+
+        /* ═══════════════════════════════════════════════
            GROUPS — raised bevel boxes
         ═══════════════════════════════════════════════ */
         .groups {
@@ -969,6 +1012,20 @@
                 <label style="font-size:9px;opacity:.5">VOL</label>
                 <input id="volumeSlider" type="range" min="0" max="1" step="0.01" value="1" style="width:60px">
             </div>
+            <div class="ctrl" style="border:none;background:none;padding:0 2px">
+                <label style="font-size:9px;opacity:.5">RATE</label>
+                <select id="playbackRate" style="font-size:10px;padding:1px 2px">
+                    <option value="0.25">0.25×</option>
+                    <option value="0.5">0.5×</option>
+                    <option value="1" selected>1×</option>
+                    <option value="2">2×</option>
+                    <option value="4">4×</option>
+                </select>
+            </div>
+            <div class="ctrl" style="border:none;background:none;padding:0 2px">
+                <label style="font-size:9px;opacity:.5">LOOP</label>
+                <input id="loopToggle" type="checkbox" checked>
+            </div>
             <button id="refreshBtn" disabled>↻ Refresh</button>
             <button id="resetBtn" title="Reset all parameters to defaults">↺ Reset</button>
             <div class="topbar-sep"></div>
@@ -989,21 +1046,25 @@
             <button id="aboutBtn" class="btn-red">ABOUT</button>
         </div>
 
+        <!-- seek / time row -->
+        <div class="transport-row">
+            <span style="font-family:'VT323',monospace;font-size:11px;color:var(--term-dgreen);opacity:.7;flex-shrink:0;letter-spacing:.06em">POS</span>
+            <input id="seekBar" type="range" min="0" max="1000" step="1" value="0">
+            <span id="timeDisplay">0:00 / 0:00</span>
+        </div>
+
+        <!-- hidden preset file input -->
+        <input id="presetLoadInput" type="file" accept=".json" style="display:none">
+
         <!-- PRESETS (outside form so buttons don't submit) -->
         <div class="groups" style="margin-top:0">
         <div class="group">
             <div class="group-label">Presets</div>
             <div class="group-body">
             <div class="group-row">
-                <input id="presetName" type="text" placeholder="preset name"
-                       style="width:110px;background:rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.14);
-                              border-radius:5px;color:#e8eaf0;padding:2px 6px;font-size:10px;
-                              font-family:inherit;">
-                <button id="presetSaveBtn" class="btn-dim" style="font-size:10px;padding:3px 8px">💾 Save</button>
-                <select id="presetList" style="max-width:130px;font-size:10px"></select>
-                <button id="presetLoadBtn"   class="btn-dim" style="font-size:10px;padding:3px 8px">▶ Load</button>
-                <button id="presetDeleteBtn" class="btn-dim" style="font-size:10px;padding:3px 8px;color:#ff6060">✕</button>
-                <span id="presetStatus" style="font-size:9px;color:rgba(255,255,255,.35);padding:0 4px"></span>
+                <button id="presetSaveBtn" class="btn-dim" style="font-size:10px;padding:3px 8px">💾 Save Preset</button>
+                <button id="presetLoadBtn" class="btn-dim" style="font-size:10px;padding:3px 8px">📂 Load Preset…</button>
+                <span style="font-size:9px;color:rgba(255,255,255,.25);padding:0 4px;font-family:'Share Tech Mono',monospace">JSON · Ctrl+Z to undo</span>
             </div>
             </div>
         </div>

@@ -321,6 +321,11 @@ let _rafPumpLast = 0;
 
 function _syncGCur() {
   if (!playing || !videoEl?.elt || !gCur) return;
+  // Skip drawImage while the browser is seeking — videoEl.elt holds no valid
+  // frame during decode and drawImage produces a blank, causing the visible pause.
+  // gCur already holds the last good frame, so effects keep running on it.
+  // _syncGCur resumes automatically on the next draw() call after seeking completes.
+  if (videoEl.elt.seeking) return;
   try {
     const ctx = gCur.drawingContext;
     ctx.clearRect(0, 0, gCur.width, gCur.height);
@@ -343,15 +348,19 @@ function _pushToRing() {
   } catch(e) {}
 }
 
+// Each call to pumpVideoFrames() generates a new session token.
+// The old pump chain checks its captured token on every tick and
+// terminates if it no longer matches — ensuring only one active pump exists.
+let _pumpSession = 0;
+
 function pumpVideoFrames() {
   if (!videoEl?.elt) return;
-  const v = videoEl.elt;
+  const v       = videoEl.elt;
+  const session = ++_pumpSession; // invalidates any previous pump chain
+
   if (v.requestVideoFrameCallback) {
     const onFrame = () => {
-      // A new decoded frame is now in videoEl.elt. Update gCur immediately
-      // so the ring snapshot captures this frame, not the previous draw's frame.
-      // requestVideoFrameCallback fires before the rAF for the same display tick,
-      // so without this blit, _pushToRing would read gCur from the prior draw().
+      if (session !== _pumpSession) return; // stale chain — stop
       if (playing && gCur) {
         try {
           const ctx = gCur.drawingContext;
@@ -360,14 +369,14 @@ function pumpVideoFrames() {
         } catch(e) {}
         _pushToRing();
       }
-      if (playing) v.requestVideoFrameCallback(onFrame);
+      if (session === _pumpSession) v.requestVideoFrameCallback(onFrame);
     };
     v.requestVideoFrameCallback(onFrame);
   } else {
-    // Fallback: push to ring at up to 60fps via rAF
     const tick = (ts) => {
+      if (session !== _pumpSession) return; // stale chain — stop
       if (ts - _rafPumpLast >= (1000 / 60)) { _rafPumpLast = ts; _pushToRing(); }
-      if (playing) requestAnimationFrame(tick);
+      requestAnimationFrame(tick);
     };
     requestAnimationFrame(tick);
   }
@@ -494,21 +503,149 @@ function hookFile() {
 }
 
 function hookTransport() {
+  // ── Play ────────────────────────────────────────────────────────────────────
   els.playBtn?.addEventListener('click', async () => {
-    if (!videoEl) return;
+    if (!videoEl?.elt) return;
     const v = videoEl.elt;
-    try { await v.play(); } catch { try { v.muted = true; await v.play(); } catch {} }
+
+    // #5: reconcile volume/mute state from slider before unmuting
+    const volSlider = _$('volumeSlider');
+    const vol = volSlider ? parseFloat(volSlider.value) : 1;
+    try { v.volume = vol; v.muted = (vol === 0); } catch {}
+
+    try {
+      await v.play();
+    } catch {
+      // Autoplay blocked — try muted then re-unmute on gesture
+      try { v.muted = true; await v.play(); } catch { return; }
+    }
+
+    // #6: set playing only after play() resolves successfully
     playing = true;
+
+    // #1: restart pump — previous pump chain self-terminated when playing became false
+    pumpVideoFrames();
   });
 
+  // ── Pause ───────────────────────────────────────────────────────────────────
   els.pauseBtn?.addEventListener('click', () => {
-    if (!videoEl) return;
+    if (!videoEl?.elt) return;
     videoEl.elt.pause();
     playing = false;
+    // Incrementing _pumpSession causes the active pump chain to self-terminate
+    // on its next tick — no new frames pushed while paused.
+    _pumpSession++;
   });
 
+  // ── Refresh ─────────────────────────────────────────────────────────────────
   els.refreshBtn?.addEventListener('click', refreshGlitch);
+
+  // ── Seed ────────────────────────────────────────────────────────────────────
   els.seed?.addEventListener('change', setSeedFromUI);
+
+  // ── Playback rate (#8) ───────────────────────────────────────────────────────
+  const rateSelect = _$('playbackRate');
+  rateSelect?.addEventListener('change', () => {
+    const r = parseFloat(rateSelect.value);
+    if (videoEl?.elt) videoEl.elt.playbackRate = r;
+  });
+
+  // ── Loop toggle (#9) ─────────────────────────────────────────────────────────
+  const loopToggle = _$('loopToggle');
+  loopToggle?.addEventListener('change', () => {
+    if (videoEl?.elt) videoEl.elt.loop = loopToggle.checked;
+  });
+
+  // ── Seek / time display (#7) ─────────────────────────────────────────────────
+  const seekBar  = _$('seekBar');
+  const timeDisp = _$('timeDisplay');
+
+  // Hoisted at hookTransport scope so the seeked handler in startPlayback
+  // can access them regardless of whether seekBar exists in the DOM.
+  let _wasPlaying  = false;
+  let _seekPending = false;
+
+  // Time formatter
+  const _fmt = s => `${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,'0')}`;
+
+  // Update seek bar and time display while playing.
+  // During a drag, show the target time from _seekPending rather than v.currentTime
+  // so the readout is live even though the actual decode is throttled.
+  function _tickTransport() {
+    const v = videoEl?.elt;
+    if (v && !isNaN(v.duration) && v.duration > 0) {
+      if (seekBar && !seekBar._dragging) {
+        seekBar.value = (v.currentTime / v.duration) * 1000;
+      }
+      if (timeDisp) {
+        const display = (seekBar?._dragging && seekBar._seekPending != null)
+          ? seekBar._seekPending
+          : v.currentTime;
+        timeDisp.textContent = `${_fmt(display)} / ${_fmt(v.duration)}`;
+      }
+    }
+    requestAnimationFrame(_tickTransport);
+  }
+  _tickTransport();
+
+  // Seek interaction
+  // fastSeek() jumps to the nearest keyframe — avoids the browser having to
+  // decode forward from the keyframe to the exact timestamp, which is what
+  // causes the pause. Falls back to currentTime= on browsers that lack it.
+  // rAF throttle: during a drag, input fires many times per frame. We store
+  // the pending target and only apply the seek once per display frame.
+  if (seekBar) {
+    let _seekFrame   = null;
+
+    seekBar.addEventListener('mousedown', () => {
+      seekBar._dragging = true;
+      const v = videoEl?.elt;
+      if (!v) return;
+      _wasPlaying = !v.paused;
+      // Pause while scrubbing so the browser isn't fighting between
+      // decode-for-seek and decode-for-playback simultaneously.
+      if (_wasPlaying) v.pause();
+    });
+
+    seekBar.addEventListener('touchstart', () => {
+      seekBar._dragging = true;
+      const v = videoEl?.elt;
+      if (!v) return;
+      _wasPlaying = !v.paused;
+      if (_wasPlaying) v.pause();
+    }, { passive:true });
+
+    seekBar.addEventListener('input', () => {
+      const v = videoEl?.elt;
+      if (!v || isNaN(v.duration)) return;
+      const target = (seekBar.value / 1000) * v.duration;
+      seekBar._seekPending = target;
+      _seekPending = true;
+      if (_seekFrame) return;
+      _seekFrame = requestAnimationFrame(() => {
+        _seekFrame = null;
+        const vv = videoEl?.elt;
+        if (!vv || isNaN(vv.duration)) return;
+        const t = seekBar._seekPending ?? (seekBar.value / 1000) * vv.duration;
+        if (typeof vv.fastSeek === 'function') vv.fastSeek(t);
+        else vv.currentTime = t;
+      });
+    });
+
+    const endDrag = () => {
+      seekBar._dragging    = false;
+      seekBar._seekPending = null;
+      // If the seeked event already fired before mouseup, resume now.
+      // Otherwise _seekPending flag lets the seeked handler resume instead.
+      if (!_seekPending && _wasPlaying) {
+        const v = videoEl?.elt;
+        if (v) v.play().catch(() => {});
+        _wasPlaying = false;
+      }
+    };
+    seekBar.addEventListener('mouseup',  endDrag);
+    seekBar.addEventListener('touchend', endDrag);
+  }
 }
 
 function hookCamera() {
@@ -685,6 +822,9 @@ function onFile(ev) {
   videoEl = null;
   if (currentBlobUrl) { try { URL.revokeObjectURL(currentBlobUrl); } catch {} currentBlobUrl = null; }
 
+  // Invalidate any active pump and clear orphaned gesture listeners
+  _pumpSession++;
+
   playing = false;
   enableTransport(false);
 
@@ -706,16 +846,34 @@ function onFile(ev) {
   v.setAttribute('playsinline', '');
   try { v.disableRemotePlayback = true; } catch {}
 
+  // Track gesture unlock listeners so they can be removed if a new file loads
+  // before the user ever triggers a gesture (#4 — orphaned listener bug).
+  let _gesturePointer = null;
+  let _gestureKey     = null;
+
   let primed = false;
   let poller;
 
   const startPlayback = async () => {
     if (primed) return;
-    if (v.readyState < 3 || v.videoWidth === 0) return;
+    // #3: readyState >= 2 (HAVE_CURRENT_DATA) is sufficient to call play()
+    // and get a renderable frame. The original >= 3 blocked valid MP4/MKV files
+    // that reported state 2 when first ready and never briefly hit state 3.
+    if (v.readyState < 2 || v.videoWidth === 0) return;
     clearInterval(poller);
     primed = true;
     clearAll(); updateDim();
     try { blitVideoInto(gCur); } catch {}
+
+    // Clean up any orphaned gesture listeners from a previous file load (#4)
+    if (_gesturePointer) {
+      window.removeEventListener('pointerdown', _gesturePointer, true);
+      _gesturePointer = null;
+    }
+    if (_gestureKey) {
+      window.removeEventListener('keydown', _gestureKey, true);
+      _gestureKey = null;
+    }
 
     try {
       await v.play();
@@ -724,15 +882,44 @@ function onFile(ev) {
         try { await v.play(); } catch {}
         window.removeEventListener('pointerdown', gesture, true);
         window.removeEventListener('keydown',     gesture, true);
+        _gesturePointer = null;
+        _gestureKey     = null;
       };
+      _gesturePointer = gesture;
+      _gestureKey     = gesture;
       window.addEventListener('pointerdown', gesture, true);
       window.addEventListener('keydown',     gesture, true);
     }
 
-    try { videoEl.elt.loop = true; } catch {}
+    // #8: apply playback rate from UI
+    const rateSelect = _$('playbackRate');
+    try { v.playbackRate = rateSelect ? parseFloat(rateSelect.value) : 1.0; } catch {}
+
+    // #9: apply loop state from UI (default on if no toggle exists)
+    const loopToggle = _$('loopToggle');
+    try { v.loop = loopToggle ? loopToggle.checked : true; } catch {}
+
+    // After any seek completes, resume play immediately if we were playing
+    // before the scrub started. This is what makes the resume seamless —
+    // play() is called the moment the browser has a decoded frame ready,
+    // not after some timeout or the next user interaction.
+    v.addEventListener('seeked', () => {
+      _seekPending = false;
+      pumpVideoFrames();
+      if (_wasPlaying && !seekBar?._dragging) {
+        v.play().catch(() => {});
+        playing     = true;
+        _wasPlaying = false;
+      }
+    });
+
+    // #6: set playing only after play() has been called successfully
     playing = true;
-    enableTransport(true);
+
+    // #10: start pump BEFORE enabling transport so there's no window where
+    // the user can click Pause before the first requestVideoFrameCallback fires.
     pumpVideoFrames();
+    enableTransport(true);
 
     const volSlider = _$('volumeSlider');
     const vol = volSlider ? parseFloat(volSlider.value) : 1;
