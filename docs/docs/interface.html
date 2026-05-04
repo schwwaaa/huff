@@ -260,6 +260,20 @@ body {
 </table></div>
 <hr/>
 
+<h2>Global Key Group</h2>
+<p>A final composite pass applied after all effects, between the clean base video and the fully processed output. Two modes: <strong>Luma</strong> uses the luminance of the base video to control where processed output shows through. <strong>Blend</strong> composites layers using a GPU blend operation with no pixel work.</p>
+<div class="table-responsive"><table class="win-table">
+  <thead><tr><th>Control</th><th>Range / Options</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td>MODE</td><td>OFF / LUMA / BLEND</td><td><strong>OFF</strong> — disabled. <strong>LUMA</strong> — luminance of the base video gates how much of the processed output shows through; bright areas reveal the effect, dark areas stay clean (flip with Invert). <strong>BLEND</strong> — composites base over processed using a CSS blend operation; GPU-accelerated, no pixel work.</td></tr>
+    <tr><td>MIX</td><td>0–1</td><td>Overall strength of the key. 0 = no effect, 1 = full.</td></tr>
+    <tr><td>THRESH</td><td>0–1</td><td>Luma mode only. Luminance threshold. 0 = nothing revealed, 1 = everything revealed. Soft rolloff prevents hard edges.</td></tr>
+    <tr><td>INVERT</td><td>toggle</td><td>Luma mode only. Flips which side of the threshold reveals the processed output.</td></tr>
+    <tr><td>BLEND</td><td>SCREEN / MULTIPLY / OVERLAY / DIFFERENCE / HARD LIGHT / ADD</td><td>Blend mode only. SCREEN brightens. MULTIPLY darkens. OVERLAY adds contrast. DIFFERENCE inverts where layers differ. ADD saturates quickly.</td></tr>
+  </tbody>
+</table></div>
+<hr/>
+
 <h2>Solarize Group</h2>
 <div class="table-responsive"><table class="win-table">
   <thead><tr><th>Control</th><th>Range</th><th>Description</th></tr></thead>
@@ -296,7 +310,7 @@ body {
 </table></div>
 <hr/>
 
-<h2>Trails Group</h2>
+<h2>Buffer Trails Group</h2>
 <div class="table-responsive"><table class="win-table">
   <thead><tr><th>Control</th><th>Range</th><th>Description</th></tr></thead>
   <tbody>
