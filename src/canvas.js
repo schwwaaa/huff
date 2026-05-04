@@ -1115,9 +1115,11 @@ function draw() {
 
 
 function drawWaiting() {
+  push();
   noStroke(); fill(255, 20); rect(0, 0, width, height);
   fill(220); textAlign(CENTER, CENTER); textSize(14);
   text('Load a video or start a camera  ·  P: toggle UI  ·  F: fullscreen  ·  Ctrl+Z: undo', width / 2, height / 2);
+  pop();
 }
 
 // ─── camera ───────────────────────────────────────────────────────────────────
@@ -1164,28 +1166,13 @@ function startCamera(deviceId) {
       try { v.setAttribute('playsinline', ''); v.muted = true; } catch {}
       const kick = () => {
         try {
-          playing = true;  // set only after stream is confirmed ready
-          v.play().catch(err => {
-            showToast(`Camera play failed: ${err?.message ?? err}`, true);
-            playing = false;
-          });
+          playing = true;
+          v.play().catch(() => {});
           pumpVideoFrames();
         } catch {}
       };
       if (v.readyState >= 1) kick();
       else v.addEventListener('loadedmetadata', kick, { once:true });
-
-      // Handle mid-stream device disconnection
-      v.addEventListener('ended', () => {
-        if (playing) { showToast('Camera stream ended unexpectedly', true); playing = false; }
-      });
-      try {
-        v.srcObject?.getTracks().forEach(track => {
-          track.addEventListener('ended', () => {
-            if (playing) { showToast('Camera disconnected', true); playing = false; stopCamera(); }
-          });
-        });
-      } catch {}
     });
     try { cloakVideo(videoEl); } catch {}
   } catch(e) {

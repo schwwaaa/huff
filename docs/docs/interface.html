@@ -167,11 +167,16 @@ body {
   <tbody>
     <tr><td>File</td><td>Load a video file. Drag-and-drop also works. MP4, MOV, WebM, and any format your system decoder handles.</td></tr>
     <tr><td>Camera</td><td>Select a webcam from the dropdown. Click ↻ Refresh to scan for newly connected devices.</td></tr>
-    <tr><td>▶ Play / ⏸ Pause</td><td>Toggle video playback.</td></tr>
+    <tr><td>▶ Play / ⏸ Pause</td><td>Toggle video playback. Resuming after pause restarts the frame pump automatically.</td></tr>
+    <tr><td>Seek Bar</td><td>Scrub to any position in the loaded file. Uses fast keyframe seeking while dragging for low latency; playback resumes automatically on release.</td></tr>
+    <tr><td>Time Display</td><td>Shows current position and total duration as <code>M:SS / M:SS</code>.</td></tr>
+    <tr><td>RATE</td><td>Playback speed: 0.25×, 0.5×, 1×, 2×, 4×. Applies immediately without reloading.</td></tr>
+    <tr><td>LOOP</td><td>Loop the file continuously. Unchecking plays once and stops.</td></tr>
+    <tr><td>VOL</td><td>Output volume. Drag to zero to mute.</td></tr>
     <tr><td>BASE VIDEO</td><td>Show the raw source frame underneath the glitch output.</td></tr>
     <tr><td>BASE MIX</td><td>Opacity of the base video layer. 0 = fully glitched output, 1 = raw source on top.</td></tr>
     <tr><td>BASE BG</td><td>Background fill colour when no tile covers a pixel: Black, Green (chroma key), Blue, or White.</td></tr>
-    <tr><td>SEED ON LOAD</td><td>Prime the frame ring with the first video frame immediately on file load.</td></tr>
+    <tr><td>SEED ON LOAD</td><td>Randomise the seed each time a new file is loaded, giving every clip a visually distinct glitch pattern.</td></tr>
     <tr><td>QUALITY</td><td>Scales the frame ring depth (0 → 4 frames, 1 → 60 frames). The single most impactful performance lever.</td></tr>
     <tr><td>SEED</td><td>Randomisation seed. Same seed + parameters = same output.</td></tr>
   </tbody>
@@ -217,17 +222,18 @@ body {
 <hr/>
 
 <h2>Scanlines Group</h2>
+<p>Displaces horizontal bands of the <strong>current video frame</strong> spatially — no temporal sampling from the ring. This means scanlines are smooth and follow live motion without any buffer-trail artifact. The bands shift the current content left or right; they do not pull from historical frames.</p>
 <div class="table-responsive"><table class="win-table">
   <thead><tr><th>Control</th><th>Range</th><th>Description</th></tr></thead>
   <tbody>
     <tr><td>ON</td><td>toggle</td><td>Enable/disable.</td></tr>
-    <tr><td>BANDS</td><td>0–30</td><td>Number of active displacement bands per frame.</td></tr>
-    <tr><td>BAND HEIGHT</td><td>0–1</td><td>Relative height of each band.</td></tr>
-    <tr><td>RAND SIZE</td><td>toggle</td><td>Randomise band height per band.</td></tr>
+    <tr><td>BANDS</td><td>0–50</td><td>Number of active displacement bands per frame.</td></tr>
+    <tr><td>HEIGHT</td><td>0–120</td><td>Base height of each band in pixels.</td></tr>
+    <tr><td>RAND SIZE</td><td>toggle</td><td>Randomise band height per band. Heights are stable per video frame — no 60fps flickering.</td></tr>
     <tr><td>SHIFT</td><td>0–0.5</td><td>Maximum horizontal displacement as a fraction of canvas width.</td></tr>
     <tr><td>SKEW</td><td>-1–1</td><td>Position-based horizontal offset making bands angle diagonally.</td></tr>
     <tr><td>DRIFT</td><td>0–3</td><td>Vertical drift speed of band positions.</td></tr>
-    <tr><td>SPEED</td><td>0–5</td><td>Overall speed multiplier for band drift.</td></tr>
+    <tr><td>SPEED</td><td>0–5</td><td>Speed of band animation. Operates independently of glitch speed — works even with glitch off.</td></tr>
     <tr><td>GAP</td><td>0–200</td><td>Snaps band positions to a regular grid spacing.</td></tr>
     <tr><td>OPACITY</td><td>0–1</td><td>Alpha of displaced band content.</td></tr>
   </tbody>
@@ -235,18 +241,21 @@ body {
 <hr/>
 
 <h2>Clusters Group</h2>
+<p>Biases glitch tile placement toward moving focal points (cluster centres) rather than scattering tiles randomly. Glitch must also be ON. Each centre has its own physics simulation with inertia, steering, and optional velocity bursts.</p>
 <div class="table-responsive"><table class="win-table">
   <thead><tr><th>Control</th><th>Range</th><th>Description</th></tr></thead>
   <tbody>
     <tr><td>ON</td><td>toggle</td><td>Enable cluster-biased tile placement. Glitch must also be ON.</td></tr>
-    <tr><td>CENTERS</td><td>1–20</td><td>Number of cluster centres.</td></tr>
-    <tr><td>SPREAD</td><td>1–300</td><td>Radius around each centre within which tiles are distributed.</td></tr>
-    <tr><td>MIN RAD</td><td>0–150</td><td>Minimum distance from centre — creates a hollow ring.</td></tr>
+    <tr><td>CENTERS</td><td>1–20</td><td>Number of cluster centres. Each is an independent physics body that tiles gravitate toward.</td></tr>
+    <tr><td>SPREAD</td><td>1–300</td><td>Radius in pixels around each centre within which tiles are distributed.</td></tr>
+    <tr><td>MIN RAD</td><td>0–150</td><td>Minimum distance from centre — creates a hollow ring of tiles.</td></tr>
     <tr><td>SPATIAL GAP</td><td>0–200</td><td>Minimum pixel distance between any two tiles. Prevents overlap.</td></tr>
-    <tr><td>BIAS</td><td>0–1</td><td>Fraction of tiles forced into clusters. Remainder placed randomly.</td></tr>
-    <tr><td>DRIFT</td><td>0–5</td><td>Noise-driven movement of cluster centre positions.</td></tr>
-    <tr><td>SPEED</td><td>0–15</td><td>Speed of cluster centre physics simulation. 0 = static.</td></tr>
-    <tr><td>INERTIA</td><td>0.01–0.99</td><td>Momentum of cluster centres. High = smooth. Low = jittery.</td></tr>
+    <tr><td>BIAS</td><td>0–1</td><td>Fraction of tiles forced into clusters. Remainder placed randomly across the canvas.</td></tr>
+    <tr><td>DRIFT</td><td>0–5</td><td>Adds noise-driven wandering to centre positions.</td></tr>
+    <tr><td>SPEED</td><td>0–40</td><td>Speed of cluster centre physics simulation. 0 = static centres.</td></tr>
+    <tr><td>SPD VAR</td><td>0–2</td><td>Per-centre speed variation. Each centre gets its own speed multiplier so they move at different rates. 0 = all same speed.</td></tr>
+    <tr><td>PULSE</td><td>0–10</td><td>Periodic velocity kick — centres suddenly burst in a random direction then settle. Higher = more frequent bursts.</td></tr>
+    <tr><td>INERTIA</td><td>0.01–0.99</td><td>Momentum of cluster centres. High = smooth gliding. Low = snappy response to steering.</td></tr>
   </tbody>
 </table></div>
 <hr/>
@@ -300,17 +309,24 @@ body {
 <hr/>
 
 <h2>Presets</h2>
-<p>Presets save a complete snapshot of all parameter values to localStorage. They survive app restarts.</p>
+<p>Presets save a complete snapshot of all parameter values as a <strong>JSON file</strong> you download to disk. Load them back at any time — across sessions, machines, or shared with collaborators. The previous localStorage-based system has been replaced.</p>
 <div class="table-responsive"><table class="win-table">
-  <thead><tr><th>Preset</th><th>Character</th></tr></thead>
+  <thead><tr><th>Action</th><th>Description</th></tr></thead>
   <tbody>
-    <tr><td>clean</td><td>All effects off — raw source passthrough</td></tr>
-    <tr><td>chaos</td><td>High corruption, deep ring, fast clusters</td></tr>
-    <tr><td>melt</td><td>Slow feedback zoom with deep scanlines</td></tr>
-    <tr><td>mirror</td><td>Symmetry-forward with light solarise</td></tr>
-    <tr><td>pulse</td><td>Rhythmic cluster glitch with trails</td></tr>
-    <tr><td>solar</td><td>Solarise dominant, flow warp texture</td></tr>
-    <tr><td>vapor</td><td>Soft trails, slow feedback rotation</td></tr>
+    <tr><td>💾 Save Preset</td><td>Downloads a timestamped <code>.json</code> file containing all current parameter values.</td></tr>
+    <tr><td>📂 Load Preset…</td><td>Opens a file picker. Select a previously saved <code>.json</code> preset. All controls update immediately.</td></tr>
+    <tr><td>Ctrl+Z / Cmd+Z</td><td>10-step undo. Steps back through parameter changes one snapshot at a time. Loading a preset counts as one undo step.</td></tr>
+  </tbody>
+</table></div>
+<hr/>
+
+<h2>Keyboard Shortcuts</h2>
+<div class="table-responsive"><table class="win-table">
+  <thead><tr><th>Key</th><th>Action</th></tr></thead>
+  <tbody>
+    <tr><td>P</td><td>Toggle the control panel. A pill indicator appears at the bottom of the screen reading "UI hidden · P to show" so you can always get back.</td></tr>
+    <tr><td>F</td><td>Toggle fullscreen.</td></tr>
+    <tr><td>Ctrl+Z / Cmd+Z</td><td>Undo the last parameter change. Up to 10 steps.</td></tr>
   </tbody>
 </table></div>
 

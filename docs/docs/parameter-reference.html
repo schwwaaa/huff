@@ -193,19 +193,21 @@ body {
     <tr><td>symPos</td><td>Sym Position</td><td>0</td><td>1</td><td>0.5 = centre</td></tr>
     <tr><td>scanShift</td><td>Scan Shift</td><td>0</td><td>0.5</td><td></td></tr>
     <tr><td>scanDrift</td><td>Scan Drift</td><td>0</td><td>3</td><td></td></tr>
-    <tr><td>scanSpeed</td><td>Scan Speed</td><td>0</td><td>5</td><td></td></tr>
+    <tr><td>scanSpeed</td><td>Scan Speed</td><td>0</td><td>5</td><td>Independent of glitch speed</td></tr>
     <tr><td>scanGap</td><td>Scan Gap</td><td>0</td><td>200</td><td></td></tr>
     <tr><td>scanSkew</td><td>Scan Skew</td><td>-1</td><td>1</td><td></td></tr>
     <tr><td>scanAlpha</td><td>Scan Opacity</td><td>0</td><td>1</td><td></td></tr>
-    <tr><td>clusterCount</td><td>Scan Bands</td><td>0</td><td>30</td><td></td></tr>
-    <tr><td>clusterRadius</td><td>Band Height</td><td>0</td><td>1</td><td></td></tr>
+    <tr><td>clusterCount</td><td>Scan Bands</td><td>0</td><td>50</td><td>Displaces current frame — no ring sampling</td></tr>
+    <tr><td>clusterRadius</td><td>Band Height</td><td>0</td><td>120</td><td></td></tr>
     <tr><td>cluCenters</td><td>Clu Centers</td><td>1</td><td>20</td><td></td></tr>
     <tr><td>cluSpread</td><td>Clu Spread</td><td>1</td><td>300</td><td></td></tr>
     <tr><td>cluMinSpread</td><td>Clu Min Rad</td><td>0</td><td>150</td><td></td></tr>
     <tr><td>spatialGap</td><td>Spatial Gap</td><td>0</td><td>200</td><td></td></tr>
     <tr><td>cluBias</td><td>Clu Bias</td><td>0</td><td>1</td><td></td></tr>
     <tr><td>cluDrift</td><td>Clu Drift</td><td>0</td><td>5</td><td></td></tr>
-    <tr><td>cluSpeed</td><td>Clu Speed</td><td>0</td><td>15</td><td></td></tr>
+    <tr><td>cluSpeed</td><td>Clu Speed</td><td>0</td><td>40</td><td></td></tr>
+    <tr><td>cluSpeedVar</td><td>Clu Spd Var</td><td>0</td><td>2</td><td>Per-centre speed multiplier variance</td></tr>
+    <tr><td>cluPulse</td><td>Clu Pulse</td><td>0</td><td>10</td><td>Periodic velocity burst frequency</td></tr>
     <tr><td>cluInertia</td><td>Clu Inertia</td><td>0.01</td><td>0.99</td><td></td></tr>
     <tr><td>solarizeThresh</td><td>Sol Thresh</td><td>0</td><td>1</td><td></td></tr>
     <tr><td>solarizeAmt</td><td>Sol Amount</td><td>0</td><td>1</td><td></td></tr>
@@ -235,6 +237,7 @@ body {
     <tr><td>solarizeOn</td><td>Solarize On</td></tr>
     <tr><td>flowOn</td><td>Flow Warp On</td></tr>
     <tr><td>trailOn</td><td>Trails On</td></tr>
+    <tr><td>loopToggle</td><td>Loop Video</td></tr>
   </tbody>
 </table></div>
 <hr/>
@@ -256,7 +259,9 @@ body {
 <strong>MIDI maps</strong> use cc: 0–127, mapped linearly to the parameter's min–max. You do not specify the output range in a MIDI map.<br/><br/>
 <strong>OSC maps</strong> use inputMin/inputMax to tell huff what range your sender outputs. TouchOSC faders: inputMin: 0, inputMax: 1. MIDI-to-OSC bridges: inputMin: 0, inputMax: 127.<br/><br/>
 <strong>fbZ</strong> has a narrow range (0.98–1.03) because zoom is applied multiplicatively every frame. Even 1.005 produces dramatic zoom over a few seconds of feedback.<br/><br/>
-<strong>quality</strong> range is 0–3 but 0–1 is the practical working range. Values &gt; 1 increase ring depth beyond 60 frames and can cause memory pressure at high resolutions.
+<strong>quality</strong> range is 0–3 but 0–1 is the practical working range. Values &gt; 1 increase ring depth beyond 60 frames and can cause memory pressure at high resolutions.<br/><br/>
+<strong>clusterCount (Scan Bands)</strong> displaces the <em>current</em> video frame spatially — it does not sample from the ring buffer. There is no temporal artifact; bands are smooth even with fast camera movement.<br/><br/>
+<strong>cluSpeedVar</strong> and <strong>cluPulse</strong> are not mappable via trigger type — use range (0–2 and 0–10 respectively).
 </div>
 
         </div>

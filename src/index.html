@@ -1296,6 +1296,21 @@
                     </div>
                     <div class="ctrl"><label>RAND SIZE</label><input id="scanRandSize" type="checkbox"></div>
                     <div class="ctrl">
+                        <label>DEPTH</label>
+                        <input id="scanDepth" type="range" min="0" max="0.5" step="0.01" value="0.15">
+                        <span class="val" id="scanDepthVal">0.15</span>
+                    </div>
+                    <div class="ctrl">
+                        <label>OFFSET X</label>
+                        <input id="scanOffX" type="range" min="-1" max="1" step="0.01" value="0">
+                        <span class="val" id="scanOffXVal">0.00</span>
+                    </div>
+                    <div class="ctrl">
+                        <label>OFFSET Y</label>
+                        <input id="scanOffY" type="range" min="-1" max="1" step="0.01" value="0">
+                        <span class="val" id="scanOffYVal">0.00</span>
+                    </div>
+                    <div class="ctrl">
                         <label>SHIFT</label>
                         <input id="scanShift" type="range" min="0" max="0.5" step="0.01" value="0.12">
                         <span class="val" id="scanShiftVal">0.12</span>
@@ -1307,18 +1322,13 @@
                     </div>
                     <div class="ctrl">
                         <label>SPEED</label>
-                        <input id="scanSpeed" type="range" min="0" max="3" step="0.01" value="1.0">
+                        <input id="scanSpeed" type="range" min="0" max="5" step="0.01" value="1.0">
                         <span class="val" id="scanSpeedVal">1.00</span>
                     </div>
                     <div class="ctrl">
-                        <label>GRID GAP</label>
+                        <label>GAP</label>
                         <input id="scanGap" type="range" min="0" max="200" step="1" value="0">
                         <span class="val" id="scanGapVal">0</span>
-                    </div>
-                    <div class="ctrl">
-                        <label>SPACING</label>
-                        <input id="scanSpacing" type="range" min="0" max="400" step="1" value="0">
-                        <span class="val" id="scanSpacingVal">0</span>
                     </div>
                     <div class="ctrl">
                         <label>SKEW</label>
@@ -1392,48 +1402,6 @@
                     </div>
                 </div>
             </div>
-            </div>
-
-            <!-- GLOBAL KEY -->
-            <div class="group">
-                <div class="group-label">Global Key</div>
-                <div class="group-body">
-                <div class="group-row">
-                    <div class="ctrl">
-                        <label>MODE</label>
-                        <select id="keyMode" style="font-size:10px;padding:1px 2px">
-                            <option value="off" selected>OFF</option>
-                            <option value="luma">LUMA</option>
-                            <option value="blend">BLEND</option>
-                        </select>
-                    </div>
-                    <div class="ctrl">
-                        <label>MIX</label>
-                        <input id="keyMix" type="range" min="0" max="1" step="0.01" value="0">
-                        <span class="val" id="keyMixVal">0.00</span>
-                    </div>
-                    <div class="ctrl">
-                        <label>THRESH</label>
-                        <input id="keyThresh" type="range" min="0" max="1" step="0.01" value="0.5">
-                        <span class="val" id="keyThreshVal">0.50</span>
-                    </div>
-                    <div class="ctrl">
-                        <label>INVERT</label>
-                        <input id="keyInvert" type="checkbox">
-                    </div>
-                    <div class="ctrl">
-                        <label>BLEND</label>
-                        <select id="keyBlend" style="font-size:10px;padding:1px 2px">
-                            <option value="screen">SCREEN</option>
-                            <option value="multiply">MULTIPLY</option>
-                            <option value="overlay">OVERLAY</option>
-                            <option value="difference">DIFFERENCE</option>
-                            <option value="hard-light">HARD LIGHT</option>
-                            <option value="lighter">ADD</option>
-                        </select>
-                    </div>
-                </div>
-                </div>
             </div>
 
             <!-- SOLARIZE -->
@@ -1514,35 +1482,31 @@
     (() => {
         'use strict';
 
-        /* ── Collapsible groups ────────────────────────────────── */
+        /* ── Collapsible groups ───────────────────────────────── */
         document.querySelectorAll('.group-label').forEach(label => {
             label.addEventListener('click', () => {
                 label.closest('.group').classList.toggle('collapsed');
             });
         });
 
-        /* ── About ─────────────────────────────────────────────── */
+        /* ── About ───────────────────────────────────────────── */
         const overlay  = document.getElementById('aboutOverlay');
-        document.getElementById('aboutBtn')  .addEventListener('click', () => overlay.classList.add('open'));
-        document.getElementById('aboutClose').addEventListener('click', () => overlay.classList.remove('open'));
-        overlay.addEventListener('click', e => { if (e.target === overlay) overlay.classList.remove('open'); });
-
-        window.addEventListener('keydown', e => {
-            if (e.key === 'Escape') overlay.classList.remove('open');
-        }, true);
+        document.getElementById('aboutBtn')  ?.addEventListener('click', () => overlay?.classList.add('open'));
+        document.getElementById('aboutClose')?.addEventListener('click', () => overlay?.classList.remove('open'));
+        overlay?.addEventListener('click', e => { if (e.target === overlay) overlay.classList.remove('open'); });
+        window.addEventListener('keydown', e => { if (e.key === 'Escape') overlay?.classList.remove('open'); }, true);
 
         /* ── Reset all parameters to HTML defaults ────────────── */
-        document.getElementById('resetBtn').addEventListener('click', () => {
-            document.getElementById('controlsForm').reset();
-            // fire input events so labels update
+        document.getElementById('resetBtn')?.addEventListener('click', () => {
+            document.getElementById('controlsForm')?.reset();
             document.querySelectorAll('#controlsForm input[type=range], #controlsForm input[type=number]')
                 .forEach(el => el.dispatchEvent(new Event('input', { bubbles: true })));
             document.querySelectorAll('#controlsForm input[type=checkbox], #controlsForm select')
                 .forEach(el => el.dispatchEvent(new Event('change', { bubbles: true })));
         });
 
-        /* ── Reset Feedback motion sliders (X, Y, Z, Delta) ───── */
-        document.getElementById('resetMotionBtn').addEventListener('click', () => {
+        /* ── Reset Feedback motion sliders ───────────────────── */
+        document.getElementById('resetMotionBtn')?.addEventListener('click', () => {
             const defaults = { fbX: '1', fbY: '1', fbZ: '1.000', fbTheta: '0.01' };
             Object.entries(defaults).forEach(([id, val]) => {
                 const el = document.getElementById(id);
@@ -1552,229 +1516,9 @@
             });
         });
 
-        /* ── Presets (JSON files in src/presets/) ─────────────────
-         * In Tauri: uses fetch() to read from src/presets/ dir.
-         * Save writes via Tauri fs API if available; falls back to
-         * localStorage so it works in browser dev mode too.
-         * ─────────────────────────────────────────────────────── */
-        const PRESET_PARAM_IDS = [
-            'baseMix','baseOn','bgMode','quality','seedOnLoad','seed',
-            'feedback','persistence','fbX','fbY','fbZ','fbTheta',
-            'depth','depthScatter','corrupt','corruptDrift','block',
-            'glitchSpeed','glitchSpeedFine','glitchSpeedMul','glitchSize',
-            'glitchSmear','glitchSmearAngle','glitchAlpha','glitchJitter',
-            'glitchBaseX','glitchBaseY','trailLayers','trailDepth','trailLumaKey',
-            'symOn','symMode','symPos',
-            'clusters','clusterCount','clusterRadius','scanShift','scanDrift','scanAlpha',
-            'scanSpeed','scanGap','scanSkew','scanRandSize',
-            'clusterTiles','cluCenters','cluSpread','cluMinSpread','cluBias','cluDrift','cluSpeed','cluInertia','spatialGap',
-            'solarizeOn','solarizeThresh','solarizeAmt','solarizeR','solarizeG','solarizeB',
-            'flowOn','flowStrength','flowScale','flowPulse','flowImpl',
-            'corruptOn',
-        ];
-
-        function capturePreset(name) {
-            const p = { name, version: 1, params: {} };
-            PRESET_PARAM_IDS.forEach(id => {
-                const el = document.getElementById(id); if (!el) return;
-                p.params[id] = el.type === 'checkbox' ? el.checked : el.value;
-            });
-            return p;
-        }
-
-        function applyPreset(p) {
-            if (!p || !p.params) return;
-            Object.entries(p.params).forEach(([id, val]) => {
-                const el = document.getElementById(id); if (!el) return;
-                if (el.type === 'checkbox') {
-                    el.checked = (val === true || val === 'true');
-                    el.dispatchEvent(new Event('change', { bubbles: true }));
-                } else {
-                    el.value = val;
-                    el.dispatchEvent(new Event('input', { bubbles: true }));
-                }
-            });
-        }
-
-        // Storage: try localStorage (works everywhere); Tauri fs if available
-        const PRESET_LS_KEY = 'huffPresets';
-
-        /* ── Factory presets — loaded from src/presets/*.json ─────
-         * Files live in src/presets/ so you can edit or add new ones
-         * without touching index.html. Each file is a JSON object
-         * matching the preset schema: { name, version, factory, params }.
-         * The list below is the manifest — add an entry here when you
-         * drop a new .json file into the presets folder.
-         * ─────────────────────────────────────────────────────── */
-        const FACTORY_PRESET_FILES = [
-            'presets/factory-clean.json',
-            'presets/factory-melt.json',
-            'presets/factory-pulse.json',
-            'presets/factory-mirror.json',
-            'presets/factory-solar.json',
-            'presets/factory-vapor.json',
-            'presets/factory-chaos.json',
-        ];
-
-        // Loaded asynchronously at startup; preset list rebuilds once complete
-        let _factoryPresets = {};
-
-        async function loadFactoryPresets() {
-            const results = await Promise.allSettled(
-                FACTORY_PRESET_FILES.map(f => fetch(f).then(r => r.json()))
-            );
-            results.forEach(r => {
-                if (r.status === 'fulfilled' && r.value?.name) {
-                    _factoryPresets[r.value.name] = r.value;
-                } else if (r.status === 'rejected') {
-                    console.warn('[huff] Failed to load preset:', r.reason);
-                }
-            });
-            refreshPresetList();
-        }
-
-        function isFactory(name) { return !!_factoryPresets[name]; }
-
-        function loadAllPresets() {
-            try { return JSON.parse(localStorage.getItem(PRESET_LS_KEY) || '{}'); } catch { return {}; }
-        }
-        function saveAllPresets(map) {
-            try { localStorage.setItem(PRESET_LS_KEY, JSON.stringify(map)); } catch {}
-        }
-
-        function allPresetsMap() {
-            // Merge factory (always present) + user-saved (from localStorage)
-            return Object.assign({}, _factoryPresets, loadAllPresets());
-        }
-
-        function refreshPresetList() {
-            const sel = document.getElementById('presetList');
-            const prev = sel.value;
-            const map = allPresetsMap();
-            sel.innerHTML = '';
-            const names = Object.keys(map).sort((a,b) => {
-                // Factory presets first, then user presets alphabetically
-                const af = isFactory(a), bf = isFactory(b);
-                if (af && !bf) return -1; if (!af && bf) return 1;
-                return a.localeCompare(b);
-            });
-            names.forEach(n => {
-                const o = document.createElement('option');
-                o.value = n;
-                // Show factory presets with a lock prefix, strip the 'factory:' key prefix for display
-                const display = isFactory(n) ? '🔒 ' + n.replace('factory:','') : n;
-                o.textContent = display;
-                sel.appendChild(o);
-            });
-            if (prev && Array.from(sel.options).some(o => o.value === prev)) sel.value = prev;
-        }
-
-        function showPresetStatus(msg, ms = 1800) {
-            const s = document.getElementById('presetStatus');
-            s.textContent = msg;
-            clearTimeout(s._t);
-            s._t = setTimeout(() => s.textContent = '', ms);
-        }
-
-        document.getElementById('presetSaveBtn').addEventListener('click', () => {
-            const nameEl = document.getElementById('presetName');
-            const name = (nameEl.value || '').trim();
-            if (!name) { showPresetStatus('enter a name first'); return; }
-            const map = loadAllPresets();
-            map[name] = capturePreset(name);
-            saveAllPresets(map);
-            nameEl.value = '';
-            refreshPresetList();
-            // try to select what we just saved
-            const sel = document.getElementById('presetList');
-            for (let o of sel.options) { if (o.value === name) { sel.value = name; break; } }
-            showPresetStatus('saved ✓');
-        });
-
-        document.getElementById('presetLoadBtn').addEventListener('click', () => {
-            const sel = document.getElementById('presetList');
-            const name = sel.value; if (!name) return;
-            const map = allPresetsMap();
-            if (!map[name]) { showPresetStatus('not found'); return; }
-            applyPreset(map[name]);
-            showPresetStatus('loaded: ' + name.replace('factory:',''));
-        });
-
-        document.getElementById('presetDeleteBtn').addEventListener('click', () => {
-            const sel = document.getElementById('presetList');
-            const name = sel.value; if (!name) return;
-            if (isFactory(name)) { showPresetStatus('factory presets cannot be deleted'); return; }
-            const map = loadAllPresets();
-            if (!map[name]) return;
-            if (!confirm('Delete preset "' + name + '"?')) return;
-            delete map[name];
-            saveAllPresets(map);
-            refreshPresetList();
-            showPresetStatus('deleted');
-        });
-
-        // Export preset as downloadable JSON file
-        document.getElementById('presetList').addEventListener('dblclick', () => {
-            const sel = document.getElementById('presetList');
-            const name = sel.value; if (!name) return;
-            const map = allPresetsMap();
-            if (!map[name]) return;
-            const blob = new Blob([JSON.stringify(map[name], null, 2)], { type: 'application/json' });
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
-            a.download = name.replace(/[^a-z0-9_\-]/gi, '_') + '.json';
-            a.click(); URL.revokeObjectURL(a.href);
-            showPresetStatus('exported ✓');
-        });
-
-        // Import preset from JSON file via hidden input
-        const presetImportInput = document.createElement('input');
-        presetImportInput.type = 'file'; presetImportInput.accept = '.json';
-        presetImportInput.style.display = 'none'; document.body.appendChild(presetImportInput);
-        presetImportInput.addEventListener('change', () => {
-            const file = presetImportInput.files?.[0]; if (!file) return;
-            const reader = new FileReader();
-            reader.onload = e => {
-                try {
-                    const p = JSON.parse(e.target.result);
-                    if (!p.params || !p.name) { showPresetStatus('invalid preset file'); return; }
-                    const map = loadAllPresets();
-                    map[p.name] = p;
-                    saveAllPresets(map);
-                    refreshPresetList();
-                    const sel = document.getElementById('presetList');
-                    for (let o of sel.options) { if (o.value === p.name) { sel.value = p.name; break; } }
-                    showPresetStatus('imported: ' + p.name);
-                } catch { showPresetStatus('parse error'); }
-            };
-            reader.readAsText(file);
-            presetImportInput.value = '';
-        });
-
-        // Add import button next to delete
-        const importBtn = document.createElement('button');
-        importBtn.textContent = '📂 Import';
-        importBtn.className = 'btn-dim';
-        importBtn.style.cssText = 'font-size:10px;padding:3px 8px';
-        importBtn.addEventListener('click', () => presetImportInput.click());
-        document.getElementById('presetDeleteBtn').after(importBtn);
-
-        // Boot: load factory presets from src/presets/*.json async, then rebuild list
-        loadFactoryPresets();
-        // Show user presets from localStorage immediately; factory fills in once fetched
-        refreshPresetList();
-
-        /* ── MIDI + OSC commented out ─────────────────────────────
-         * Web MIDI API (navigator.requestMIDIAccess) requires a
-         * secure context. Tauri's tauri:// protocol is not treated
-         * as secure by WebKit, so the API is unavailable.
-         * TODO: implement via Tauri Rust plugin (tauri-plugin-midi)
-         *       or a localhost HTTP bridge.
-         * All mapping tables and apply logic preserved below.
-         * ─────────────────────────────────────────────────────── */
-
     })();
     </script>
+
 
     <!-- ═══ MIDI Engine ══════════════════════════════════════════════════ -->
     <script>
