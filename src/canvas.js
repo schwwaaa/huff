@@ -21,10 +21,13 @@ let gCur, gBuf, gWarp, gTemp;
 let _fbCanvas = null, _fbCtx = null;
 let canvas;
 let playing = false;
+let _wasPlaying  = false; // whether video was playing when a scrub started
+let _seekPending = false; // whether a seek is still in flight when drag ends
 
 const els = {};
 let baseSeed = 1, seededOnce = false;
 let nPhaseX = 0, nPhaseY = 1000;
+let nPhaseScanX = 0, nPhaseScanY = 2000; // independent scanline phase
 
 // ─── FrameRing ────────────────────────────────────────────────────────────────
 // Replaces the plain array + shift() pattern.
@@ -154,10 +157,12 @@ const PRESET_IDS = [
   'baseOn','baseMix','seedOnLoad',
   'symOn','symMode','symPos',
   'solarizeOn','solarizeThresh','solarizeAmt','solarizeR','solarizeG','solarizeB',
-  'scanAlpha','scanShift','scanDrift','scanSpeed','scanGap','scanSkew','scanRandSize',
+  'scanAlpha','scanShift','scanDrift','scanSpeed','scanGap','scanSpacing','scanSkew','scanRandSize',
   'depthScatter','corruptDrift',
   'trailOn','trailLayers','trailDepth','trailLumaKey',
   'bgMode',
+  'cluSpeedVar','cluPulse',
+  'keyMode','keyMix','keyThresh','keyInvert','keyBlend',
 ];
 
 function capturePreset() {
@@ -452,6 +457,12 @@ function clearAll() {
   if (typeof resetClusterPhysics === 'function') resetClusterPhysics();
 }
 
+function refreshGlitch() {
+  clearAll();
+  nPhaseX = 0; nPhaseY = 1000;
+  nPhaseScanX = 0; nPhaseScanY = 2000;
+}
+
 // ─── UI wiring ────────────────────────────────────────────────────────────────
 // Split into focused sub-functions so each concern is independently readable.
 
@@ -479,11 +490,13 @@ function hookUI() {
     'solarizeOn','solarizeThresh','solarizeThreshVal','solarizeAmt','solarizeAmtVal',
     'solarizeR','solarizeRVal','solarizeG','solarizeGVal','solarizeB','solarizeBVal',
     'scanAlpha','scanAlphaVal','scanShift','scanShiftVal','scanDrift','scanDriftVal',
-    'scanSpeed','scanSpeedVal','scanGap','scanGapVal','scanSkew','scanSkewVal',
+    'scanSpeed','scanSpeedVal','scanGap','scanGapVal','scanSpacing','scanSpacingVal','scanSkew','scanSkewVal',
     'depthScatter','depthScatterVal','corruptDrift','corruptDriftVal',
     'trailOn','trailLayers','trailLayersVal','trailDepth','trailDepthVal',
     'trailLumaKey','trailLumaKeyVal',
     'scanRandSize','bgMode','dim',
+    'cluSpeedVar','cluSpeedVarVal','cluPulse','cluPulseVal',
+    'keyMode','keyMix','keyMixVal','keyThresh','keyThreshVal','keyInvert','keyBlend',
   ].forEach(k => els[k] = _$(k));
 
   hookFile();
@@ -559,11 +572,6 @@ function hookTransport() {
   // ── Seek / time display (#7) ─────────────────────────────────────────────────
   const seekBar  = _$('seekBar');
   const timeDisp = _$('timeDisplay');
-
-  // Hoisted at hookTransport scope so the seeked handler in startPlayback
-  // can access them regardless of whether seekBar exists in the DOM.
-  let _wasPlaying  = false;
-  let _seekPending = false;
 
   // Time formatter
   const _fmt = s => `${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,'0')}`;
@@ -676,11 +684,13 @@ function hookSliders() {
     'feedback','persistence','fbX','fbY','fbZ','fbTheta',
     'spatialGap','clusterCount','clusterRadius','cluCenters','cluSpread',
     'cluMinSpread','cluBias','cluDrift','cluSpeed','cluInertia',
-    'scanAlpha','scanShift','scanDrift','scanSpeed','scanGap','scanSkew',
+    'scanAlpha','scanShift','scanDrift','scanSpeed','scanGap','scanSpacing','scanSkew',
     'glitchAlpha','glitchJitter','glitchSmearAngle',
     'flowStrength','flowScale','flowPulse','flowImpl','baseMix','symPos','glitchSpeedMul',
     'depthScatter','corruptDrift','trailLayers','trailDepth','trailLumaKey',
     'solarizeThresh','solarizeAmt','solarizeR','solarizeG','solarizeB',
+    'cluSpeedVar','cluPulse',
+    'keyMix','keyThresh',
   ];
 
   sliderIds.forEach(id => {
@@ -786,6 +796,7 @@ function updateLabels() {
   set(els.scanDrift,        els.scanDriftVal,        f2);
   set(els.scanSpeed,        els.scanSpeedVal,        f2);
   set(els.scanGap,          els.scanGapVal,          v => (v|0));
+  set(els.scanSpacing,      els.scanSpacingVal,      v => (v|0));
   set(els.scanSkew,         els.scanSkewVal,         f2);
   set(els.depthScatter,     els.depthScatterVal,     f2);
   set(els.corruptDrift,     els.corruptDriftVal,     f2);
@@ -798,6 +809,10 @@ function updateLabels() {
   set(els.solarizeR,        els.solarizeRVal,        f2);
   set(els.solarizeG,        els.solarizeGVal,        f2);
   set(els.solarizeB,        els.solarizeBVal,        f2);
+  set(els.cluSpeedVar,      els.cluSpeedVarVal,      f2);
+  set(els.cluPulse,         els.cluPulseVal,         f2);
+  set(els.keyMix,           els.keyMixVal,           f2);
+  set(els.keyThresh,        els.keyThreshVal,        f2);
   if (els.baseMix && els.baseMixVal) {
     els.baseMixVal.textContent = f2(els.baseMix.value);
     if (els.baseMix) els.baseMix.disabled = !els.baseOn?.checked;
@@ -985,6 +1000,13 @@ function draw() {
   nPhaseX += density * 0.01;
   nPhaseY += density * 0.011;
 
+  // Scanlines advance on their own phase accumulator at their own rate.
+  // scanSpeed controls actual animation speed — not noise coordinate scaling,
+  // which caused aliasing (random jumping) rather than smooth speed change.
+  const scanSpeed = parseFloat(els.scanSpeed?.value ?? '1.0');
+  nPhaseScanX += density * scanSpeed * 0.01;
+  nPhaseScanY += density * scanSpeed * 0.011;
+
   const pers = parseFloat(els.persistence?.value ?? '0.7');
   if (pers < 1) {
     const ctx = gBuf.drawingContext;
@@ -1072,12 +1094,24 @@ function draw() {
     image(gCur, 0, 0, width, height);
     gBuf.image(gCur, 0, 0, gBuf.width, gBuf.height);
   }
+
+  // Global key composite — runs after the main composite, keying base against processed.
+  const keyMode = els.keyMode?.value ?? 'off';
+  const keyMix  = parseFloat(els.keyMix?.value ?? '0');
+  if (keyMode !== 'off' && keyMix > 0) {
+    applyGlobalKey(
+      canvas,                                      // p5 canvas
+      gCur,                                        // base (clean video)
+      gBuf,                                        // processed output
+      keyMode,
+      keyMix,
+      parseFloat(els.keyThresh?.value ?? '0.5'),
+      !!els.keyInvert?.checked,
+      els.keyBlend?.value ?? 'screen'
+    );
+  }
 }
 
-function refreshGlitch() {
-  clearAll();
-  nPhaseX = 0; nPhaseY = 1000;
-}
 
 function drawWaiting() {
   noStroke(); fill(255, 20); rect(0, 0, width, height);

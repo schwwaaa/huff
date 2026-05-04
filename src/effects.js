@@ -163,52 +163,76 @@ function applyScanlines(density) {
   const baseRadius = parseInt(els.clusterRadius.value, 10);
   if (scanBands <= 0 || frameRing.length < 2) return;
 
-  const depth     = parseFloat(els.depth.value);
-  const maxBackSc = Math.max(1, Math.floor((frameRing.length - 1) * depth));
-  const randSize  = !!els.scanRandSize?.checked;
-  const bandHeight = randSize
-    ? Math.max(4, Math.floor(random(baseRadius * 0.5, baseRadius * 4) * 3))
-    : Math.max(4, Math.floor(baseRadius * 3));
-  const bandAlpha  = Math.floor(parseFloat(els.scanAlpha?.value  ?? '0.86') * 255);
+  const depth      = parseFloat(els.depth.value);
+  const maxBackSc  = Math.max(1, Math.floor((frameRing.length - 1) * depth));
+  const randSize   = !!els.scanRandSize?.checked;
+  const bandAlpha  = parseFloat(els.scanAlpha?.value  ?? '0.86');
   const shiftScale = parseFloat(els.scanShift?.value  ?? '0.12');
   const driftSpeed = parseFloat(els.scanDrift?.value  ?? '1.0');
-  const speedMul   = parseFloat(els.scanSpeed?.value  ?? '1.0');
-  const scanGap    = parseInt(els.scanGap?.value       ?? '0',   10);
-  const scanSkew   = parseFloat(els.scanSkew?.value   ?? '0');
+  const scanGap     = parseInt(els.scanGap?.value      ?? '0',   10);
+  const scanSpacing = parseInt(els.scanSpacing?.value  ?? '0',   10);
+  const scanSkew    = parseFloat(els.scanSkew?.value   ?? '0');
 
-  const ctx = gBuf.drawingContext;
+  // Use the dedicated scanline phase accumulator — independent of glitch phase.
+  // Speed is controlled by how fast nPhaseScanX/Y accumulate in draw(),
+  // not by scaling noise coordinates (which caused aliasing).
+  const phX = nPhaseScanX;
+  const phY = nPhaseScanY;
+
+  // Cap the number of distinct ring frames requested to RING_CACHE_SIZE - 2.
+  // With 50 bands each requesting a random frame, cache thrashing causes
+  // repeated putImageData uploads. Quantising to a small pool keeps the LRU
+  // cache hot and eliminates the per-band GPU readback cost.
+  const framePool = Math.max(1, Math.min(maxBackSc, RING_CACHE_SIZE - 2));
+
+  const ctx      = gBuf.drawingContext;
+  const prevAlpha = ctx.globalAlpha;
+
+  // Track last band bottom for minimum spacing enforcement
+  let lastBandBot = -scanSpacing - 1;
+
   for (let n = 0; n < scanBands; n++) {
     const bH_n = randSize
       ? Math.max(4, Math.floor(random(baseRadius * 0.5, baseRadius * 4) * 3))
-      : bandHeight;
-    const driftY  = noise(n * 4.1 + nPhaseY * 0.4 * driftSpeed * speedMul) * height;
+      : Math.max(4, Math.floor(baseRadius * 3));
+
+    const driftY  = noise(n * 4.1 + phY * 0.4 * driftSpeed) * height;
     const gappedY = scanGap > 0
       ? Math.floor(driftY / Math.max(1, bH_n + scanGap)) * (bH_n + scanGap)
       : driftY;
     const bTop = Math.max(0, Math.floor(gappedY));
+
+    // Minimum spacing — skip this band if it would overlap the previous one
+    if (scanSpacing > 0 && bTop < lastBandBot + scanSpacing) continue;
+
     const bBot = Math.min(height, bTop + bH_n);
     const bH   = bBot - bTop;
     if (bH <= 0) continue;
 
-    // Convert random offset to fromEnd index — clamp to valid range
-    const offset = Math.floor(random(1, maxBackSc + 1));
-    const src    = frameRing.fromEnd(Math.min(offset, frameRing.length - 1));
+    lastBandBot = bBot;
+
+    // Quantise ring offset to framePool — keeps LRU cache hits high
+    const poolIdx = Math.floor(random(framePool)) + 1;
+    const src     = frameRing.fromEnd(Math.min(poolIdx, frameRing.length - 1));
     if (!src) continue;
 
     const skewOffset = Math.floor(scanSkew * bTop);
     const shiftX = Math.floor(
-      map(noise(n * 2.3 + nPhaseX * 0.5 * speedMul), 0, 1, -width * shiftScale, width * shiftScale)
+      map(noise(n * 2.3 + phX * 0.5), 0, 1, -width * shiftScale, width * shiftScale)
     ) + skewOffset;
     const srcX = Math.max(0, shiftX < 0 ? -shiftX : 0);
     const dstX = Math.max(0, shiftX > 0 ?  shiftX : 0);
     const bW   = width - Math.abs(shiftX);
     if (bW <= 0) continue;
 
-    ctx.save();
-    ctx.globalAlpha = bandAlpha / 255;
+    // Direct alpha set/restore — no ctx.save/restore per band.
+    // save/restore pushes/pops the full canvas state (transform, clip, font,
+    // shadow, compositing). At 50 bands × 60fps that's 6000 state snapshots/sec.
+    ctx.globalAlpha = bandAlpha;
     drawRingRegion(gBuf, src, srcX, bTop, bW, bH, dstX, bTop, bW, bH);
-    ctx.restore();
   }
+
+  ctx.globalAlpha = prevAlpha; // restore once at the end
 }
 
 // ─── Glitch ───────────────────────────────────────────────────────────────────
@@ -298,9 +322,11 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0) {
   // Note: randomSeed is set by draw() once per frame; no re-seeding here.
   // applyScanlines ran first and consumed some random state — that ordering is intentional.
 
+  const cluSpeedVar = parseFloat(els.cluSpeedVar?.value ?? '0');
+  const cluPulse    = parseFloat(els.cluPulse?.value   ?? '0');
+
   // ── Cluster center physics ─────────────────────────────────────────────────
   function getPhysicsCenters() {
-    // Use p5's seeded random() for reproducibility across reloads with the same baseSeed.
     while (_cluPhysics.length < cluCenters) {
       _cluPhysics.push({
         x: random(width),
@@ -309,17 +335,40 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0) {
         vy: (random() - 0.5) * 2,
         noiseOffX: random(1000),
         noiseOffY: random(1000),
+        // Per-center speed multiplier — randomized once on creation so each
+        // center has its own characteristic speed even at the same cluSpeed.
+        // cluSpeedVar=0 → all centers same speed; =1 → range 0×–2× of cluSpeed.
+        speedMul: 1 + (random() - 0.5) * 2 * cluSpeedVar,
       });
     }
     _cluPhysics.length = cluCenters;
 
     _cluPhysT += cluSpeed * 0.004;
 
+    // Pulse: every pulseInterval seconds, kick all centers with a random
+    // velocity burst. Creates sudden lurching motion that steady inertia alone
+    // can't produce. cluPulse=0 disables; higher values = stronger kicks.
+    if (cluPulse > 0) {
+      const pulseInterval = Math.max(0.2, 3 - cluPulse * 0.25); // 3s down to 0.5s
+      const nowSec = millis() / 1000;
+      if (!_cluPhysics._lastPulse) _cluPhysics._lastPulse = nowSec;
+      if (nowSec - _cluPhysics._lastPulse >= pulseInterval) {
+        _cluPhysics._lastPulse = nowSec;
+        for (const c of _cluPhysics) {
+          const ang = random(TWO_PI);
+          const force = cluPulse * cluSpeed * 0.6;
+          c.vx += Math.cos(ang) * force;
+          c.vy += Math.sin(ang) * force;
+        }
+      }
+    }
+
     for (const c of _cluPhysics) {
+      const effectiveSpeed = cluSpeed * (c.speedMul ?? 1);
       const steerAng = noise(c.noiseOffX + _cluPhysT * 0.7,
                              c.noiseOffY + _cluPhysT * 0.5) * TWO_PI * 2;
-      const desiredVx = Math.cos(steerAng) * cluSpeed;
-      const desiredVy = Math.sin(steerAng) * cluSpeed;
+      const desiredVx = Math.cos(steerAng) * effectiveSpeed;
+      const desiredVy = Math.sin(steerAng) * effectiveSpeed;
 
       c.vx = c.vx * cluInertia + desiredVx * (1 - cluInertia);
       c.vy = c.vy * cluInertia + desiredVy * (1 - cluInertia);
@@ -598,5 +647,124 @@ function applySymmetry(src, dst, mode = 'v', pos = 0.5) {
     dst.push(); dst.translate(0, 2 * y0); dst.scale(1, -1);
     dst.image(src, 0, 0, w, h);
     dst.pop(); ctx.restore();
+  }
+}
+
+// ─── Global composite key ─────────────────────────────────────────────────────
+// Applied at the final composite stage in draw(), between the clean base (gCur)
+// and the processed output (gBuf).
+//
+// BLEND mode — CSS globalCompositeOperation. Entirely GPU-accelerated.
+//   draw() already put gBuf on the p5 canvas. We draw gCur on top with a blend
+//   mode at mix opacity. One drawImage call, no pixel work.
+//
+// LUMA mode — base luminance controls how much of the processed layer shows.
+//   Optimized to a single getImageData + putImageData cycle:
+//   1. Downsample base into _gkCanvas, read pixels (1 GPU→CPU readback).
+//   2. Pixel loop: write luma→alpha only (3 muls per pixel, no lerp).
+//      Output is white pixels with luma-derived alpha.
+//   3. putImageData back to _gkCanvas (1 CPU→GPU upload).
+//   4. Draw processed (gBuf) into _gkBufCanvas at downscale (GPU).
+//   5. Apply _gkCanvas as alpha mask via destination-in (GPU).
+//   6. Draw _gkBufCanvas over the canvas at mix opacity (GPU).
+//   Net: 1 getImageData, 1 putImageData, 4 GPU drawImage/composite ops.
+//   Previously: 2 getImageData + 1 createImageData + full lerp pixel loop.
+
+let _gkCanvas = null, _gkCtx = null;       // luma mask canvas
+let _gkBufCanvas = null, _gkBufCtx = null; // processed layer canvas
+let _gkPixBuf = null;                       // pre-allocated pixel buffer (reused)
+
+function applyGlobalKey(p5canvas, baseSrc, processedSrc, mode, mix, thresh, invert, blendMode) {
+  if (!mode || mode === 'off' || mix <= 0) return;
+
+  const W = p5canvas.width, H = p5canvas.height;
+  const ctx = p5canvas.drawingContext;
+
+  // Resolve source elements once — avoid repeated optional chaining per pixel
+  const baseEl = baseSrc?.elt ?? baseSrc?.drawingContext?.canvas ?? null;
+  const procEl = processedSrc?.elt ?? processedSrc?.drawingContext?.canvas ?? null;
+  if (!baseEl || !procEl) return;
+
+  // ── Blend mode ─────────────────────────────────────────────────────────────
+  // draw() already has gBuf on the canvas. We composite gCur on top with a
+  // blend mode — one drawImage, zero pixel work.
+  if (mode === 'blend') {
+    ctx.save();
+    ctx.globalCompositeOperation = blendMode || 'screen';
+    ctx.globalAlpha = mix;
+    ctx.drawImage(baseEl, 0, 0, W, H);
+    ctx.restore();
+    return;
+  }
+
+  // ── Luma mode ──────────────────────────────────────────────────────────────
+  if (mode === 'luma') {
+    const MAX_W = 640;
+    const scale = W > MAX_W ? MAX_W / W : 1;
+    const sw = Math.max(1, Math.round(W * scale));
+    const sh = Math.max(1, Math.round(H * scale));
+    const n  = sw * sh * 4;
+
+    // Allocate canvases only when dimensions change
+    if (!_gkCanvas || _gkCanvas.width !== sw || _gkCanvas.height !== sh) {
+      _gkCanvas = document.createElement('canvas');
+      _gkCanvas.width = sw; _gkCanvas.height = sh;
+      _gkCtx = _gkCanvas.getContext('2d', { willReadFrequently: true });
+      _gkPixBuf = null; // force realloc below
+    }
+    if (!_gkBufCanvas || _gkBufCanvas.width !== sw || _gkBufCanvas.height !== sh) {
+      _gkBufCanvas = document.createElement('canvas');
+      _gkBufCanvas.width = sw; _gkBufCanvas.height = sh;
+      _gkBufCtx = _gkBufCanvas.getContext('2d');
+    }
+
+    // Pre-allocated output buffer — no createImageData per frame
+    if (!_gkPixBuf || _gkPixBuf.length !== n) _gkPixBuf = new Uint8ClampedArray(n);
+
+    // Step 1: Downsample base, read pixels — single getImageData
+    _gkCtx.drawImage(baseEl, 0, 0, sw, sh);
+    const baseData = _gkCtx.getImageData(0, 0, sw, sh);
+    const bp = baseData.data;
+
+    // Step 2: Luma→alpha pixel loop — 3 multiplies per pixel, no lerp
+    // Output: white (255,255,255) with luma-derived alpha.
+    // destination-in compositing will use this alpha to clip the processed layer.
+    //
+    // thresh=0 → gate at luma 255 → nothing revealed → base video only
+    // thresh=1 → gate at luma 0   → everything revealed → full processed output
+    const t = (1 - thresh) * 255;
+    const rollRange = Math.max(1, 64); // soft rolloff width in luma units
+    for (let i = 0; i < n; i += 4) {
+      const lum    = (0.299 * bp[i] + 0.587 * bp[i+1] + 0.114 * bp[i+2]);
+      const roll   = Math.max(0, Math.min(1, (lum - t) / rollRange));
+      const reveal = invert ? (1 - roll) : roll;
+      _gkPixBuf[i]   = 255;
+      _gkPixBuf[i+1] = 255;
+      _gkPixBuf[i+2] = 255;
+      _gkPixBuf[i+3] = (reveal * 255 + 0.5) | 0; // alpha = luma gate
+    }
+
+    // Step 3: Upload luma mask
+    _gkCtx.putImageData(new ImageData(_gkPixBuf, sw, sh), 0, 0);
+
+    // Steps 4–5: Draw processed into _gkBufCanvas, clip it with the luma mask
+    _gkBufCtx.clearRect(0, 0, sw, sh);
+    _gkBufCtx.drawImage(procEl, 0, 0, sw, sh);        // processed layer
+    _gkBufCtx.globalCompositeOperation = 'destination-in';
+    _gkBufCtx.drawImage(_gkCanvas, 0, 0, sw, sh);     // apply luma mask as alpha
+    _gkBufCtx.globalCompositeOperation = 'source-over'; // reset
+
+    // Step 6: Composite — draw base (gCur) as foundation, then luma-clipped
+    // processed (gBuf) on top at mix opacity.
+    // This is done here rather than relying on whatever draw() already put on
+    // the canvas — by this point gBuf is already painted, so we must replace
+    // it with gCur first or the key has nothing to cut through.
+    ctx.save();
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.drawImage(baseEl, 0, 0, W, H);     // lay down clean base
+    ctx.globalAlpha = mix;
+    ctx.drawImage(_gkBufCanvas, 0, 0, W, H); // processed, clipped by luma mask
+    ctx.restore();
   }
 }
