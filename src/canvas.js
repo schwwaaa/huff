@@ -349,7 +349,7 @@ function _pushToRing() {
     // getImageData returns an owned ImageData directly — no p5 loadPixels()
     // intermediate and no .buffer.slice() copy. One GPU readback, one allocation.
     const imgData = gCur.drawingContext.getImageData(0, 0, gCur.width, gCur.height);
-    if (imgData.data.length > 0) frameRing.push(imgData);
+    if (imgData.data.length > 0) { frameRing.push(imgData); _vfc++; }
   } catch(e) {}
 }
 
@@ -357,6 +357,7 @@ function _pushToRing() {
 // The old pump chain checks its captured token on every tick and
 // terminates if it no longer matches — ensuring only one active pump exists.
 let _pumpSession = 0;
+let _vfc = 0; // increments once per decoded video frame — used to stabilise scanline ring selection
 
 function pumpVideoFrames() {
   if (!videoEl?.elt) return;
@@ -1000,12 +1001,12 @@ function draw() {
   nPhaseX += density * 0.01;
   nPhaseY += density * 0.011;
 
-  // Scanlines advance on their own phase accumulator at their own rate.
-  // scanSpeed controls actual animation speed — not noise coordinate scaling,
-  // which caused aliasing (random jumping) rather than smooth speed change.
+  // Scanline phase advances independently of glitch density.
+  // Previously: nPhaseScanX += density * scanSpeed * 0.01 — if density=0 (glitch off), bands froze.
+  // Now: advances every draw() at scanSpeed rate regardless of glitch state.
   const scanSpeed = parseFloat(els.scanSpeed?.value ?? '1.0');
-  nPhaseScanX += density * scanSpeed * 0.01;
-  nPhaseScanY += density * scanSpeed * 0.011;
+  nPhaseScanX += scanSpeed * 0.008;
+  nPhaseScanY += scanSpeed * 0.009;
 
   const pers = parseFloat(els.persistence?.value ?? '0.7');
   if (pers < 1) {

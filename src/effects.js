@@ -179,12 +179,6 @@ function applyScanlines(density) {
   const phX = nPhaseScanX;
   const phY = nPhaseScanY;
 
-  // Cap the number of distinct ring frames requested to RING_CACHE_SIZE - 2.
-  // With 50 bands each requesting a random frame, cache thrashing causes
-  // repeated putImageData uploads. Quantising to a small pool keeps the LRU
-  // cache hot and eliminates the per-band GPU readback cost.
-  const framePool = Math.max(1, Math.min(maxBackSc, RING_CACHE_SIZE - 2));
-
   const ctx      = gBuf.drawingContext;
   const prevAlpha = ctx.globalAlpha;
 
@@ -211,10 +205,12 @@ function applyScanlines(density) {
 
     lastBandBot = bBot;
 
-    // Quantise ring offset to framePool — keeps LRU cache hits high
-    const poolIdx = Math.floor(random(framePool)) + 1;
-    const src     = frameRing.fromEnd(Math.min(poolIdx, frameRing.length - 1));
-    if (!src) continue;
+    // Source is gCur — the current clean video frame.
+    // Previously bands pulled from historical ring frames (different time points per band)
+    // which caused the buffer-trail appearance and stutter on movement.
+    // Using gCur means bands show the current video displaced spatially — pure
+    // horizontal shift glitch with no temporal artifact.
+    const gCurCanvas = gCur.drawingContext.canvas;
 
     const skewOffset = Math.floor(scanSkew * bTop);
     const shiftX = Math.floor(
@@ -225,11 +221,8 @@ function applyScanlines(density) {
     const bW   = width - Math.abs(shiftX);
     if (bW <= 0) continue;
 
-    // Direct alpha set/restore — no ctx.save/restore per band.
-    // save/restore pushes/pops the full canvas state (transform, clip, font,
-    // shadow, compositing). At 50 bands × 60fps that's 6000 state snapshots/sec.
     ctx.globalAlpha = bandAlpha;
-    drawRingRegion(gBuf, src, srcX, bTop, bW, bH, dstX, bTop, bW, bH);
+    ctx.drawImage(gCurCanvas, srcX, bTop, bW, bH, dstX, bTop, bW, bH);
   }
 
   ctx.globalAlpha = prevAlpha; // restore once at the end
@@ -437,6 +430,13 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0) {
   if (frameRing.length === 0 || maxBack <= 0) return;
 
   const ctx = gBuf.drawingContext;
+  const prevAlpha = ctx.globalAlpha;
+
+  // tileAlpha is constant for all tiles — set once, restore once.
+  // Previously ctx.save/restore ran per tile and per smear step.
+  // At 50 tiles with smear=3 that was 200 full state snapshots per frame.
+  ctx.globalAlpha = tileAlpha / 255;
+
   for (let i = 0; i < targets.length; i++) {
     let [cx, cy] = targets[i];
 
@@ -445,41 +445,38 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0) {
     cx = (cx + ox + width)  % width;
     cy = (cy + oy + height) % height;
 
-    // Tile size from the natural position — partial tiles at canvas edges are fine
-    // and match the original behaviour. Do NOT use a fixed tileW clamped to
-    // canvas-minus-tileW: that stacks all edge tiles at one coordinate (the band bug).
     const w = Math.min(block * (size / 20), width  - cx);
     const h = Math.min(block * (size / 20), height - cy);
     if (w <= 0 || h <= 0) continue;
 
-    // Apply base offset to the destination position only, clamped so the tile
-    // fits within the canvas. Source (cx, cy) is unchanged — tiles shift where
-    // they appear but sample from their natural ring position.
     const dstX = Math.max(0, Math.min(width  - w, cx + baseDX));
     const dstY = Math.max(0, Math.min(height - h, cy + baseDY));
 
-    const randBack  = Math.floor(random(1, maxBack + 1));
+    // Stable ring frame selection per video frame using _vfc hash.
+    // Previously random(1, maxBack+1) reseeded from frameCount — every draw()
+    // at 60fps picked a different historical frame per tile. Between two video
+    // frames each tile would flash through different time-slices of the person,
+    // causing the temporal stutter on movement.
+    // _vfc only increments when a real decoded frame arrives (~30fps), so this
+    // hash is identical across all draw() calls sharing the same video frame.
+    const randBack  = Math.max(1, ((_vfc * 1664525 + i * 1013904223) >>> 0) % maxBack + 1);
     const blendBack = Math.round(baseBack + (randBack - baseBack) * depthScatter);
     const idx       = Math.max(1, Math.min(maxBack, blendBack));
     const src       = frameRing.fromEnd(idx);
     if (!src) continue;
 
-    ctx.save();
-    ctx.globalAlpha = tileAlpha / 255;
     drawRingRegion(gBuf, src, cx, cy, w, h, dstX, dstY, w, h);
-    ctx.restore();
 
     if (smearLen > 0) {
       for (let s = 1; s <= smearLen; s++) {
         const sx2 = Math.max(0, Math.min(width  - w, dstX + Math.round(dxUnit * s * block)));
         const sy2 = Math.max(0, Math.min(height - h, dstY + Math.round(dyUnit * s * block)));
-        ctx.save();
-        ctx.globalAlpha = tileAlpha / 255;
         drawRingRegion(gBuf, src, cx, cy, w, h, sx2, sy2, w, h);
-        ctx.restore();
       }
     }
   }
+
+  ctx.globalAlpha = prevAlpha;
 }
 
 // ─── Flow warp ────────────────────────────────────────────────────────────────
