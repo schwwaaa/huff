@@ -1404,6 +1404,48 @@
             </div>
             </div>
 
+            <!-- GLOBAL KEY -->
+            <div class="group">
+                <div class="group-label">Global Key</div>
+                <div class="group-body">
+                <div class="group-row">
+                    <div class="ctrl">
+                        <label>MODE</label>
+                        <select id="keyMode" style="font-size:10px;padding:1px 2px">
+                            <option value="off" selected>OFF</option>
+                            <option value="luma">LUMA</option>
+                            <option value="blend">BLEND</option>
+                        </select>
+                    </div>
+                    <div class="ctrl">
+                        <label>MIX</label>
+                        <input id="keyMix" type="range" min="0" max="1" step="0.01" value="0">
+                        <span class="val" id="keyMixVal">0.00</span>
+                    </div>
+                    <div class="ctrl">
+                        <label>THRESH</label>
+                        <input id="keyThresh" type="range" min="0" max="1" step="0.01" value="0.5">
+                        <span class="val" id="keyThreshVal">0.50</span>
+                    </div>
+                    <div class="ctrl">
+                        <label>INVERT</label>
+                        <input id="keyInvert" type="checkbox">
+                    </div>
+                    <div class="ctrl">
+                        <label>BLEND</label>
+                        <select id="keyBlend" style="font-size:10px;padding:1px 2px">
+                            <option value="screen">SCREEN</option>
+                            <option value="multiply">MULTIPLY</option>
+                            <option value="overlay">OVERLAY</option>
+                            <option value="difference">DIFFERENCE</option>
+                            <option value="hard-light">HARD LIGHT</option>
+                            <option value="lighter">ADD</option>
+                        </select>
+                    </div>
+                </div>
+                </div>
+            </div>
+
             <!-- SOLARIZE -->
             <div class="group">
                 <div class="group-label">Solarize</div>
