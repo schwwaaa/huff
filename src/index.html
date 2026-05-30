@@ -1061,14 +1061,29 @@
         <div class="group">
             <div class="group-label">Presets</div>
             <div class="group-body">
-            <div class="group-row">
-                <button id="presetSaveBtn" class="btn-dim" style="font-size:10px;padding:3px 8px">💾 Save Preset</button>
-                <button id="presetLoadBtn" class="btn-dim" style="font-size:10px;padding:3px 8px">📂 Load Preset…</button>
-                <span style="font-size:9px;color:rgba(255,255,255,.25);padding:0 4px;font-family:'Share Tech Mono',monospace">JSON · Ctrl+Z to undo</span>
+            <div class="group-row" style="gap:4px;flex-wrap:wrap">
+                <!-- Name + Save -->
+                <input id="presetName" type="text" placeholder="preset name…"
+                    style="width:110px;background:rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.18);
+                           color:#e8eaf0;padding:2px 6px;font-size:10px;font-family:inherit;
+                           border-radius:0;outline:none;">
+                <button id="presetSaveBtn" class="btn-dim" style="font-size:10px;padding:3px 8px">💾 Save</button>
+                <!-- List + Load + Delete -->
+                <select id="presetList" style="max-width:130px;font-size:10px;background:#111;color:#e8eaf0;border:1px solid rgba(255,255,255,.18);padding:1px 3px;">
+                    <option value="">— saved presets —</option>
+                </select>
+                <button id="presetLoadBtn" class="btn-dim" style="font-size:10px;padding:3px 8px">▶ Load</button>
+                <button id="presetDeleteBtn" class="btn-dim" style="font-size:10px;padding:3px 8px;color:#ff7070">✕ Delete</button>
+                <!-- JSON export/import for portability -->
+                <span style="font-size:9px;color:rgba(255,255,255,.2);padding:0 2px">|</span>
+                <button id="presetExportBtn" class="btn-dim" style="font-size:10px;padding:3px 8px">↑ Export JSON</button>
+                <button id="presetImportBtn" class="btn-dim" style="font-size:10px;padding:3px 8px">↓ Import JSON</button>
+                <span style="font-size:9px;color:rgba(255,255,255,.22);padding:0 4px;font-family:'Share Tech Mono',monospace">Ctrl+Z: undo</span>
             </div>
             </div>
         </div>
         </div>
+        <input id="presetLoadInput" type="file" accept=".json" style="display:none">
 
         <!-- grouped controls -->
         <form id="controlsForm" autocomplete="off" novalidate>

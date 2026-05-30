@@ -222,30 +222,120 @@ function applyPreset(data) {
   }
 }
 
-function savePreset() {
-  const blob = new Blob([JSON.stringify(capturePreset(), null, 2)], { type:'application/json' });
-  const a    = document.createElement('a');
-  a.href     = URL.createObjectURL(blob);
-  a.download = `huff-preset-${Date.now()}.json`;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
-  showToast('Preset saved');
+// ─── Preset system — localStorage + JSON export/import ───────────────────────
+// Presets are stored by name in localStorage so they persist across sessions
+// and are instantly accessible from the dropdown without file dialogs.
+// JSON export/import provides portability between machines.
+
+const PRESETS_LS_KEY = 'huff_presets_v1';
+
+function _loadPresetMap() {
+  try { return JSON.parse(localStorage.getItem(PRESETS_LS_KEY) || '{}'); } catch { return {}; }
+}
+function _savePresetMap(map) {
+  try { localStorage.setItem(PRESETS_LS_KEY, JSON.stringify(map)); } catch {}
 }
 
-function loadPresetFromFile(file) {
+function refreshPresetList() {
+  const sel = _$('presetList');
+  if (!sel) return;
+  const map  = _loadPresetMap();
+  const prev = sel.value;
+  sel.innerHTML = '<option value="">— saved presets —</option>';
+  Object.keys(map).sort().forEach(name => {
+    const o = document.createElement('option');
+    o.value = name; o.textContent = name;
+    sel.appendChild(o);
+  });
+  if (prev && map[prev]) sel.value = prev;
+}
+
+function saveNamedPreset() {
+  const nameEl = _$('presetName');
+  const name   = (nameEl?.value || '').trim();
+  if (!name) { showToast('Enter a preset name first', true); return; }
+  const map = _loadPresetMap();
+  map[name] = capturePreset();
+  _savePresetMap(map);
+  refreshPresetList();
+  const sel = _$('presetList');
+  if (sel) sel.value = name;
+  showToast(`Preset "${name}" saved`);
+}
+
+function loadNamedPreset() {
+  const sel  = _$('presetList');
+  const name = sel?.value;
+  if (!name) { showToast('Select a preset first', true); return; }
+  const map  = _loadPresetMap();
+  if (!map[name]) { showToast(`Preset "${name}" not found`, true); return; }
+  snapshotForUndo();
+  applyPreset(map[name]);
+  showToast(`Preset "${name}" loaded`);
+}
+
+function deleteNamedPreset() {
+  const sel  = _$('presetList');
+  const name = sel?.value;
+  if (!name) { showToast('Select a preset to delete', true); return; }
+  const map  = _loadPresetMap();
+  if (!map[name]) return;
+  delete map[name];
+  _savePresetMap(map);
+  refreshPresetList();
+  showToast(`Preset "${name}" deleted`);
+}
+
+// JSON export — downloads all named presets as one file for sharing/backup
+function exportPresetsJSON() {
+  const map  = _loadPresetMap();
+  const keys = Object.keys(map);
+  if (keys.length === 0) { showToast('No presets saved yet', true); return; }
+  const blob = new Blob([JSON.stringify(map, null, 2)], { type:'application/json' });
+  const a    = document.createElement('a');
+  a.href     = URL.createObjectURL(blob);
+  a.download = `huff-presets-${Date.now()}.json`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  showToast(`${keys.length} preset${keys.length !== 1 ? 's' : ''} exported`);
+}
+
+// JSON import — merges presets from a file into the existing localStorage set
+function importPresetsFromFile(file) {
   if (!file) return;
   const reader = new FileReader();
   reader.onload = e => {
     try {
-      const data = JSON.parse(e.target.result);
-      snapshotForUndo();
-      applyPreset(data);
-      showToast('Preset loaded');
+      const incoming = JSON.parse(e.target.result);
+      // Accept either a map of {name: presetData} or a single preset object
+      const isSinglePreset = '_v' in incoming && !Object.values(incoming).some(v => v && '_v' in v);
+      if (isSinglePreset) {
+        // Single preset — ask for a name via the name field
+        const nameEl = _$('presetName');
+        const name   = (nameEl?.value || '').trim() || `imported-${Date.now()}`;
+        const map    = _loadPresetMap();
+        map[name]    = incoming;
+        _savePresetMap(map);
+        refreshPresetList();
+        const sel = _$('presetList');
+        if (sel) sel.value = name;
+        showToast(`Preset imported as "${name}"`);
+      } else {
+        // Map of named presets — merge all
+        const map = _loadPresetMap();
+        let count = 0;
+        Object.entries(incoming).forEach(([name, data]) => {
+          if (data && typeof data === 'object') { map[name] = data; count++; }
+        });
+        _savePresetMap(map);
+        refreshPresetList();
+        showToast(`${count} preset${count !== 1 ? 's' : ''} imported`);
+      }
     } catch {
       showToast('Invalid preset file', true);
     }
   };
-  reader.onerror = () => showToast('Could not read preset file', true);
+  reader.onerror = () => showToast('Could not read file', true);
   reader.readAsText(file);
 }
 
@@ -711,19 +801,35 @@ function hookSliders() {
 }
 
 function hookPresets() {
-  _$('presetSaveBtn')?.addEventListener('click', savePreset);
+  // Named preset controls
+  _$('presetSaveBtn')?.addEventListener('click', saveNamedPreset);
+  _$('presetLoadBtn')?.addEventListener('click', loadNamedPreset);
+  _$('presetDeleteBtn')?.addEventListener('click', deleteNamedPreset);
 
-  const loadBtn   = _$('presetLoadBtn');
-  const loadInput = _$('presetLoadInput');
-  if (loadBtn && loadInput) {
-    loadBtn.addEventListener('click', () => loadInput.click());
-    loadInput.addEventListener('change', () => {
-      loadPresetFromFile(loadInput.files?.[0]);
-      loadInput.value = '';
+  // Double-clicking a preset in the list loads it immediately
+  _$('presetList')?.addEventListener('dblclick', loadNamedPreset);
+
+  // JSON export/import
+  _$('presetExportBtn')?.addEventListener('click', exportPresetsJSON);
+  const importBtn   = _$('presetImportBtn');
+  const importInput = _$('presetLoadInput');
+  if (importBtn && importInput) {
+    importBtn.addEventListener('click', () => importInput.click());
+    importInput.addEventListener('change', () => {
+      importPresetsFromFile(importInput.files?.[0]);
+      importInput.value = '';
     });
   }
 
-  // resetBtn is preset-adjacent — snapshot before wiping
+  // Allow Enter key in name field to trigger save
+  _$('presetName')?.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); saveNamedPreset(); }
+  });
+
+  // Populate list on startup
+  refreshPresetList();
+
+  // Reset btn
   els.resetBtn?.addEventListener('click', () => { snapshotForUndo(); refreshGlitch(); });
 }
 
