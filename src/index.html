@@ -1300,30 +1300,26 @@
                 <div class="group-row">
                     <div class="ctrl"><label>ON</label><input id="clusters" type="checkbox"></div>
                     <div class="ctrl">
+                        <label>ORIENT</label>
+                        <select id="scanOrient" style="font-size:10px;padding:1px 2px">
+                            <option value="H" selected>H</option>
+                            <option value="V">V</option>
+                        </select>
+                    </div>
+                    <div class="ctrl">
                         <label>BANDS</label>
                         <input id="clusterCount" type="range" min="1" max="50" step="1" value="3">
                         <span class="val" id="clusterCountVal">3</span>
                     </div>
                     <div class="ctrl">
-                        <label>HEIGHT</label>
+                        <label>SIZE</label>
                         <input id="clusterRadius" type="range" min="1" max="120" step="1" value="10">
                         <span class="val" id="clusterRadiusVal">10</span>
                     </div>
-                    <div class="ctrl"><label>RAND SIZE</label><input id="scanRandSize" type="checkbox"></div>
                     <div class="ctrl">
-                        <label>DEPTH</label>
-                        <input id="scanDepth" type="range" min="0" max="0.5" step="0.01" value="0.15">
-                        <span class="val" id="scanDepthVal">0.15</span>
-                    </div>
-                    <div class="ctrl">
-                        <label>OFFSET X</label>
-                        <input id="scanOffX" type="range" min="-1" max="1" step="0.01" value="0">
-                        <span class="val" id="scanOffXVal">0.00</span>
-                    </div>
-                    <div class="ctrl">
-                        <label>OFFSET Y</label>
-                        <input id="scanOffY" type="range" min="-1" max="1" step="0.01" value="0">
-                        <span class="val" id="scanOffYVal">0.00</span>
+                        <label>FOCUS</label>
+                        <input id="scanFocus" type="range" min="0" max="1" step="0.01" value="0.5">
+                        <span class="val" id="scanFocusVal">0.50</span>
                     </div>
                     <div class="ctrl">
                         <label>SHIFT</label>
@@ -1331,9 +1327,19 @@
                         <span class="val" id="scanShiftVal">0.12</span>
                     </div>
                     <div class="ctrl">
+                        <label>SKEW</label>
+                        <input id="scanSkew" type="range" min="-1" max="1" step="0.01" value="0">
+                        <span class="val" id="scanSkewVal">0.00</span>
+                    </div>
+                    <div class="ctrl">
                         <label>DRIFT</label>
                         <input id="scanDrift" type="range" min="0" max="3" step="0.01" value="1.0">
                         <span class="val" id="scanDriftVal">1.00</span>
+                    </div>
+                    <div class="ctrl">
+                        <label>ROLL</label>
+                        <input id="scanRoll" type="range" min="-2" max="2" step="0.01" value="0">
+                        <span class="val" id="scanRollVal">0.00</span>
                     </div>
                     <div class="ctrl">
                         <label>SPEED</label>
@@ -1344,11 +1350,6 @@
                         <label>GAP</label>
                         <input id="scanGap" type="range" min="0" max="200" step="1" value="0">
                         <span class="val" id="scanGapVal">0</span>
-                    </div>
-                    <div class="ctrl">
-                        <label>SKEW</label>
-                        <input id="scanSkew" type="range" min="-1" max="1" step="0.01" value="0">
-                        <span class="val" id="scanSkewVal">0.00</span>
                     </div>
                     <div class="ctrl">
                         <label>OPACITY</label>

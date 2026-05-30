@@ -157,8 +157,8 @@ const PRESET_IDS = [
   'baseOn','baseMix','seedOnLoad',
   'symOn','symMode','symPos',
   'solarizeOn','solarizeThresh','solarizeAmt','solarizeR','solarizeG','solarizeB',
-  'scanAlpha','scanShift','scanDrift','scanSpeed','scanGap','scanSpacing','scanSkew','scanRandSize',
-  'depthScatter','corruptDrift',
+  'scanAlpha','scanShift','scanDrift','scanSpeed','scanGap','scanSkew',
+  'scanOrient','scanFocus','scanRoll',
   'trailOn','trailLayers','trailDepth','trailLumaKey',
   'bgMode',
   'cluSpeedVar','cluPulse',
@@ -581,11 +581,12 @@ function hookUI() {
     'solarizeOn','solarizeThresh','solarizeThreshVal','solarizeAmt','solarizeAmtVal',
     'solarizeR','solarizeRVal','solarizeG','solarizeGVal','solarizeB','solarizeBVal',
     'scanAlpha','scanAlphaVal','scanShift','scanShiftVal','scanDrift','scanDriftVal',
-    'scanSpeed','scanSpeedVal','scanGap','scanGapVal','scanSpacing','scanSpacingVal','scanSkew','scanSkewVal',
+    'scanSpeed','scanSpeedVal','scanGap','scanGapVal','scanSkew','scanSkewVal',
+    'scanOrient','scanFocus','scanFocusVal','scanRoll','scanRollVal',
     'depthScatter','depthScatterVal','corruptDrift','corruptDriftVal',
     'trailOn','trailLayers','trailLayersVal','trailDepth','trailDepthVal',
     'trailLumaKey','trailLumaKeyVal',
-    'scanRandSize','bgMode','dim',
+    'scanOrient','bgMode','dim',
     'cluSpeedVar','cluSpeedVarVal','cluPulse','cluPulseVal',
     'keyMode','keyMix','keyMixVal','keyThresh','keyThreshVal','keyInvert','keyBlend',
   ].forEach(k => els[k] = _$(k));
@@ -775,7 +776,7 @@ function hookSliders() {
     'feedback','persistence','fbX','fbY','fbZ','fbTheta',
     'spatialGap','clusterCount','clusterRadius','cluCenters','cluSpread',
     'cluMinSpread','cluBias','cluDrift','cluSpeed','cluInertia',
-    'scanAlpha','scanShift','scanDrift','scanSpeed','scanGap','scanSpacing','scanSkew',
+    'scanAlpha','scanShift','scanDrift','scanSpeed','scanGap','scanSkew','scanFocus','scanRoll',
     'glitchAlpha','glitchJitter','glitchSmearAngle',
     'flowStrength','flowScale','flowPulse','flowImpl','baseMix','symPos','glitchSpeedMul',
     'depthScatter','corruptDrift','trailLayers','trailDepth','trailLumaKey',
@@ -790,7 +791,7 @@ function hookSliders() {
 
   // Checkboxes and selects also get snapshotted for undo
   ['corruptOn','clusters','clusterTiles','flowOn','baseOn','symOn','solarizeOn',
-   'trailOn','scanRandSize','seedOnLoad','bgMode','symMode'].forEach(id => {
+   'trailOn','seedOnLoad','bgMode','symMode'].forEach(id => {
     _$(id)?.addEventListener('change', snapshotForUndo);
   });
 
@@ -903,8 +904,9 @@ function updateLabels() {
   set(els.scanDrift,        els.scanDriftVal,        f2);
   set(els.scanSpeed,        els.scanSpeedVal,        f2);
   set(els.scanGap,          els.scanGapVal,          v => (v|0));
-  set(els.scanSpacing,      els.scanSpacingVal,      v => (v|0));
   set(els.scanSkew,         els.scanSkewVal,         f2);
+  set(els.scanFocus,        els.scanFocusVal,        f2);
+  set(els.scanRoll,         els.scanRollVal,         f2);
   set(els.depthScatter,     els.depthScatterVal,     f2);
   set(els.corruptDrift,     els.corruptDriftVal,     f2);
   set(els.trailLayers,      els.trailLayersVal,      v => (v|0));

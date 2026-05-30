@@ -152,81 +152,85 @@ function applyTrails() {
 }
 
 // ─── Scanlines ────────────────────────────────────────────────────────────────
-// ORDER DEPENDENCY: draw() calls randomSeed(baseSeed + frameCount) before this.
-// applyScanlines must run before applyGlitch — glitch consumes random state and
-// would change scanline positions if run first. Do not reorder in draw().
+// ORIENT H — horizontal bands displaced left/right (tape head jitter, line noise)
+// ORIENT V — vertical bands displaced up/down (vertical sync issues, column noise)
+// FOCUS — biases band positions toward a region of the canvas (0=top/left, 1=bottom/right)
+// ROLL — steady scroll simulating CRT rolling sync loss, independent of DRIFT
+// DRIFT — dual-frequency noise: slow sync wander + fast instability jitter
 
 function applyScanlines(density) {
   if (!els.clusters?.checked) return;
 
-  const scanBands  = parseInt(els.clusterCount.value,  10);
-  const baseRadius = parseInt(els.clusterRadius.value, 10);
-  if (scanBands <= 0 || frameRing.length < 2) return;
+  const scanBands  = parseInt(els.clusterCount?.value ?? '3',  10);
+  const bandSize   = parseInt(els.clusterRadius?.value ?? '10', 10);
+  if (scanBands <= 0) return;
 
-  const depth      = parseFloat(els.depth.value);
-  const maxBackSc  = Math.max(1, Math.floor((frameRing.length - 1) * depth));
-  const randSize   = !!els.scanRandSize?.checked;
+  const orient     = els.scanOrient?.value ?? 'H';
   const bandAlpha  = parseFloat(els.scanAlpha?.value  ?? '0.86');
   const shiftScale = parseFloat(els.scanShift?.value  ?? '0.12');
-  const driftSpeed = parseFloat(els.scanDrift?.value  ?? '1.0');
-  const scanGap     = parseInt(els.scanGap?.value      ?? '0',   10);
-  const scanSpacing = parseInt(els.scanSpacing?.value  ?? '0',   10);
-  const scanSkew    = parseFloat(els.scanSkew?.value   ?? '0');
+  const driftAmt   = parseFloat(els.scanDrift?.value  ?? '1.0');
+  const scanGap    = parseInt(els.scanGap?.value       ?? '0',   10);
+  const scanSkew   = parseFloat(els.scanSkew?.value   ?? '0');
+  const focus      = parseFloat(els.scanFocus?.value  ?? '0.5');
+  const roll       = parseFloat(els.scanRoll?.value   ?? '0');
 
-  // Use the dedicated scanline phase accumulator — independent of glitch phase.
-  // Speed is controlled by how fast nPhaseScanX/Y accumulate in draw(),
-  // not by scaling noise coordinates (which caused aliasing).
   const phX = nPhaseScanX;
   const phY = nPhaseScanY;
 
-  const ctx      = gBuf.drawingContext;
-  const prevAlpha = ctx.globalAlpha;
+  const rollOffset = (phY * roll * 80) % (orient === 'H' ? height : width);
 
-  // Track last band bottom for minimum spacing enforcement
-  let lastBandBot = -scanSpacing - 1;
+  const dim    = orient === 'H' ? height : width;
+  const cross  = orient === 'H' ? width  : height;
+  const bSize  = Math.max(4, Math.floor(bandSize * 3));
+
+  const ctx       = gBuf.drawingContext;
+  const prevAlpha = ctx.globalAlpha;
+  const gCurCvs   = gCur.drawingContext.canvas;
 
   for (let n = 0; n < scanBands; n++) {
-    const bH_n = randSize
-      ? Math.max(4, Math.floor(random(baseRadius * 0.5, baseRadius * 4) * 3))
-      : Math.max(4, Math.floor(baseRadius * 3));
+    // Dual-frequency drift: slow sync wander + fast instability jitter
+    const slowDrift  = noise(n * 3.7 + phY * 0.25 * driftAmt) * dim;
+    const fastJitter = (noise(n * 11.3 + phY * 1.8 * driftAmt) - 0.5) * dim * 0.12 * driftAmt;
 
-    const driftY  = noise(n * 4.1 + phY * 0.4 * driftSpeed) * height;
-    const gappedY = scanGap > 0
-      ? Math.floor(driftY / Math.max(1, bH_n + scanGap)) * (bH_n + scanGap)
-      : driftY;
-    const bTop = Math.max(0, Math.floor(gappedY));
+    // Focus bias: lerp noise output toward the focus point
+    const biased = slowDrift * (1 - Math.abs(focus - 0.5) * 1.4)
+                 + (focus * dim) * Math.abs(focus - 0.5) * 1.4
+                 + fastJitter;
 
-    // Minimum spacing — skip this band if it would overlap the previous one
-    if (scanSpacing > 0 && bTop < lastBandBot + scanSpacing) continue;
+    const rawPos  = ((biased + rollOffset) % dim + dim) % dim;
+    const gridPos = scanGap > 0
+      ? Math.floor(rawPos / Math.max(1, bSize + scanGap)) * (bSize + scanGap)
+      : rawPos;
 
-    const bBot = Math.min(height, bTop + bH_n);
-    const bH   = bBot - bTop;
-    if (bH <= 0) continue;
+    const bStart = Math.max(0, Math.floor(gridPos));
+    const bEnd   = Math.min(dim, bStart + bSize);
+    const bLen   = bEnd - bStart;
+    if (bLen <= 0) continue;
 
-    lastBandBot = bBot;
-
-    // Source is gCur — the current clean video frame.
-    // Previously bands pulled from historical ring frames (different time points per band)
-    // which caused the buffer-trail appearance and stutter on movement.
-    // Using gCur means bands show the current video displaced spatially — pure
-    // horizontal shift glitch with no temporal artifact.
-    const gCurCanvas = gCur.drawingContext.canvas;
-
-    const skewOffset = Math.floor(scanSkew * bTop);
-    const shiftX = Math.floor(
-      map(noise(n * 2.3 + phX * 0.5), 0, 1, -width * shiftScale, width * shiftScale)
+    const skewOffset = Math.floor(scanSkew * bStart);
+    const shift = Math.floor(
+      map(noise(n * 2.3 + phX * 0.5), 0, 1, -cross * shiftScale, cross * shiftScale)
     ) + skewOffset;
-    const srcX = Math.max(0, shiftX < 0 ? -shiftX : 0);
-    const dstX = Math.max(0, shiftX > 0 ?  shiftX : 0);
-    const bW   = width - Math.abs(shiftX);
-    if (bW <= 0) continue;
+
+    const srcOff = Math.max(0, shift < 0 ? -shift : 0);
+    const dstOff = Math.max(0, shift > 0 ?  shift : 0);
+    const bCross = cross - Math.abs(shift);
+    if (bCross <= 0) continue;
 
     ctx.globalAlpha = bandAlpha;
-    ctx.drawImage(gCurCanvas, srcX, bTop, bW, bH, dstX, bTop, bW, bH);
+
+    if (orient === 'H') {
+      // Horizontal band: position along Y axis, displacement along X
+      ctx.drawImage(gCurCvs, srcOff, bStart, bCross, bLen, dstOff, bStart, bCross, bLen);
+    } else {
+      // Vertical band: position along X axis, displacement along Y
+      ctx.drawImage(gCurCvs, bStart, srcOff, bLen, bCross, bStart, dstOff, bLen, bCross);
+    }
   }
 
-  ctx.globalAlpha = prevAlpha; // restore once at the end
+  ctx.globalAlpha = prevAlpha;
 }
+
 
 // ─── Glitch ───────────────────────────────────────────────────────────────────
 // Note: randomSeed is set by draw() once per frame. No re-seeding here.
