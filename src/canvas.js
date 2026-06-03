@@ -153,16 +153,17 @@ const PRESET_IDS = [
   'corruptOn','feedback','persistence','fbX','fbY','fbZ','fbTheta',
   'clusters','clusterTiles','clusterCount','clusterRadius','spatialGap',
   'cluCenters','cluSpread','cluMinSpread','cluBias','cluDrift','cluSpeed','cluInertia',
-  'flowOn','flowStrength','flowScale','flowPulse','flowImpl',
+  'flowOn','flowStrength','flowScale','flowPulse','flowImpl','flowSpeed','flowTurb','flowSwirl',
   'baseOn','baseMix','seedOnLoad',
   'symOn','symMode','symPos',
   'solarizeOn','solarizeThresh','solarizeAmt','solarizeR','solarizeG','solarizeB',
   'scanAlpha','scanShift','scanDrift','scanSpeed','scanGap','scanSkew',
-  'scanOrient','scanFocus','scanRoll',
+  'scanAngle','scanFocus','scanRoll',
   'trailOn','trailLayers','trailDepth','trailLumaKey',
   'bgMode',
   'cluSpeedVar','cluPulse',
-  'keyMode','keyMix','keyThresh','keyInvert','keyBlend',
+  'lumaKeyOn','lumaKeyMix','lumaKeyThresh','lumaKeyInvert',
+  'globalMixOn','globalMixBlend','globalMixAmt',
 ];
 
 function capturePreset() {
@@ -576,19 +577,21 @@ function hookUI() {
     'cluSpeed','cluSpeedVal','cluInertia','cluInertiaVal',
     'flowOn','flowStrength','flowStrengthVal','flowScale','flowScaleVal',
     'flowPulse','flowPulseVal','flowImpl','flowImplVal',
+    'flowSpeed','flowSpeedVal','flowTurb','flowTurbVal','flowSwirl','flowSwirlVal',
     'baseOn','baseMix','baseMixVal','seedOnLoad',
     'symOn','symMode','symPos','symPosVal',
     'solarizeOn','solarizeThresh','solarizeThreshVal','solarizeAmt','solarizeAmtVal',
     'solarizeR','solarizeRVal','solarizeG','solarizeGVal','solarizeB','solarizeBVal',
     'scanAlpha','scanAlphaVal','scanShift','scanShiftVal','scanDrift','scanDriftVal',
     'scanSpeed','scanSpeedVal','scanGap','scanGapVal','scanSkew','scanSkewVal',
-    'scanOrient','scanFocus','scanFocusVal','scanRoll','scanRollVal',
+    'scanAngle','scanAngleVal','scanFocus','scanFocusVal','scanRoll','scanRollVal',
     'depthScatter','depthScatterVal','corruptDrift','corruptDriftVal',
     'trailOn','trailLayers','trailLayersVal','trailDepth','trailDepthVal',
     'trailLumaKey','trailLumaKeyVal',
-    'scanOrient','bgMode','dim',
+    'scanAngle','bgMode','dim',
     'cluSpeedVar','cluSpeedVarVal','cluPulse','cluPulseVal',
-    'keyMode','keyMix','keyMixVal','keyThresh','keyThreshVal','keyInvert','keyBlend',
+    'lumaKeyOn','lumaKeyMix','lumaKeyMixVal','lumaKeyThresh','lumaKeyThreshVal','lumaKeyInvert',
+    'globalMixOn','globalMixBlend','globalMixAmt','globalMixAmtVal',
   ].forEach(k => els[k] = _$(k));
 
   hookFile();
@@ -778,11 +781,11 @@ function hookSliders() {
     'cluMinSpread','cluBias','cluDrift','cluSpeed','cluInertia',
     'scanAlpha','scanShift','scanDrift','scanSpeed','scanGap','scanSkew','scanFocus','scanRoll',
     'glitchAlpha','glitchJitter','glitchSmearAngle',
-    'flowStrength','flowScale','flowPulse','flowImpl','baseMix','symPos','glitchSpeedMul',
+    'flowStrength','flowScale','flowPulse','flowImpl','flowSpeed','flowTurb','flowSwirl','baseMix','symPos','glitchSpeedMul',
     'depthScatter','corruptDrift','trailLayers','trailDepth','trailLumaKey',
     'solarizeThresh','solarizeAmt','solarizeR','solarizeG','solarizeB',
     'cluSpeedVar','cluPulse',
-    'keyMix','keyThresh',
+    'lumaKeyMix','lumaKeyThresh','globalMixAmt','scanAngle',
   ];
 
   sliderIds.forEach(id => {
@@ -791,7 +794,8 @@ function hookSliders() {
 
   // Checkboxes and selects also get snapshotted for undo
   ['corruptOn','clusters','clusterTiles','flowOn','baseOn','symOn','solarizeOn',
-   'trailOn','seedOnLoad','bgMode','symMode'].forEach(id => {
+   'trailOn','seedOnLoad','bgMode','symMode',
+   'lumaKeyOn','globalMixOn'].forEach(id => {
     _$(id)?.addEventListener('change', snapshotForUndo);
   });
 
@@ -893,6 +897,9 @@ function updateLabels() {
   set(els.flowScale,        els.flowScaleVal,        v => v);
   set(els.flowPulse,        els.flowPulseVal,        v => (v|0));
   set(els.flowImpl,         els.flowImplVal,         f2);
+  set(els.flowSpeed,        els.flowSpeedVal,        f2);
+  set(els.flowTurb,         els.flowTurbVal,         f2);
+  set(els.flowSwirl,        els.flowSwirlVal,        f2);
   set(els.glitchBaseX,      els.glitchBaseXVal,      v => (v|0));
   set(els.glitchBaseY,      els.glitchBaseYVal,      v => (v|0));
   set(els.glitchSpeedMul,   els.glitchSpeedMulVal,   f2);
@@ -905,6 +912,7 @@ function updateLabels() {
   set(els.scanSpeed,        els.scanSpeedVal,        f2);
   set(els.scanGap,          els.scanGapVal,          v => (v|0));
   set(els.scanSkew,         els.scanSkewVal,         f2);
+  set(els.scanAngle,        els.scanAngleVal,        v => Math.round(v)+'°');
   set(els.scanFocus,        els.scanFocusVal,        f2);
   set(els.scanRoll,         els.scanRollVal,         f2);
   set(els.depthScatter,     els.depthScatterVal,     f2);
@@ -920,8 +928,9 @@ function updateLabels() {
   set(els.solarizeB,        els.solarizeBVal,        f2);
   set(els.cluSpeedVar,      els.cluSpeedVarVal,      f2);
   set(els.cluPulse,         els.cluPulseVal,         f2);
-  set(els.keyMix,           els.keyMixVal,           f2);
-  set(els.keyThresh,        els.keyThreshVal,        f2);
+  set(els.lumaKeyMix,       els.lumaKeyMixVal,       f2);
+  set(els.lumaKeyThresh,    els.lumaKeyThreshVal,    f2);
+  set(els.globalMixAmt,     els.globalMixAmtVal,     f2);
   if (els.baseMix && els.baseMixVal) {
     els.baseMixVal.textContent = f2(els.baseMix.value);
     if (els.baseMix) els.baseMix.disabled = !els.baseOn?.checked;
@@ -1126,14 +1135,44 @@ function draw() {
     ctx.restore();
   }
 
-  // ORDER: Trails → Scanlines → Glitch (scanlines must precede glitch; see effects.js)
+  // ORDER: Trails → Glitch → Luma Key → Scanlines
+  // Glitch runs first. Luma Key then composites glitch output with clean source
+  // based on luminance — bright areas let glitch show, dark areas revert to clean.
+  // Scanlines runs last as a spatial displacement on top of the keyed result.
   applyTrails();
-  applyScanlines(density);
 
   if (els.corruptOn?.checked) {
     applyGlitch(density,
       parseInt(els.glitchBaseX?.value ?? '0', 10),
       parseInt(els.glitchBaseY?.value ?? '0', 10));
+  }
+
+  // Luma Key — pipeline gate between glitch and scanlines (only when ON)
+  const lkMix = parseFloat(els.lumaKeyMix?.value ?? '0');
+  if (els.lumaKeyOn?.checked && lkMix > 0) {
+    applyPipelineLumaKey(
+      parseFloat(els.lumaKeyThresh?.value ?? '0.5'),
+      lkMix,
+      !!els.lumaKeyInvert?.checked
+    );
+  }
+
+  applyScanlines(density);
+
+  // Global Mix — blend mode composite between effects chain and base video
+  if (els.globalMixOn?.checked) {
+    const gmMix = parseFloat(els.globalMixAmt?.value ?? '0');
+    if (gmMix > 0) {
+      const ctx    = gBuf.drawingContext;
+      const gCurEl = gCur.elt ?? gCur.drawingContext?.canvas;
+      if (gCurEl) {
+        ctx.save();
+        ctx.globalCompositeOperation = els.globalMixBlend?.value ?? 'screen';
+        ctx.globalAlpha = gmMix;
+        ctx.drawImage(gCurEl, 0, 0, gBuf.width, gBuf.height);
+        ctx.restore();
+      }
+    }
   }
 
   const fb = parseFloat(els.feedback?.value ?? '0');
@@ -1169,7 +1208,10 @@ function draw() {
     applyFlowWarp(gBuf, gWarp, flowS,
       parseInt(els.flowScale?.value  ?? '80', 10),
       parseInt(els.flowPulse?.value  ?? '0',  10),
-      parseFloat(els.flowImpl?.value ?? '0'));
+      parseFloat(els.flowImpl?.value  ?? '0'),
+      parseFloat(els.flowSpeed?.value ?? '1'),
+      parseFloat(els.flowTurb?.value  ?? '0'),
+      parseFloat(els.flowSwirl?.value ?? '0'));
     [gBuf, gWarp] = [gWarp, gBuf];
   }
 
@@ -1204,21 +1246,7 @@ function draw() {
     gBuf.image(gCur, 0, 0, gBuf.width, gBuf.height);
   }
 
-  // Global key composite — runs after the main composite, keying base against processed.
-  const keyMode = els.keyMode?.value ?? 'off';
-  const keyMix  = parseFloat(els.keyMix?.value ?? '0');
-  if (keyMode !== 'off' && keyMix > 0) {
-    applyGlobalKey(
-      canvas,                                      // p5 canvas
-      gCur,                                        // base (clean video)
-      gBuf,                                        // processed output
-      keyMode,
-      keyMix,
-      parseFloat(els.keyThresh?.value ?? '0.5'),
-      !!els.keyInvert?.checked,
-      els.keyBlend?.value ?? 'screen'
-    );
-  }
+
 }
 
 

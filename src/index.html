@@ -1245,6 +1245,90 @@
             </div>
             </div>
 
+            <!-- CLUSTERS -->
+            <div class="group">
+                <div class="group-label">Clusters</div>
+                <div class="group-body">
+                <div class="group-row">
+                    <div class="ctrl"><label>ON</label><input id="clusterTiles" type="checkbox"></div>
+                    <div class="ctrl">
+                        <label>CENTERS</label>
+                        <input id="cluCenters" type="range" min="1" max="20" step="1" value="3">
+                        <span class="val" id="cluCentersVal">3</span>
+                    </div>
+                    <div class="ctrl">
+                        <label>SPREAD</label>
+                        <input id="cluSpread" type="range" min="1" max="300" step="1" value="80">
+                        <span class="val" id="cluSpreadVal">80</span>
+                    </div>
+                    <div class="ctrl">
+                        <label>MIN RAD</label>
+                        <input id="cluMinSpread" type="range" min="0" max="150" step="1" value="0">
+                        <span class="val" id="cluMinSpreadVal">0</span>
+                    </div>
+                    <div class="ctrl">
+                        <label>SPATIAL GAP</label>
+                        <input id="spatialGap" type="range" min="0" max="200" step="1" value="40">
+                        <span class="val" id="spatialGapVal">40</span>
+                    </div>
+                    <div class="ctrl">
+                        <label>BIAS</label>
+                        <input id="cluBias" type="range" min="0" max="1" step="0.01" value="0.85">
+                        <span class="val" id="cluBiasVal">0.85</span>
+                    </div>
+                    <div class="ctrl">
+                        <label>DRIFT</label>
+                        <input id="cluDrift" type="range" min="0" max="5" step="0.01" value="0">
+                        <span class="val" id="cluDriftVal">0.00</span>
+                    </div>
+                    <div class="ctrl">
+                        <label>SPEED</label>
+                        <input id="cluSpeed" type="range" min="0" max="10" step="0.01" value="0">
+                        <span class="val" id="cluSpeedVal">0.0</span>
+                    </div>
+                    <div class="ctrl">
+                        <label>SPD VAR</label>
+                        <input id="cluSpeedVar" type="range" min="0" max="2" step="0.01" value="0">
+                        <span class="val" id="cluSpeedVarVal">0.00</span>
+                    </div>
+                    <div class="ctrl">
+                        <label>PULSE</label>
+                        <input id="cluPulse" type="range" min="0" max="10" step="0.1" value="0">
+                        <span class="val" id="cluPulseVal">0.00</span>
+                    </div>
+                    <div class="ctrl">
+                        <label>INERTIA</label>
+                        <input id="cluInertia" type="range" min="0.01" max="0.99" step="0.01" value="0.92">
+                        <span class="val" id="cluInertiaVal">0.92</span>
+                    </div>
+                </div>
+            </div>
+            </div>
+
+            <!-- LUMA KEY — gates glitch output by source luminance before scanlines -->
+            <div class="group">
+                <div class="group-label">Luma Key</div>
+                <div class="group-body">
+                <div class="group-row">
+                    <div class="ctrl"><label>ON</label><input id="lumaKeyOn" type="checkbox"></div>
+                    <div class="ctrl">
+                        <label>MIX</label>
+                        <input id="lumaKeyMix" type="range" min="0" max="1" step="0.01" value="0">
+                        <span class="val" id="lumaKeyMixVal">0.00</span>
+                    </div>
+                    <div class="ctrl">
+                        <label>THRESH</label>
+                        <input id="lumaKeyThresh" type="range" min="0" max="1" step="0.01" value="0.5">
+                        <span class="val" id="lumaKeyThreshVal">0.50</span>
+                    </div>
+                    <div class="ctrl">
+                        <label>INVERT</label>
+                        <input id="lumaKeyInvert" type="checkbox">
+                    </div>
+                </div>
+                </div>
+            </div>
+
             <!-- BUFFER TRAILS -->
             <div class="group">
                 <div class="group-label">Buffer Trails</div>
@@ -1300,11 +1384,9 @@
                 <div class="group-row">
                     <div class="ctrl"><label>ON</label><input id="clusters" type="checkbox"></div>
                     <div class="ctrl">
-                        <label>ORIENT</label>
-                        <select id="scanOrient" style="font-size:10px;padding:1px 2px">
-                            <option value="H" selected>H</option>
-                            <option value="V">V</option>
-                        </select>
+                        <label>ANGLE</label>
+                        <input id="scanAngle" type="range" min="-180" max="180" step="1" value="0">
+                        <span class="val" id="scanAngleVal">0°</span>
                     </div>
                     <div class="ctrl">
                         <label>BANDS</label>
@@ -1360,96 +1442,16 @@
             </div>
             </div>
 
-            <!-- CLUSTERS -->
-            <div class="group">
-                <div class="group-label">Clusters</div>
-                <div class="group-body">
-                <div class="group-row">
-                    <div class="ctrl"><label>ON</label><input id="clusterTiles" type="checkbox"></div>
-                    <div class="ctrl">
-                        <label>CENTERS</label>
-                        <input id="cluCenters" type="range" min="1" max="20" step="1" value="3">
-                        <span class="val" id="cluCentersVal">3</span>
-                    </div>
-                    <div class="ctrl">
-                        <label>SPREAD</label>
-                        <input id="cluSpread" type="range" min="1" max="300" step="1" value="80">
-                        <span class="val" id="cluSpreadVal">80</span>
-                    </div>
-                    <div class="ctrl">
-                        <label>MIN RAD</label>
-                        <input id="cluMinSpread" type="range" min="0" max="150" step="1" value="0">
-                        <span class="val" id="cluMinSpreadVal">0</span>
-                    </div>
-                    <div class="ctrl">
-                        <label>SPATIAL GAP</label>
-                        <input id="spatialGap" type="range" min="0" max="200" step="1" value="40">
-                        <span class="val" id="spatialGapVal">40</span>
-                    </div>
-                    <div class="ctrl">
-                        <label>BIAS</label>
-                        <input id="cluBias" type="range" min="0" max="1" step="0.01" value="0.85">
-                        <span class="val" id="cluBiasVal">0.85</span>
-                    </div>
-                    <div class="ctrl">
-                        <label>DRIFT</label>
-                        <input id="cluDrift" type="range" min="0" max="5" step="0.01" value="0">
-                        <span class="val" id="cluDriftVal">0.00</span>
-                    </div>
-                    <div class="ctrl">
-                        <label>SPEED</label>
-                        <input id="cluSpeed" type="range" min="0" max="40" step="0.1" value="0">
-                        <span class="val" id="cluSpeedVal">0.0</span>
-                    </div>
-                    <div class="ctrl">
-                        <label>SPD VAR</label>
-                        <input id="cluSpeedVar" type="range" min="0" max="2" step="0.01" value="0">
-                        <span class="val" id="cluSpeedVarVal">0.00</span>
-                    </div>
-                    <div class="ctrl">
-                        <label>PULSE</label>
-                        <input id="cluPulse" type="range" min="0" max="10" step="0.1" value="0">
-                        <span class="val" id="cluPulseVal">0.00</span>
-                    </div>
-                    <div class="ctrl">
-                        <label>INERTIA</label>
-                        <input id="cluInertia" type="range" min="0.01" max="0.99" step="0.01" value="0.92">
-                        <span class="val" id="cluInertiaVal">0.92</span>
-                    </div>
-                </div>
-            </div>
-            </div>
 
-            <!-- GLOBAL KEY -->
+            <!-- GLOBAL MIX — blend modes between effects chain and base video -->
             <div class="group">
-                <div class="group-label">Global Key</div>
+                <div class="group-label">Global Mix</div>
                 <div class="group-body">
                 <div class="group-row">
-                    <div class="ctrl">
-                        <label>MODE</label>
-                        <select id="keyMode" style="font-size:10px;padding:1px 2px">
-                            <option value="off" selected>OFF</option>
-                            <option value="luma">LUMA</option>
-                            <option value="blend">BLEND</option>
-                        </select>
-                    </div>
-                    <div class="ctrl">
-                        <label>MIX</label>
-                        <input id="keyMix" type="range" min="0" max="1" step="0.01" value="0">
-                        <span class="val" id="keyMixVal">0.00</span>
-                    </div>
-                    <div class="ctrl">
-                        <label>THRESH</label>
-                        <input id="keyThresh" type="range" min="0" max="1" step="0.01" value="0.5">
-                        <span class="val" id="keyThreshVal">0.50</span>
-                    </div>
-                    <div class="ctrl">
-                        <label>INVERT</label>
-                        <input id="keyInvert" type="checkbox">
-                    </div>
+                    <div class="ctrl"><label>ON</label><input id="globalMixOn" type="checkbox"></div>
                     <div class="ctrl">
                         <label>BLEND</label>
-                        <select id="keyBlend" style="font-size:10px;padding:1px 2px">
+                        <select id="globalMixBlend" style="font-size:10px;padding:1px 2px">
                             <option value="screen">SCREEN</option>
                             <option value="multiply">MULTIPLY</option>
                             <option value="overlay">OVERLAY</option>
@@ -1457,6 +1459,11 @@
                             <option value="hard-light">HARD LIGHT</option>
                             <option value="lighter">ADD</option>
                         </select>
+                    </div>
+                    <div class="ctrl">
+                        <label>MIX</label>
+                        <input id="globalMixAmt" type="range" min="0" max="1" step="0.01" value="0">
+                        <span class="val" id="globalMixAmtVal">0.00</span>
                     </div>
                 </div>
                 </div>
@@ -1510,8 +1517,13 @@
                     </div>
                     <div class="ctrl">
                         <label>SCALE</label>
-                        <input id="flowScale" type="range" min="40" max="200" step="0.001" value="80">
+                        <input id="flowScale" type="range" min="40" max="200" step="1" value="80">
                         <span class="val" id="flowScaleVal">80</span>
+                    </div>
+                    <div class="ctrl">
+                        <label>SPEED</label>
+                        <input id="flowSpeed" type="range" min="0" max="4" step="0.01" value="1">
+                        <span class="val" id="flowSpeedVal">1.00</span>
                     </div>
                     <div class="ctrl">
                         <label>PULSE</label>
@@ -1519,9 +1531,19 @@
                         <span class="val" id="flowPulseVal">0</span>
                     </div>
                     <div class="ctrl">
-                        <label>IMPLODE</label>
-                        <input id="flowImpl" type="range" min="0" max="1" step="0.01" value="0">
+                        <label>PULL</label>
+                        <input id="flowImpl" type="range" min="-1" max="1" step="0.01" value="0">
                         <span class="val" id="flowImplVal">0.00</span>
+                    </div>
+                    <div class="ctrl">
+                        <label>SWIRL</label>
+                        <input id="flowSwirl" type="range" min="-2" max="2" step="0.01" value="0">
+                        <span class="val" id="flowSwirlVal">0.00</span>
+                    </div>
+                    <div class="ctrl">
+                        <label>TURB</label>
+                        <input id="flowTurb" type="range" min="0" max="1" step="0.01" value="0">
+                        <span class="val" id="flowTurbVal">0.00</span>
                     </div>
                 </div>
             </div>

@@ -152,10 +152,12 @@ function applyTrails() {
 }
 
 // ─── Scanlines ────────────────────────────────────────────────────────────────
-// ORIENT H — horizontal bands displaced left/right (tape head jitter, line noise)
-// ORIENT V — vertical bands displaced up/down (vertical sync issues, column noise)
+// ANGLE — rotates the entire scanline pattern. 0°=horizontal, 90°=vertical,
+//         45°=diagonal right, -45°=diagonal left, any value = spin.
+//         Canvas context is rotated before drawing bands; all band math runs in
+//         the rotated frame so displacement is always perpendicular to band axis.
 // FOCUS — biases band positions toward a region of the canvas (0=top/left, 1=bottom/right)
-// ROLL — steady scroll simulating CRT rolling sync loss, independent of DRIFT
+// ROLL  — steady scroll simulating CRT rolling sync loss, independent of DRIFT
 // DRIFT — dual-frequency noise: slow sync wander + fast instability jitter
 
 function applyScanlines(density) {
@@ -165,7 +167,8 @@ function applyScanlines(density) {
   const bandSize   = parseInt(els.clusterRadius?.value ?? '10', 10);
   if (scanBands <= 0) return;
 
-  const orient     = els.scanOrient?.value ?? 'H';
+  const angleDeg   = parseFloat(els.scanAngle?.value  ?? '0');
+  const angleRad   = (angleDeg * Math.PI) / 180;
   const bandAlpha  = parseFloat(els.scanAlpha?.value  ?? '0.86');
   const shiftScale = parseFloat(els.scanShift?.value  ?? '0.12');
   const driftAmt   = parseFloat(els.scanDrift?.value  ?? '1.0');
@@ -177,22 +180,30 @@ function applyScanlines(density) {
   const phX = nPhaseScanX;
   const phY = nPhaseScanY;
 
-  const rollOffset = (phY * roll * 80) % (orient === 'H' ? height : width);
-
-  const dim    = orient === 'H' ? height : width;
-  const cross  = orient === 'H' ? width  : height;
-  const bSize  = Math.max(4, Math.floor(bandSize * 3));
+  // All band maths run as horizontal bands (position along Y, shift along X).
+  // The canvas rotation makes them appear at the chosen angle.
+  const dim   = height;
+  const cross = width;
+  const bSize = Math.max(4, Math.floor(bandSize * 3));
+  const rollOffset = (phY * roll * 80) % dim;
 
   const ctx       = gBuf.drawingContext;
   const prevAlpha = ctx.globalAlpha;
   const gCurCvs   = gCur.drawingContext.canvas;
 
+  // Apply rotation around canvas centre
+  const rotated = Math.abs(angleRad) > 0.001;
+  if (rotated) {
+    ctx.save();
+    ctx.translate(gBuf.width / 2, gBuf.height / 2);
+    ctx.rotate(angleRad);
+    ctx.translate(-gBuf.width / 2, -gBuf.height / 2);
+  }
+
   for (let n = 0; n < scanBands; n++) {
-    // Dual-frequency drift: slow sync wander + fast instability jitter
     const slowDrift  = noise(n * 3.7 + phY * 0.25 * driftAmt) * dim;
     const fastJitter = (noise(n * 11.3 + phY * 1.8 * driftAmt) - 0.5) * dim * 0.12 * driftAmt;
 
-    // Focus bias: lerp noise output toward the focus point
     const biased = slowDrift * (1 - Math.abs(focus - 0.5) * 1.4)
                  + (focus * dim) * Math.abs(focus - 0.5) * 1.4
                  + fastJitter;
@@ -218,17 +229,14 @@ function applyScanlines(density) {
     if (bCross <= 0) continue;
 
     ctx.globalAlpha = bandAlpha;
-
-    if (orient === 'H') {
-      // Horizontal band: position along Y axis, displacement along X
-      ctx.drawImage(gCurCvs, srcOff, bStart, bCross, bLen, dstOff, bStart, bCross, bLen);
-    } else {
-      // Vertical band: position along X axis, displacement along Y
-      ctx.drawImage(gCurCvs, bStart, srcOff, bLen, bCross, bStart, dstOff, bLen, bCross);
-    }
+    ctx.drawImage(gCurCvs, srcOff, bStart, bCross, bLen, dstOff, bStart, bCross, bLen);
   }
 
-  ctx.globalAlpha = prevAlpha;
+  if (rotated) {
+    ctx.restore();
+  } else {
+    ctx.globalAlpha = prevAlpha;
+  }
 }
 
 
@@ -400,7 +408,11 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0) {
 
   // ── Tile placement ─────────────────────────────────────────────────────────
   if (useCluTiles && cluCenters > 0) {
-    const centers    = cluSpeed > 0 ? getPhysicsCenters() : getStaticCenters();
+    // Always use physics centres. At cluSpeed=0 the desired velocity is zero
+    // so centres gradually stop and hold position via inertia.
+    // getStaticCenters() called random() every frame causing re-randomisation
+    // even at speed=0 — that looked like movement when there should be none.
+    const centers = getPhysicsCenters();
     const biasCount  = Math.round(count * cluBias);
     const per        = Math.max(1, Math.floor(biasCount / cluCenters));
 
@@ -500,7 +512,7 @@ function _ensureFlowBuffers(cols, rows) {
   }
 }
 
-function applyFlowWarp(src, dst, strength = 6, scale = 80, pulse = 0, implode = 0) {
+function applyFlowWarp(src, dst, strength = 6, scale = 80, pulse = 0, implode = 0, speed = 1, turb = 0, swirl = 0) {
   dst.clear();
 
   let srcFrame = src;
@@ -511,7 +523,8 @@ function applyFlowWarp(src, dst, strength = 6, scale = 80, pulse = 0, implode = 
 
   const cell = Math.max(8, scale | 0);
   const off  = strength;
-  const t    = frameCount * 0.005;
+  // Speed multiplier on time — at speed=0 the field is completely frozen.
+  const t    = frameCount * 0.005 * Math.max(0, speed);
   const w = width, h = height;
   const cx2 = w * 0.5, cy2 = h * 0.5;
 
@@ -519,7 +532,6 @@ function applyFlowWarp(src, dst, strength = 6, scale = 80, pulse = 0, implode = 
   const rows = Math.ceil(h / cell);
   _ensureFlowBuffers(cols, rows);
 
-  // Pre-compute all displacement vectors into typed arrays
   let idx = 0;
   for (let row = 0; row < rows; row++) {
     for (let col = 0; col < cols; col++) {
@@ -527,17 +539,38 @@ function applyFlowWarp(src, dst, strength = 6, scale = 80, pulse = 0, implode = 
       const y  = row * cell;
       const nx = (x + 0.5 * cell) / w * 2.0;
       const ny = (y + 0.5 * cell) / h * 2.0;
-      const a  = noise(nx * 0.9 + t, ny * 0.9) * TWO_PI * 2.0;
+
+      // Primary noise octave
+      let a = noise(nx * 0.9 + t, ny * 0.9) * TWO_PI * 2.0;
+
+      // Turbulence: second octave at 4× frequency, half amplitude
+      // Blends in fractional Brownian noise for organic complexity
+      if (turb > 0) {
+        const a2 = noise(nx * 3.6 + t * 1.3 + 100, ny * 3.6 + t * 0.9) * TWO_PI * 2.0;
+        a = a * (1 - turb * 0.5) + a2 * (turb * 0.5);
+      }
 
       let dx2 = Math.cos(a) * off;
       let dy2 = Math.sin(a) * off;
 
-      if (implode > 0) {
+      // Implode (positive) / Explode (negative) — bidirectional on one slider
+      if (implode !== 0) {
         const px = x + 0.5 * cell, py = y + 0.5 * cell;
         const vx = cx2 - px, vy = cy2 - py;
         const L  = Math.hypot(vx, vy) || 1;
         dx2 += (vx / L) * off * implode;
         dy2 += (vy / L) * off * implode;
+      }
+
+      // Swirl: rotate displacement vector by angle proportional to distance from center
+      // Positive = clockwise spiral, negative = counterclockwise
+      if (swirl !== 0) {
+        const px  = x + 0.5 * cell, py = y + 0.5 * cell;
+        const ang = Math.atan2(py - cy2, px - cx2) * swirl;
+        const cs  = Math.cos(ang), sn = Math.sin(ang);
+        const rx  = dx2 * cs - dy2 * sn;
+        const ry  = dx2 * sn + dy2 * cs;
+        dx2 = rx; dy2 = ry;
       }
 
       _flowDx[idx] = dx2;
@@ -546,7 +579,6 @@ function applyFlowWarp(src, dst, strength = 6, scale = 80, pulse = 0, implode = 
     }
   }
 
-  // Draw all displaced tiles using the pre-computed vectors
   const dctx = dst.drawingContext;
   dctx.save();
   idx = 0;
@@ -564,7 +596,7 @@ function applyFlowWarp(src, dst, strength = 6, scale = 80, pulse = 0, implode = 
         drawRingRegion(dst, srcFrame.data, sx2, sy2, tileW, tileH, x, y, tileW, tileH);
       } else {
         const srcEl = srcFrame?.elt ?? srcFrame?.drawingContext?.canvas ?? null;
-        if (!srcEl) continue; // guard: graphics disposed during resize
+        if (!srcEl) continue;
         dctx.drawImage(srcEl, sx2, sy2, tileW, tileH, x, y, tileW, tileH);
       }
     }
@@ -768,4 +800,83 @@ function applyGlobalKey(p5canvas, baseSrc, processedSrc, mode, mix, thresh, inve
     ctx.drawImage(_gkBufCanvas, 0, 0, W, H); // processed, clipped by luma mask
     ctx.restore();
   }
+}
+
+// ─── Pipeline Luma Key ────────────────────────────────────────────────────────
+// Applied in draw() between applyGlitch() and applyScanlines().
+// Gates how much of the glitch output (gBuf) shows through based on the
+// luminance of the clean source (gCur).
+//
+// thresh=0 → nothing keyed (all glitch shows) 
+// thresh=1 → everything keyed (all clean shows)
+// invert   → flips: dark areas show glitch, bright areas stay clean
+//
+// Operates at 640px max width for performance (same as applyGlobalKey luma path).
+
+let _plkCanvas = null, _plkCtx = null;
+let _plkBufCanvas = null, _plkBufCtx = null;
+let _plkPixBuf = null;
+
+function applyPipelineLumaKey(thresh, mix, invert) {
+  if (mix <= 0) return;
+
+  const W = gBuf.width, H = gBuf.height;
+  const MAX_W  = 640;
+  const scale  = W > MAX_W ? MAX_W / W : 1;
+  const sw     = Math.max(1, Math.round(W * scale));
+  const sh     = Math.max(1, Math.round(H * scale));
+  const n      = sw * sh * 4;
+
+  if (!_plkCanvas || _plkCanvas.width !== sw || _plkCanvas.height !== sh) {
+    _plkCanvas = document.createElement('canvas');
+    _plkCanvas.width = sw; _plkCanvas.height = sh;
+    _plkCtx = _plkCanvas.getContext('2d', { willReadFrequently: true });
+    _plkPixBuf = null;
+  }
+  if (!_plkBufCanvas || _plkBufCanvas.width !== sw || _plkBufCanvas.height !== sh) {
+    _plkBufCanvas = document.createElement('canvas');
+    _plkBufCanvas.width = sw; _plkBufCanvas.height = sh;
+    _plkBufCtx = _plkBufCanvas.getContext('2d');
+  }
+  if (!_plkPixBuf || _plkPixBuf.length !== n) _plkPixBuf = new Uint8ClampedArray(n);
+
+  // Read gCur (clean source) for luma sampling
+  const gCurEl = gCur.elt ?? gCur.drawingContext?.canvas;
+  if (!gCurEl) return;
+  _plkCtx.drawImage(gCurEl, 0, 0, sw, sh);
+  const srcData = _plkCtx.getImageData(0, 0, sw, sh);
+  const sp = srcData.data;
+
+  // Build luma mask: alpha = how much glitch should show at each pixel
+  // reveal=1 → keep gBuf (glitch), reveal=0 → replace with gCur (clean)
+  const t = (1 - thresh) * 255;
+  const rollRange = Math.max(1, 64);
+  for (let i = 0; i < n; i += 4) {
+    const lum    = 0.299 * sp[i] + 0.587 * sp[i+1] + 0.114 * sp[i+2];
+    const roll   = Math.max(0, Math.min(1, (lum - t) / rollRange));
+    const reveal = invert ? (1 - roll) : roll;
+    // Inverted alpha: opaque where CLEAN should show, transparent where GLITCH shows
+    _plkPixBuf[i]   = 255;
+    _plkPixBuf[i+1] = 255;
+    _plkPixBuf[i+2] = 255;
+    _plkPixBuf[i+3] = ((1 - reveal) * 255 + 0.5) | 0;
+  }
+  _plkCtx.putImageData(new ImageData(_plkPixBuf, sw, sh), 0, 0);
+
+  // Clip gCur to the "clean" regions using the inverted mask
+  const gBufEl = gBuf.elt ?? gBuf.drawingContext?.canvas;
+  if (!gBufEl) return;
+  _plkBufCtx.clearRect(0, 0, sw, sh);
+  _plkBufCtx.drawImage(gCurEl, 0, 0, sw, sh);         // clean source
+  _plkBufCtx.globalCompositeOperation = 'destination-in';
+  _plkBufCtx.drawImage(_plkCanvas, 0, 0, sw, sh);      // keep only clean areas
+  _plkBufCtx.globalCompositeOperation = 'source-over';
+
+  // Overlay the clean-area patch onto gBuf at mix strength.
+  // Glitch areas are untouched — gBuf content (trails, feedback) preserved.
+  const ctx = gBuf.drawingContext;
+  ctx.save();
+  ctx.globalAlpha = mix;
+  ctx.drawImage(_plkBufCanvas, 0, 0, W, H);
+  ctx.restore();
 }
