@@ -1028,6 +1028,7 @@
             </div>
             <button id="refreshBtn" disabled>↻ Refresh</button>
             <button id="resetBtn" title="Reset all parameters to defaults">↺ Reset</button>
+            <button id="clearBufBtn" title="Wipe frame ring and buffers instantly">⬛ Clear</button>
             <div class="topbar-sep"></div>
             <button id="camStartBtn">⬤ Cam</button>
             <button id="camStopBtn">✕ Cam</button>
@@ -1305,26 +1306,39 @@
             </div>
             </div>
 
+            <!-- A/B MIX — layer priority between glitch and scanlines -->
+            <div class="group">
+                <div class="group-label">A / B Mix</div>
+                <div class="group-body">
+                <div class="group-row">
+                    <span style="font-size:9px;color:rgba(255,255,255,.4);font-family:'Share Tech Mono',monospace;white-space:nowrap">GLITCH ←</span>
+                    <div class="ctrl" style="flex:1">
+                        <input id="abMix" type="range" min="0" max="1" step="0.01" value="0.5" style="width:100%">
+                    </div>
+                    <span style="font-size:9px;color:rgba(255,255,255,.4);font-family:'Share Tech Mono',monospace;white-space:nowrap">→ SCAN</span>
+                    <span class="val" id="abMixVal" style="min-width:30px;text-align:right">0.50</span>
+                </div>
+                </div>
+            </div>
+
             <!-- LUMA KEY — gates glitch output by source luminance before scanlines -->
             <div class="group">
                 <div class="group-label">Luma Key</div>
                 <div class="group-body">
                 <div class="group-row">
                     <div class="ctrl"><label>ON</label><input id="lumaKeyOn" type="checkbox"></div>
+                    <span style="font-size:9px;color:rgba(255,255,255,.4);font-family:'Share Tech Mono',monospace;white-space:nowrap">CLEAN ←</span>
+                    <div class="ctrl" style="flex:1">
+                        <input id="lumaKeyAB" type="range" min="0" max="1" step="0.01" value="0.5" style="width:100%">
+                    </div>
+                    <span style="font-size:9px;color:rgba(255,255,255,.4);font-family:'Share Tech Mono',monospace;white-space:nowrap">→ GLITCH</span>
+                    <span class="val" id="lumaKeyABVal" style="min-width:30px;text-align:right">0.50</span>
                     <div class="ctrl">
                         <label>MIX</label>
                         <input id="lumaKeyMix" type="range" min="0" max="1" step="0.01" value="0">
                         <span class="val" id="lumaKeyMixVal">0.00</span>
                     </div>
-                    <div class="ctrl">
-                        <label>THRESH</label>
-                        <input id="lumaKeyThresh" type="range" min="0" max="1" step="0.01" value="0.5">
-                        <span class="val" id="lumaKeyThreshVal">0.50</span>
-                    </div>
-                    <div class="ctrl">
-                        <label>INVERT</label>
-                        <input id="lumaKeyInvert" type="checkbox">
-                    </div>
+                    <div class="ctrl"><label>INVERT</label><input id="lumaKeyInvert" type="checkbox"></div>
                 </div>
                 </div>
             </div>
@@ -1385,8 +1399,18 @@
                     <div class="ctrl"><label>ON</label><input id="clusters" type="checkbox"></div>
                     <div class="ctrl">
                         <label>ANGLE</label>
-                        <input id="scanAngle" type="range" min="-180" max="180" step="1" value="0">
+                        <input id="scanAngle" type="range" min="-180" max="180" step="0.5" value="0">
                         <span class="val" id="scanAngleVal">0°</span>
+                        <button id="scanAngleReset" class="btn-dim" style="font-size:9px;padding:1px 5px;margin-left:2px" title="Reset to 0°">0°</button>
+                        <button id="scanAngle90n" class="btn-dim" style="font-size:9px;padding:1px 5px;margin-left:2px" title="Set to -90°">-90°</button>
+                        <button id="scanAngle90p" class="btn-dim" style="font-size:9px;padding:1px 5px;margin-left:2px" title="Set to 90°">90°</button>
+                    </div>
+                    <div class="ctrl"><label>SPIN L</label><input id="scanSpinLeft" type="checkbox"></div>
+                    <div class="ctrl"><label>SPIN R</label><input id="scanSpinRight" type="checkbox"></div>
+                    <div class="ctrl">
+                        <label>SPIN SPD</label>
+                        <input id="scanSpinSpeed" type="range" min="0.1" max="10" step="0.1" value="1">
+                        <span class="val" id="scanSpinSpeedVal">1.0</span>
                     </div>
                     <div class="ctrl">
                         <label>BANDS</label>
@@ -1443,7 +1467,7 @@
             </div>
 
 
-            <!-- GLOBAL MIX — blend modes between effects chain and base video -->
+            <!-- GLOBAL MIX -->
             <div class="group">
                 <div class="group-label">Global Mix</div>
                 <div class="group-body">
@@ -1590,6 +1614,16 @@
             const defaults = { fbX: '1', fbY: '1', fbZ: '1.000', fbTheta: '0.01' };
             Object.entries(defaults).forEach(([id, val]) => {
                 const el = document.getElementById(id);
+                if (!el) return;
+                el.value = val;
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+            });
+        });
+
+        /* ── Scanline angle snap buttons ──────────────────────── */
+        [['scanAngleReset', '0'], ['scanAngle90n', '-90'], ['scanAngle90p', '90']].forEach(([id, val]) => {
+            document.getElementById(id)?.addEventListener('click', () => {
+                const el = document.getElementById('scanAngle');
                 if (!el) return;
                 el.value = val;
                 el.dispatchEvent(new Event('input', { bubbles: true }));

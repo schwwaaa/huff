@@ -160,16 +160,19 @@ function applyTrails() {
 // ROLL  — steady scroll simulating CRT rolling sync loss, independent of DRIFT
 // DRIFT — dual-frequency noise: slow sync wander + fast instability jitter
 
-function applyScanlines(density) {
+function applyScanlines(density, angleOverride = null, scanPriority = 1.0) {
   if (!els.clusters?.checked) return;
 
   const scanBands  = parseInt(els.clusterCount?.value ?? '3',  10);
   const bandSize   = parseInt(els.clusterRadius?.value ?? '10', 10);
   if (scanBands <= 0) return;
 
-  const angleDeg   = parseFloat(els.scanAngle?.value  ?? '0');
+  // Use spin override if active, otherwise read from the static slider
+  const angleDeg = angleOverride !== null
+    ? angleOverride
+    : parseFloat(els.scanAngle?.value ?? '0');
   const angleRad   = (angleDeg * Math.PI) / 180;
-  const bandAlpha  = parseFloat(els.scanAlpha?.value  ?? '0.86');
+  const bandAlpha  = parseFloat(els.scanAlpha?.value  ?? '0.86') * scanPriority;
   const shiftScale = parseFloat(els.scanShift?.value  ?? '0.12');
   const driftAmt   = parseFloat(els.scanDrift?.value  ?? '1.0');
   const scanGap    = parseInt(els.scanGap?.value       ?? '0',   10);
@@ -180,30 +183,38 @@ function applyScanlines(density) {
   const phX = nPhaseScanX;
   const phY = nPhaseScanY;
 
-  // All band maths run as horizontal bands (position along Y, shift along X).
-  // The canvas rotation makes them appear at the chosen angle.
-  const dim   = height;
-  const cross = width;
-  const bSize = Math.max(4, Math.floor(bandSize * 3));
+  // The span needed to cover the full canvas perpendicular to the band axis
+  // at angle θ is |W·sin θ| + |H·cos θ|. At 0° this equals H, at 90° equals W,
+  // at 45° on a 16:9 canvas it's ~1.3× H. Without this, rotated bands only fill
+  // the center strip and leave the corners empty.
+  const absS = Math.abs(Math.sin(angleRad));
+  const absC = Math.abs(Math.cos(angleRad));
+  const dim   = width * absS + height * absC;   // full rotated span
+  const cross = width * absC + height * absS;   // displacement axis span
+  const bSize = Math.max(4, Math.floor(parseInt(els.clusterRadius?.value ?? '10', 10) * 3));
+
+  // Roll offset scrolls bands along the full rotated span
   const rollOffset = (phY * roll * 80) % dim;
 
   const ctx       = gBuf.drawingContext;
   const prevAlpha = ctx.globalAlpha;
   const gCurCvs   = gCur.drawingContext.canvas;
 
-  // Apply rotation around canvas centre
+  // Rotate around canvas centre. We also translate so the band coordinate
+  // system is centred on the canvas — bands at position dim/2 appear at the
+  // visual centre regardless of angle.
   const rotated = Math.abs(angleRad) > 0.001;
-  if (rotated) {
-    ctx.save();
-    ctx.translate(gBuf.width / 2, gBuf.height / 2);
-    ctx.rotate(angleRad);
-    ctx.translate(-gBuf.width / 2, -gBuf.height / 2);
-  }
+  ctx.save();
+  ctx.translate(gBuf.width / 2, gBuf.height / 2);
+  if (rotated) ctx.rotate(angleRad);
+  // Offset so that band Y=0 is at -dim/2 from canvas centre
+  ctx.translate(-gBuf.width / 2, -dim / 2);
 
   for (let n = 0; n < scanBands; n++) {
     const slowDrift  = noise(n * 3.7 + phY * 0.25 * driftAmt) * dim;
     const fastJitter = (noise(n * 11.3 + phY * 1.8 * driftAmt) - 0.5) * dim * 0.12 * driftAmt;
 
+    // Focus bias within the full rotated span
     const biased = slowDrift * (1 - Math.abs(focus - 0.5) * 1.4)
                  + (focus * dim) * Math.abs(focus - 0.5) * 1.4
                  + fastJitter;
@@ -229,21 +240,19 @@ function applyScanlines(density) {
     if (bCross <= 0) continue;
 
     ctx.globalAlpha = bandAlpha;
+    // Source coordinates: sample from gCur at the unshifted position
+    // (srcOff accounts for horizontal shift direction)
     ctx.drawImage(gCurCvs, srcOff, bStart, bCross, bLen, dstOff, bStart, bCross, bLen);
   }
 
-  if (rotated) {
-    ctx.restore();
-  } else {
-    ctx.globalAlpha = prevAlpha;
-  }
+  ctx.restore();
 }
 
 
 // ─── Glitch ───────────────────────────────────────────────────────────────────
 // Note: randomSeed is set by draw() once per frame. No re-seeding here.
 
-function applyGlitch(density = 1, baseDX = 0, baseDY = 0) {
+function applyGlitch(density = 1, baseDX = 0, baseDY = 0, glitchPriority = 1.0) {
   const block     = parseInt(els.block.value, 10);
   const size      = parseInt(els.glitchSize.value, 10);
   const smearLen  = parseInt(els.glitchSmear.value, 10);
@@ -449,9 +458,8 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0) {
   const prevAlpha = ctx.globalAlpha;
 
   // tileAlpha is constant for all tiles — set once, restore once.
-  // Previously ctx.save/restore ran per tile and per smear step.
-  // At 50 tiles with smear=3 that was 200 full state snapshots per frame.
-  ctx.globalAlpha = tileAlpha / 255;
+  // glitchPriority scales contribution relative to scanlines (A/B mix).
+  ctx.globalAlpha = (tileAlpha / 255) * glitchPriority;
 
   for (let i = 0; i < targets.length; i++) {
     let [cx, cy] = targets[i];

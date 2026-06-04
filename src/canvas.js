@@ -17,6 +17,52 @@ window.$  = window.$  || _$;
 window.$$ = window.$$ || (sel => document.querySelector(sel));
 
 let videoEl, currentBlobUrl = null;
+
+// ─── Dedicated audio thread ───────────────────────────────────────────────────
+// Route video audio through Web Audio so it runs on the browser's dedicated
+// audio thread, completely independent of the main thread's draw loop.
+// When the canvas is heavy (many effects, pixel readbacks) the main thread
+// budget tightens and can starve the browser's audio scheduler — causing
+// dropouts. The audio thread is never blocked by canvas work.
+let _audioCtx  = null;
+let _gainNode  = null;
+let _audioSrc  = null;   // MediaElementAudioSourceNode for the current video element
+
+function _ensureAudioCtx() {
+  if (_audioCtx) return;
+  try {
+    _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    _gainNode = _audioCtx.createGain();
+    _gainNode.gain.value = 1.0;
+    _gainNode.connect(_audioCtx.destination);
+  } catch (e) {
+    console.warn('[huff audio] AudioContext unavailable:', e);
+  }
+}
+
+function connectVideoAudio(videoElement) {
+  if (!videoElement) return;
+  _ensureAudioCtx();
+  if (!_audioCtx || !_gainNode) return;
+  try {
+    // Resume context — required after user gesture by autoplay policy
+    if (_audioCtx.state === 'suspended') _audioCtx.resume();
+    // Disconnect previous source if any
+    if (_audioSrc) { try { _audioSrc.disconnect(); } catch {} _audioSrc = null; }
+    // Route this element through Web Audio — mute the element itself
+    // so audio only comes out of the AudioContext destination (no double-play)
+    videoElement.muted = false;
+    _audioSrc = _audioCtx.createMediaElementSource(videoElement);
+    _audioSrc.connect(_gainNode);
+    // Apply current volume slider value
+    const vol = parseFloat(_$('volumeSlider')?.value ?? '1');
+    _gainNode.gain.value = vol;
+    videoElement.volume  = 1.0;  // gain node handles level; element stays at 1
+    videoElement.muted   = false;
+  } catch (e) {
+    console.warn('[huff audio] connectVideoAudio failed:', e);
+  }
+}
 let gCur, gBuf, gWarp, gTemp;
 let _fbCanvas = null, _fbCtx = null;
 let canvas;
@@ -28,6 +74,7 @@ const els = {};
 let baseSeed = 1, seededOnce = false;
 let nPhaseX = 0, nPhaseY = 1000;
 let nPhaseScanX = 0, nPhaseScanY = 2000; // independent scanline phase
+let _scanSpinAngle = 0;                   // continuous spin accumulator (degrees)
 
 // ─── FrameRing ────────────────────────────────────────────────────────────────
 // Replaces the plain array + shift() pattern.
@@ -159,10 +206,11 @@ const PRESET_IDS = [
   'solarizeOn','solarizeThresh','solarizeAmt','solarizeR','solarizeG','solarizeB',
   'scanAlpha','scanShift','scanDrift','scanSpeed','scanGap','scanSkew',
   'scanAngle','scanFocus','scanRoll',
+  'scanSpinLeft','scanSpinRight','scanSpinSpeed',
   'trailOn','trailLayers','trailDepth','trailLumaKey',
   'bgMode',
   'cluSpeedVar','cluPulse',
-  'lumaKeyOn','lumaKeyMix','lumaKeyThresh','lumaKeyInvert',
+  'abMix',
   'globalMixOn','globalMixBlend','globalMixAmt',
 ];
 
@@ -560,7 +608,7 @@ function refreshGlitch() {
 
 function hookUI() {
   [
-    'file','playBtn','pauseBtn','refreshBtn','resetBtn',
+    'file','playBtn','pauseBtn','refreshBtn','resetBtn','clearBufBtn',
     'camStartBtn','camStopBtn','camRefreshBtn','cams','corruptOn',
     'quality','qualityVal','depth','depthVal','corrupt','corruptVal','block','blockVal',
     'glitchSpeed','glitchSpeedVal','glitchSpeedFine','glitchSpeedFineVal',
@@ -585,12 +633,14 @@ function hookUI() {
     'scanAlpha','scanAlphaVal','scanShift','scanShiftVal','scanDrift','scanDriftVal',
     'scanSpeed','scanSpeedVal','scanGap','scanGapVal','scanSkew','scanSkewVal',
     'scanAngle','scanAngleVal','scanFocus','scanFocusVal','scanRoll','scanRollVal',
+    'scanSpinLeft','scanSpinRight','scanSpinSpeed','scanSpinSpeedVal',
     'depthScatter','depthScatterVal','corruptDrift','corruptDriftVal',
     'trailOn','trailLayers','trailLayersVal','trailDepth','trailDepthVal',
     'trailLumaKey','trailLumaKeyVal',
     'scanAngle','bgMode','dim',
     'cluSpeedVar','cluSpeedVarVal','cluPulse','cluPulseVal',
-    'lumaKeyOn','lumaKeyMix','lumaKeyMixVal','lumaKeyThresh','lumaKeyThreshVal','lumaKeyInvert',
+    'abMix','abMixVal',
+    'lumaKeyOn','lumaKeyMix','lumaKeyMixVal','lumaKeyAB','lumaKeyABVal','lumaKeyInvert',
     'globalMixOn','globalMixBlend','globalMixAmt','globalMixAmtVal',
   ].forEach(k => els[k] = _$(k));
 
@@ -617,21 +667,17 @@ function hookTransport() {
     const v = videoEl.elt;
 
     // #5: reconcile volume/mute state from slider before unmuting
-    const volSlider = _$('volumeSlider');
-    const vol = volSlider ? parseFloat(volSlider.value) : 1;
-    try { v.volume = vol; v.muted = (vol === 0); } catch {}
-
     try {
       await v.play();
     } catch {
-      // Autoplay blocked — try muted then re-unmute on gesture
       try { v.muted = true; await v.play(); } catch { return; }
     }
 
-    // #6: set playing only after play() resolves successfully
-    playing = true;
+    // Route through dedicated audio thread — prevents main thread draw load
+    // from causing audio dropouts
+    connectVideoAudio(v);
 
-    // #1: restart pump — previous pump chain self-terminated when playing became false
+    playing = true;
     pumpVideoFrames();
   });
 
@@ -765,7 +811,12 @@ function hookVolume() {
   if (!volSlider) return;
   volSlider.addEventListener('input', () => {
     const vol = parseFloat(volSlider.value);
-    if (videoEl?.elt) {
+    if (_gainNode) {
+      // Route through Web Audio gain — audio thread handles the level
+      _gainNode.gain.value = vol;
+      if (_audioCtx?.state === 'suspended') _audioCtx.resume();
+    } else if (videoEl?.elt) {
+      // Fallback if AudioContext unavailable
       videoEl.elt.volume = vol;
       videoEl.elt.muted  = (vol === 0);
     }
@@ -785,7 +836,7 @@ function hookSliders() {
     'depthScatter','corruptDrift','trailLayers','trailDepth','trailLumaKey',
     'solarizeThresh','solarizeAmt','solarizeR','solarizeG','solarizeB',
     'cluSpeedVar','cluPulse',
-    'lumaKeyMix','lumaKeyThresh','globalMixAmt','scanAngle',
+    'lumaKeyMix','lumaKeyAB','globalMixAmt','scanAngle','scanSpinSpeed','abMix',
   ];
 
   sliderIds.forEach(id => {
@@ -795,7 +846,7 @@ function hookSliders() {
   // Checkboxes and selects also get snapshotted for undo
   ['corruptOn','clusters','clusterTiles','flowOn','baseOn','symOn','solarizeOn',
    'trailOn','seedOnLoad','bgMode','symMode',
-   'lumaKeyOn','globalMixOn'].forEach(id => {
+   'lumaKeyOn','globalMixOn','scanSpinLeft','scanSpinRight'].forEach(id => {
     _$(id)?.addEventListener('change', snapshotForUndo);
   });
 
@@ -836,6 +887,7 @@ function hookPresets() {
 
   // Reset btn
   els.resetBtn?.addEventListener('click', () => { snapshotForUndo(); refreshGlitch(); });
+  els.clearBufBtn?.addEventListener('click', () => clearAll());
 }
 
 function hookKeyboard() {
@@ -915,6 +967,7 @@ function updateLabels() {
   set(els.scanAngle,        els.scanAngleVal,        v => Math.round(v)+'°');
   set(els.scanFocus,        els.scanFocusVal,        f2);
   set(els.scanRoll,         els.scanRollVal,         f2);
+  set(els.scanSpinSpeed,    els.scanSpinSpeedVal,    f2);
   set(els.depthScatter,     els.depthScatterVal,     f2);
   set(els.corruptDrift,     els.corruptDriftVal,     f2);
   set(els.trailLayers,      els.trailLayersVal,      v => (v|0));
@@ -929,7 +982,8 @@ function updateLabels() {
   set(els.cluSpeedVar,      els.cluSpeedVarVal,      f2);
   set(els.cluPulse,         els.cluPulseVal,         f2);
   set(els.lumaKeyMix,       els.lumaKeyMixVal,       f2);
-  set(els.lumaKeyThresh,    els.lumaKeyThreshVal,    f2);
+  set(els.lumaKeyAB,        els.lumaKeyABVal,        f2);
+  set(els.abMix,            els.abMixVal,            f2);
   set(els.globalMixAmt,     els.globalMixAmtVal,     f2);
   if (els.baseMix && els.baseMixVal) {
     els.baseMixVal.textContent = f2(els.baseMix.value);
@@ -1141,37 +1195,59 @@ function draw() {
   // Scanlines runs last as a spatial displacement on top of the keyed result.
   applyTrails();
 
+  // A/B layer priority mix — 0=glitch dominant, 0.5=equal, 1=scanlines dominant.
+  // Neither effect drops below MIN so both remain readable at all positions.
+  const abMix = parseFloat(els.abMix?.value ?? '0.5');
+  const AB_MIN = 0.35;
+  const glitchPriority = 1.0 - abMix * (1.0 - AB_MIN);
+  const scanPriority   = AB_MIN + abMix * (1.0 - AB_MIN);
+
   if (els.corruptOn?.checked) {
     applyGlitch(density,
       parseInt(els.glitchBaseX?.value ?? '0', 10),
-      parseInt(els.glitchBaseY?.value ?? '0', 10));
+      parseInt(els.glitchBaseY?.value ?? '0', 10),
+      glitchPriority);
   }
 
   // Luma Key — pipeline gate between glitch and scanlines (only when ON)
   const lkMix = parseFloat(els.lumaKeyMix?.value ?? '0');
   if (els.lumaKeyOn?.checked && lkMix > 0) {
     applyPipelineLumaKey(
-      parseFloat(els.lumaKeyThresh?.value ?? '0.5'),
+      parseFloat(els.lumaKeyAB?.value ?? '0.5'),
       lkMix,
       !!els.lumaKeyInvert?.checked
     );
   }
 
-  applyScanlines(density);
+  // Advance spin accumulator. Left and right are separate toggles; right wins if both on.
+  // When neither is active, keep accumulator in sync with the manual slider so
+  // enabling spin starts from where the slider currently is — no jump.
+  const spinSpeed = parseFloat(els.scanSpinSpeed?.value ?? '1');
+  const spinLeft  = !!els.scanSpinLeft?.checked;
+  const spinRight = !!els.scanSpinRight?.checked;
+  let scanAngleArg = null;
+  if (spinRight) {
+    _scanSpinAngle = (_scanSpinAngle + spinSpeed * 0.5) % 360;
+    scanAngleArg   = _scanSpinAngle;
+  } else if (spinLeft) {
+    _scanSpinAngle = ((_scanSpinAngle - spinSpeed * 0.5) % 360 + 360) % 360;
+    scanAngleArg   = _scanSpinAngle;
+  } else {
+    _scanSpinAngle = parseFloat(els.scanAngle?.value ?? '0');
+  }
+  applyScanlines(density, scanAngleArg, scanPriority);
 
-  // Global Mix — blend mode composite between effects chain and base video
+  // Global Mix — blend mode composite of base video over effects chain
   if (els.globalMixOn?.checked) {
-    const gmMix = parseFloat(els.globalMixAmt?.value ?? '0');
-    if (gmMix > 0) {
-      const ctx    = gBuf.drawingContext;
-      const gCurEl = gCur.elt ?? gCur.drawingContext?.canvas;
-      if (gCurEl) {
-        ctx.save();
-        ctx.globalCompositeOperation = els.globalMixBlend?.value ?? 'screen';
-        ctx.globalAlpha = gmMix;
-        ctx.drawImage(gCurEl, 0, 0, gBuf.width, gBuf.height);
-        ctx.restore();
-      }
+    const gmMix  = parseFloat(els.globalMixAmt?.value ?? '0');
+    const gCurEl = gCur.elt ?? gCur.drawingContext?.canvas;
+    if (gmMix > 0 && gCurEl) {
+      const ctx = gBuf.drawingContext;
+      ctx.save();
+      ctx.globalCompositeOperation = els.globalMixBlend?.value ?? 'screen';
+      ctx.globalAlpha = gmMix;
+      ctx.drawImage(gCurEl, 0, 0, gBuf.width, gBuf.height);
+      ctx.restore();
     }
   }
 
@@ -1304,6 +1380,7 @@ function startCamera(deviceId) {
         try {
           playing = true;
           v.play().catch(() => {});
+          connectVideoAudio(v);
           pumpVideoFrames();
         } catch {}
       };
