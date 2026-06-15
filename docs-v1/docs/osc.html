@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css"/>
 <link href="https://fonts.googleapis.com/css2?family=VT323&family=Share+Tech+Mono&display=swap" rel="stylesheet">
-<title>How It Works — huff docs</title>
+<title>OSC — huff docs</title>
 
 <style>
 :root {
@@ -135,11 +135,11 @@ body {
   <ul class="doc-nav-list">
     <li><a href="../index.html">← Back to huff</a></li>
     <li><div class="doc-nav-sep"></div></li>
-    <li><a href="how-it-works.html" class="active">How It Works</a></li>
+    <li><a href="how-it-works.html">How It Works</a></li>
 <li><a href="installation.html">Installation</a></li>
 <li><a href="interface.html">The Interface</a></li>
 <li><a href="midi.html">MIDI</a></li>
-<li><a href="osc.html">OSC</a></li>
+<li><a href="osc.html" class="active">OSC</a></li>
 <li><a href="output.html">Video Output</a></li>
 <li><a href="parameter-reference.html">Parameter Reference</a></li>
 <li><a href="architecture.html">Architecture</a></li>
@@ -152,84 +152,83 @@ body {
     <div class="col-12 col-md-9 col-lg-10">
       <div class="window">
         <div class="win-titlebar">
-          <span class="win-titlebar-title">How It Works</span>
+          <span class="win-titlebar-title">OSC</span>
           <div class="win-controls"><div class="win-btn">_</div><div class="win-btn">□</div><div class="win-btn">✕</div></div>
         </div>
         <div class="win-body doc-content">
           
-<p>huff processes video through a sequential chain of effect passes each frame. Understanding the order helps predict how parameter changes interact.</p>
+<p>huff listens for UDP OSC on port <strong>9000</strong> at <code>0.0.0.0</code> — any device on the same local network can send to it. The listener starts automatically when the app launches.</p>
 <hr/>
 
-<h2>Effect Pipeline</h2>
-<div class="term" style="line-height:2">
-  <div>  SOURCE (video / webcam)</div>
-  <div>    ↓</div>
-  <div>  [1] TRAILS          — ghost frame blend from ring</div>
-  <div>  [2] GLITCH / DATAMOSH — tile displacement from ring buffer</div>
-  <div>  [3] LUMA KEY        — A/B luma composite of glitch output vs clean source (if ON)</div>
-  <div>  [4] SCANLINES       — spatial band displacement, angle/spin</div>
-  <div>  [5] GLOBAL MIX      — blend-mode composite of base video over effects (if ON)</div>
-  <div>  [6] FEEDBACK        — previous frame zoomed/rotated back</div>
-  <div>  [7] FLOW WARP       — noise-field UV distortion</div>
-  <div>  [8] SYMMETRY        — axis mirror</div>
-  <div>  [9] SOLARISE        — luminance-threshold inversion</div>
-  <div>    ↓</div>
-  <div>  DISPLAY COMPOSITE   — base video mixed in per BASE MIX</div>
-  <div>    ↓</div>
-  <div>  RING BUFFER UPDATE  — clean source frame written to ring for next pass</div>
-  <div>    ↓</div>
-  <div>  OUTPUT → WebSocket relay → Canvas / Syphon / Spout</div>
-</div>
-<div class="callout mt-2">
-Each pass is independently toggleable. Disabled passes are completely skipped — no bleed-through. GLITCH and SCANLINES are also weighted against each other by the <strong>A/B Mix</strong> layer-priority slider: the recessive effect's opacity floors at 35% rather than reaching zero, so both remain visible at any position. The ring stores the clean source frame each cycle — passes that sample the ring (GLITCH, TRAILS, FLOW WARP with PULSE) always read <strong>previous</strong> frames, never the one being assembled.
-</div>
+<h2>Setup</h2>
+<ol>
+  <li>Click the <strong>OSC</strong> button in the top bar.</li>
+  <li>The status area confirms the listener is active and shows the port.</li>
+  <li>Load a map file via <strong>📂 Load Map…</strong></li>
+  <li>Move a control on your sender. The OSC pill in the top bar flashes the incoming address.</li>
+</ol>
 <hr/>
 
-<h2>UI → Effect Data Flow</h2>
-<p>All parameter control — sliders, MIDI CC, OSC messages — converges on the same DOM element values. The p5.js draw loop reads these values directly on every frame.</p>
-<div class="callout">
-<strong>No debounce, no interpolation layer, no intermediate state object.</strong> Moving a slider and receiving a MIDI CC produce identical results — both write the same DOM element. There is no latency between a MIDI CC and it affecting the output; the next draw() frame picks it up.
+<h2>OSC Map Format</h2>
+<div class="term">
+{
+  "name": "My TouchOSC Layout",
+  "version": 1,
+  "mappings": [
+    { "param": "feedback",    "addr": "/1/fader1", "type": "range",
+      "inputMin": 0, "inputMax": 1, "enabled": true },
+    { "param": "corruptOn",   "addr": "/1/toggle1","type": "toggle", "enabled": true },
+    { "param": "refreshBtn",  "addr": "/1/push1",  "type": "trigger","enabled": true },
+    { "_section": "Flow Warp" },
+    { "param": "flowStrength","addr": "/2/fader1", "type": "range",
+      "inputMin": 0, "inputMax": 1, "enabled": true }
+  ]
+}
 </div>
-<hr/>
-
-<h2>Frame Ring Buffer</h2>
-<p>The ring buffer stores raw ImageData objects — RGBA pixel arrays at canvas resolution. It is the shared memory between passes.</p>
-<div class="table-responsive">
-<table class="win-table">
-  <thead><tr><th>Parameter</th><th>Effect on ring</th></tr></thead>
+<h3>Field Reference</h3>
+<div class="table-responsive"><table class="win-table">
+  <thead><tr><th>Field</th><th>Required</th><th>Notes</th></tr></thead>
   <tbody>
-    <tr><td>QUALITY</td><td>Controls ring depth: 0 → 4 frames, 1 → 60 frames</td></tr>
-    <tr><td>DEPTH</td><td>How far back effects sample into the ring (0–50% of ring depth)</td></tr>
-    <tr><td>DEPTH SCATTER</td><td>Per-tile randomisation of the back index</td></tr>
-    <tr><td>192 MB cap</td><td>Ring depth also capped by pixel budget: at 1080p (~8 MB/frame) max ≈ 23 frames regardless of quality</td></tr>
+    <tr><td>param</td><td>yes</td><td>DOM element ID — see <a href="parameter-reference.html">Parameter Reference</a></td></tr>
+    <tr><td>addr</td><td>yes</td><td>Full OSC address e.g. /1/fader1</td></tr>
+    <tr><td>type</td><td>yes</td><td>range, toggle, or trigger</td></tr>
+    <tr><td>inputMin / inputMax</td><td>range only</td><td>Value range the sender emits. Default: 0 / 1</td></tr>
+    <tr><td>enabled</td><td>no</td><td>false disables without deleting</td></tr>
+    <tr><td>_section</td><td>—</td><td>Divider row — rendered as a header, never dispatched</td></tr>
   </tbody>
-</table>
-</div>
-<div class="table-responsive mt-2">
-<table class="win-table">
-  <thead><tr><th>Resolution</th><th>Bytes/frame</th><th>Max frames (quality=1)</th></tr></thead>
-  <tbody>
-    <tr><td>720p (1280×720)</td><td>~3.7 MB</td><td>51 frames</td></tr>
-    <tr><td>1080p (1920×1080)</td><td>~8.3 MB</td><td>23 frames</td></tr>
-    <tr><td>1440p (2560×1440)</td><td>~14.7 MB</td><td>13 frames</td></tr>
-    <tr><td>4K (3840×2160)</td><td>~33.2 MB</td><td>5 frames</td></tr>
-  </tbody>
-</table>
-</div>
-<div class="callout warn mt-2"><strong>720p or 1080p is the practical sweet spot.</strong> At 4K the ring holds only 5 frames — DEPTH and temporal effects lose most of their range.</div>
+</table></div>
+<hr/>
 
-<h2>Frame Output Pipeline</h2>
-<p>At the end of each draw() call, huff routes the composited output frame to one or more destinations. Syphon and Spout use a magic-byte prefix on the same WebSocket connection as the canvas mirror — Rust inspects the first bytes and routes accordingly.</p>
-<div class="term" style="font-size:11px;line-height:1.8">
-  <div>canvas.getImageData()</div>
-  <div>  → raw RGBA bytes</div>
-  <div>  → magic prefix (HUFFSYPH / HUFFSPOUT) + dimensions + pixels</div>
-  <div>  → binary WebSocket to port 8787</div>
-  <div>  → Rust relay inspects prefix</div>
-  <div>      HUFFSYPH  → syphon::push_frame() → MTLTexture → Syphon clients</div>
-  <div>      HUFFSPOUT → spout::push_frame()  → D3D11 texture → Spout receivers</div>
-  <div>      (none)    → forwarded to canvas role clients as JPEG frames</div>
-</div>
+<h2>Sending from Software</h2>
+<div class="table-responsive"><table class="win-table">
+  <thead><tr><th>Software</th><th>Code / Setting</th></tr></thead>
+  <tbody>
+    <tr><td>Max/MSP</td><td><code>[udpsend 127.0.0.1 9000]</code></td></tr>
+    <tr><td>Pure Data</td><td><code>[netsend -u -b 127.0.0.1 9000]</code> then <code>[oscformat]</code></td></tr>
+    <tr><td>SuperCollider</td><td><code>NetAddr("127.0.0.1", 9000).sendMsg("/1/fader1", 0.75)</code></td></tr>
+    <tr><td>TouchDesigner</td><td>OSC Out DAT, host 127.0.0.1, port 9000</td></tr>
+    <tr><td>Python (pythonosc)</td><td><code>SimpleUDPClient("127.0.0.1", 9000).send_message("/1/fader1", 0.75)</code></td></tr>
+  </tbody>
+</table></div>
+<hr/>
+
+<h2>TouchOSC Setup</h2>
+<ol>
+  <li>In TouchOSC go to <strong>Settings → OSC</strong>.</li>
+  <li>Set <strong>Host</strong> to your computer's local IP.</li>
+  <li>Set <strong>Port (outgoing)</strong> to <code>9000</code>.</li>
+  <li>Enable <strong>OSC</strong>.</li>
+  <li>In huff's OSC panel, load <code>src/osc/touchosc-effects.json</code>.</li>
+</ol>
+<h3>Bundled Layouts</h3>
+<div class="table-responsive"><table class="win-table">
+  <thead><tr><th>File</th><th>Contents</th></tr></thead>
+  <tbody>
+    <tr><td>touchosc-effects.json</td><td>Main effects — Glitch, Feedback, Flow Warp, Symmetry</td></tr>
+    <tr><td>touchosc-mix.json</td><td>Mix layer — Base Mix, Scanlines, Solarize, Trails</td></tr>
+    <tr><td>generic-16.json</td><td>16-parameter generic template using /huff/ prefix</td></tr>
+  </tbody>
+</table></div>
 
         </div>
       </div>

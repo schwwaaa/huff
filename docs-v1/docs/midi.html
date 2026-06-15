@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css"/>
 <link href="https://fonts.googleapis.com/css2?family=VT323&family=Share+Tech+Mono&display=swap" rel="stylesheet">
-<title>How It Works — huff docs</title>
+<title>MIDI — huff docs</title>
 
 <style>
 :root {
@@ -135,10 +135,10 @@ body {
   <ul class="doc-nav-list">
     <li><a href="../index.html">← Back to huff</a></li>
     <li><div class="doc-nav-sep"></div></li>
-    <li><a href="how-it-works.html" class="active">How It Works</a></li>
+    <li><a href="how-it-works.html">How It Works</a></li>
 <li><a href="installation.html">Installation</a></li>
 <li><a href="interface.html">The Interface</a></li>
-<li><a href="midi.html">MIDI</a></li>
+<li><a href="midi.html" class="active">MIDI</a></li>
 <li><a href="osc.html">OSC</a></li>
 <li><a href="output.html">Video Output</a></li>
 <li><a href="parameter-reference.html">Parameter Reference</a></li>
@@ -152,83 +152,89 @@ body {
     <div class="col-12 col-md-9 col-lg-10">
       <div class="window">
         <div class="win-titlebar">
-          <span class="win-titlebar-title">How It Works</span>
+          <span class="win-titlebar-title">MIDI</span>
           <div class="win-controls"><div class="win-btn">_</div><div class="win-btn">□</div><div class="win-btn">✕</div></div>
         </div>
         <div class="win-body doc-content">
           
-<p>huff processes video through a sequential chain of effect passes each frame. Understanding the order helps predict how parameter changes interact.</p>
+<p>huff's MIDI system runs natively in Rust via <code>midir</code>. USB controllers, USB-MIDI interfaces, and virtual ports (IAC Bus on macOS, loopMIDI on Windows) are all supported. There is no Web MIDI API involved.</p>
 <hr/>
 
-<h2>Effect Pipeline</h2>
-<div class="term" style="line-height:2">
-  <div>  SOURCE (video / webcam)</div>
-  <div>    ↓</div>
-  <div>  [1] TRAILS          — ghost frame blend from ring</div>
-  <div>  [2] GLITCH / DATAMOSH — tile displacement from ring buffer</div>
-  <div>  [3] LUMA KEY        — A/B luma composite of glitch output vs clean source (if ON)</div>
-  <div>  [4] SCANLINES       — spatial band displacement, angle/spin</div>
-  <div>  [5] GLOBAL MIX      — blend-mode composite of base video over effects (if ON)</div>
-  <div>  [6] FEEDBACK        — previous frame zoomed/rotated back</div>
-  <div>  [7] FLOW WARP       — noise-field UV distortion</div>
-  <div>  [8] SYMMETRY        — axis mirror</div>
-  <div>  [9] SOLARISE        — luminance-threshold inversion</div>
-  <div>    ↓</div>
-  <div>  DISPLAY COMPOSITE   — base video mixed in per BASE MIX</div>
-  <div>    ↓</div>
-  <div>  RING BUFFER UPDATE  — clean source frame written to ring for next pass</div>
-  <div>    ↓</div>
-  <div>  OUTPUT → WebSocket relay → Canvas / Syphon / Spout</div>
-</div>
-<div class="callout mt-2">
-Each pass is independently toggleable. Disabled passes are completely skipped — no bleed-through. GLITCH and SCANLINES are also weighted against each other by the <strong>A/B Mix</strong> layer-priority slider: the recessive effect's opacity floors at 35% rather than reaching zero, so both remain visible at any position. The ring stores the clean source frame each cycle — passes that sample the ring (GLITCH, TRAILS, FLOW WARP with PULSE) always read <strong>previous</strong> frames, never the one being assembled.
-</div>
+<h2>Connecting a Device</h2>
+<ol>
+  <li>Click the <strong>MIDI</strong> button in the top bar to open the MIDI panel.</li>
+  <li>Click <strong>↻ Refresh</strong> to scan available ports.</li>
+  <li>Select your device from the dropdown.</li>
+  <li>Click <strong>Connect</strong>. The status area confirms the port name.</li>
+</ol>
+<div class="callout note"><strong>Hot connection:</strong> The MIDI port list is refreshed on demand. Click ↻ Refresh after connecting a device. Ports connected after the app launched will not appear until you refresh.</div>
 <hr/>
 
-<h2>UI → Effect Data Flow</h2>
-<p>All parameter control — sliders, MIDI CC, OSC messages — converges on the same DOM element values. The p5.js draw loop reads these values directly on every frame.</p>
+<h2>MIDI Map Format</h2>
+<p>Maps are plain JSON files loaded at runtime via <strong>📂 Load Map…</strong>. They persist in localStorage and reload automatically on next launch.</p>
+<div class="term">
+{
+  "name": "My APC mini",
+  "version": 1,
+  "channel": -1,
+  "mappings": [
+    { "param": "feedback",     "cc": 48, "type": "range",   "enabled": true },
+    { "param": "corrupt",      "cc": 49, "type": "range",   "enabled": true },
+    { "param": "depth",        "cc": 50, "type": "range",   "enabled": true },
+    { "param": "corruptOn",    "cc": 64, "type": "toggle",  "enabled": true },
+    { "param": "refreshBtn",   "cc": 82, "type": "trigger", "enabled": true }
+  ]
+}
+</div>
+<h3>Field Reference</h3>
+<div class="table-responsive"><table class="win-table">
+  <thead><tr><th>Field</th><th>Type</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td>name</td><td>string</td><td>Shown in the MIDI panel</td></tr>
+    <tr><td>version</td><td>integer</td><td>Always 1</td></tr>
+    <tr><td>channel</td><td>integer</td><td>-1 = all channels. 0–15 = specific channel (0-indexed).</td></tr>
+    <tr><td>param</td><td>string</td><td>DOM element ID — see <a href="parameter-reference.html">Parameter Reference</a></td></tr>
+    <tr><td>cc</td><td>integer</td><td>CC number 0–127</td></tr>
+    <tr><td>type</td><td>string</td><td>range, toggle, or trigger</td></tr>
+    <tr><td>enabled</td><td>boolean</td><td>false disables without deleting. Default: true</td></tr>
+  </tbody>
+</table></div>
+<h3>Type Behaviour</h3>
 <div class="callout">
-<strong>No debounce, no interpolation layer, no intermediate state object.</strong> Moving a slider and receiving a MIDI CC produce identical results — both write the same DOM element. There is no latency between a MIDI CC and it affecting the output; the next draw() frame picks it up.
+<strong>range</strong> — CC 0–127 scaled linearly to the parameter's min–max.<br/>
+<strong>toggle</strong> — CC &gt; 63 → ON. CC ≤ 63 → OFF.<br/>
+<strong>trigger</strong> — Any CC &gt; 0 fires the button's click event.
 </div>
 <hr/>
 
-<h2>Frame Ring Buffer</h2>
-<p>The ring buffer stores raw ImageData objects — RGBA pixel arrays at canvas resolution. It is the shared memory between passes.</p>
-<div class="table-responsive">
-<table class="win-table">
-  <thead><tr><th>Parameter</th><th>Effect on ring</th></tr></thead>
+<h2>Bundled Maps</h2>
+<div class="table-responsive"><table class="win-table">
+  <thead><tr><th>File</th><th>Controller</th></tr></thead>
   <tbody>
-    <tr><td>QUALITY</td><td>Controls ring depth: 0 → 4 frames, 1 → 60 frames</td></tr>
-    <tr><td>DEPTH</td><td>How far back effects sample into the ring (0–50% of ring depth)</td></tr>
-    <tr><td>DEPTH SCATTER</td><td>Per-tile randomisation of the back index</td></tr>
-    <tr><td>192 MB cap</td><td>Ring depth also capped by pixel budget: at 1080p (~8 MB/frame) max ≈ 23 frames regardless of quality</td></tr>
+    <tr><td>src/midi/nanokontrol2.json</td><td>Korg nanoKONTROL2 — full fader + knob + transport</td></tr>
+    <tr><td>src/midi/nanokontrol1.json</td><td>Korg nanoKONTROL (original)</td></tr>
+    <tr><td>src/midi/generic.json</td><td>Generic template using CC 14–29</td></tr>
   </tbody>
-</table>
-</div>
-<div class="table-responsive mt-2">
-<table class="win-table">
-  <thead><tr><th>Resolution</th><th>Bytes/frame</th><th>Max frames (quality=1)</th></tr></thead>
-  <tbody>
-    <tr><td>720p (1280×720)</td><td>~3.7 MB</td><td>51 frames</td></tr>
-    <tr><td>1080p (1920×1080)</td><td>~8.3 MB</td><td>23 frames</td></tr>
-    <tr><td>1440p (2560×1440)</td><td>~14.7 MB</td><td>13 frames</td></tr>
-    <tr><td>4K (3840×2160)</td><td>~33.2 MB</td><td>5 frames</td></tr>
-  </tbody>
-</table>
-</div>
-<div class="callout warn mt-2"><strong>720p or 1080p is the practical sweet spot.</strong> At 4K the ring holds only 5 frames — DEPTH and temporal effects lose most of their range.</div>
+</table></div>
+<hr/>
 
-<h2>Frame Output Pipeline</h2>
-<p>At the end of each draw() call, huff routes the composited output frame to one or more destinations. Syphon and Spout use a magic-byte prefix on the same WebSocket connection as the canvas mirror — Rust inspects the first bytes and routes accordingly.</p>
-<div class="term" style="font-size:11px;line-height:1.8">
-  <div>canvas.getImageData()</div>
-  <div>  → raw RGBA bytes</div>
-  <div>  → magic prefix (HUFFSYPH / HUFFSPOUT) + dimensions + pixels</div>
-  <div>  → binary WebSocket to port 8787</div>
-  <div>  → Rust relay inspects prefix</div>
-  <div>      HUFFSYPH  → syphon::push_frame() → MTLTexture → Syphon clients</div>
-  <div>      HUFFSPOUT → spout::push_frame()  → D3D11 texture → Spout receivers</div>
-  <div>      (none)    → forwarded to canvas role clients as JPEG frames</div>
+<h2>Virtual MIDI</h2>
+<h3>macOS — IAC Driver</h3>
+<ol>
+  <li>Open <strong>Audio MIDI Setup</strong> (Applications → Utilities).</li>
+  <li>Open MIDI Studio (⌘2).</li>
+  <li>Double-click <strong>IAC Driver</strong>.</li>
+  <li>Enable <strong>Device is online</strong>, add a port (e.g. "Bus 1").</li>
+  <li>The IAC port appears in huff's MIDI port list after a refresh.</li>
+</ol>
+<h3>Windows — loopMIDI</h3>
+<ol>
+  <li>Download and install <a href="https://www.tobias-erichsen.de/software/loopmidi.html" target="_blank">loopMIDI</a>.</li>
+  <li>Create a virtual port.</li>
+  <li>The port appears in huff's MIDI port list after a refresh.</li>
+</ol>
+<div class="callout">
+<strong>Tip:</strong> Duplicate CCs are fine — two entries sharing a CC update both parameters simultaneously. <strong>channel: -1</strong> is almost always correct. Most controllers default to channel 1 but some advertise "all channels" — -1 handles both.
 </div>
 
         </div>

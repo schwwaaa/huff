@@ -164,24 +164,22 @@ body {
 <div class="term" style="line-height:2">
   <div>  SOURCE (video / webcam)</div>
   <div>    ↓</div>
-  <div>  [1] TRAILS          — ghost frame blend from ring</div>
-  <div>  [2] GLITCH / DATAMOSH — tile displacement from ring buffer</div>
-  <div>  [3] LUMA KEY        — A/B luma composite of glitch output vs clean source (if ON)</div>
-  <div>  [4] SCANLINES       — spatial band displacement, angle/spin</div>
-  <div>  [5] GLOBAL MIX      — blend-mode composite of base video over effects (if ON)</div>
-  <div>  [6] FEEDBACK        — previous frame zoomed/rotated back</div>
-  <div>  [7] FLOW WARP       — noise-field UV distortion</div>
-  <div>  [8] SYMMETRY        — axis mirror</div>
-  <div>  [9] SOLARISE        — luminance-threshold inversion</div>
+  <div>  [1] SCANLINE BANDS  — horizontal displacement from ring</div>
+  <div>  [2] FLOW WARP       — noise-field UV distortion</div>
+  <div>  [3] GLITCH / DATAMOSH — tile displacement from ring buffer</div>
+  <div>  [4] FEEDBACK        — previous frame zoomed/rotated back</div>
+  <div>  [5] SYMMETRY        — axis mirror</div>
+  <div>  [6] SOLARISE        — luminance-threshold inversion</div>
+  <div>  [7] TRAILS          — ghost frame blend</div>
+  <div>  [8] BASE VIDEO MIX  — raw source composited on top</div>
+  <div>  [9] GLOBAL KEY      — luma or blend composite between base and processed output</div>
   <div>    ↓</div>
-  <div>  DISPLAY COMPOSITE   — base video mixed in per BASE MIX</div>
-  <div>    ↓</div>
-  <div>  RING BUFFER UPDATE  — clean source frame written to ring for next pass</div>
+  <div>  RING BUFFER UPDATE  — frame written to ring for next pass</div>
   <div>    ↓</div>
   <div>  OUTPUT → WebSocket relay → Canvas / Syphon / Spout</div>
 </div>
 <div class="callout mt-2">
-Each pass is independently toggleable. Disabled passes are completely skipped — no bleed-through. GLITCH and SCANLINES are also weighted against each other by the <strong>A/B Mix</strong> layer-priority slider: the recessive effect's opacity floors at 35% rather than reaching zero, so both remain visible at any position. The ring stores the clean source frame each cycle — passes that sample the ring (GLITCH, TRAILS, FLOW WARP with PULSE) always read <strong>previous</strong> frames, never the one being assembled.
+Each pass is independently toggleable. Disabled passes are completely skipped — no bleed-through. The ring is updated at the end of each frame — passes always read the <strong>previous</strong> frame's ring state, never the one being assembled.
 </div>
 <hr/>
 

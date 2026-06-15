@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css"/>
 <link href="https://fonts.googleapis.com/css2?family=VT323&family=Share+Tech+Mono&display=swap" rel="stylesheet">
-<title>How It Works — huff docs</title>
+<title>Parameter Reference — huff docs</title>
 
 <style>
 :root {
@@ -135,13 +135,13 @@ body {
   <ul class="doc-nav-list">
     <li><a href="../index.html">← Back to huff</a></li>
     <li><div class="doc-nav-sep"></div></li>
-    <li><a href="how-it-works.html" class="active">How It Works</a></li>
+    <li><a href="how-it-works.html">How It Works</a></li>
 <li><a href="installation.html">Installation</a></li>
 <li><a href="interface.html">The Interface</a></li>
 <li><a href="midi.html">MIDI</a></li>
 <li><a href="osc.html">OSC</a></li>
 <li><a href="output.html">Video Output</a></li>
-<li><a href="parameter-reference.html">Parameter Reference</a></li>
+<li><a href="parameter-reference.html" class="active">Parameter Reference</a></li>
 <li><a href="architecture.html">Architecture</a></li>
 <li><a href="caveats.html">Caveats</a></li>
 <li><a href="troubleshooting.html">Troubleshooting</a></li>
@@ -152,83 +152,133 @@ body {
     <div class="col-12 col-md-9 col-lg-10">
       <div class="window">
         <div class="win-titlebar">
-          <span class="win-titlebar-title">How It Works</span>
+          <span class="win-titlebar-title">Parameter Reference</span>
           <div class="win-controls"><div class="win-btn">_</div><div class="win-btn">□</div><div class="win-btn">✕</div></div>
         </div>
         <div class="win-body doc-content">
           
-<p>huff processes video through a sequential chain of effect passes each frame. Understanding the order helps predict how parameter changes interact.</p>
+<p>Complete list of all mappable parameter IDs for use in MIDI and OSC map files. The <code>param</code> field in any map entry must match an ID in this table exactly.</p>
 <hr/>
 
-<h2>Effect Pipeline</h2>
-<div class="term" style="line-height:2">
-  <div>  SOURCE (video / webcam)</div>
-  <div>    ↓</div>
-  <div>  [1] TRAILS          — ghost frame blend from ring</div>
-  <div>  [2] GLITCH / DATAMOSH — tile displacement from ring buffer</div>
-  <div>  [3] LUMA KEY        — A/B luma composite of glitch output vs clean source (if ON)</div>
-  <div>  [4] SCANLINES       — spatial band displacement, angle/spin</div>
-  <div>  [5] GLOBAL MIX      — blend-mode composite of base video over effects (if ON)</div>
-  <div>  [6] FEEDBACK        — previous frame zoomed/rotated back</div>
-  <div>  [7] FLOW WARP       — noise-field UV distortion</div>
-  <div>  [8] SYMMETRY        — axis mirror</div>
-  <div>  [9] SOLARISE        — luminance-threshold inversion</div>
-  <div>    ↓</div>
-  <div>  DISPLAY COMPOSITE   — base video mixed in per BASE MIX</div>
-  <div>    ↓</div>
-  <div>  RING BUFFER UPDATE  — clean source frame written to ring for next pass</div>
-  <div>    ↓</div>
-  <div>  OUTPUT → WebSocket relay → Canvas / Syphon / Spout</div>
-</div>
-<div class="callout mt-2">
-Each pass is independently toggleable. Disabled passes are completely skipped — no bleed-through. GLITCH and SCANLINES are also weighted against each other by the <strong>A/B Mix</strong> layer-priority slider: the recessive effect's opacity floors at 35% rather than reaching zero, so both remain visible at any position. The ring stores the clean source frame each cycle — passes that sample the ring (GLITCH, TRAILS, FLOW WARP with PULSE) always read <strong>previous</strong> frames, never the one being assembled.
-</div>
+<h2>Range Parameters</h2>
+<div class="table-responsive"><table class="win-table">
+  <thead><tr><th>ID</th><th>Label</th><th>Min</th><th>Max</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td>baseMix</td><td>Base Mix</td><td>0</td><td>1</td><td></td></tr>
+    <tr><td>seed</td><td>Seed</td><td>1</td><td>99999</td><td>Randomisation seed. Same seed = same output</td></tr>
+    <tr><td>quality</td><td>Quality</td><td>0</td><td>3</td><td>Scales ring depth + performance</td></tr>
+    <tr><td>feedback</td><td>Feedback</td><td>0</td><td>3</td><td>Values &gt; 1 over-expose</td></tr>
+    <tr><td>persistence</td><td>Persistence</td><td>0</td><td>10</td><td></td></tr>
+    <tr><td>fbX</td><td>FB X</td><td>-1</td><td>1</td><td></td></tr>
+    <tr><td>fbY</td><td>FB Y</td><td>-1</td><td>1</td><td></td></tr>
+    <tr><td>fbZ</td><td>FB Z</td><td>0.98</td><td>1.03</td><td>1.0 = no zoom</td></tr>
+    <tr><td>fbTheta</td><td>FB θ</td><td>-2</td><td>2</td><td>degrees/frame</td></tr>
+    <tr><td>depth</td><td>Depth</td><td>0</td><td>0.5</td><td></td></tr>
+    <tr><td>depthScatter</td><td>Scatter</td><td>0</td><td>1</td><td></td></tr>
+    <tr><td>corrupt</td><td>Corrupt %</td><td>0</td><td>7</td><td></td></tr>
+    <tr><td>corruptDrift</td><td>Corrupt Drift</td><td>0</td><td>1</td><td></td></tr>
+    <tr><td>block</td><td>Pixel Size</td><td>150</td><td>2000</td><td></td></tr>
+    <tr><td>glitchSize</td><td>Glitch Size</td><td>1</td><td>60</td><td></td></tr>
+    <tr><td>glitchAlpha</td><td>Tile Opacity</td><td>0</td><td>1</td><td></td></tr>
+    <tr><td>glitchJitter</td><td>Jitter</td><td>0</td><td>1</td><td></td></tr>
+    <tr><td>glitchSmear</td><td>Smear</td><td>0</td><td>200</td><td></td></tr>
+    <tr><td>glitchSmearAngle</td><td>Smear Angle</td><td>0</td><td>360</td><td>0 = noise-driven</td></tr>
+    <tr><td>glitchSpeed</td><td>Glitch Speed</td><td>0</td><td>10</td><td></td></tr>
+    <tr><td>glitchSpeedFine</td><td>Fine Speed</td><td>0</td><td>5</td><td></td></tr>
+    <tr><td>glitchSpeedMul</td><td>Speed Mult</td><td>0</td><td>5</td><td></td></tr>
+    <tr><td>glitchBaseX</td><td>Glitch X</td><td>-1</td><td>1</td><td></td></tr>
+    <tr><td>glitchBaseY</td><td>Glitch Y</td><td>-1</td><td>1</td><td></td></tr>
+    <tr><td>trailLayers</td><td>Trail Layers</td><td>0</td><td>10</td><td></td></tr>
+    <tr><td>trailDepth</td><td>Trail Depth</td><td>0</td><td>1</td><td></td></tr>
+    <tr><td>trailLumaKey</td><td>Luma Key</td><td>0</td><td>1</td><td>0 = off</td></tr>
+    <tr><td>symPos</td><td>Sym Position</td><td>0</td><td>1</td><td>0.5 = centre</td></tr>
+    <tr><td>scanShift</td><td>Scan Shift</td><td>0</td><td>0.5</td><td></td></tr>
+    <tr><td>scanDrift</td><td>Scan Drift</td><td>0</td><td>3</td><td></td></tr>
+    <tr><td>scanSpeed</td><td>Scan Speed</td><td>0</td><td>5</td><td>Independent of glitch speed</td></tr>
+    <tr><td>scanGap</td><td>Scan Gap</td><td>0</td><td>200</td><td></td></tr>
+    <tr><td>scanSkew</td><td>Scan Skew</td><td>-1</td><td>1</td><td></td></tr>
+    <tr><td>scanAlpha</td><td>Scan Opacity</td><td>0</td><td>1</td><td></td></tr>
+    <tr><td>clusterCount</td><td>Scan Bands</td><td>0</td><td>50</td><td>Displaces current frame — no ring sampling</td></tr>
+    <tr><td>clusterRadius</td><td>Band Height</td><td>0</td><td>120</td><td></td></tr>
+    <tr><td>cluCenters</td><td>Clu Centers</td><td>1</td><td>20</td><td></td></tr>
+    <tr><td>cluSpread</td><td>Clu Spread</td><td>1</td><td>300</td><td></td></tr>
+    <tr><td>cluMinSpread</td><td>Clu Min Rad</td><td>0</td><td>150</td><td></td></tr>
+    <tr><td>spatialGap</td><td>Spatial Gap</td><td>0</td><td>200</td><td></td></tr>
+    <tr><td>cluBias</td><td>Clu Bias</td><td>0</td><td>1</td><td></td></tr>
+    <tr><td>cluDrift</td><td>Clu Drift</td><td>0</td><td>5</td><td></td></tr>
+    <tr><td>cluSpeed</td><td>Clu Speed</td><td>0</td><td>40</td><td></td></tr>
+    <tr><td>cluSpeedVar</td><td>Clu Spd Var</td><td>0</td><td>2</td><td>Per-centre speed multiplier variance</td></tr>
+    <tr><td>cluPulse</td><td>Clu Pulse</td><td>0</td><td>10</td><td>Periodic velocity burst frequency</td></tr>
+    <tr><td>cluInertia</td><td>Clu Inertia</td><td>0.01</td><td>0.99</td><td></td></tr>
+    <tr><td>solarizeThresh</td><td>Sol Thresh</td><td>0</td><td>1</td><td></td></tr>
+    <tr><td>solarizeAmt</td><td>Sol Amount</td><td>0</td><td>1</td><td></td></tr>
+    <tr><td>solarizeR</td><td>Sol R</td><td>0</td><td>2</td><td></td></tr>
+    <tr><td>solarizeG</td><td>Sol G</td><td>0</td><td>2</td><td></td></tr>
+    <tr><td>solarizeB</td><td>Sol B</td><td>0</td><td>2</td><td></td></tr>
+    <tr><td>flowStrength</td><td>Flow Strength</td><td>0</td><td>20</td><td></td></tr>
+    <tr><td>flowScale</td><td>Flow Scale</td><td>40</td><td>200</td><td></td></tr>
+    <tr><td>flowPulse</td><td>Flow Pulse</td><td>0</td><td>200</td><td>frames back</td></tr>
+    <tr><td>flowImpl</td><td>Flow Implode</td><td>0</td><td>1</td><td></td></tr>
+    <tr><td>keyMix</td><td>Key Mix</td><td>0</td><td>1</td><td>Global Key — overall strength</td></tr>
+    <tr><td>keyThresh</td><td>Key Thresh</td><td>0</td><td>1</td><td>Global Key luma mode — 0 = nothing, 1 = everything</td></tr>
+  </tbody>
+</table></div>
 <hr/>
 
-<h2>UI → Effect Data Flow</h2>
-<p>All parameter control — sliders, MIDI CC, OSC messages — converges on the same DOM element values. The p5.js draw loop reads these values directly on every frame.</p>
+<h2>Toggle Parameters</h2>
+<p>Use <code>type: "toggle"</code>. Value &gt; 0.5 = ON, value ≤ 0.5 = OFF.</p>
+<div class="table-responsive"><table class="win-table">
+  <thead><tr><th>ID</th><th>Label</th></tr></thead>
+  <tbody>
+    <tr><td>corruptOn</td><td>Glitch On</td></tr>
+    <tr><td>baseOn</td><td>Base Video</td></tr>
+    <tr><td>seedOnLoad</td><td>Seed on Load</td></tr>
+    <tr><td>symOn</td><td>Symmetry On</td></tr>
+    <tr><td>clusters</td><td>Scanlines On</td></tr>
+    <tr><td>scanRandSize</td><td>Rand Band Size</td></tr>
+    <tr><td>clusterTiles</td><td>Cluster Tiles On</td></tr>
+    <tr><td>solarizeOn</td><td>Solarize On</td></tr>
+    <tr><td>flowOn</td><td>Flow Warp On</td></tr>
+    <tr><td>trailOn</td><td>Trails On</td></tr>
+    <tr><td>loopToggle</td><td>Loop Video</td></tr>
+    <tr><td>keyInvert</td><td>Global Key Invert</td></tr>
+  </tbody>
+</table></div>
+<hr/>
+
+<h2>Select Parameters</h2>
+<p>Use <code>type: "select"</code>. Value must be one of the listed options exactly.</p>
+<div class="table-responsive"><table class="win-table">
+  <thead><tr><th>ID</th><th>Label</th><th>Options</th></tr></thead>
+  <tbody>
+    <tr><td>keyMode</td><td>Global Key Mode</td><td>off, luma, blend</td></tr>
+    <tr><td>keyBlend</td><td>Global Key Blend</td><td>screen, multiply, overlay, difference, hard-light, lighter</td></tr>
+    <tr><td>symMode</td><td>Symmetry Mode</td><td>v, h, hv</td></tr>
+    <tr><td>bgMode</td><td>Background</td><td>black, white, green, blue</td></tr>
+  </tbody>
+</table></div>
+<hr/>
+
+<h2>Trigger Parameters</h2>
+<p>Use <code>type: "trigger"</code>. Any value &gt; 0 fires the click.</p>
+<div class="table-responsive"><table class="win-table">
+  <thead><tr><th>ID</th><th>Action</th></tr></thead>
+  <tbody>
+    <tr><td>refreshBtn</td><td>Re-seed glitch randomisation</td></tr>
+    <tr><td>resetMotionBtn</td><td>Reset FB X/Y/Z/θ to neutral</td></tr>
+    <tr><td>resetBtn</td><td>Reset all parameters to defaults</td></tr>
+  </tbody>
+</table></div>
+<hr/>
+
+<h2>Notes on Ranges</h2>
 <div class="callout">
-<strong>No debounce, no interpolation layer, no intermediate state object.</strong> Moving a slider and receiving a MIDI CC produce identical results — both write the same DOM element. There is no latency between a MIDI CC and it affecting the output; the next draw() frame picks it up.
-</div>
-<hr/>
-
-<h2>Frame Ring Buffer</h2>
-<p>The ring buffer stores raw ImageData objects — RGBA pixel arrays at canvas resolution. It is the shared memory between passes.</p>
-<div class="table-responsive">
-<table class="win-table">
-  <thead><tr><th>Parameter</th><th>Effect on ring</th></tr></thead>
-  <tbody>
-    <tr><td>QUALITY</td><td>Controls ring depth: 0 → 4 frames, 1 → 60 frames</td></tr>
-    <tr><td>DEPTH</td><td>How far back effects sample into the ring (0–50% of ring depth)</td></tr>
-    <tr><td>DEPTH SCATTER</td><td>Per-tile randomisation of the back index</td></tr>
-    <tr><td>192 MB cap</td><td>Ring depth also capped by pixel budget: at 1080p (~8 MB/frame) max ≈ 23 frames regardless of quality</td></tr>
-  </tbody>
-</table>
-</div>
-<div class="table-responsive mt-2">
-<table class="win-table">
-  <thead><tr><th>Resolution</th><th>Bytes/frame</th><th>Max frames (quality=1)</th></tr></thead>
-  <tbody>
-    <tr><td>720p (1280×720)</td><td>~3.7 MB</td><td>51 frames</td></tr>
-    <tr><td>1080p (1920×1080)</td><td>~8.3 MB</td><td>23 frames</td></tr>
-    <tr><td>1440p (2560×1440)</td><td>~14.7 MB</td><td>13 frames</td></tr>
-    <tr><td>4K (3840×2160)</td><td>~33.2 MB</td><td>5 frames</td></tr>
-  </tbody>
-</table>
-</div>
-<div class="callout warn mt-2"><strong>720p or 1080p is the practical sweet spot.</strong> At 4K the ring holds only 5 frames — DEPTH and temporal effects lose most of their range.</div>
-
-<h2>Frame Output Pipeline</h2>
-<p>At the end of each draw() call, huff routes the composited output frame to one or more destinations. Syphon and Spout use a magic-byte prefix on the same WebSocket connection as the canvas mirror — Rust inspects the first bytes and routes accordingly.</p>
-<div class="term" style="font-size:11px;line-height:1.8">
-  <div>canvas.getImageData()</div>
-  <div>  → raw RGBA bytes</div>
-  <div>  → magic prefix (HUFFSYPH / HUFFSPOUT) + dimensions + pixels</div>
-  <div>  → binary WebSocket to port 8787</div>
-  <div>  → Rust relay inspects prefix</div>
-  <div>      HUFFSYPH  → syphon::push_frame() → MTLTexture → Syphon clients</div>
-  <div>      HUFFSPOUT → spout::push_frame()  → D3D11 texture → Spout receivers</div>
-  <div>      (none)    → forwarded to canvas role clients as JPEG frames</div>
+<strong>MIDI maps</strong> use cc: 0–127, mapped linearly to the parameter's min–max. You do not specify the output range in a MIDI map.<br/><br/>
+<strong>OSC maps</strong> use inputMin/inputMax to tell huff what range your sender outputs. TouchOSC faders: inputMin: 0, inputMax: 1. MIDI-to-OSC bridges: inputMin: 0, inputMax: 127.<br/><br/>
+<strong>fbZ</strong> has a narrow range (0.98–1.03) because zoom is applied multiplicatively every frame. Even 1.005 produces dramatic zoom over a few seconds of feedback.<br/><br/>
+<strong>quality</strong> range is 0–3 but 0–1 is the practical working range. Values &gt; 1 increase ring depth beyond 60 frames and can cause memory pressure at high resolutions.<br/><br/>
+<strong>clusterCount (Scan Bands)</strong> displaces the <em>current</em> video frame spatially — it does not sample from the ring buffer. There is no temporal artifact; bands are smooth even with fast camera movement.<br/><br/>
+<strong>cluSpeedVar</strong> and <strong>cluPulse</strong> are not mappable via trigger type — use range (0–2 and 0–10 respectively).
 </div>
 
         </div>

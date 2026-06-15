@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css"/>
 <link href="https://fonts.googleapis.com/css2?family=VT323&family=Share+Tech+Mono&display=swap" rel="stylesheet">
-<title>How It Works — huff docs</title>
+<title>Installation — huff docs</title>
 
 <style>
 :root {
@@ -135,8 +135,8 @@ body {
   <ul class="doc-nav-list">
     <li><a href="../index.html">← Back to huff</a></li>
     <li><div class="doc-nav-sep"></div></li>
-    <li><a href="how-it-works.html" class="active">How It Works</a></li>
-<li><a href="installation.html">Installation</a></li>
+    <li><a href="how-it-works.html">How It Works</a></li>
+<li><a href="installation.html" class="active">Installation</a></li>
 <li><a href="interface.html">The Interface</a></li>
 <li><a href="midi.html">MIDI</a></li>
 <li><a href="osc.html">OSC</a></li>
@@ -152,84 +152,72 @@ body {
     <div class="col-12 col-md-9 col-lg-10">
       <div class="window">
         <div class="win-titlebar">
-          <span class="win-titlebar-title">How It Works</span>
+          <span class="win-titlebar-title">Installation</span>
           <div class="win-controls"><div class="win-btn">_</div><div class="win-btn">□</div><div class="win-btn">✕</div></div>
         </div>
         <div class="win-body doc-content">
           
-<p>huff processes video through a sequential chain of effect passes each frame. Understanding the order helps predict how parameter changes interact.</p>
+<h2>macOS</h2>
+<ol>
+  <li>Download <code>huff-1.0.2-universal.dmg</code> from the Releases page.</li>
+  <li>Open the DMG and drag <strong>huff</strong> to your Applications folder.</li>
+  <li>On first launch macOS may show a Gatekeeper warning. Right-click the app icon → <strong>Open</strong> → <strong>Open</strong> to bypass it once.</li>
+  <li>Grant camera access when prompted if you plan to use webcam input.</li>
+</ol>
+<div class="callout note mt-2"><strong>Apple Silicon + Intel:</strong> The DMG ships as a Universal binary built with lipo. Runs natively on both M-series and Intel Macs. Syphon.framework is bundled inside the .app — nothing to install separately.</div>
 <hr/>
 
-<h2>Effect Pipeline</h2>
-<div class="term" style="line-height:2">
-  <div>  SOURCE (video / webcam)</div>
-  <div>    ↓</div>
-  <div>  [1] TRAILS          — ghost frame blend from ring</div>
-  <div>  [2] GLITCH / DATAMOSH — tile displacement from ring buffer</div>
-  <div>  [3] LUMA KEY        — A/B luma composite of glitch output vs clean source (if ON)</div>
-  <div>  [4] SCANLINES       — spatial band displacement, angle/spin</div>
-  <div>  [5] GLOBAL MIX      — blend-mode composite of base video over effects (if ON)</div>
-  <div>  [6] FEEDBACK        — previous frame zoomed/rotated back</div>
-  <div>  [7] FLOW WARP       — noise-field UV distortion</div>
-  <div>  [8] SYMMETRY        — axis mirror</div>
-  <div>  [9] SOLARISE        — luminance-threshold inversion</div>
-  <div>    ↓</div>
-  <div>  DISPLAY COMPOSITE   — base video mixed in per BASE MIX</div>
-  <div>    ↓</div>
-  <div>  RING BUFFER UPDATE  — clean source frame written to ring for next pass</div>
-  <div>    ↓</div>
-  <div>  OUTPUT → WebSocket relay → Canvas / Syphon / Spout</div>
-</div>
-<div class="callout mt-2">
-Each pass is independently toggleable. Disabled passes are completely skipped — no bleed-through. GLITCH and SCANLINES are also weighted against each other by the <strong>A/B Mix</strong> layer-priority slider: the recessive effect's opacity floors at 35% rather than reaching zero, so both remain visible at any position. The ring stores the clean source frame each cycle — passes that sample the ring (GLITCH, TRAILS, FLOW WARP with PULSE) always read <strong>previous</strong> frames, never the one being assembled.
-</div>
+<h2>Windows</h2>
+<ol>
+  <li>Download <code>huff-1.0.2-x64-setup.exe</code> (or the <code>.msi</code>) from the Releases page.</li>
+  <li>Run the installer.</li>
+  <li>Windows SmartScreen may warn about an unsigned binary — click <strong>More info → Run anyway</strong>.</li>
+  <li>For <strong>Spout output</strong>, install the <a href="https://spout.zeal.co/" target="_blank">Spout2 runtime</a> separately.</li>
+  <li>Microsoft Edge WebView2 Runtime is required on Windows 10. Pre-installed on Windows 11.</li>
+</ol>
+<div class="callout warn mt-2"><strong>SmartScreen warning:</strong> Expected on unsigned builds. Click More info → Run anyway. This will be resolved in future releases with a code-signing certificate.</div>
 <hr/>
 
-<h2>UI → Effect Data Flow</h2>
-<p>All parameter control — sliders, MIDI CC, OSC messages — converges on the same DOM element values. The p5.js draw loop reads these values directly on every frame.</p>
-<div class="callout">
-<strong>No debounce, no interpolation layer, no intermediate state object.</strong> Moving a slider and receiving a MIDI CC produce identical results — both write the same DOM element. There is no latency between a MIDI CC and it affecting the output; the next draw() frame picks it up.
-</div>
-<hr/>
-
-<h2>Frame Ring Buffer</h2>
-<p>The ring buffer stores raw ImageData objects — RGBA pixel arrays at canvas resolution. It is the shared memory between passes.</p>
+<h2>Building From Source</h2>
+<h3>Prerequisites</h3>
 <div class="table-responsive">
 <table class="win-table">
-  <thead><tr><th>Parameter</th><th>Effect on ring</th></tr></thead>
+  <thead><tr><th>Tool</th><th>Version</th><th>Notes</th></tr></thead>
   <tbody>
-    <tr><td>QUALITY</td><td>Controls ring depth: 0 → 4 frames, 1 → 60 frames</td></tr>
-    <tr><td>DEPTH</td><td>How far back effects sample into the ring (0–50% of ring depth)</td></tr>
-    <tr><td>DEPTH SCATTER</td><td>Per-tile randomisation of the back index</td></tr>
-    <tr><td>192 MB cap</td><td>Ring depth also capped by pixel budget: at 1080p (~8 MB/frame) max ≈ 23 frames regardless of quality</td></tr>
+    <tr><td>Node.js</td><td>≥ 18 LTS</td><td>nodejs.org</td></tr>
+    <tr><td>Rust + Cargo</td><td>stable</td><td>Install via rustup.rs</td></tr>
+    <tr><td>Tauri CLI</td><td>1.x</td><td>Installed via npm install</td></tr>
   </tbody>
 </table>
 </div>
-<div class="table-responsive mt-2">
-<table class="win-table">
-  <thead><tr><th>Resolution</th><th>Bytes/frame</th><th>Max frames (quality=1)</th></tr></thead>
-  <tbody>
-    <tr><td>720p (1280×720)</td><td>~3.7 MB</td><td>51 frames</td></tr>
-    <tr><td>1080p (1920×1080)</td><td>~8.3 MB</td><td>23 frames</td></tr>
-    <tr><td>1440p (2560×1440)</td><td>~14.7 MB</td><td>13 frames</td></tr>
-    <tr><td>4K (3840×2160)</td><td>~33.2 MB</td><td>5 frames</td></tr>
-  </tbody>
-</table>
-</div>
-<div class="callout warn mt-2"><strong>720p or 1080p is the practical sweet spot.</strong> At 4K the ring holds only 5 frames — DEPTH and temporal effects lose most of their range.</div>
 
-<h2>Frame Output Pipeline</h2>
-<p>At the end of each draw() call, huff routes the composited output frame to one or more destinations. Syphon and Spout use a magic-byte prefix on the same WebSocket connection as the canvas mirror — Rust inspects the first bytes and routes accordingly.</p>
-<div class="term" style="font-size:11px;line-height:1.8">
-  <div>canvas.getImageData()</div>
-  <div>  → raw RGBA bytes</div>
-  <div>  → magic prefix (HUFFSYPH / HUFFSPOUT) + dimensions + pixels</div>
-  <div>  → binary WebSocket to port 8787</div>
-  <div>  → Rust relay inspects prefix</div>
-  <div>      HUFFSYPH  → syphon::push_frame() → MTLTexture → Syphon clients</div>
-  <div>      HUFFSPOUT → spout::push_frame()  → D3D11 texture → Spout receivers</div>
-  <div>      (none)    → forwarded to canvas role clients as JPEG frames</div>
-</div>
+<p><strong>macOS extra:</strong> Xcode Command Line Tools</p>
+<div class="term">xcode-select --install</div>
+
+<p style="margin-top:10px"><strong>Windows extra:</strong> Build Tools for Visual Studio with Desktop development with C++.</p>
+<div class="term">rustup target add x86_64-pc-windows-msvc</div>
+
+<p style="margin-top:10px"><strong>Linux extra:</strong> WebKitGTK development libraries.</p>
+<div class="term"><span class="comment"># Ubuntu / Debian</span>
+sudo apt install -y libwebkit2gtk-4.0-dev build-essential libssl-dev libgtk-3-dev
+
+<span class="comment"># Arch</span>
+sudo pacman -S --needed webkit2gtk base-devel openssl gtk3
+
+<span class="comment"># Fedora</span>
+sudo dnf install webkit2gtk4.0-devel openssl-devel</div>
+
+<h3>Clone and Run</h3>
+<div class="term">git clone https://github.com/your-org/huff.git
+cd huff
+npm install
+
+<span class="comment"># Development — hot reload</span>
+npm run dev
+
+<span class="comment"># Production build</span>
+npm run build         <span class="comment"># macOS: Universal DMG</span>
+npx tauri build       <span class="comment"># Windows / Linux: native installer</span></div>
 
         </div>
       </div>

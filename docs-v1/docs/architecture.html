@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css"/>
 <link href="https://fonts.googleapis.com/css2?family=VT323&family=Share+Tech+Mono&display=swap" rel="stylesheet">
-<title>How It Works — huff docs</title>
+<title>Architecture — huff docs</title>
 
 <style>
 :root {
@@ -135,14 +135,14 @@ body {
   <ul class="doc-nav-list">
     <li><a href="../index.html">← Back to huff</a></li>
     <li><div class="doc-nav-sep"></div></li>
-    <li><a href="how-it-works.html" class="active">How It Works</a></li>
+    <li><a href="how-it-works.html">How It Works</a></li>
 <li><a href="installation.html">Installation</a></li>
 <li><a href="interface.html">The Interface</a></li>
 <li><a href="midi.html">MIDI</a></li>
 <li><a href="osc.html">OSC</a></li>
 <li><a href="output.html">Video Output</a></li>
 <li><a href="parameter-reference.html">Parameter Reference</a></li>
-<li><a href="architecture.html">Architecture</a></li>
+<li><a href="architecture.html" class="active">Architecture</a></li>
 <li><a href="caveats.html">Caveats</a></li>
 <li><a href="troubleshooting.html">Troubleshooting</a></li>
 
@@ -152,83 +152,88 @@ body {
     <div class="col-12 col-md-9 col-lg-10">
       <div class="window">
         <div class="win-titlebar">
-          <span class="win-titlebar-title">How It Works</span>
+          <span class="win-titlebar-title">Architecture</span>
           <div class="win-controls"><div class="win-btn">_</div><div class="win-btn">□</div><div class="win-btn">✕</div></div>
         </div>
         <div class="win-body doc-content">
           
-<p>huff processes video through a sequential chain of effect passes each frame. Understanding the order helps predict how parameter changes interact.</p>
-<hr/>
-
-<h2>Effect Pipeline</h2>
-<div class="term" style="line-height:2">
-  <div>  SOURCE (video / webcam)</div>
-  <div>    ↓</div>
-  <div>  [1] TRAILS          — ghost frame blend from ring</div>
-  <div>  [2] GLITCH / DATAMOSH — tile displacement from ring buffer</div>
-  <div>  [3] LUMA KEY        — A/B luma composite of glitch output vs clean source (if ON)</div>
-  <div>  [4] SCANLINES       — spatial band displacement, angle/spin</div>
-  <div>  [5] GLOBAL MIX      — blend-mode composite of base video over effects (if ON)</div>
-  <div>  [6] FEEDBACK        — previous frame zoomed/rotated back</div>
-  <div>  [7] FLOW WARP       — noise-field UV distortion</div>
-  <div>  [8] SYMMETRY        — axis mirror</div>
-  <div>  [9] SOLARISE        — luminance-threshold inversion</div>
-  <div>    ↓</div>
-  <div>  DISPLAY COMPOSITE   — base video mixed in per BASE MIX</div>
-  <div>    ↓</div>
-  <div>  RING BUFFER UPDATE  — clean source frame written to ring for next pass</div>
-  <div>    ↓</div>
-  <div>  OUTPUT → WebSocket relay → Canvas / Syphon / Spout</div>
-</div>
-<div class="callout mt-2">
-Each pass is independently toggleable. Disabled passes are completely skipped — no bleed-through. GLITCH and SCANLINES are also weighted against each other by the <strong>A/B Mix</strong> layer-priority slider: the recessive effect's opacity floors at 35% rather than reaching zero, so both remain visible at any position. The ring stores the clean source frame each cycle — passes that sample the ring (GLITCH, TRAILS, FLOW WARP with PULSE) always read <strong>previous</strong> frames, never the one being assembled.
-</div>
-<hr/>
-
-<h2>UI → Effect Data Flow</h2>
-<p>All parameter control — sliders, MIDI CC, OSC messages — converges on the same DOM element values. The p5.js draw loop reads these values directly on every frame.</p>
-<div class="callout">
-<strong>No debounce, no interpolation layer, no intermediate state object.</strong> Moving a slider and receiving a MIDI CC produce identical results — both write the same DOM element. There is no latency between a MIDI CC and it affecting the output; the next draw() frame picks it up.
-</div>
-<hr/>
-
-<h2>Frame Ring Buffer</h2>
-<p>The ring buffer stores raw ImageData objects — RGBA pixel arrays at canvas resolution. It is the shared memory between passes.</p>
-<div class="table-responsive">
-<table class="win-table">
-  <thead><tr><th>Parameter</th><th>Effect on ring</th></tr></thead>
-  <tbody>
-    <tr><td>QUALITY</td><td>Controls ring depth: 0 → 4 frames, 1 → 60 frames</td></tr>
-    <tr><td>DEPTH</td><td>How far back effects sample into the ring (0–50% of ring depth)</td></tr>
-    <tr><td>DEPTH SCATTER</td><td>Per-tile randomisation of the back index</td></tr>
-    <tr><td>192 MB cap</td><td>Ring depth also capped by pixel budget: at 1080p (~8 MB/frame) max ≈ 23 frames regardless of quality</td></tr>
-  </tbody>
-</table>
-</div>
-<div class="table-responsive mt-2">
-<table class="win-table">
-  <thead><tr><th>Resolution</th><th>Bytes/frame</th><th>Max frames (quality=1)</th></tr></thead>
-  <tbody>
-    <tr><td>720p (1280×720)</td><td>~3.7 MB</td><td>51 frames</td></tr>
-    <tr><td>1080p (1920×1080)</td><td>~8.3 MB</td><td>23 frames</td></tr>
-    <tr><td>1440p (2560×1440)</td><td>~14.7 MB</td><td>13 frames</td></tr>
-    <tr><td>4K (3840×2160)</td><td>~33.2 MB</td><td>5 frames</td></tr>
-  </tbody>
-</table>
-</div>
-<div class="callout warn mt-2"><strong>720p or 1080p is the practical sweet spot.</strong> At 4K the ring holds only 5 frames — DEPTH and temporal effects lose most of their range.</div>
-
-<h2>Frame Output Pipeline</h2>
-<p>At the end of each draw() call, huff routes the composited output frame to one or more destinations. Syphon and Spout use a magic-byte prefix on the same WebSocket connection as the canvas mirror — Rust inspects the first bytes and routes accordingly.</p>
+<h2>Project Structure</h2>
 <div class="term" style="font-size:11px;line-height:1.8">
-  <div>canvas.getImageData()</div>
-  <div>  → raw RGBA bytes</div>
-  <div>  → magic prefix (HUFFSYPH / HUFFSPOUT) + dimensions + pixels</div>
-  <div>  → binary WebSocket to port 8787</div>
-  <div>  → Rust relay inspects prefix</div>
-  <div>      HUFFSYPH  → syphon::push_frame() → MTLTexture → Syphon clients</div>
-  <div>      HUFFSPOUT → spout::push_frame()  → D3D11 texture → Spout receivers</div>
-  <div>      (none)    → forwarded to canvas role clients as JPEG frames</div>
+huff/
+├── src/
+│   ├── index.html        <span class="comment"># Controls window — UI, p5 draw loop, effect chain</span>
+│   ├── canvas.html       <span class="comment"># Output mirror window</span>
+│   ├── canvas.js         <span class="comment"># p5 setup, draw loop, video handling, WS sender</span>
+│   ├── effects.js        <span class="comment"># applyGlitch · applyTrails · applyScanlines</span>
+│   │                     <span class="comment">#   applyFlowWarp · applySolarize · applySymmetry</span>
+│   ├── p5.js             <span class="comment"># p5.js library (bundled locally)</span>
+│   ├── midi/             <span class="comment"># Bundled MIDI map files</span>
+│   ├── osc/              <span class="comment"># Bundled OSC map files</span>
+│   └── presets/          <span class="comment"># Factory preset JSON files</span>
+│
+├── src-tauri/
+│   ├── src/
+│   │   ├── main.rs       <span class="comment"># WS relay · MIDI commands · OSC listener</span>
+│   │   │                 <span class="comment">#   Syphon handlers · Spout handlers</span>
+│   │   ├── syphon.rs     <span class="comment"># macOS Syphon via ObjC FFI (Metal texture)</span>
+│   │   └── spout.rs      <span class="comment"># Windows Spout2 via SpoutDX C-ABI bridge</span>
+│   ├── native/
+│   │   └── spout_bridge/ <span class="comment"># C++ SpoutDX bridge (CMake)</span>
+│   ├── frameworks/
+│   │   └── Syphon.framework
+│   └── tauri.conf.json
+│
+└── scripts/
+    ├── create_universal_dmg.sh
+    └── tauri-build.cjs
+</div>
+<hr/>
+
+<h2>WebSocket Relay</h2>
+<p>The relay runs inside the Tauri Rust process — not in Node.js or the browser.</p>
+<ul>
+  <li>Binds on <code>127.0.0.1:8787</code> (IPv4) and <code>[::1]:8787</code> (IPv6) via tokio + tokio-tungstenite</li>
+  <li>Clients register via a JSON hello: <code>{"type":"hello","role":"index"}</code> or <code>"canvas"</code></li>
+  <li>Text messages → broadcast to all other clients</li>
+  <li>Binary messages → inspected for magic prefix: <code>HUFFSYPH</code> → Syphon, <code>HUFFSPOUT</code> → Spout, all other → canvas clients</li>
+</ul>
+<hr/>
+
+<h2>Rust Crates</h2>
+<div class="table-responsive"><table class="win-table">
+  <thead><tr><th>Crate</th><th>Version</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td>tauri</td><td>1.x</td><td>App shell, two-window management, Tauri IPC</td></tr>
+    <tr><td>tokio</td><td>1.x</td><td>Async runtime (relay + OSC listener)</td></tr>
+    <tr><td>tokio-tungstenite</td><td>0.21</td><td>WebSocket server</td></tr>
+    <tr><td>midir</td><td>0.9</td><td>Native MIDI input (USB + virtual)</td></tr>
+    <tr><td>rosc</td><td>0.10</td><td>OSC UDP packet decoder</td></tr>
+    <tr><td>once_cell</td><td>1.x</td><td>Lazy static initialisation for global client map</td></tr>
+    <tr><td>serde / serde_json</td><td>1.x</td><td>JSON IPC serialisation</td></tr>
+    <tr><td>objc / objc-foundation</td><td>0.2 / 0.1</td><td>macOS Syphon ObjC FFI (macOS only)</td></tr>
+    <tr><td>cmake</td><td>0.1</td><td>Spout bridge CMake build (Windows only)</td></tr>
+  </tbody>
+</table></div>
+<hr/>
+
+<h2>Frontend Architecture</h2>
+<p>The frontend intentionally has no build step and no bundler. Everything is plain ES6 loaded via script tags. This keeps the dev cycle fast — edit a file, reload the WebView, see the change immediately.</p>
+<p><code>index.html</code> is large (~2300 lines) because the entire controls UI, all MIDI/OSC/Syphon/Spout logic, and the p5 draw loop all live in one file. This is intentional — a single file is trivially auditable and has no dependency graph to maintain.</p>
+<p><code>effects.js</code> is the one separate module because its functions are called from both <code>canvas.js</code> and <code>index.html</code>. The only shared interface between the two is the <code>frameRing</code> array and <code>gBuf</code> p5 Graphics object.</p>
+<hr/>
+
+<h2>macOS Universal Binary Build</h2>
+<div class="term" style="font-size:11px;line-height:1.8">
+scripts/create_universal_dmg.sh
+  ↓
+tauri build --target aarch64-apple-darwin  →  huff_arm64.app
+tauri build --target x86_64-apple-darwin   →  huff_x64.app
+  ↓
+lipo -create huff_arm64.app/.../huff
+             huff_x64.app/.../huff
+     -output huff_universal.app/.../huff
+  ↓
+hdiutil create → huff-universal.dmg
 </div>
 
         </div>

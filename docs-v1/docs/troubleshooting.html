@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css"/>
 <link href="https://fonts.googleapis.com/css2?family=VT323&family=Share+Tech+Mono&display=swap" rel="stylesheet">
-<title>How It Works — huff docs</title>
+<title>Troubleshooting — huff docs</title>
 
 <style>
 :root {
@@ -135,7 +135,7 @@ body {
   <ul class="doc-nav-list">
     <li><a href="../index.html">← Back to huff</a></li>
     <li><div class="doc-nav-sep"></div></li>
-    <li><a href="how-it-works.html" class="active">How It Works</a></li>
+    <li><a href="how-it-works.html">How It Works</a></li>
 <li><a href="installation.html">Installation</a></li>
 <li><a href="interface.html">The Interface</a></li>
 <li><a href="midi.html">MIDI</a></li>
@@ -144,7 +144,7 @@ body {
 <li><a href="parameter-reference.html">Parameter Reference</a></li>
 <li><a href="architecture.html">Architecture</a></li>
 <li><a href="caveats.html">Caveats</a></li>
-<li><a href="troubleshooting.html">Troubleshooting</a></li>
+<li><a href="troubleshooting.html" class="active">Troubleshooting</a></li>
 
   </ul>
 </div>
@@ -152,84 +152,95 @@ body {
     <div class="col-12 col-md-9 col-lg-10">
       <div class="window">
         <div class="win-titlebar">
-          <span class="win-titlebar-title">How It Works</span>
+          <span class="win-titlebar-title">Troubleshooting</span>
           <div class="win-controls"><div class="win-btn">_</div><div class="win-btn">□</div><div class="win-btn">✕</div></div>
         </div>
         <div class="win-body doc-content">
           
-<p>huff processes video through a sequential chain of effect passes each frame. Understanding the order helps predict how parameter changes interact.</p>
+<h2>Canvas window shows "WS: disconnected"</h2>
+<ol>
+  <li><strong>Check that huff is fully started.</strong> The relay starts asynchronously — wait a second after launch.</li>
+  <li><strong>Check port 8787 is not in use</strong> by another application. See <a href="caveats.html#port-8787">Caveats — Port 8787</a>.</li>
+  <li>If you opened <code>canvas.html</code> directly in a browser outside the Tauri app, the relay is not running. Start a standalone relay: <code>node src/ws-server.js</code></li>
+  <li>On some systems the WebView connects via IPv6 (<code>[::1]</code>). huff binds both — if one fails the other should succeed within 1–2 seconds.</li>
+</ol>
 <hr/>
 
-<h2>Effect Pipeline</h2>
-<div class="term" style="line-height:2">
-  <div>  SOURCE (video / webcam)</div>
-  <div>    ↓</div>
-  <div>  [1] TRAILS          — ghost frame blend from ring</div>
-  <div>  [2] GLITCH / DATAMOSH — tile displacement from ring buffer</div>
-  <div>  [3] LUMA KEY        — A/B luma composite of glitch output vs clean source (if ON)</div>
-  <div>  [4] SCANLINES       — spatial band displacement, angle/spin</div>
-  <div>  [5] GLOBAL MIX      — blend-mode composite of base video over effects (if ON)</div>
-  <div>  [6] FEEDBACK        — previous frame zoomed/rotated back</div>
-  <div>  [7] FLOW WARP       — noise-field UV distortion</div>
-  <div>  [8] SYMMETRY        — axis mirror</div>
-  <div>  [9] SOLARISE        — luminance-threshold inversion</div>
-  <div>    ↓</div>
-  <div>  DISPLAY COMPOSITE   — base video mixed in per BASE MIX</div>
-  <div>    ↓</div>
-  <div>  RING BUFFER UPDATE  — clean source frame written to ring for next pass</div>
-  <div>    ↓</div>
-  <div>  OUTPUT → WebSocket relay → Canvas / Syphon / Spout</div>
-</div>
-<div class="callout mt-2">
-Each pass is independently toggleable. Disabled passes are completely skipped — no bleed-through. GLITCH and SCANLINES are also weighted against each other by the <strong>A/B Mix</strong> layer-priority slider: the recessive effect's opacity floors at 35% rather than reaching zero, so both remain visible at any position. The ring stores the clean source frame each cycle — passes that sample the ring (GLITCH, TRAILS, FLOW WARP with PULSE) always read <strong>previous</strong> frames, never the one being assembled.
-</div>
+<h2>Camera not appearing or not starting</h2>
+<h3>No camera in the dropdown</h3>
+<ul>
+  <li>Click <strong>↻ Refresh</strong> in the Source group.</li>
+  <li>macOS: System Preferences → Security &amp; Privacy → Camera → confirm huff is allowed.</li>
+  <li>Windows: Settings → Privacy → Camera → allow apps to access the camera.</li>
+</ul>
+<h3>Camera in dropdown but Start produces no output</h3>
+<ul>
+  <li>macOS distribution builds: must be codesigned with the camera entitlement. Dev mode works automatically. See <a href="caveats.html">Caveats</a>.</li>
+</ul>
 <hr/>
 
-<h2>UI → Effect Data Flow</h2>
-<p>All parameter control — sliders, MIDI CC, OSC messages — converges on the same DOM element values. The p5.js draw loop reads these values directly on every frame.</p>
-<div class="callout">
-<strong>No debounce, no interpolation layer, no intermediate state object.</strong> Moving a slider and receiving a MIDI CC produce identical results — both write the same DOM element. There is no latency between a MIDI CC and it affecting the output; the next draw() frame picks it up.
-</div>
+<h2>MIDI device not appearing or not responding</h2>
+<h3>Device not in the list</h3>
+<ul>
+  <li>Click <strong>↻ Refresh</strong> in the MIDI panel.</li>
+  <li>macOS: confirm the device appears in Audio MIDI Setup (Applications → Utilities).</li>
+  <li>Windows: Device Manager → Sound, video and game controllers.</li>
+</ul>
+<h3>Device connected but not responding</h3>
+<ul>
+  <li>Check the <code>channel</code> field in your map file. <code>-1</code> accepts all channels.</li>
+  <li>Click <strong>Debug: log all ports to console</strong> in the MIDI panel and check the browser console (right-click controls window → Inspect → Console).</li>
+</ul>
 <hr/>
 
-<h2>Frame Ring Buffer</h2>
-<p>The ring buffer stores raw ImageData objects — RGBA pixel arrays at canvas resolution. It is the shared memory between passes.</p>
-<div class="table-responsive">
-<table class="win-table">
-  <thead><tr><th>Parameter</th><th>Effect on ring</th></tr></thead>
-  <tbody>
-    <tr><td>QUALITY</td><td>Controls ring depth: 0 → 4 frames, 1 → 60 frames</td></tr>
-    <tr><td>DEPTH</td><td>How far back effects sample into the ring (0–50% of ring depth)</td></tr>
-    <tr><td>DEPTH SCATTER</td><td>Per-tile randomisation of the back index</td></tr>
-    <tr><td>192 MB cap</td><td>Ring depth also capped by pixel budget: at 1080p (~8 MB/frame) max ≈ 23 frames regardless of quality</td></tr>
-  </tbody>
-</table>
-</div>
-<div class="table-responsive mt-2">
-<table class="win-table">
-  <thead><tr><th>Resolution</th><th>Bytes/frame</th><th>Max frames (quality=1)</th></tr></thead>
-  <tbody>
-    <tr><td>720p (1280×720)</td><td>~3.7 MB</td><td>51 frames</td></tr>
-    <tr><td>1080p (1920×1080)</td><td>~8.3 MB</td><td>23 frames</td></tr>
-    <tr><td>1440p (2560×1440)</td><td>~14.7 MB</td><td>13 frames</td></tr>
-    <tr><td>4K (3840×2160)</td><td>~33.2 MB</td><td>5 frames</td></tr>
-  </tbody>
-</table>
-</div>
-<div class="callout warn mt-2"><strong>720p or 1080p is the practical sweet spot.</strong> At 4K the ring holds only 5 frames — DEPTH and temporal effects lose most of their range.</div>
+<h2>Syphon not appearing in receivers</h2>
+<ol>
+  <li>Confirm the Syphon panel shows <strong>active</strong>.</li>
+  <li>In your receiver, trigger a manual re-scan of Syphon sources. Some apps only scan on launch.</li>
+  <li>Confirm both apps are on the same user account. Syphon uses shared memory and does not work across user sessions.</li>
+</ol>
+<hr/>
 
-<h2>Frame Output Pipeline</h2>
-<p>At the end of each draw() call, huff routes the composited output frame to one or more destinations. Syphon and Spout use a magic-byte prefix on the same WebSocket connection as the canvas mirror — Rust inspects the first bytes and routes accordingly.</p>
-<div class="term" style="font-size:11px;line-height:1.8">
-  <div>canvas.getImageData()</div>
-  <div>  → raw RGBA bytes</div>
-  <div>  → magic prefix (HUFFSYPH / HUFFSPOUT) + dimensions + pixels</div>
-  <div>  → binary WebSocket to port 8787</div>
-  <div>  → Rust relay inspects prefix</div>
-  <div>      HUFFSYPH  → syphon::push_frame() → MTLTexture → Syphon clients</div>
-  <div>      HUFFSPOUT → spout::push_frame()  → D3D11 texture → Spout receivers</div>
-  <div>      (none)    → forwarded to canvas role clients as JPEG frames</div>
-</div>
+<h2>Spout init failed (Windows)</h2>
+<ol>
+  <li><strong>Install the Spout2 runtime</strong> from <a href="https://spout.zeal.co/" target="_blank">spout.zeal.co</a>.</li>
+  <li>Confirm <code>spout_bridge.dll</code> is present next to the huff executable. If missing, reinstall.</li>
+  <li>On Windows 10, ensure WebView2 Runtime is installed.</li>
+</ol>
+<hr/>
+
+<h2>High memory usage</h2>
+<ul>
+  <li>Lower the <strong>QUALITY</strong> slider. At quality=0 the ring holds only 4 frames.</li>
+  <li>Reduce canvas resolution — make the controls window smaller.</li>
+  <li>Disable <strong>Trails</strong> and <strong>Flow Warp</strong> — both read the full ring depth and keep it alive.</li>
+</ul>
+<hr/>
+
+<h2>Glitch / effects stop responding to controls</h2>
+<ol>
+  <li>Check that <strong>ON</strong> is toggled for the relevant effect group.</li>
+  <li>If CORRUPT % is at 0, no tiles will be displaced regardless of other settings.</li>
+  <li>If QUALITY is at 0, the ring holds only 4 frames — DEPTH and DEPTH SCATTER have very little range.</li>
+  <li>Right-click the controls window → <strong>Inspect</strong> → <strong>Console</strong> to check for JS errors.</li>
+</ol>
+<hr/>
+
+<h2>Output looks frozen / only one frame</h2>
+<ul>
+  <li>The p5 draw loop may have halted due to a JS error. Check the console (right-click → Inspect → Console).</li>
+  <li>If the video file is paused, the source is static — effects still run but the input is not changing.</li>
+  <li>On Windows, some configurations throttle requestAnimationFrame when the window is not in focus. Keep the controls window visible.</li>
+</ul>
+<hr/>
+
+<h2>Getting More Help</h2>
+<p>Open an issue on the <a href="https://github.com" target="_blank">GitHub repository</a> with the console output and your OS/version. Include the huff version shown in the About overlay.</p>
+<div class="term"><span class="comment"># macOS — get OS version</span>
+system_profiler SPSoftwareDataType
+
+<span class="comment"># Windows</span>
+winver</div>
 
         </div>
       </div>

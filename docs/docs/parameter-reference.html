@@ -160,6 +160,9 @@ body {
 <p>Complete list of all mappable parameter IDs for use in MIDI and OSC map files. The <code>param</code> field in any map entry must match an ID in this table exactly.</p>
 <hr/>
 
+<p>Complete list of all mappable parameter IDs for use in MIDI and OSC map files. The <code>param</code> field in any map entry must match an ID in this table exactly.</p>
+<hr/>
+
 <h2>Range Parameters</h2>
 <div class="table-responsive"><table class="win-table">
   <thead><tr><th>ID</th><th>Label</th><th>Min</th><th>Max</th><th>Notes</th></tr></thead>
@@ -183,33 +186,41 @@ body {
     <tr><td>glitchJitter</td><td>Jitter</td><td>0</td><td>1</td><td></td></tr>
     <tr><td>glitchSmear</td><td>Smear</td><td>0</td><td>200</td><td></td></tr>
     <tr><td>glitchSmearAngle</td><td>Smear Angle</td><td>0</td><td>360</td><td>0 = noise-driven</td></tr>
-    <tr><td>glitchSpeed</td><td>Glitch Speed</td><td>0</td><td>10</td><td></td></tr>
-    <tr><td>glitchSpeedFine</td><td>Fine Speed</td><td>0</td><td>5</td><td></td></tr>
-    <tr><td>glitchSpeedMul</td><td>Speed Mult</td><td>0</td><td>5</td><td></td></tr>
-    <tr><td>glitchBaseX</td><td>Glitch X</td><td>-1</td><td>1</td><td></td></tr>
-    <tr><td>glitchBaseY</td><td>Glitch Y</td><td>-1</td><td>1</td><td></td></tr>
-    <tr><td>trailLayers</td><td>Trail Layers</td><td>0</td><td>10</td><td></td></tr>
+    <tr><td>glitchSpeed</td><td>Glitch Speed</td><td>0</td><td>5</td><td></td></tr>
+    <tr><td>glitchSpeedFine</td><td>Fine Speed</td><td>0</td><td>10</td><td></td></tr>
+    <tr><td>glitchSpeedMul</td><td>Speed Mult</td><td>0</td><td>10</td><td></td></tr>
+    <tr><td>glitchBaseX</td><td>Glitch X</td><td>-1000</td><td>1000</td><td></td></tr>
+    <tr><td>glitchBaseY</td><td>Glitch Y</td><td>-1000</td><td>1000</td><td></td></tr>
+    <tr><td>abMix</td><td>A/B Mix</td><td>0</td><td>1</td><td>0 = Glitch priority, 1 = Scanlines priority. Recessive side floors at 0.35</td></tr>
+    <tr><td>lumaKeyAB</td><td>Luma Key A/B</td><td>0</td><td>1</td><td>0 = clean dominant, 1 = glitch dominant. Floors at 0.35</td></tr>
+    <tr><td>lumaKeyMix</td><td>Luma Key Mix</td><td>0</td><td>1</td><td>Overall strength of the pipeline luma key</td></tr>
+    <tr><td>trailLayers</td><td>Trail Layers</td><td>0</td><td>4</td><td></td></tr>
     <tr><td>trailDepth</td><td>Trail Depth</td><td>0</td><td>1</td><td></td></tr>
-    <tr><td>trailLumaKey</td><td>Luma Key</td><td>0</td><td>1</td><td>0 = off</td></tr>
+    <tr><td>trailLumaKey</td><td>Trail Luma Key</td><td>0</td><td>1</td><td>0 = off</td></tr>
     <tr><td>symPos</td><td>Sym Position</td><td>0</td><td>1</td><td>0.5 = centre</td></tr>
+    <tr><td>scanAngle</td><td>Scan Angle</td><td>-180</td><td>180</td><td>degrees, step 0.5. 0 = horizontal, ±90 = vertical</td></tr>
+    <tr><td>scanFocus</td><td>Scan Focus</td><td>0</td><td>1</td><td>Biases band distribution along the rotated span. 0.5 = even</td></tr>
+    <tr><td>scanRoll</td><td>Scan Roll</td><td>-2</td><td>2</td><td>Continuous scroll of bands, independent of Drift</td></tr>
+    <tr><td>scanSpinSpeed</td><td>Scan Spin Speed</td><td>0.1</td><td>10</td><td>Only active when Spin L or Spin R is on</td></tr>
     <tr><td>scanShift</td><td>Scan Shift</td><td>0</td><td>0.5</td><td></td></tr>
-    <tr><td>scanDrift</td><td>Scan Drift</td><td>0</td><td>3</td><td></td></tr>
+    <tr><td>scanDrift</td><td>Scan Drift</td><td>0</td><td>3</td><td>Dual-frequency: slow wander + fast jitter</td></tr>
     <tr><td>scanSpeed</td><td>Scan Speed</td><td>0</td><td>5</td><td>Independent of glitch speed</td></tr>
     <tr><td>scanGap</td><td>Scan Gap</td><td>0</td><td>200</td><td></td></tr>
     <tr><td>scanSkew</td><td>Scan Skew</td><td>-1</td><td>1</td><td></td></tr>
     <tr><td>scanAlpha</td><td>Scan Opacity</td><td>0</td><td>1</td><td></td></tr>
-    <tr><td>clusterCount</td><td>Scan Bands</td><td>0</td><td>50</td><td>Displaces current frame — no ring sampling</td></tr>
-    <tr><td>clusterRadius</td><td>Band Height</td><td>0</td><td>120</td><td></td></tr>
+    <tr><td>clusterCount</td><td>Scan Bands</td><td>1</td><td>50</td><td>Displaces current frame — no ring sampling</td></tr>
+    <tr><td>clusterRadius</td><td>Band Size</td><td>1</td><td>120</td><td></td></tr>
     <tr><td>cluCenters</td><td>Clu Centers</td><td>1</td><td>20</td><td></td></tr>
     <tr><td>cluSpread</td><td>Clu Spread</td><td>1</td><td>300</td><td></td></tr>
     <tr><td>cluMinSpread</td><td>Clu Min Rad</td><td>0</td><td>150</td><td></td></tr>
     <tr><td>spatialGap</td><td>Spatial Gap</td><td>0</td><td>200</td><td></td></tr>
     <tr><td>cluBias</td><td>Clu Bias</td><td>0</td><td>1</td><td></td></tr>
     <tr><td>cluDrift</td><td>Clu Drift</td><td>0</td><td>5</td><td></td></tr>
-    <tr><td>cluSpeed</td><td>Clu Speed</td><td>0</td><td>40</td><td></td></tr>
+    <tr><td>cluSpeed</td><td>Clu Speed</td><td>0</td><td>10</td><td>Step 0.01. 0 = centres glide to a stop and hold</td></tr>
     <tr><td>cluSpeedVar</td><td>Clu Spd Var</td><td>0</td><td>2</td><td>Per-centre speed multiplier variance</td></tr>
     <tr><td>cluPulse</td><td>Clu Pulse</td><td>0</td><td>10</td><td>Periodic velocity burst frequency</td></tr>
     <tr><td>cluInertia</td><td>Clu Inertia</td><td>0.01</td><td>0.99</td><td></td></tr>
+    <tr><td>globalMixAmt</td><td>Global Mix Amount</td><td>0</td><td>1</td><td>Opacity of base video in the blend</td></tr>
     <tr><td>solarizeThresh</td><td>Sol Thresh</td><td>0</td><td>1</td><td></td></tr>
     <tr><td>solarizeAmt</td><td>Sol Amount</td><td>0</td><td>1</td><td></td></tr>
     <tr><td>solarizeR</td><td>Sol R</td><td>0</td><td>2</td><td></td></tr>
@@ -217,10 +228,11 @@ body {
     <tr><td>solarizeB</td><td>Sol B</td><td>0</td><td>2</td><td></td></tr>
     <tr><td>flowStrength</td><td>Flow Strength</td><td>0</td><td>20</td><td></td></tr>
     <tr><td>flowScale</td><td>Flow Scale</td><td>40</td><td>200</td><td></td></tr>
+    <tr><td>flowSpeed</td><td>Flow Speed</td><td>0</td><td>4</td><td>0 = noise field frozen</td></tr>
     <tr><td>flowPulse</td><td>Flow Pulse</td><td>0</td><td>200</td><td>frames back</td></tr>
-    <tr><td>flowImpl</td><td>Flow Implode</td><td>0</td><td>1</td><td></td></tr>
-    <tr><td>keyMix</td><td>Key Mix</td><td>0</td><td>1</td><td>Global Key — overall strength</td></tr>
-    <tr><td>keyThresh</td><td>Key Thresh</td><td>0</td><td>1</td><td>Global Key luma mode — 0 = nothing, 1 = everything</td></tr>
+    <tr><td>flowImpl</td><td>Flow Pull</td><td>-1</td><td>1</td><td>Positive = implode toward centre, negative = explode outward</td></tr>
+    <tr><td>flowSwirl</td><td>Flow Swirl</td><td>-2</td><td>2</td><td>Vortex rotation of displacement vectors</td></tr>
+    <tr><td>flowTurb</td><td>Flow Turbulence</td><td>0</td><td>1</td><td>Blends in a second, higher-frequency noise octave</td></tr>
   </tbody>
 </table></div>
 <hr/>
@@ -235,13 +247,16 @@ body {
     <tr><td>seedOnLoad</td><td>Seed on Load</td></tr>
     <tr><td>symOn</td><td>Symmetry On</td></tr>
     <tr><td>clusters</td><td>Scanlines On</td></tr>
-    <tr><td>scanRandSize</td><td>Rand Band Size</td></tr>
     <tr><td>clusterTiles</td><td>Cluster Tiles On</td></tr>
+    <tr><td>scanSpinLeft</td><td>Scan Spin Left</td></tr>
+    <tr><td>scanSpinRight</td><td>Scan Spin Right</td></tr>
+    <tr><td>lumaKeyOn</td><td>Luma Key On</td></tr>
+    <tr><td>lumaKeyInvert</td><td>Luma Key Invert</td></tr>
+    <tr><td>globalMixOn</td><td>Global Mix On</td></tr>
     <tr><td>solarizeOn</td><td>Solarize On</td></tr>
     <tr><td>flowOn</td><td>Flow Warp On</td></tr>
     <tr><td>trailOn</td><td>Trails On</td></tr>
     <tr><td>loopToggle</td><td>Loop Video</td></tr>
-    <tr><td>keyInvert</td><td>Global Key Invert</td></tr>
   </tbody>
 </table></div>
 <hr/>
@@ -251,8 +266,7 @@ body {
 <div class="table-responsive"><table class="win-table">
   <thead><tr><th>ID</th><th>Label</th><th>Options</th></tr></thead>
   <tbody>
-    <tr><td>keyMode</td><td>Global Key Mode</td><td>off, luma, blend</td></tr>
-    <tr><td>keyBlend</td><td>Global Key Blend</td><td>screen, multiply, overlay, difference, hard-light, lighter</td></tr>
+    <tr><td>globalMixBlend</td><td>Global Mix Blend</td><td>screen, multiply, overlay, difference, hard-light, lighter</td></tr>
     <tr><td>symMode</td><td>Symmetry Mode</td><td>v, h, hv</td></tr>
     <tr><td>bgMode</td><td>Background</td><td>black, white, green, blue</td></tr>
   </tbody>
@@ -267,8 +281,46 @@ body {
     <tr><td>refreshBtn</td><td>Re-seed glitch randomisation</td></tr>
     <tr><td>resetMotionBtn</td><td>Reset FB X/Y/Z/θ to neutral</td></tr>
     <tr><td>resetBtn</td><td>Reset all parameters to defaults</td></tr>
+    <tr><td>clearBufBtn</td><td>Wipe the frame ring and all internal buffers instantly, without resetting parameters</td></tr>
+    <tr><td>scanAngleReset</td><td>Set Scan Angle to 0°</td></tr>
+    <tr><td>scanAngle90n</td><td>Set Scan Angle to -90°</td></tr>
+    <tr><td>scanAngle90p</td><td>Set Scan Angle to 90°</td></tr>
   </tbody>
 </table></div>
+<hr/>
+
+<h2>Transport &amp; Preset Controls</h2>
+<p>The dispatch code in <code>index.html</code> resolves <code>param</code> by <code>document.getElementById()</code> generically — any element with an ID can be targeted, not just the effect groups. The transport bar and preset toolbar are valid targets under the same <code>type</code> rules, with the caveats below.</p>
+<h3>Mappable as Trigger</h3>
+<p>Use <code>type: "trigger"</code>. All are <code>&lt;button&gt;</code> elements — <code>.click()</code> fires their existing handler.</p>
+<div class="table-responsive"><table class="win-table">
+  <thead><tr><th>ID</th><th>Action</th></tr></thead>
+  <tbody>
+    <tr><td>playBtn</td><td>▶ Play</td></tr>
+    <tr><td>pauseBtn</td><td>⏸ Pause</td></tr>
+    <tr><td>camStartBtn</td><td>⬤ Cam — start the selected camera</td></tr>
+    <tr><td>camStopBtn</td><td>✕ Cam — stop the camera</td></tr>
+    <tr><td>camRefreshBtn</td><td>↻ — rescan camera devices</td></tr>
+    <tr><td>presetSaveBtn</td><td>💾 Save — save current snapshot under the name in presetName</td></tr>
+    <tr><td>presetLoadBtn</td><td>▶ Load — load the preset selected in presetList</td></tr>
+    <tr><td>presetDeleteBtn</td><td>✕ Delete — delete the preset selected in presetList</td></tr>
+    <tr><td>presetExportBtn</td><td>↑ Export JSON — download all saved presets</td></tr>
+    <tr><td>presetImportBtn</td><td>↓ Import JSON — open the import file picker</td></tr>
+  </tbody>
+</table></div>
+<h3>Mappable as Range</h3>
+<div class="table-responsive"><table class="win-table">
+  <thead><tr><th>ID</th><th>Label</th><th>Min</th><th>Max</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td>volumeSlider</td><td>Volume</td><td>0</td><td>1</td><td>Routed through a dedicated Web Audio GainNode</td></tr>
+    <tr><td>seekBar</td><td>Seek Position</td><td>0</td><td>1000</td><td>Position as a fraction of total duration ×1000. Dispatching <code>input</code> seeks the loaded video immediately</td></tr>
+  </tbody>
+</table></div>
+<h3>Not Practically Mappable</h3>
+<div class="callout warn">
+<strong>playbackRate</strong>, <strong>cams</strong>, and <strong>presetList</strong> are <code>&lt;select&gt;</code> elements, and <strong>presetName</strong> is a text input. None have a numeric <code>min</code>/<code>max</code>, so the range-dispatch code (which computes <code>el.min</code>/<code>el.max</code>) resolves both to 0 and writes <code>value = "0"</code> — not a valid option for any of these. There is no <code>select</code> mapping type. These four are not usable MIDI/OSC targets with the current dispatch logic; they're operated from the controls UI only.<br/><br/>
+<strong>timeDisplay</strong> is a read-only <code>&lt;span&gt;</code> showing <code>M:SS / M:SS</code> — it is not a control and has no <code>param</code> use.
+</div>
 <hr/>
 
 <h2>Notes on Ranges</h2>
@@ -278,9 +330,10 @@ body {
 <strong>fbZ</strong> has a narrow range (0.98–1.03) because zoom is applied multiplicatively every frame. Even 1.005 produces dramatic zoom over a few seconds of feedback.<br/><br/>
 <strong>quality</strong> range is 0–3 but 0–1 is the practical working range. Values &gt; 1 increase ring depth beyond 60 frames and can cause memory pressure at high resolutions.<br/><br/>
 <strong>clusterCount (Scan Bands)</strong> displaces the <em>current</em> video frame spatially — it does not sample from the ring buffer. There is no temporal artifact; bands are smooth even with fast camera movement.<br/><br/>
+<strong>abMix</strong> and <strong>lumaKeyAB</strong> are layer-priority mixes, not crossfades — the recessive side never drops below a 0.35 floor, so both contributors always remain visible.<br/><br/>
+<strong>scanSpinSpeed</strong> only has an effect while <strong>scanSpinLeft</strong> or <strong>scanSpinRight</strong> is on; otherwise the static <strong>scanAngle</strong> slider is used.<br/><br/>
 <strong>cluSpeedVar</strong> and <strong>cluPulse</strong> are not mappable via trigger type — use range (0–2 and 0–10 respectively).
 </div>
-
         </div>
       </div>
     </div>

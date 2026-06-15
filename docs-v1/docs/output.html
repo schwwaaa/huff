@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css"/>
 <link href="https://fonts.googleapis.com/css2?family=VT323&family=Share+Tech+Mono&display=swap" rel="stylesheet">
-<title>How It Works — huff docs</title>
+<title>Video Output — huff docs</title>
 
 <style>
 :root {
@@ -135,12 +135,12 @@ body {
   <ul class="doc-nav-list">
     <li><a href="../index.html">← Back to huff</a></li>
     <li><div class="doc-nav-sep"></div></li>
-    <li><a href="how-it-works.html" class="active">How It Works</a></li>
+    <li><a href="how-it-works.html">How It Works</a></li>
 <li><a href="installation.html">Installation</a></li>
 <li><a href="interface.html">The Interface</a></li>
 <li><a href="midi.html">MIDI</a></li>
 <li><a href="osc.html">OSC</a></li>
-<li><a href="output.html">Video Output</a></li>
+<li><a href="output.html" class="active">Video Output</a></li>
 <li><a href="parameter-reference.html">Parameter Reference</a></li>
 <li><a href="architecture.html">Architecture</a></li>
 <li><a href="caveats.html">Caveats</a></li>
@@ -152,83 +152,65 @@ body {
     <div class="col-12 col-md-9 col-lg-10">
       <div class="window">
         <div class="win-titlebar">
-          <span class="win-titlebar-title">How It Works</span>
+          <span class="win-titlebar-title">Video Output</span>
           <div class="win-controls"><div class="win-btn">_</div><div class="win-btn">□</div><div class="win-btn">✕</div></div>
         </div>
         <div class="win-body doc-content">
           
-<p>huff processes video through a sequential chain of effect passes each frame. Understanding the order helps predict how parameter changes interact.</p>
+<p>huff has three ways to send its output outside the app window: <strong>Syphon</strong> (macOS), <strong>Spout</strong> (Windows), and the <strong>canvas mirror window</strong> (all platforms).</p>
 <hr/>
 
-<h2>Effect Pipeline</h2>
-<div class="term" style="line-height:2">
-  <div>  SOURCE (video / webcam)</div>
-  <div>    ↓</div>
-  <div>  [1] TRAILS          — ghost frame blend from ring</div>
-  <div>  [2] GLITCH / DATAMOSH — tile displacement from ring buffer</div>
-  <div>  [3] LUMA KEY        — A/B luma composite of glitch output vs clean source (if ON)</div>
-  <div>  [4] SCANLINES       — spatial band displacement, angle/spin</div>
-  <div>  [5] GLOBAL MIX      — blend-mode composite of base video over effects (if ON)</div>
-  <div>  [6] FEEDBACK        — previous frame zoomed/rotated back</div>
-  <div>  [7] FLOW WARP       — noise-field UV distortion</div>
-  <div>  [8] SYMMETRY        — axis mirror</div>
-  <div>  [9] SOLARISE        — luminance-threshold inversion</div>
-  <div>    ↓</div>
-  <div>  DISPLAY COMPOSITE   — base video mixed in per BASE MIX</div>
-  <div>    ↓</div>
-  <div>  RING BUFFER UPDATE  — clean source frame written to ring for next pass</div>
-  <div>    ↓</div>
-  <div>  OUTPUT → WebSocket relay → Canvas / Syphon / Spout</div>
-</div>
-<div class="callout mt-2">
-Each pass is independently toggleable. Disabled passes are completely skipped — no bleed-through. GLITCH and SCANLINES are also weighted against each other by the <strong>A/B Mix</strong> layer-priority slider: the recessive effect's opacity floors at 35% rather than reaching zero, so both remain visible at any position. The ring stores the clean source frame each cycle — passes that sample the ring (GLITCH, TRAILS, FLOW WARP with PULSE) always read <strong>previous</strong> frames, never the one being assembled.
-</div>
+<h2>Syphon (macOS)</h2>
+<p>Syphon lets huff share its canvas as a named texture that any Syphon-enabled application can receive in real time — without capture cards or screen recording.</p>
+<p><strong>Compatible receivers:</strong> Resolume Avenue/Arena, VDMX, MadMapper, CoGe, Millumin, Modul8, Max/MSP Jitter, Processing (Syphon library).</p>
+<h3>Usage</h3>
+<ol>
+  <li>Click the <strong>SYPHON</strong> button in the top bar.</li>
+  <li>Set the output <strong>resolution</strong> (default: 1280×720).</li>
+  <li>Set the <strong>FPS cap</strong> (default: 30fps — do not set higher than your canvas frame rate).</li>
+  <li>Click <strong>▶ Start</strong>. The sender appears as <code>huff</code> in any Syphon receiver.</li>
+</ol>
+<div class="callout warn"><strong>CPU round-trip:</strong> Uses getImageData() → loopback WebSocket → Metal texture re-upload. Not zero-copy. Works reliably at 720p/30fps. See <a href="caveats.html">Caveats</a> for details.</div>
+<h3>Installation Notes</h3>
+<p>The Syphon.framework is <strong>bundled inside the huff app bundle</strong> — no separate installation required.</p>
 <hr/>
 
-<h2>UI → Effect Data Flow</h2>
-<p>All parameter control — sliders, MIDI CC, OSC messages — converges on the same DOM element values. The p5.js draw loop reads these values directly on every frame.</p>
-<div class="callout">
-<strong>No debounce, no interpolation layer, no intermediate state object.</strong> Moving a slider and receiving a MIDI CC produce identical results — both write the same DOM element. There is no latency between a MIDI CC and it affecting the output; the next draw() frame picks it up.
-</div>
+<h2>Spout (Windows)</h2>
+<p>Spout is the Windows equivalent of Syphon. huff shares its canvas as a named D3D11 texture via the SpoutDX bridge.</p>
+<p><strong>Compatible receivers:</strong> Resolume Arena, TouchDesigner, MadMapper, Notch, and anything supporting the Spout2 protocol.</p>
+<h3>Usage</h3>
+<ol>
+  <li>Install the <a href="https://spout.zeal.co/" target="_blank">Spout2 runtime</a> if not already present.</li>
+  <li>Click the <strong>SPOUT</strong> button in the top bar.</li>
+  <li>Set resolution and FPS cap.</li>
+  <li>Click <strong>▶ Start</strong>. The sender appears as <code>huff</code> in Spout receivers.</li>
+</ol>
 <hr/>
 
-<h2>Frame Ring Buffer</h2>
-<p>The ring buffer stores raw ImageData objects — RGBA pixel arrays at canvas resolution. It is the shared memory between passes.</p>
-<div class="table-responsive">
-<table class="win-table">
-  <thead><tr><th>Parameter</th><th>Effect on ring</th></tr></thead>
-  <tbody>
-    <tr><td>QUALITY</td><td>Controls ring depth: 0 → 4 frames, 1 → 60 frames</td></tr>
-    <tr><td>DEPTH</td><td>How far back effects sample into the ring (0–50% of ring depth)</td></tr>
-    <tr><td>DEPTH SCATTER</td><td>Per-tile randomisation of the back index</td></tr>
-    <tr><td>192 MB cap</td><td>Ring depth also capped by pixel budget: at 1080p (~8 MB/frame) max ≈ 23 frames regardless of quality</td></tr>
-  </tbody>
-</table>
-</div>
-<div class="table-responsive mt-2">
-<table class="win-table">
-  <thead><tr><th>Resolution</th><th>Bytes/frame</th><th>Max frames (quality=1)</th></tr></thead>
-  <tbody>
-    <tr><td>720p (1280×720)</td><td>~3.7 MB</td><td>51 frames</td></tr>
-    <tr><td>1080p (1920×1080)</td><td>~8.3 MB</td><td>23 frames</td></tr>
-    <tr><td>1440p (2560×1440)</td><td>~14.7 MB</td><td>13 frames</td></tr>
-    <tr><td>4K (3840×2160)</td><td>~33.2 MB</td><td>5 frames</td></tr>
-  </tbody>
-</table>
-</div>
-<div class="callout warn mt-2"><strong>720p or 1080p is the practical sweet spot.</strong> At 4K the ring holds only 5 frames — DEPTH and temporal effects lose most of their range.</div>
+<h2>Canvas Mirror Window</h2>
+<p>The canvas window connects to the embedded WebSocket relay on port <code>8787</code> and renders frames as they arrive.</p>
+<ul>
+  <li>Opens automatically with the app.</li>
+  <li>Press <strong>F</strong> in the canvas window to toggle fullscreen.</li>
+  <li>Move it to a second monitor or projector.</li>
+  <li>Can also be opened in any browser on the local network — navigate to <code>file:///path/to/huff/src/canvas.html</code>.</li>
+</ul>
+<div class="callout note"><strong>OBS capture:</strong> The canvas window has no UI chrome. Use OBS Window Capture pointed at the canvas window for recording or streaming.</div>
+<hr/>
 
-<h2>Frame Output Pipeline</h2>
-<p>At the end of each draw() call, huff routes the composited output frame to one or more destinations. Syphon and Spout use a magic-byte prefix on the same WebSocket connection as the canvas mirror — Rust inspects the first bytes and routes accordingly.</p>
+<h2>WebSocket Binary Protocol</h2>
 <div class="term" style="font-size:11px;line-height:1.8">
-  <div>canvas.getImageData()</div>
-  <div>  → raw RGBA bytes</div>
-  <div>  → magic prefix (HUFFSYPH / HUFFSPOUT) + dimensions + pixels</div>
-  <div>  → binary WebSocket to port 8787</div>
-  <div>  → Rust relay inspects prefix</div>
-  <div>      HUFFSYPH  → syphon::push_frame() → MTLTexture → Syphon clients</div>
-  <div>      HUFFSPOUT → spout::push_frame()  → D3D11 texture → Spout receivers</div>
-  <div>      (none)    → forwarded to canvas role clients as JPEG frames</div>
+Syphon frame:
+  Bytes  0–7   : b"HUFFSYPH"  (8 bytes)
+  Bytes  8–11  : width  u32 little-endian
+  Bytes  12–15 : height u32 little-endian
+  Bytes  16+   : raw RGBA8 pixels (width × height × 4 bytes)
+
+Spout frame:
+  Bytes  0–8   : b"HUFFSPOUT"  (9 bytes)
+  Bytes  9–12  : width  u32 little-endian
+  Bytes  13–16 : height u32 little-endian
+  Bytes  17+   : raw RGBA8 pixels (width × height × 4 bytes)
 </div>
 
         </div>

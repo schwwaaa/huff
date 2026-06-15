@@ -410,25 +410,7 @@ body {
         <div class="col-12 col-sm-6 col-lg-4">
           <div class="feat-item">
             <div class="feat-name">FLOW WARP</div>
-            <div class="feat-desc">Noise-field UV distortion with speed, pulse, bidirectional pull (implode/explode), swirl, and turbulence.</div>
-          </div>
-        </div>
-        <div class="col-12 col-sm-6 col-lg-4">
-          <div class="feat-item">
-            <div class="feat-name">A/B MIX</div>
-            <div class="feat-desc">Layer-priority mix between Glitch and Scanlines. Neither effect fully mutes — the recessive side floors at 35%.</div>
-          </div>
-        </div>
-        <div class="col-12 col-sm-6 col-lg-4">
-          <div class="feat-item">
-            <div class="feat-name">LUMA KEY</div>
-            <div class="feat-desc">Pipeline gate between Glitch and Scanlines — A/B luma composite of glitched output against the clean source.</div>
-          </div>
-        </div>
-        <div class="col-12 col-sm-6 col-lg-4">
-          <div class="feat-item">
-            <div class="feat-name">GLOBAL MIX</div>
-            <div class="feat-desc">GPU blend-mode composite of the base video over the full effects chain — screen, multiply, overlay, difference, hard light, add.</div>
+            <div class="feat-desc">Noise-field UV distortion with pulse and implosion modes. Liquid or heat-haze displacement.</div>
           </div>
         </div>
         <div class="col-12 col-sm-6 col-lg-4">
@@ -446,7 +428,7 @@ body {
         <div class="col-12 col-sm-6 col-lg-4">
           <div class="feat-item">
             <div class="feat-name">SCANLINE BANDS</div>
-            <div class="feat-desc">Spatial displacement bands at any angle, with continuous spin. Dual-frequency drift, roll, focus, gap quantisation and skew.</div>
+            <div class="feat-desc">Drifting horizontal displacement bands sampled from past frames. Gap quantisation and skew.</div>
           </div>
         </div>
         <div class="col-12 col-sm-6 col-lg-4">
@@ -488,7 +470,13 @@ body {
         <div class="col-12 col-sm-6 col-lg-4">
           <div class="feat-item">
             <div class="feat-name">PRESETS</div>
-            <div class="feat-desc">Save/recall named parameter snapshots in the browser. JSON export/import for backup and sharing across machines.</div>
+            <div class="feat-desc">Save/recall named parameter snapshots. 7 factory presets: clean, chaos, melt, mirror, pulse, solar, vapor.</div>
+          </div>
+        </div>
+        <div class="col-12 col-sm-6 col-lg-4">
+          <div class="feat-item">
+            <div class="feat-name">GLOBAL KEY</div>
+            <div class="feat-desc">Final composite pass between clean base and processed output. Luma mode: base video luminance gates effect reveal. Blend mode: GPU composite operations (Screen, Multiply, Overlay, Difference, Add).</div>
           </div>
         </div>
       </div>
@@ -508,24 +496,22 @@ body {
       <div class="term">
         <div>  SOURCE (video / webcam)</div>
         <div>    ↓</div>
-        <div>  [1] TRAILS          — ghost frame blend from ring</div>
-        <div>  [2] GLITCH          — tile displacement from ring buffer</div>
-        <div>  [3] LUMA KEY        — A/B luma composite, glitch vs clean (optional)</div>
-        <div>  [4] SCANLINES       — spatial band displacement, angle/spin</div>
-        <div>  [5] GLOBAL MIX      — blend-mode composite of base video (optional)</div>
-        <div>  [6] FEEDBACK        — previous frame zoomed/rotated back</div>
-        <div>  [7] FLOW WARP       — noise-field UV distortion</div>
-        <div>  [8] SYMMETRY        — axis mirror</div>
-        <div>  [9] SOLARISE        — luminance-threshold inversion</div>
+        <div>  [1] SCANLINE BANDS  — horizontal displacement from ring</div>
+        <div>  [2] FLOW WARP       — noise-field UV distortion</div>
+        <div>  [3] GLITCH          — tile displacement from ring buffer</div>
+        <div>  [4] FEEDBACK        — previous frame zoomed/rotated back</div>
+        <div>  [5] SYMMETRY        — axis mirror</div>
+        <div>  [6] SOLARISE        — luminance-threshold inversion</div>
+        <div>  [7] TRAILS          — ghost frame blend</div>
+        <div>  [8] BASE VIDEO MIX  — raw source composited on top</div>
+        <div>  [9] GLOBAL KEY      — luma or blend composite between base and processed</div>
         <div>    ↓</div>
-        <div>  DISPLAY COMPOSITE   — base video mixed in per BASE MIX</div>
-        <div>    ↓</div>
-        <div>  RING BUFFER UPDATE  — clean source frame written for next pass</div>
+        <div>  RING BUFFER UPDATE  — frame written for next pass</div>
         <div>    ↓</div>
         <div>  OUTPUT → WebSocket relay → Canvas / Syphon / Spout</div>
       </div>
       <div class="callout">
-        Each pass is independently toggleable. Disabled passes are completely skipped — no bleed-through. GLITCH and SCANLINES are also weighted against each other by the A/B Mix layer-priority slider — the recessive effect floors at 35% rather than reaching zero. All controls (sliders, MIDI CC, OSC) write directly to DOM elements. The p5 draw loop reads them on every frame — <strong>no debounce, no interpolation layer.</strong>
+        Each pass is independently toggleable. Disabled passes are completely skipped — no bleed-through. All controls (sliders, MIDI CC, OSC) write directly to DOM elements. The p5 draw loop reads them on every frame — <strong>no debounce, no interpolation layer.</strong>
       </div>
       <div class="section-label">Frame Ring Buffer</div>
       <div class="table-responsive">
