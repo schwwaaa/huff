@@ -161,7 +161,7 @@ body {
 <hr/>
 
 <h2>Effect Pipeline</h2>
-<div class="term" style="line-height:2">
+<!-- <div class="term" style="line-height:2">
   <div>  SOURCE (video / webcam)</div>
   <div>    ↓</div>
   <div>  [1] TRAILS          — ghost frame blend from ring</div>
@@ -179,9 +179,12 @@ body {
   <div>  RING BUFFER UPDATE  — clean source frame written to ring for next pass</div>
   <div>    ↓</div>
   <div>  OUTPUT → WebSocket relay → Canvas / Syphon / Spout</div>
-</div>
+</div> -->
 <div class="callout mt-2">
-Each pass is independently toggleable. Disabled passes are completely skipped — no bleed-through. GLITCH and SCANLINES are also weighted against each other by the <strong>A/B Mix</strong> layer-priority slider: the recessive effect's opacity floors at 35% rather than reaching zero, so both remain visible at any position. The ring stores the clean source frame each cycle — passes that sample the ring (GLITCH, TRAILS, FLOW WARP with PULSE) always read <strong>previous</strong> frames, never the one being assembled.
+Each pass is independently toggleable. Disabled passes are completely skipped — no bleed-through. GLITCH and SCANLINES are also weighted against each other by the <strong>A/B Mix</strong> layer-priority slider: the recessive effect's opacity floors at 35% rather than reaching zero, so both remain visible at any position. The ring stores the clean source frame each cycle — passes that sample the ring (GLITCH, TRAILS, FLOW WARP with PULSE) always read <em>previous</em> frames, never the one being assembled.
+</div>
+<div style="text-align:center;margin-top:14px">
+  <img src="../media/huff-effect-pipeline.jpg" alt="huff effect pipeline diagram — full per-frame processing order from Source through Trails, Glitch, Luma Key, Scanlines, Global Mix, Feedback, Flow Warp, Symmetry, Solarize, to Output" style="max-width:100%;border:2px solid var(--mid);box-shadow:3px 3px 0 rgba(0,0,0,.3)"/>
 </div>
 <hr/>
 
