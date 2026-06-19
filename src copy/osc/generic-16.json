@@ -1,0 +1,30 @@
+{
+  "name": "Generic OSC — 16 addresses",
+  "description": "Minimal starter map. 16 addresses covering the most important parameters. Works with any OSC sender — just configure your controller to send to these addresses. All values 0.0–1.0.",
+  "version": 1,
+  "mappings": [
+    { "_section": "── PRIMARY MIX ──────────────────────────────────────────────────────────" },
+    { "param": "feedback",    "addr": "/huff/feedback",    "type": "range",   "inputMin": 0, "inputMax": 1, "enabled": true, "note": "0–1" },
+    { "param": "corrupt",     "addr": "/huff/corrupt",     "type": "range",   "inputMin": 0, "inputMax": 1, "enabled": true, "note": "0–1" },
+    { "param": "baseMix",     "addr": "/huff/basemix",     "type": "range",   "inputMin": 0, "inputMax": 1, "enabled": true, "note": "0–1" },
+    { "param": "depth",       "addr": "/huff/depth",       "type": "range",   "inputMin": 0, "inputMax": 1, "enabled": true, "note": "0–1" },
+
+    { "_section": "── TEXTURE ───────────────────────────────────────────────────────────────" },
+    { "param": "glitchSize",  "addr": "/huff/glitchsize",  "type": "range",   "inputMin": 0, "inputMax": 1, "enabled": true, "note": "0–1" },
+    { "param": "glitchAlpha", "addr": "/huff/glitchalpha", "type": "range",   "inputMin": 0, "inputMax": 1, "enabled": true, "note": "0–1" },
+    { "param": "flowStrength","addr": "/huff/flow",        "type": "range",   "inputMin": 0, "inputMax": 1, "enabled": true, "note": "0–1" },
+    { "param": "persistence", "addr": "/huff/persistence", "type": "range",   "inputMin": 0, "inputMax": 1, "enabled": true, "note": "0–1" },
+
+    { "_section": "── FEEDBACK TRANSFORM ───────────────────────────────────────────────────" },
+    { "param": "fbZ",         "addr": "/huff/fbz",         "type": "range",   "inputMin": 0, "inputMax": 1, "enabled": true, "note": "0–1" },
+    { "param": "fbTheta",     "addr": "/huff/fbtheta",     "type": "range",   "inputMin": 0, "inputMax": 1, "enabled": true, "note": "0–1" },
+    { "param": "fbX",         "addr": "/huff/fbx",         "type": "range",   "inputMin": 0, "inputMax": 1, "enabled": true, "note": "0–1" },
+    { "param": "fbY",         "addr": "/huff/fby",         "type": "range",   "inputMin": 0, "inputMax": 1, "enabled": true, "note": "0–1" },
+
+    { "_section": "── TOGGLES & TRIGGERS ───────────────────────────────────────────────────" },
+    { "param": "corruptOn",      "addr": "/huff/corrupton",  "type": "toggle",  "inputMin": 0, "inputMax": 1, "enabled": true, "note": "1=on 0=off" },
+    { "param": "flowOn",         "addr": "/huff/flowon",     "type": "toggle",  "inputMin": 0, "inputMax": 1, "enabled": true, "note": "1=on 0=off" },
+    { "param": "baseOn",         "addr": "/huff/baseon",     "type": "toggle",  "inputMin": 0, "inputMax": 1, "enabled": true, "note": "1=on 0=off" },
+    { "param": "refreshBtn",     "addr": "/huff/reseed",     "type": "trigger", "inputMin": 0, "inputMax": 1, "enabled": true, "note": "any >0.5 fires" }
+  ]
+}

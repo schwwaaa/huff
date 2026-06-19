@@ -227,7 +227,7 @@ const PRESET_IDS = [
   'scanAlpha','scanShift','scanDrift','scanSpeed','scanGap','scanSkew',
   'scanAngle','scanFocus','scanRoll',
   'scanSpinLeft','scanSpinRight','scanSpinSpeed',
-  'trailOn','trailLayers','trailDepth',
+  'trailOn','trailLayers','trailDepth','trailLumaKey',
   'bgMode',
   'cluSpeedVar','cluPulse',
   'abMix',
@@ -656,6 +656,7 @@ function hookUI() {
     'scanSpinLeft','scanSpinRight','scanSpinSpeed','scanSpinSpeedVal',
     'depthScatter','depthScatterVal','corruptDrift','corruptDriftVal',
     'trailOn','trailLayers','trailLayersVal','trailDepth','trailDepthVal',
+    'trailLumaKey','trailLumaKeyVal',
     'scanAngle','bgMode','dim',
     'cluSpeedVar','cluSpeedVarVal','cluPulse','cluPulseVal',
     'abMix','abMixVal',
@@ -852,7 +853,7 @@ function hookSliders() {
     'scanAlpha','scanShift','scanDrift','scanSpeed','scanGap','scanSkew','scanFocus','scanRoll',
     'glitchAlpha','glitchJitter','glitchSmearAngle',
     'flowStrength','flowScale','flowPulse','flowImpl','flowSpeed','flowTurb','flowSwirl','baseMix','symPos','glitchSpeedMul',
-    'depthScatter','corruptDrift','trailLayers','trailDepth',
+    'depthScatter','corruptDrift','trailLayers','trailDepth','trailLumaKey',
     'solarizeThresh','solarizeAmt','solarizeR','solarizeG','solarizeB',
     'cluSpeedVar','cluPulse',
     'lumaKeyMix','lumaKeyAB','globalMixAmt','scanAngle','scanSpinSpeed','abMix',
@@ -991,6 +992,7 @@ function updateLabels() {
   set(els.corruptDrift,     els.corruptDriftVal,     f2);
   set(els.trailLayers,      els.trailLayersVal,      v => (v|0));
   set(els.trailDepth,       els.trailDepthVal,       f2);
+  set(els.trailLumaKey,     els.trailLumaKeyVal,     f2);
   set(els.symPos,           els.symPosVal,           f2);
   set(els.solarizeThresh,   els.solarizeThreshVal,   f2);
   set(els.solarizeAmt,      els.solarizeAmtVal,      f2);
@@ -1472,28 +1474,10 @@ function startCamera(deviceId) {
   // Read quality slider each frame so JPEG compression and FPS adapt in real time.
   function _q() { return parseFloat(_$('quality')?.value ?? '1'); }
   function streamJpegQ() { return Math.max(0.3, Math.min(0.97, 0.5 + _q() * 0.47)); }
-
-  // Stream rate is capped at 30fps. The quality slider ranges 0–3, so the old
-  // `15 + q*45` formula asked for 60–150fps at higher settings — i.e. a JPEG
-  // encode + canvas readback on essentially every animation frame, competing
-  // directly with draw(). That is what collapses 720p60. 30fps to OBS is standard
-  // and roughly halves the per-frame main-thread tax. Raise STREAM_FPS_CAP if you
-  // later move encoding off the main thread.
-  const STREAM_FPS_CAP = 30;
-  function targetPeriod() {
-    const fps = Math.max(10, Math.min(STREAM_FPS_CAP, Math.round(15 + _q() * 45)));
-    return 1000 / fps;
-  }
-
-  // Skip a frame while the socket's send buffer is backed up. Without this,
-  // ws.send() queues blobs faster than the relay can drain them, so latency
-  // grows the whole time you stream and keeps draining after you stop — the
-  // persistent lag. Dropping frames here keeps end-to-end latency bounded.
-  const WS_MAX_BUFFERED = 1 << 19; // ~512KB ≈ a few JPEG frames
+  function targetPeriod() { return 1000 / Math.round(15 + _q() * 45); } // 15–60 fps
 
   async function sendFrame(cnv) {
     if (!connected || !ws || ws.readyState !== 1 || sending) return;
-    if (ws.bufferedAmount > WS_MAX_BUFFERED) return; // backpressure — let it drain
     sending = true;
     try {
       const sw = cnv.width, sh = cnv.height;

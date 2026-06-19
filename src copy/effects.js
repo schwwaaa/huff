@@ -5,6 +5,7 @@
 //    fromEnd() is explicit and works correctly without an array reference.
 //  - applyFlowWarp pre-allocates Float32Array displacement buffers — avoids
 //    per-frame GC pressure from repeated typed-array construction.
+//  - blitTrailLumaKeyed is fully self-contained (no dependency on drawRingRegion).
 //  - applyGlitch does not re-seed random — draw() seeds once per frame.
 //  - Cluster physics centers use p5 seeded random() for reproducibility.
 
@@ -70,6 +71,44 @@ window.resetClusterPhysics = resetClusterPhysics;
 // Self-contained — initialises _ringCanvas itself rather than relying on
 // drawRingRegion having run first. Safe to call in any order.
 
+let _trailLumaCanvas = null, _trailLumaCtx = null;
+const TRAIL_LUMA_MAX_W = 640;
+
+function blitTrailLumaKeyed(ctx, imgData, alpha, lumaThresh) {
+  const w = imgData.width, h = imgData.height;
+  const scale = w > TRAIL_LUMA_MAX_W ? TRAIL_LUMA_MAX_W / w : 1;
+  const sw = Math.max(1, Math.round(w * scale));
+  const sh = Math.max(1, Math.round(h * scale));
+
+  if (!_trailLumaCanvas || _trailLumaCanvas.width !== sw || _trailLumaCanvas.height !== sh) {
+    _trailLumaCanvas        = document.createElement('canvas');
+    _trailLumaCanvas.width  = sw;
+    _trailLumaCanvas.height = sh;
+    _trailLumaCtx = _trailLumaCanvas.getContext('2d', { willReadFrequently:true });
+  }
+
+  // Use the shared LRU ring cache instead of a private _ringCanvas
+  const { canvas: ringCvs } = _getRingCanvas(imgData);
+
+  _trailLumaCtx.clearRect(0, 0, sw, sh);
+  _trailLumaCtx.drawImage(ringCvs, 0, 0, sw, sh);
+
+  const imageData = _trailLumaCtx.getImageData(0, 0, sw, sh);
+  const pix = imageData.data;
+  const t   = lumaThresh * 255;
+  for (let i = 0; i < pix.length; i += 4) {
+    const lum = 0.299 * pix[i] + 0.587 * pix[i + 1] + 0.114 * pix[i + 2];
+    if (lum < t) {
+      pix[i + 3] = 0;
+    } else {
+      const roll = Math.min(1, (lum - t) / Math.max(1, 255 - t));
+      pix[i + 3] = Math.round(roll * alpha * 255);
+    }
+  }
+  _trailLumaCtx.putImageData(imageData, 0, 0);
+  ctx.drawImage(_trailLumaCanvas, 0, 0, w, h);
+}
+
 // ─── Trails ───────────────────────────────────────────────────────────────────
 // Call before scanlines and glitch so ghost frames sit underneath.
 //
@@ -78,53 +117,35 @@ window.resetClusterPhysics = resetClusterPhysics;
 // smear at the oldest accessible frame. This is the "dynamic" quality of the
 // effect — do not spread layers out to eliminate duplicates.
 
-// Adaptive load guard (same approach as the solarize guard). Every trail layer
-// is a full-screen ring composite, and as the ring slides each depth needs a
-// full-resolution GPU upload as its frame enters the cache window — that upload
-// churn is the fps cost of turning trails on. While the frame period is healthy
-// we draw every layer (look unchanged); only when overloaded do we thin the
-// layers drawn, cutting the per-frame upload + composite count. The deepest
-// layer is always kept so the trail's reach never snaps shorter.
-let _trailPrevTs   = 0;
-let _trailFrameEMA = 16.7;   // smoothed frame period, ms
-
 function applyTrails() {
   if (!els.trailOn?.checked) return;
   const trailLayers = parseInt(els.trailLayers?.value  ?? '0', 10);
   const trailDepth  = parseFloat(els.trailDepth?.value  ?? '0');
+  const lumaKey     = parseFloat(els.trailLumaKey?.value ?? '0');
   if (trailLayers <= 0 || trailDepth <= 0 || frameRing.length < 2) return;
-
-  // Smoothed frame period (applyTrails runs once per frame). Thinning layers
-  // shortens the frame, so the metric self-corrects toward the threshold.
-  const now = performance.now();
-  if (_trailPrevTs) _trailFrameEMA += ((now - _trailPrevTs) - _trailFrameEMA) * 0.1;
-  _trailPrevTs = now;
-
-  // Layer stride from load:  ≤20ms (≈50fps+) → every layer,
-  // 20–30ms → every 2nd layer, >30ms → every 3rd layer.
-  let layerStride = 1;
-  if (_trailFrameEMA > 30)      layerStride = 3;
-  else if (_trailFrameEMA > 20) layerStride = 2;
 
   const maxBack = Math.max(1, Math.floor((frameRing.length - 1) * trailDepth));
   const step    = Math.max(1, Math.floor(maxBack / trailLayers));
   const ctx     = gBuf.drawingContext;
 
-  // Each kept layer is a single cached drawImage of a historical ring frame — no
-  // per-layer pixel readback. (The old trail-local luma key ran a full
-  // getImageData/putImageData cycle PER LAYER; it has been removed.)
   for (let g = 1; g <= trailLayers; g++) {
-    // Under load, skip intermediate layers but always keep the deepest one so
-    // the trail's visual reach is preserved.
-    if (layerStride > 1 && g !== trailLayers && (g % layerStride) !== 0) continue;
-
     const back = Math.min(frameRing.length - 1, g * step);
     const src  = frameRing.fromEnd(back);
     if (!src) continue;
 
     const alpha = (1 - (g - 1) / trailLayers) * 0.65;
-    ctx.globalAlpha = alpha;
-    drawRingRegion(gBuf, src, 0, 0, width, height, 0, 0, width, height);
+
+    // Reset to 1.0 before every layer.
+    // blitTrailLumaKeyed bakes alpha into pixel data then calls ctx.drawImage —
+    // a non-1.0 globalAlpha here multiplies in again and nerfes luma key output.
+    ctx.globalAlpha = 1.0;
+
+    if (lumaKey > 0) {
+      blitTrailLumaKeyed(ctx, src, alpha, lumaKey);
+    } else {
+      ctx.globalAlpha = alpha;
+      drawRingRegion(gBuf, src, 0, 0, width, height, 0, 0, width, height);
+    }
   }
 
   ctx.globalAlpha = 1.0;
@@ -597,23 +618,6 @@ function applyFlowWarp(src, dst, strength = 6, scale = 80, pulse = 0, implode = 
 
 let _solCanvas = null, _solCtx = null;
 let _solOut    = null, _solOutCtx = null;
-// ── Adaptive load guard ───────────────────────────────────────────────────────
-// applySolarize()'s getImageData() forces a synchronous GPU→CPU readback. Because
-// solarize runs late in the pipeline, that readback flushes every preceding
-// effect's GPU work on the main thread before it returns. Under sustained load the
-// stall pushes the frame past budget and starves the <video> element's decode
-// pipeline that feeds Web Audio — the "breaks up, drops, then recovers" symptom.
-//
-// The guard measures the smoothed frame period and, ONLY while overloaded,
-// processes solarize every 2nd/3rd frame, re-blitting the cached full-res result
-// (_solOut) on the frames it skips. At healthy frame rates it processes every
-// frame, so the output is identical to before — the easing only kicks in exactly
-// when the machine is already dropping frames, trading a little solarize update
-// rate for stable audio.
-let _solPrevTs   = 0;
-let _solFrameEMA = 16.7;   // smoothed frame period, ms
-let _solPhase    = 0;
-let _solHasCache = false;
 
 function applySolarize(buf, thresh = 0.5, amount = 1.0, solR = 1.0, solG = 1.0, solB = 1.0) {
   const BW = buf.width, BH = buf.height;
@@ -629,50 +633,30 @@ function applySolarize(buf, thresh = 0.5, amount = 1.0, solR = 1.0, solG = 1.0, 
   if (!_solOut || _solOut.width !== BW || _solOut.height !== BH) {
     _solOut    = document.createElement('canvas'); _solOut.width = BW; _solOut.height = BH;
     _solOutCtx = _solOut.getContext('2d');
-    _solHasCache = false;   // fresh canvas — must process before it can be reused
   }
 
-  // Smoothed frame period (ms). Solarize runs once per frame, so the gap between
-  // calls is the frame period; skipping work shortens it, so the metric self-corrects.
-  const now = performance.now();
-  if (_solPrevTs) _solFrameEMA += ((now - _solPrevTs) - _solFrameEMA) * 0.1;
-  _solPrevTs = now;
+  const srcCanvas = buf.elt || buf.drawingContext.canvas;
+  _solCtx.clearRect(0, 0, sw, sh);
+  _solCtx.drawImage(srcCanvas, 0, 0, sw, sh);
 
-  // Processing stride from load:  ≤20ms (≈50fps+) → every frame,
-  // 20–30ms → every 2nd frame, >30ms → every 3rd frame.
-  let stride = 1;
-  if (_solFrameEMA > 30)      stride = 3;
-  else if (_solFrameEMA > 20) stride = 2;
+  const imgData = _solCtx.getImageData(0, 0, sw, sh);
+  const pix = imgData.data;
+  const t   = thresh * 255;
+  const a   = Math.max(0, Math.min(1, amount));
 
-  const doProcess = (stride === 1) || (_solPhase % stride === 0) || !_solHasCache;
-  _solPhase++;
-
-  if (doProcess) {
-    const srcCanvas = buf.elt || buf.drawingContext.canvas;
-    _solCtx.clearRect(0, 0, sw, sh);
-    _solCtx.drawImage(srcCanvas, 0, 0, sw, sh);
-
-    const imgData = _solCtx.getImageData(0, 0, sw, sh);
-    const pix = imgData.data;
-    const t   = thresh * 255;
-    const a   = Math.max(0, Math.min(1, amount));
-
-    for (let i = 0; i < pix.length; i += 4) {
-      const r = pix[i], g = pix[i + 1], b = pix[i + 2];
-      const lum = 0.299 * r + 0.587 * g + 0.114 * b;
-      if (lum > t) {
-        pix[i]     = Math.min(255, Math.max(0, (r + (255 - r - r) * a) * solR + 0.5) | 0);
-        pix[i + 1] = Math.min(255, Math.max(0, (g + (255 - g - g) * a) * solG + 0.5) | 0);
-        pix[i + 2] = Math.min(255, Math.max(0, (b + (255 - b - b) * a) * solB + 0.5) | 0);
-      }
+  for (let i = 0; i < pix.length; i += 4) {
+    const r = pix[i], g = pix[i + 1], b = pix[i + 2];
+    const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+    if (lum > t) {
+      pix[i]     = Math.min(255, Math.max(0, (r + (255 - r - r) * a) * solR + 0.5) | 0);
+      pix[i + 1] = Math.min(255, Math.max(0, (g + (255 - g - g) * a) * solG + 0.5) | 0);
+      pix[i + 2] = Math.min(255, Math.max(0, (b + (255 - b - b) * a) * solB + 0.5) | 0);
     }
-    _solCtx.putImageData(imgData, 0, 0);
-
-    _solOutCtx.clearRect(0, 0, BW, BH);
-    _solOutCtx.drawImage(_solCanvas, 0, 0, BW, BH);
-    _solHasCache = true;
   }
+  _solCtx.putImageData(imgData, 0, 0);
 
+  _solOutCtx.clearRect(0, 0, BW, BH);
+  _solOutCtx.drawImage(_solCanvas, 0, 0, BW, BH);
   buf.drawingContext.clearRect(0, 0, BW, BH);
   buf.drawingContext.drawImage(_solOut, 0, 0);
 }

@@ -95,44 +95,19 @@ function connectWS() {
     }, _wsDelay);
   };
 
-  // Latest-frame-wins. The previous handler decoded and drew EVERY frame it
-  // received, so when decode+draw fell behind the incoming rate (more likely at
-  // 1080p / 60fps) frames accumulated and were shown stale — a latency tail that
-  // grew while streaming and kept draining after the sender stopped. Instead we
-  // keep only the newest received frame and run at most one decode at a time;
-  // any frames that arrive mid-decode overwrite the pending one and the stale
-  // ones are dropped. Latency is bounded to a single decode+draw, and on stop
-  // there is at most one frame left to render — no tail.
-  let _pending = null;     // newest received frame bytes not yet rendered
-  let _busy    = false;    // a decode/draw is currently in flight
-
-  ws.onmessage = (ev) => {
+  ws.onmessage = async (ev) => {
     if (typeof ev.data === 'string') return;
-    _pending = ev.data;    // drop any older undrawn frame — only the newest matters
-    if (!_busy) drainPending();
+    try {
+      const blob = new Blob([ev.data]);
+      const bmp  = await createImageBitmap(blob, { imageOrientation:'none', premultiplyAlpha:'premultiply' });
+      const dw = cvs.width, dh = cvs.height;
+      ctx.clearRect(0,0,dw,dh);
+      ctx.drawImage(bmp, 0, 0, dw, dh);
+      bmp.close?.();
+    } catch(e) {
+      console.warn('[canvas ws] bad frame', e);
+    }
   };
-
-  function drainPending() {
-    if (_busy || _pending == null) return;
-    _busy = true;
-    const data = _pending;
-    _pending = null;
-    let blob;
-    try { blob = new Blob([data]); }
-    catch (e) { _busy = false; return; }
-    createImageBitmap(blob, { imageOrientation:'none', premultiplyAlpha:'premultiply' })
-      .then(bmp => {
-        ctx.drawImage(bmp, 0, 0, cvs.width, cvs.height);
-        bmp.close?.();
-      })
-      .catch(e => { console.warn('[canvas ws] bad frame', e); })
-      .finally(() => {
-        _busy = false;
-        // A newer frame landed while we were decoding — render it next, dropping
-        // everything that arrived before it.
-        if (_pending != null) drainPending();
-      });
-  }
 }
 
 connectWS();
