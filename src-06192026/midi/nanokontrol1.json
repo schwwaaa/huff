@@ -1,0 +1,48 @@
+{
+  "name": "Korg nanoKONTROL (mk1)",
+  "description": "Scene 1 mapping for the original Korg nanoKONTROL. 9 faders + 9 knobs across two groups, plus 18 transport/mode buttons.",
+  "version": 1,
+  "channel": -1,
+  "note": "channel -1 means accept any MIDI channel. Set to 0-15 to filter a specific channel.",
+  "mappings": [
+    { "_section": "── Group A Faders (CC 2–7) ─────────────────────────────────────────" },
+    { "param": "feedback",        "cc": 2,  "type": "range",   "enabled": true,  "note": "Group A Fader 1" },
+    { "param": "depth",           "cc": 3,  "type": "range",   "enabled": true,  "note": "Group A Fader 2" },
+    { "param": "corrupt",         "cc": 4,  "type": "range",   "enabled": true,  "note": "Group A Fader 3" },
+    { "param": "baseMix",         "cc": 5,  "type": "range",   "enabled": true,  "note": "Group A Fader 4" },
+    { "param": "glitchSpeed",     "cc": 6,  "type": "range",   "enabled": true,  "note": "Group A Fader 5" },
+    { "param": "persistence",     "cc": 8,  "type": "range",   "enabled": true,  "note": "Group A Fader 6" },
+
+    { "_section": "── Group A Knobs (CC 14–19) ────────────────────────────────────────" },
+    { "param": "block",           "cc": 14, "type": "range",   "enabled": true,  "note": "Group A Knob 1 — pixel size" },
+    { "param": "glitchSize",      "cc": 15, "type": "range",   "enabled": true,  "note": "Group A Knob 2" },
+    { "param": "glitchSmear",     "cc": 16, "type": "range",   "enabled": true,  "note": "Group A Knob 3" },
+    { "param": "glitchAlpha",     "cc": 17, "type": "range",   "enabled": true,  "note": "Group A Knob 4 — tile opacity" },
+    { "param": "scanShift",       "cc": 18, "type": "range",   "enabled": true,  "note": "Group A Knob 5" },
+    { "param": "solarizeThresh",  "cc": 19, "type": "range",   "enabled": true,  "note": "Group A Knob 6" },
+
+    { "_section": "── Group A Buttons (notes 23–28) ─── type: trigger / toggle ───────" },
+    { "param": "corruptOn",       "cc": 23, "type": "toggle",  "enabled": true,  "note": "Group A Btn 1 — glitch on" },
+    { "param": "clusters",        "cc": 24, "type": "toggle",  "enabled": true,  "note": "Group A Btn 2 — scanlines" },
+    { "param": "clusterTiles",    "cc": 25, "type": "toggle",  "enabled": true,  "note": "Group A Btn 3 — cluster tiles" },
+    { "param": "flowOn",          "cc": 26, "type": "toggle",  "enabled": true,  "note": "Group A Btn 4" },
+    { "param": "solarizeOn",      "cc": 27, "type": "toggle",  "enabled": true,  "note": "Group A Btn 5" },
+    { "param": "baseOn",          "cc": 28, "type": "toggle",  "enabled": true,  "note": "Group A Btn 6" },
+
+    { "_section": "── Group B Faders (CC 9–12) ─────────────────────────────────────" },
+    { "param": "flowStrength",    "cc": 9,  "type": "range",   "enabled": true,  "note": "Group B Fader 1" },
+    { "param": "fbZ",             "cc": 10, "type": "range",   "enabled": true,  "note": "Group B Fader 2 — feedback zoom" },
+    { "param": "fbTheta",         "cc": 11, "type": "range",   "enabled": true,  "note": "Group B Fader 3 — rotation" },
+    { "param": "quality",         "cc": 12, "type": "range",   "enabled": true,  "note": "Group B Fader 4" },
+
+    { "_section": "── Group B Knobs (CC 20–22) ─────────────────────────────────────" },
+    { "param": "cluSpread",       "cc": 20, "type": "range",   "enabled": true,  "note": "Group B Knob 1" },
+    { "param": "cluSpeed",        "cc": 21, "type": "range",   "enabled": true,  "note": "Group B Knob 2 — cluster physics" },
+    { "param": "depthScatter",    "cc": 22, "type": "range",   "enabled": true,  "note": "Group B Knob 3" },
+
+    { "_section": "── Group B Buttons ──────────────────────────────────────────────" },
+    { "param": "symOn",           "cc": 29, "type": "toggle",  "enabled": true,  "note": "Group B Btn 1 — symmetry" },
+    { "param": "refreshBtn",      "cc": 30, "type": "trigger", "enabled": true,  "note": "Group B Btn 2 — refresh" },
+    { "param": "resetMotionBtn",  "cc": 31, "type": "trigger", "enabled": true,  "note": "Group B Btn 3 — reset motion" }
+  ]
+}

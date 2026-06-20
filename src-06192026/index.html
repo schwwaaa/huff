@@ -2054,18 +2054,6 @@
 
             if (!wsReady) { ensureSyphWS(); rafId = requestAnimationFrame(sendFrame); return; }
 
-            // Backpressure — THE memory-leak guard. Each frame is raw RGBA
-            // (~8.3 MB at 1080p). With no ceiling, syphWS.send() queues frames into
-            // the socket's send buffer faster than the relay can drain them, and
-            // that buffer grows without bound in RAM — the runaway that filled
-            // memory and locked the machine. If the socket is already backed up,
-            // skip this frame entirely: no readback, no allocation, no send.
-            const WS_MAX_BUFFERED = 8 * 1024 * 1024; // ~8 MB ≈ one 1080p frame
-            if (syphWS.bufferedAmount > WS_MAX_BUFFERED) {
-                rafId = requestAnimationFrame(sendFrame);
-                return;
-            }
-
             const cnv = findCanvas();
             if (!cnv) { rafId = requestAnimationFrame(sendFrame); return; }
 
