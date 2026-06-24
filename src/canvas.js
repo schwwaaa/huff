@@ -1220,7 +1220,33 @@ function draw() {
   // Opacity still tracks the knob, so the dominant layer is both on top AND
   // stronger — z-order and weight move together. The crossover at 0.5 is a hard
   // z-swap, but both sides sit at equal opacity there so the swap is near-seamless.
-  const abMix  = parseFloat(els.abMix?.value ?? '0.5');
+  let abMix = parseFloat(els.abMix?.value ?? '0.5');
+
+  // ── FLOW → A/B routing (near-zero cost) ────────────────────────────────────
+  // Flow's pixel warp is perceptually masked on glitch — glitch re-randomizes
+  // every frame, so a smooth few-pixel warp is invisible on it while it clearly
+  // bends the coherent scanline bands. Rather than geometrically warp glitch
+  // (which would cost a per-tile flow-field lookup), we let Flow's motion push
+  // the glitch↔scanline balance instead. Cost: ONE Perlin sample per frame —
+  // no field, no per-pixel work, no extra buffer, no GPU readback.
+  //   STRENGTH → how hard flow pushes the balance (scaled to the slider's max)
+  //   SPEED    → the tempo of that push (shares flow's own time base)
+  // noise() is Perlin (separate from random()), so this does not perturb the
+  // glitch RNG sequence. At high STRENGTH the push can carry abMix across the
+  // 0.5 midpoint, flow-syncing the z-swap itself — keep base abMix off-centre if
+  // you don't want the layer order flipping with the flow.
+  if (els.flowOn?.checked) {
+    const fS = parseInt(els.flowStrength?.value ?? '0', 10);
+    if (fS > 0) {
+      const fMax   = parseFloat(els.flowStrength?.max ?? '50') || 50;
+      const fSpeed = parseFloat(els.flowSpeed?.value ?? '1');
+      const tF     = frameCount * 0.005 * Math.max(0, fSpeed);
+      const pulse  = noise(tF * 1.3, 500) * 2 - 1;     // signed −1..1, flow-synced
+      const depth  = 0.4 * Math.min(1, fS / fMax);     // push capped at ±0.4
+      abMix = Math.max(0, Math.min(1, abMix + pulse * depth));
+    }
+  }
+
   const AB_MIN = 0.35;
   const glitchPriority = 1.0 - abMix * (1.0 - AB_MIN);
   const scanPriority   = AB_MIN + abMix * (1.0 - AB_MIN);
