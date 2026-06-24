@@ -1207,39 +1207,49 @@ function draw() {
     ctx.restore();
   }
 
-  // ORDER: Trails → Glitch → Luma Key → Scanlines
-  // Glitch runs first. Luma Key then composites glitch output with clean source
-  // based on luminance — bright areas let glitch show, dark areas revert to clean.
-  // Scanlines runs last as a spatial displacement on top of the keyed result.
+  // ORDER: Trails → [Glitch group ⇄ Scanlines]  (relative z chosen by A/B knob)
+  // Both glitch and scanlines composite onto the SAME gBuf, so paint order IS
+  // z-order. The A/B knob now controls that order — not just opacity.
   applyTrails();
 
-  // A/B layer priority mix — 0=glitch dominant, 0.5=equal, 1=scanlines dominant.
-  // Neither effect drops below MIN so both remain readable at all positions.
-  const abMix = parseFloat(els.abMix?.value ?? '0.5');
+  // ── A/B LAYER PRIORITY (true z-order) ──────────────────────────────────────
+  // Whichever side is dominant is drawn LAST (on top); the other is drawn first
+  // (underneath) and held at a visibility floor (AB_MIN) so it still reads.
+  //   abMix < 0.5  → glitch dominant   → scanlines underneath, glitch on top
+  //   abMix > 0.5  → scanlines dominant → glitch underneath, scanlines on top
+  // Opacity still tracks the knob, so the dominant layer is both on top AND
+  // stronger — z-order and weight move together. The crossover at 0.5 is a hard
+  // z-swap, but both sides sit at equal opacity there so the swap is near-seamless.
+  const abMix  = parseFloat(els.abMix?.value ?? '0.5');
   const AB_MIN = 0.35;
   const glitchPriority = 1.0 - abMix * (1.0 - AB_MIN);
   const scanPriority   = AB_MIN + abMix * (1.0 - AB_MIN);
+  const glitchOnTop    = abMix < 0.5;   // dominant side renders last
 
-  if (els.corruptOn?.checked) {
-    applyGlitch(density,
-      parseInt(els.glitchBaseX?.value ?? '0', 10),
-      parseInt(els.glitchBaseY?.value ?? '0', 10),
-      glitchPriority);
-  }
-
-  // Luma Key — pipeline gate between glitch and scanlines (only when ON)
+  // Glitch group = glitch tiles + the Luma Key gate. The gate travels WITH glitch
+  // (keying the glitched buffer against clean source) so it stays meaningful at
+  // whichever depth glitch sits — this is what gives Luma Key real reach now.
   const lkMix = parseFloat(els.lumaKeyMix?.value ?? '0');
-  if (els.lumaKeyOn?.checked && lkMix > 0) {
-    applyPipelineLumaKey(
-      parseFloat(els.lumaKeyAB?.value ?? '0.5'),
-      lkMix,
-      !!els.lumaKeyInvert?.checked
-    );
-  }
+  const _emitGlitch = () => {
+    if (els.corruptOn?.checked) {
+      applyGlitch(density,
+        parseInt(els.glitchBaseX?.value ?? '0', 10),
+        parseInt(els.glitchBaseY?.value ?? '0', 10),
+        glitchPriority);
+    }
+    if (els.lumaKeyOn?.checked && lkMix > 0) {
+      applyPipelineLumaKey(
+        parseFloat(els.lumaKeyAB?.value ?? '0.5'),
+        lkMix,
+        !!els.lumaKeyInvert?.checked
+      );
+    }
+  };
 
-  // Advance spin accumulator. Left and right are separate toggles; right wins if both on.
-  // When neither is active, keep accumulator in sync with the manual slider so
-  // enabling spin starts from where the slider currently is — no jump.
+  // Advance spin accumulator before scanlines runs in EITHER branch.
+  // Left and right are separate toggles; right wins if both on. When neither is
+  // active, keep the accumulator synced to the manual slider so enabling spin
+  // starts from where the slider currently is — no jump.
   const spinSpeed = parseFloat(els.scanSpinSpeed?.value ?? '1');
   const spinLeft  = !!els.scanSpinLeft?.checked;
   const spinRight = !!els.scanSpinRight?.checked;
@@ -1253,7 +1263,11 @@ function draw() {
   } else {
     _scanSpinAngle = parseFloat(els.scanAngle?.value ?? '0');
   }
-  applyScanlines(density, scanAngleArg, scanPriority);
+  const _emitScanlines = () => applyScanlines(density, scanAngleArg, scanPriority);
+
+  // Emit in z-order: dominant side last (on top).
+  if (glitchOnTop) { _emitScanlines(); _emitGlitch(); }
+  else             { _emitGlitch();    _emitScanlines(); }
 
   // Global Mix — blend mode composite of base video over effects chain
   if (els.globalMixOn?.checked) {
