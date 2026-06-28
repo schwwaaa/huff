@@ -231,7 +231,7 @@ const PRESET_IDS = [
   'bgMode',
   'cluSpeedVar','cluPulse',
   'abMix',
-  'globalMixOn','globalMixBlend','globalMixAmt',
+  'globalMixOn','globalMixBlend','globalMixAmt','globalMixPos',
 ];
 
 function capturePreset() {
@@ -660,7 +660,7 @@ function hookUI() {
     'cluSpeedVar','cluSpeedVarVal','cluPulse','cluPulseVal',
     'abMix','abMixVal',
     'lumaKeyOn','lumaKeyMix','lumaKeyMixVal','lumaKeyAB','lumaKeyABVal','lumaKeyInvert',
-    'globalMixOn','globalMixBlend','globalMixAmt','globalMixAmtVal',
+    'globalMixOn','globalMixBlend','globalMixAmt','globalMixAmtVal','globalMixPos',
   ].forEach(k => els[k] = _$(k));
 
   hookFile();
@@ -865,7 +865,7 @@ function hookSliders() {
   // Checkboxes and selects also get snapshotted for undo
   ['corruptOn','clusters','clusterTiles','flowOn','baseOn','symOn','solarizeOn',
    'trailOn','seedOnLoad','bgMode','symMode',
-   'lumaKeyOn','globalMixOn','scanSpinLeft','scanSpinRight'].forEach(id => {
+   'lumaKeyOn','globalMixOn','globalMixBlend','globalMixPos','scanSpinLeft','scanSpinRight'].forEach(id => {
     _$(id)?.addEventListener('change', snapshotForUndo);
   });
 
@@ -1295,8 +1295,25 @@ function draw() {
   if (glitchOnTop) { _emitScanlines(); _emitGlitch(); }
   else             { _emitGlitch();    _emitScanlines(); }
 
-  // Global Mix — blend mode composite of base video over effects chain
-  if (els.globalMixOn?.checked) {
+  // Global Mix — blend the clean source video (gCur) over the effects chain via a
+  // selectable blend mode at AMOUNT opacity. POSITION decides where in the chain
+  // the clean frame is injected, which sets how much of the chain still processes
+  // it — a "surfaced vs processed" dial:
+  //   'before'   → before feedback: clean is pulled into the feedback recursion
+  //                and then flow/symmetry/solarize — most processed.
+  //   'after'    → after feedback: feedback trails the dirty result, clean is laid
+  //                fresh on top, then flow/symmetry/solarize process it. (With
+  //                feedback off, 'before' and 'after' are identical — nothing sits
+  //                between them but the feedback stage.)
+  //   'afterflow'→ after the flow warp: clean skips feedback AND the warp, but is
+  //                still mirrored by symmetry and coloured by solarize.
+  //   'final'    → after solarize: clean laid over the fully processed frame,
+  //                pristine — maximally surfaced, unprocessed.
+  // Defined here, invoked at whichever point POSITION selects. The closure reads
+  // gBuf live, so it correctly targets the current buffer even after flow/symmetry
+  // swap it.
+  const _emitGlobalMix = () => {
+    if (!els.globalMixOn?.checked) return;
     const gmMix  = parseFloat(els.globalMixAmt?.value ?? '0');
     const gCurEl = gCur.elt ?? gCur.drawingContext?.canvas;
     if (gmMix > 0 && gCurEl) {
@@ -1307,7 +1324,9 @@ function draw() {
       ctx.drawImage(gCurEl, 0, 0, gBuf.width, gBuf.height);
       ctx.restore();
     }
-  }
+  };
+  const gmPos = els.globalMixPos?.value ?? 'after';
+  if (gmPos === 'before') _emitGlobalMix();
 
   const fb = parseFloat(els.feedback?.value ?? '0');
   if (fb > 0) {
@@ -1337,6 +1356,8 @@ function draw() {
     ctx.restore();
   }
 
+  if (gmPos === 'after') _emitGlobalMix();
+
   const flowS = parseInt(els.flowStrength?.value ?? '0', 10);
   if (els.flowOn?.checked && flowS > 0) {
     applyFlowWarp(gBuf, gWarp, flowS,
@@ -1348,6 +1369,8 @@ function draw() {
       parseFloat(els.flowSwirl?.value ?? '0'));
     [gBuf, gWarp] = [gWarp, gBuf];
   }
+
+  if (gmPos === 'afterflow') _emitGlobalMix();
 
   if (els.symOn?.checked) {
     applySymmetry(gBuf, gTemp, els.symMode?.value || 'v', parseFloat(els.symPos?.value ?? '0.5'));
@@ -1363,10 +1386,13 @@ function draw() {
       parseFloat(els.solarizeB?.value      ?? '1.0'));
   }
 
+  if (gmPos === 'final') _emitGlobalMix();
+
   const anyFxActive =
     els.corruptOn?.checked || els.trailOn?.checked   ||
     els.clusters?.checked  || els.flowOn?.checked    ||
     els.symOn?.checked     || els.solarizeOn?.checked ||
+    (els.globalMixOn?.checked && parseFloat(els.globalMixAmt?.value ?? '0') > 0) ||
     parseFloat(els.feedback?.value ?? '0') > 0;
 
   if (anyFxActive) {
@@ -1566,9 +1592,9 @@ function startCamera(deviceId) {
 (function () {
   let visible = false;
 
-  // Top-level draw() calls only — NOT their internal sub-calls (e.g. applyGlobalKey
-  // inside applyPipelineLumaKey, or drawRingRegion inside trails/glitch) so nothing
-  // is double-counted. _pushToRing runs on the video-decode callback, so its number
+  // Top-level draw() calls only — NOT their internal sub-calls (e.g. drawRingRegion
+  // inside trails/glitch) so nothing is double-counted. _pushToRing runs on the
+  // video-decode callback, so its number
   // is the ring-snapshot cost amortised across render frames.
   const NAMES = [
     '_syncGCur', '_pushToRing',

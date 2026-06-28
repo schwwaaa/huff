@@ -707,125 +707,6 @@ function applySymmetry(src, dst, mode = 'v', pos = 0.5) {
   }
 }
 
-// ─── Global composite key ─────────────────────────────────────────────────────
-// Applied at the final composite stage in draw(), between the clean base (gCur)
-// and the processed output (gBuf).
-//
-// BLEND mode — CSS globalCompositeOperation. Entirely GPU-accelerated.
-//   draw() already put gBuf on the p5 canvas. We draw gCur on top with a blend
-//   mode at mix opacity. One drawImage call, no pixel work.
-//
-// LUMA mode — base luminance controls how much of the processed layer shows.
-//   Optimized to a single getImageData + putImageData cycle:
-//   1. Downsample base into _gkCanvas, read pixels (1 GPU→CPU readback).
-//   2. Pixel loop: write luma→alpha only (3 muls per pixel, no lerp).
-//      Output is white pixels with luma-derived alpha.
-//   3. putImageData back to _gkCanvas (1 CPU→GPU upload).
-//   4. Draw processed (gBuf) into _gkBufCanvas at downscale (GPU).
-//   5. Apply _gkCanvas as alpha mask via destination-in (GPU).
-//   6. Draw _gkBufCanvas over the canvas at mix opacity (GPU).
-//   Net: 1 getImageData, 1 putImageData, 4 GPU drawImage/composite ops.
-//   Previously: 2 getImageData + 1 createImageData + full lerp pixel loop.
-
-let _gkCanvas = null, _gkCtx = null;       // luma mask canvas
-let _gkBufCanvas = null, _gkBufCtx = null; // processed layer canvas
-let _gkPixBuf = null;                       // pre-allocated pixel buffer (reused)
-
-function applyGlobalKey(p5canvas, baseSrc, processedSrc, mode, mix, thresh, invert, blendMode) {
-  if (!mode || mode === 'off' || mix <= 0) return;
-
-  const W = p5canvas.width, H = p5canvas.height;
-  const ctx = p5canvas.drawingContext;
-
-  // Resolve source elements once — avoid repeated optional chaining per pixel
-  const baseEl = baseSrc?.elt ?? baseSrc?.drawingContext?.canvas ?? null;
-  const procEl = processedSrc?.elt ?? processedSrc?.drawingContext?.canvas ?? null;
-  if (!baseEl || !procEl) return;
-
-  // ── Blend mode ─────────────────────────────────────────────────────────────
-  // draw() already has gBuf on the canvas. We composite gCur on top with a
-  // blend mode — one drawImage, zero pixel work.
-  if (mode === 'blend') {
-    ctx.save();
-    ctx.globalCompositeOperation = blendMode || 'screen';
-    ctx.globalAlpha = mix;
-    ctx.drawImage(baseEl, 0, 0, W, H);
-    ctx.restore();
-    return;
-  }
-
-  // ── Luma mode ──────────────────────────────────────────────────────────────
-  if (mode === 'luma') {
-    const MAX_W = 640;
-    const scale = W > MAX_W ? MAX_W / W : 1;
-    const sw = Math.max(1, Math.round(W * scale));
-    const sh = Math.max(1, Math.round(H * scale));
-    const n  = sw * sh * 4;
-
-    // Allocate canvases only when dimensions change
-    if (!_gkCanvas || _gkCanvas.width !== sw || _gkCanvas.height !== sh) {
-      _gkCanvas = document.createElement('canvas');
-      _gkCanvas.width = sw; _gkCanvas.height = sh;
-      _gkCtx = _gkCanvas.getContext('2d', { willReadFrequently: true });
-      _gkPixBuf = null; // force realloc below
-    }
-    if (!_gkBufCanvas || _gkBufCanvas.width !== sw || _gkBufCanvas.height !== sh) {
-      _gkBufCanvas = document.createElement('canvas');
-      _gkBufCanvas.width = sw; _gkBufCanvas.height = sh;
-      _gkBufCtx = _gkBufCanvas.getContext('2d');
-    }
-
-    // Pre-allocated output buffer — no createImageData per frame
-    if (!_gkPixBuf || _gkPixBuf.length !== n) _gkPixBuf = new Uint8ClampedArray(n);
-
-    // Step 1: Downsample base, read pixels — single getImageData
-    _gkCtx.drawImage(baseEl, 0, 0, sw, sh);
-    const baseData = _gkCtx.getImageData(0, 0, sw, sh);
-    const bp = baseData.data;
-
-    // Step 2: Luma→alpha pixel loop — 3 multiplies per pixel, no lerp
-    // Output: white (255,255,255) with luma-derived alpha.
-    // destination-in compositing will use this alpha to clip the processed layer.
-    //
-    // thresh=0 → gate at luma 255 → nothing revealed → base video only
-    // thresh=1 → gate at luma 0   → everything revealed → full processed output
-    const t = (1 - thresh) * 255;
-    const rollRange = Math.max(1, 64); // soft rolloff width in luma units
-    for (let i = 0; i < n; i += 4) {
-      const lum    = (0.299 * bp[i] + 0.587 * bp[i+1] + 0.114 * bp[i+2]);
-      const roll   = Math.max(0, Math.min(1, (lum - t) / rollRange));
-      const reveal = invert ? (1 - roll) : roll;
-      _gkPixBuf[i]   = 255;
-      _gkPixBuf[i+1] = 255;
-      _gkPixBuf[i+2] = 255;
-      _gkPixBuf[i+3] = (reveal * 255 + 0.5) | 0; // alpha = luma gate
-    }
-
-    // Step 3: Upload luma mask
-    _gkCtx.putImageData(new ImageData(_gkPixBuf, sw, sh), 0, 0);
-
-    // Steps 4–5: Draw processed into _gkBufCanvas, clip it with the luma mask
-    _gkBufCtx.clearRect(0, 0, sw, sh);
-    _gkBufCtx.drawImage(procEl, 0, 0, sw, sh);        // processed layer
-    _gkBufCtx.globalCompositeOperation = 'destination-in';
-    _gkBufCtx.drawImage(_gkCanvas, 0, 0, sw, sh);     // apply luma mask as alpha
-    _gkBufCtx.globalCompositeOperation = 'source-over'; // reset
-
-    // Step 6: Composite — draw base (gCur) as foundation, then luma-clipped
-    // processed (gBuf) on top at mix opacity.
-    // This is done here rather than relying on whatever draw() already put on
-    // the canvas — by this point gBuf is already painted, so we must replace
-    // it with gCur first or the key has nothing to cut through.
-    ctx.save();
-    ctx.globalAlpha = 1;
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.drawImage(baseEl, 0, 0, W, H);     // lay down clean base
-    ctx.globalAlpha = mix;
-    ctx.drawImage(_gkBufCanvas, 0, 0, W, H); // processed, clipped by luma mask
-    ctx.restore();
-  }
-}
-
 // ─── Pipeline Luma Key ────────────────────────────────────────────────────────
 // Applied in draw() between applyGlitch() and applyScanlines().
 // Gates how much of the glitch output (gBuf) shows through based on the
@@ -835,7 +716,7 @@ function applyGlobalKey(p5canvas, baseSrc, processedSrc, mode, mix, thresh, inve
 // thresh=1 → everything keyed (all clean shows)
 // invert   → flips: dark areas show glitch, bright areas stay clean
 //
-// Operates at 640px max width for performance (same as applyGlobalKey luma path).
+// Operates at 640px max width for performance.
 
 let _plkCanvas = null, _plkCtx = null;
 let _plkBufCanvas = null, _plkBufCtx = null;

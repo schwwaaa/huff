@@ -1472,17 +1472,37 @@
                         <label>BLEND</label>
                         <select id="globalMixBlend" style="font-size:10px;padding:1px 2px">
                             <option value="screen">SCREEN</option>
-                            <option value="multiply">MULTIPLY</option>
-                            <option value="overlay">OVERLAY</option>
-                            <option value="difference">DIFFERENCE</option>
-                            <option value="hard-light">HARD LIGHT</option>
                             <option value="lighter">ADD</option>
+                            <option value="lighten">LIGHTEN</option>
+                            <option value="color-dodge">DODGE</option>
+                            <option value="multiply">MULTIPLY</option>
+                            <option value="darken">DARKEN</option>
+                            <option value="color-burn">BURN</option>
+                            <option value="overlay">OVERLAY</option>
+                            <option value="soft-light">SOFT LIGHT</option>
+                            <option value="hard-light">HARD LIGHT</option>
+                            <option value="difference">DIFFERENCE</option>
+                            <option value="exclusion">EXCLUSION</option>
+                            <option value="hue">HUE</option>
+                            <option value="saturation">SATURATION</option>
+                            <option value="color">COLOR</option>
+                            <option value="luminosity">LUMINOSITY</option>
+                            <option value="source-over">NORMAL</option>
                         </select>
                     </div>
                     <div class="ctrl">
                         <label>MIX</label>
                         <input id="globalMixAmt" type="range" min="0" max="1" step="0.01" value="0">
                         <span class="val" id="globalMixAmtVal">0.00</span>
+                    </div>
+                    <div class="ctrl">
+                        <label>POSITION</label>
+                        <select id="globalMixPos" style="font-size:10px;padding:1px 2px">
+                            <option value="before">BEFORE FB</option>
+                            <option value="after" selected>AFTER FB</option>
+                            <option value="afterflow">AFTER FLOW</option>
+                            <option value="final">FINAL</option>
+                        </select>
                     </div>
                 </div>
                 </div>
