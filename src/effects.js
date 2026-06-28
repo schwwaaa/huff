@@ -70,66 +70,6 @@ window.resetClusterPhysics = resetClusterPhysics;
 // Self-contained — initialises _ringCanvas itself rather than relying on
 // drawRingRegion having run first. Safe to call in any order.
 
-// ─── Trails ───────────────────────────────────────────────────────────────────
-// Call before scanlines and glitch so ghost frames sit underneath.
-//
-// When trailLayers > maxBack/step, multiple layers intentionally land on the
-// same deep frame. Their alpha values accumulate, creating a bright persistent
-// smear at the oldest accessible frame. This is the "dynamic" quality of the
-// effect — do not spread layers out to eliminate duplicates.
-
-// Adaptive load guard (same approach as the solarize guard). Every trail layer
-// is a full-screen ring composite, and as the ring slides each depth needs a
-// full-resolution GPU upload as its frame enters the cache window — that upload
-// churn is the fps cost of turning trails on. While the frame period is healthy
-// we draw every layer (look unchanged); only when overloaded do we thin the
-// layers drawn, cutting the per-frame upload + composite count. The deepest
-// layer is always kept so the trail's reach never snaps shorter.
-let _trailPrevTs   = 0;
-let _trailFrameEMA = 16.7;   // smoothed frame period, ms
-
-function applyTrails() {
-  if (!els.trailOn?.checked) return;
-  const trailLayers = parseInt(els.trailLayers?.value  ?? '0', 10);
-  const trailDepth  = parseFloat(els.trailDepth?.value  ?? '0');
-  if (trailLayers <= 0 || trailDepth <= 0 || frameRing.length < 2) return;
-
-  // Smoothed frame period (applyTrails runs once per frame). Thinning layers
-  // shortens the frame, so the metric self-corrects toward the threshold.
-  const now = performance.now();
-  if (_trailPrevTs) _trailFrameEMA += ((now - _trailPrevTs) - _trailFrameEMA) * 0.1;
-  _trailPrevTs = now;
-
-  // Layer stride from load:  ≤20ms (≈50fps+) → every layer,
-  // 20–30ms → every 2nd layer, >30ms → every 3rd layer.
-  let layerStride = 1;
-  if (_trailFrameEMA > 30)      layerStride = 3;
-  else if (_trailFrameEMA > 20) layerStride = 2;
-
-  const maxBack = Math.max(1, Math.floor((frameRing.length - 1) * trailDepth));
-  const step    = Math.max(1, Math.floor(maxBack / trailLayers));
-  const ctx     = gBuf.drawingContext;
-
-  // Each kept layer is a single cached drawImage of a historical ring frame — no
-  // per-layer pixel readback. (The old trail-local luma key ran a full
-  // getImageData/putImageData cycle PER LAYER; it has been removed.)
-  for (let g = 1; g <= trailLayers; g++) {
-    // Under load, skip intermediate layers but always keep the deepest one so
-    // the trail's visual reach is preserved.
-    if (layerStride > 1 && g !== trailLayers && (g % layerStride) !== 0) continue;
-
-    const back = Math.min(frameRing.length - 1, g * step);
-    const src  = frameRing.fromEnd(back);
-    if (!src) continue;
-
-    const alpha = (1 - (g - 1) / trailLayers) * 0.65;
-    ctx.globalAlpha = alpha;
-    drawRingRegion(gBuf, src, 0, 0, width, height, 0, 0, width, height);
-  }
-
-  ctx.globalAlpha = 1.0;
-}
-
 // ─── Scanlines ────────────────────────────────────────────────────────────────
 // ANGLE — rotates the entire scanline pattern. 0°=horizontal, 90°=vertical,
 //         45°=diagonal right, -45°=diagonal left, any value = spin.

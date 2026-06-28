@@ -227,7 +227,6 @@ const PRESET_IDS = [
   'scanAlpha','scanShift','scanDrift','scanSpeed','scanGap','scanSkew',
   'scanAngle','scanFocus','scanRoll',
   'scanSpinLeft','scanSpinRight','scanSpinSpeed',
-  'trailOn','trailLayers','trailDepth',
   'bgMode',
   'cluSpeedVar','cluPulse',
   'abMix',
@@ -655,7 +654,6 @@ function hookUI() {
     'scanAngle','scanAngleVal','scanFocus','scanFocusVal','scanRoll','scanRollVal',
     'scanSpinLeft','scanSpinRight','scanSpinSpeed','scanSpinSpeedVal',
     'depthScatter','depthScatterVal','corruptDrift','corruptDriftVal',
-    'trailOn','trailLayers','trailLayersVal','trailDepth','trailDepthVal',
     'scanAngle','bgMode','dim',
     'cluSpeedVar','cluSpeedVarVal','cluPulse','cluPulseVal',
     'abMix','abMixVal',
@@ -852,7 +850,7 @@ function hookSliders() {
     'scanAlpha','scanShift','scanDrift','scanSpeed','scanGap','scanSkew','scanFocus','scanRoll',
     'glitchAlpha','glitchJitter','glitchSmearAngle',
     'flowStrength','flowScale','flowPulse','flowImpl','flowSpeed','flowTurb','flowSwirl','baseMix','symPos','glitchSpeedMul',
-    'depthScatter','corruptDrift','trailLayers','trailDepth',
+    'depthScatter','corruptDrift',
     'solarizeThresh','solarizeAmt','solarizeR','solarizeG','solarizeB',
     'cluSpeedVar','cluPulse',
     'lumaKeyMix','lumaKeyAB','globalMixAmt','scanAngle','scanSpinSpeed','abMix',
@@ -864,7 +862,7 @@ function hookSliders() {
 
   // Checkboxes and selects also get snapshotted for undo
   ['corruptOn','clusters','clusterTiles','flowOn','baseOn','symOn','solarizeOn',
-   'trailOn','seedOnLoad','bgMode','symMode',
+   'seedOnLoad','bgMode','symMode',
    'lumaKeyOn','globalMixOn','globalMixBlend','globalMixPos','scanSpinLeft','scanSpinRight'].forEach(id => {
     _$(id)?.addEventListener('change', snapshotForUndo);
   });
@@ -989,8 +987,6 @@ function updateLabels() {
   set(els.scanSpinSpeed,    els.scanSpinSpeedVal,    f2);
   set(els.depthScatter,     els.depthScatterVal,     f2);
   set(els.corruptDrift,     els.corruptDriftVal,     f2);
-  set(els.trailLayers,      els.trailLayersVal,      v => (v|0));
-  set(els.trailDepth,       els.trailDepthVal,       f2);
   set(els.symPos,           els.symPosVal,           f2);
   set(els.solarizeThresh,   els.solarizeThreshVal,   f2);
   set(els.solarizeAmt,      els.solarizeAmtVal,      f2);
@@ -1207,11 +1203,9 @@ function draw() {
     ctx.restore();
   }
 
-  // ORDER: Trails → [Glitch group ⇄ Scanlines]  (relative z chosen by A/B knob)
+  // ORDER: [Glitch group ⇄ Scanlines]  (relative z chosen by A/B knob)
   // Both glitch and scanlines composite onto the SAME gBuf, so paint order IS
   // z-order. The A/B knob now controls that order — not just opacity.
-  applyTrails();
-
   // ── A/B LAYER PRIORITY (true z-order) ──────────────────────────────────────
   // Whichever side is dominant is drawn LAST (on top); the other is drawn first
   // (underneath) and held at a visibility floor (AB_MIN) so it still reads.
@@ -1389,9 +1383,9 @@ function draw() {
   if (gmPos === 'final') _emitGlobalMix();
 
   const anyFxActive =
-    els.corruptOn?.checked || els.trailOn?.checked   ||
-    els.clusters?.checked  || els.flowOn?.checked    ||
-    els.symOn?.checked     || els.solarizeOn?.checked ||
+    els.corruptOn?.checked || els.clusters?.checked  ||
+    els.flowOn?.checked    || els.symOn?.checked     ||
+    els.solarizeOn?.checked ||
     (els.globalMixOn?.checked && parseFloat(els.globalMixAmt?.value ?? '0') > 0) ||
     parseFloat(els.feedback?.value ?? '0') > 0;
 
@@ -1598,7 +1592,7 @@ function startCamera(deviceId) {
   // is the ring-snapshot cost amortised across render frames.
   const NAMES = [
     '_syncGCur', '_pushToRing',
-    'applyTrails', 'applyGlitch', 'applyPipelineLumaKey', 'applyScanlines',
+    'applyGlitch', 'applyPipelineLumaKey', 'applyScanlines',
     'applyFlowWarp', 'applySymmetry', 'applySolarize',
   ];
   const acc = Object.create(null);
