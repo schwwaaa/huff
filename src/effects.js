@@ -439,7 +439,7 @@ function _ensureFlowBuffers(cols, rows) {
   }
 }
 
-function applyFlowWarp(src, dst, strength = 6, scale = 80, pulse = 0, implode = 0, speed = 1, turb = 0, swirl = 0) {
+function applyFlowWarp(src, dst, strength = 6, scale = 80, pulse = 0, implode = 0, speed = 1, turb = 0, swirl = 0, spread = 1) {
   dst.clear();
 
   let srcFrame = src;
@@ -450,10 +450,16 @@ function applyFlowWarp(src, dst, strength = 6, scale = 80, pulse = 0, implode = 
 
   const cell = Math.max(8, scale | 0);
   const off  = strength;
-  // Speed multiplier on time — at speed=0 the field is completely frozen.
-  const t    = frameCount * 0.005 * Math.max(0, speed);
+  // SPEED is exponential (pow 1.6): fine, crawling control at the low end and a
+  // genuinely fast top end. speed=1 maps to the original tempo; speed=0 freezes.
+  const t    = frameCount * 0.005 * Math.pow(Math.max(0, speed), 1.6);
   const w = width, h = height;
   const cx2 = w * 0.5, cy2 = h * 0.5;
+
+  // SPREAD scales the flow-field noise frequency: low = large coherent zones all
+  // drifting together (watery), high = many small independent eddies pointing
+  // every which way (busted). spread=1 → the original 0.9 frequency.
+  const freq = 0.9 * Math.max(0.05, spread);
 
   const cols = Math.ceil(w / cell);
   const rows = Math.ceil(h / cell);
@@ -467,13 +473,13 @@ function applyFlowWarp(src, dst, strength = 6, scale = 80, pulse = 0, implode = 
       const nx = (x + 0.5 * cell) / w * 2.0;
       const ny = (y + 0.5 * cell) / h * 2.0;
 
-      // Primary noise octave
-      let a = noise(nx * 0.9 + t, ny * 0.9) * TWO_PI * 2.0;
+      // Primary noise octave (frequency set by SPREAD)
+      let a = noise(nx * freq + t, ny * freq) * TWO_PI * 2.0;
 
-      // Turbulence: second octave at 4× frequency, half amplitude
-      // Blends in fractional Brownian noise for organic complexity
+      // Turbulence: second octave at 4× the (spread-scaled) frequency, half
+      // amplitude — keeps its "4× finer than base" character at any SPREAD.
       if (turb > 0) {
-        const a2 = noise(nx * 3.6 + t * 1.3 + 100, ny * 3.6 + t * 0.9) * TWO_PI * 2.0;
+        const a2 = noise(nx * freq * 4 + t * 1.3 + 100, ny * freq * 4 + t * 0.9) * TWO_PI * 2.0;
         a = a * (1 - turb * 0.5) + a2 * (turb * 0.5);
       }
 

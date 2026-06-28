@@ -220,7 +220,7 @@ const PRESET_IDS = [
   'corruptOn','feedback','persistence','fbX','fbY','fbZ','fbTheta',
   'clusters','clusterTiles','clusterCount','clusterRadius','spatialGap',
   'cluCenters','cluSpread','cluMinSpread','cluBias','cluDrift','cluSpeed','cluInertia',
-  'flowOn','flowStrength','flowScale','flowPulse','flowImpl','flowSpeed','flowTurb','flowSwirl',
+  'flowOn','flowStrength','flowScale','flowPulse','flowImpl','flowSpeed','flowTurb','flowSwirl','flowSpread',
   'baseOn','baseMix','seedOnLoad',
   'symOn','symMode','symPos',
   'solarizeOn','solarizeThresh','solarizeAmt','solarizeR','solarizeG','solarizeB',
@@ -644,7 +644,7 @@ function hookUI() {
     'cluSpeed','cluSpeedVal','cluInertia','cluInertiaVal',
     'flowOn','flowStrength','flowStrengthVal','flowScale','flowScaleVal',
     'flowPulse','flowPulseVal','flowImpl','flowImplVal',
-    'flowSpeed','flowSpeedVal','flowTurb','flowTurbVal','flowSwirl','flowSwirlVal',
+    'flowSpeed','flowSpeedVal','flowTurb','flowTurbVal','flowSwirl','flowSwirlVal','flowSpread','flowSpreadVal',
     'baseOn','baseMix','baseMixVal','seedOnLoad',
     'symOn','symMode','symPos','symPosVal',
     'solarizeOn','solarizeThresh','solarizeThreshVal','solarizeAmt','solarizeAmtVal',
@@ -849,7 +849,7 @@ function hookSliders() {
     'cluMinSpread','cluBias','cluDrift','cluSpeed','cluInertia',
     'scanAlpha','scanShift','scanDrift','scanSpeed','scanGap','scanSkew','scanFocus','scanRoll',
     'glitchAlpha','glitchJitter','glitchSmearAngle',
-    'flowStrength','flowScale','flowPulse','flowImpl','flowSpeed','flowTurb','flowSwirl','baseMix','symPos','glitchSpeedMul',
+    'flowStrength','flowScale','flowPulse','flowImpl','flowSpeed','flowTurb','flowSwirl','flowSpread','baseMix','symPos','glitchSpeedMul',
     'depthScatter','corruptDrift',
     'solarizeThresh','solarizeAmt','solarizeR','solarizeG','solarizeB',
     'cluSpeedVar','cluPulse',
@@ -967,6 +967,7 @@ function updateLabels() {
   set(els.flowPulse,        els.flowPulseVal,        v => (v|0));
   set(els.flowImpl,         els.flowImplVal,         f2);
   set(els.flowSpeed,        els.flowSpeedVal,        f2);
+  set(els.flowSpread,       els.flowSpreadVal,       f2);
   set(els.flowTurb,         els.flowTurbVal,         f2);
   set(els.flowSwirl,        els.flowSwirlVal,        f2);
   set(els.glitchBaseX,      els.glitchBaseXVal,      v => (v|0));
@@ -1234,7 +1235,7 @@ function draw() {
     if (fS > 0) {
       const fMax   = parseFloat(els.flowStrength?.max ?? '50') || 50;
       const fSpeed = parseFloat(els.flowSpeed?.value ?? '1');
-      const tF     = frameCount * 0.005 * Math.max(0, fSpeed);
+      const tF     = frameCount * 0.005 * Math.pow(Math.max(0, fSpeed), 1.6);
       const pulse  = noise(tF * 1.3, 500) * 2 - 1;     // signed −1..1, flow-synced
       const depth  = 0.4 * Math.min(1, fS / fMax);     // push capped at ±0.4
       abMix = Math.max(0, Math.min(1, abMix + pulse * depth));
@@ -1360,7 +1361,8 @@ function draw() {
       parseFloat(els.flowImpl?.value  ?? '0'),
       parseFloat(els.flowSpeed?.value ?? '1'),
       parseFloat(els.flowTurb?.value  ?? '0'),
-      parseFloat(els.flowSwirl?.value ?? '0'));
+      parseFloat(els.flowSwirl?.value ?? '0'),
+      parseFloat(els.flowSpread?.value ?? '1'));
     [gBuf, gWarp] = [gWarp, gBuf];
   }
 
