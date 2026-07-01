@@ -215,6 +215,25 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0, glitchPriority = 1.0) 
   const cluDrift     = parseFloat(els.cluDrift?.value   ?? '0');
   const cluSpeed     = parseFloat(els.cluSpeed?.value   ?? '0');
   const cluInertia   = parseFloat(els.cluInertia?.value ?? '0.92');
+  // STEER decouples heading-change rate from travel SPEED: cluSpeed is now pure
+  // travel velocity, cluSteer is how fast the heading sweeps. cluBounce makes
+  // centers reflect off the edges (true side-to-side travel) instead of wrapping
+  // (which teleported them across — the main source of jumpiness). cluBreathe
+  // slowly oscillates the scatter radius so the cloud expands/contracts.
+  const cluSteer     = parseFloat(els.cluSteer?.value   ?? '1');
+  const cluBreathe   = parseFloat(els.cluBreathe?.value ?? '0');
+  const cluBounce    = (els.cluBounds?.value ?? 'bounce') === 'bounce';
+  const cluBreatheF  = cluBreathe > 0 ? (1 + Math.sin(millis() * 0.0006) * cluBreathe) : 1;
+  // COHERENCE — how much each center's tile offsets persist frame to frame, so a
+  // cluster reads as a BODY that travels with its center instead of re-rolling
+  // into static every frame. 0 = full per-frame boil (original), 1 = rigid
+  // constellation, between = slowly morphing blob. This is what makes the physics
+  // (steer / inertia / bounce) legible — there's finally something to watch move.
+  const cluCohere    = parseFloat(els.cluCohere?.value ?? '0.8');
+  // Recalibrated travel: exponential so the slow, watchable range spreads across
+  // the lower half of the SPEED slider instead of bunching at the bottom, and the
+  // top is calmer than the old linear px/frame.
+  const cluTravel    = Math.pow(Math.max(0, cluSpeed) / 10, 1.7) * 7;
 
   const targets = [];
 
@@ -272,11 +291,12 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0, glitchPriority = 1.0) 
         // center has its own characteristic speed even at the same cluSpeed.
         // cluSpeedVar=0 → all centers same speed; =1 → range 0×–2× of cluSpeed.
         speedMul: 1 + (random() - 0.5) * 2 * cluSpeedVar,
+        tiles: [],   // persistent center-relative offsets (COHERENCE)
       });
     }
     _cluPhysics.length = cluCenters;
 
-    _cluPhysT += cluSpeed * 0.004;
+    _cluPhysT += cluSteer * 0.004;   // heading-sweep rate — decoupled from travel SPEED
 
     // Pulse: every pulseInterval seconds, kick all centers with a random
     // velocity burst. Creates sudden lurching motion that steady inertia alone
@@ -289,7 +309,7 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0, glitchPriority = 1.0) 
         _cluPhysics._lastPulse = nowSec;
         for (const c of _cluPhysics) {
           const ang = random(TWO_PI);
-          const force = cluPulse * cluSpeed * 0.6;
+          const force = cluPulse * cluTravel * 0.6;
           c.vx += Math.cos(ang) * force;
           c.vy += Math.sin(ang) * force;
         }
@@ -297,7 +317,7 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0, glitchPriority = 1.0) 
     }
 
     for (const c of _cluPhysics) {
-      const effectiveSpeed = cluSpeed * (c.speedMul ?? 1);
+      const effectiveSpeed = cluTravel * (c.speedMul ?? 1);
       const steerAng = noise(c.noiseOffX + _cluPhysT * 0.7,
                              c.noiseOffY + _cluPhysT * 0.5) * TWO_PI * 2;
       const desiredVx = Math.cos(steerAng) * effectiveSpeed;
@@ -311,8 +331,22 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0, glitchPriority = 1.0) 
         c.vy += (noise(c.noiseOffY * 2.1 + _cluPhysT * 1.1) - 0.5) * cluDrift * 0.5;
       }
 
-      c.x = ((c.x + c.vx) % width  + width)  % width;
-      c.y = ((c.y + c.vy) % height + height) % height;
+      const nxp = c.x + c.vx;
+      const nyp = c.y + c.vy;
+      if (cluBounce) {
+        // Reflect position and velocity at the edges — momentum (INERTIA) carries
+        // the center away from the wall, giving real side-to-side travel with no
+        // teleport. Reversed heading persists until steering eases it back.
+        if      (nxp < 0)      { c.x = -nxp;             c.vx = -c.vx; }
+        else if (nxp > width)  { c.x = 2 * width - nxp;  c.vx = -c.vx; }
+        else                   { c.x = nxp; }
+        if      (nyp < 0)      { c.y = -nyp;             c.vy = -c.vy; }
+        else if (nyp > height) { c.y = 2 * height - nyp; c.vy = -c.vy; }
+        else                   { c.y = nyp; }
+      } else {
+        c.x = (nxp % width  + width)  % width;
+        c.y = (nyp % height + height) % height;
+      }
     }
     return _cluPhysics;
   }
@@ -344,22 +378,40 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0, glitchPriority = 1.0) 
     const biasCount  = Math.round(count * cluBias);
     const per        = Math.max(1, Math.floor(biasCount / cluCenters));
 
+    // BREATHE: oscillate the scatter radius over time so the cloud expands and
+    // contracts. cluBreatheF is 1 when BREATHE is 0 (static, original behaviour).
+    const effSpread = Math.max(1, cluSpread * cluBreatheF);
+    const effMin    = cluMinSpread * cluBreatheF;
+    const reroll    = 1 - cluCohere;   // per-frame chance each offset re-rolls
+
     for (const c of centers) {
+      if (!c.tiles) c.tiles = [];
       for (let i = 0; i < per && targets.length < biasCount; i++) {
-        const ang = random(TWO_PI);
-        const r   = cluMinSpread + random(Math.max(1, cluSpread - cluMinSpread));
-        const x   = (c.x + Math.cos(ang) * r + width)  % width;
-        const y   = (c.y + Math.sin(ang) * r + height) % height;
+        // Persistent center-relative offset (angle + normalized radius) so the
+        // cluster travels as a body. COHERENCE sets how often it re-rolls:
+        // reroll=1 (COHERENCE 0) → new offset every frame = original boil;
+        // reroll=0 (COHERENCE 1) → fixed constellation. Radius is stored
+        // normalized so BREATHE still modulates the body's size.
+        let off = c.tiles[i];
+        if (!off || random() < reroll) {
+          off = { ang: random(TWO_PI), rNorm: random() };
+          c.tiles[i] = off;
+        }
+        const r = effMin + off.rNorm * Math.max(1, effSpread - effMin);
+        const x = (c.x + Math.cos(off.ang) * r + width)  % width;
+        const y = (c.y + Math.sin(off.ang) * r + height) % height;
         let ok = tryAdd(Math.floor(x), Math.floor(y)), tries = 0;
         while (!ok && tries++ < 6) {
+          // Collision fallback — transient random probe, doesn't disturb the body
           const a2 = random(TWO_PI);
-          const r2 = cluMinSpread + random(Math.max(1, cluSpread - cluMinSpread));
+          const r2 = effMin + random() * Math.max(1, effSpread - effMin);
           ok = tryAdd(
             Math.floor((c.x + Math.cos(a2) * r2 + width)  % width),
             Math.floor((c.y + Math.sin(a2) * r2 + height) % height)
           );
         }
       }
+      if (c.tiles.length > per) c.tiles.length = per;   // trim if per shrank
     }
     let guard = 0;
     while (targets.length < count && guard++ < count * 4)

@@ -1288,6 +1288,11 @@
                         <span class="val" id="cluSpeedVal">0.0</span>
                     </div>
                     <div class="ctrl">
+                        <label>STEER</label>
+                        <input id="cluSteer" type="range" min="0" max="10" step="0.01" value="1">
+                        <span class="val" id="cluSteerVal">1.00</span>
+                    </div>
+                    <div class="ctrl">
                         <label>SPD VAR</label>
                         <input id="cluSpeedVar" type="range" min="0" max="2" step="0.01" value="0">
                         <span class="val" id="cluSpeedVarVal">0.00</span>
@@ -1301,6 +1306,23 @@
                         <label>INERTIA</label>
                         <input id="cluInertia" type="range" min="0.01" max="0.99" step="0.01" value="0.92">
                         <span class="val" id="cluInertiaVal">0.92</span>
+                    </div>
+                    <div class="ctrl">
+                        <label>COHERENCE</label>
+                        <input id="cluCohere" type="range" min="0" max="1" step="0.01" value="0.8">
+                        <span class="val" id="cluCohereVal">0.80</span>
+                    </div>
+                    <div class="ctrl">
+                        <label>BREATHE</label>
+                        <input id="cluBreathe" type="range" min="0" max="0.9" step="0.01" value="0">
+                        <span class="val" id="cluBreatheVal">0.00</span>
+                    </div>
+                    <div class="ctrl">
+                        <label>BOUNDS</label>
+                        <select id="cluBounds" style="font-size:10px;padding:1px 2px">
+                            <option value="bounce">BOUNCE</option>
+                            <option value="wrap">WRAP</option>
+                        </select>
                     </div>
                 </div>
             </div>
@@ -1317,6 +1339,15 @@
                     </div>
                     <span style="font-size:9px;color:rgba(255,255,255,.4);font-family:'Share Tech Mono',monospace;white-space:nowrap">→ SCAN</span>
                     <span class="val" id="abMixVal" style="min-width:30px;text-align:right">0.50</span>
+                </div>
+                <div class="group-row">
+                    <div class="ctrl">
+                        <label>TOP</label>
+                        <select id="abTop" style="font-size:10px;padding:1px 2px">
+                            <option value="scan">SCAN</option>
+                            <option value="glitch">GLITCH</option>
+                        </select>
+                    </div>
                 </div>
                 </div>
             </div>
