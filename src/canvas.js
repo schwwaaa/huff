@@ -230,7 +230,7 @@ const PRESET_IDS = [
   'bgMode',
   'cluSpeedVar','cluPulse',
   'cluSteer','cluBreathe','cluBounds','cluCohere',
-  'abMix','abTop',
+  'abPriority',
   'globalMixOn','globalMixBlend','globalMixAmt','globalMixPos',
 ];
 
@@ -657,7 +657,7 @@ function hookUI() {
     'depthScatter','depthScatterVal','corruptDrift','corruptDriftVal',
     'scanAngle','bgMode','dim',
     'cluSpeedVar','cluSpeedVarVal','cluPulse','cluPulseVal','cluBreathe','cluBreatheVal','cluBounds',
-    'abMix','abMixVal','abTop',
+    'abPriority',
     'lumaKeyOn','lumaKeyMix','lumaKeyMixVal','lumaKeyAB','lumaKeyABVal','lumaKeyInvert',
     'globalMixOn','globalMixBlend','globalMixAmt','globalMixAmtVal','globalMixPos',
   ].forEach(k => els[k] = _$(k));
@@ -854,7 +854,7 @@ function hookSliders() {
     'depthScatter','corruptDrift',
     'solarizeThresh','solarizeAmt','solarizeR','solarizeG','solarizeB',
     'cluSpeedVar','cluPulse','cluBreathe',
-    'lumaKeyMix','lumaKeyAB','globalMixAmt','scanAngle','scanSpinSpeed','abMix',
+    'lumaKeyMix','lumaKeyAB','globalMixAmt','scanAngle','scanSpinSpeed',
   ];
 
   sliderIds.forEach(id => {
@@ -863,7 +863,7 @@ function hookSliders() {
 
   // Checkboxes and selects also get snapshotted for undo
   ['corruptOn','clusters','clusterTiles','flowOn','baseOn','symOn','solarizeOn',
-   'cluBounds','abTop','seedOnLoad','bgMode','symMode',
+   'cluBounds','abPriority','seedOnLoad','bgMode','symMode',
    'lumaKeyOn','globalMixOn','globalMixBlend','globalMixPos','scanSpinLeft','scanSpinRight'].forEach(id => {
     _$(id)?.addEventListener('change', snapshotForUndo);
   });
@@ -1002,7 +1002,6 @@ function updateLabels() {
   set(els.cluBreathe,       els.cluBreatheVal,       f2);
   set(els.lumaKeyMix,       els.lumaKeyMixVal,       f2);
   set(els.lumaKeyAB,        els.lumaKeyABVal,        f2);
-  set(els.abMix,            els.abMixVal,            f2);
   set(els.globalMixAmt,     els.globalMixAmtVal,     f2);
   if (els.baseMix && els.baseMixVal) {
     els.baseMixVal.textContent = f2(els.baseMix.value);
@@ -1209,51 +1208,27 @@ function draw() {
   }
 
   // ORDER: [Glitch group ⇄ Scanlines] — both composite onto the SAME gBuf, so
-  // paint order IS z-order.
-  // ── A/B MIX (linear crossfade + manual TOP) ────────────────────────────────
-  // abMix is a pure LINEAR opacity crossfade between glitch and scanlines, each
-  // held to a visibility floor (AB_MIN) so neither fully mutes. It no longer
-  // auto-swaps the z-order at 0.5 (that mid-travel "switch" broke the sweep) —
-  // which layer sits on top is now the manual TOP control below.
-  let abMix = parseFloat(els.abMix?.value ?? '0.5');
+  // paint order IS z-order. A shared buffer can only ever have ONE layer painted
+  // last, so priority is inherently BINARY — there is no continuous "51% on top"
+  // without giving each layer its own buffer (an FPS cost we're not paying). So
+  // A/B PRIORITY is a discrete selector, NOT a slider, and it does NOT touch
+  // opacity — each effect draws at its own native opacity (glitchAlpha / scanAlpha,
+  // which those effects own). This only chooses paint order:
+  //   GLITCH  → glitch painted last   (glitch on top)
+  //   SCAN    → scanlines painted last (scanlines on top)
+  //   NEUTRAL → order flips every frame; the eye integrates to a balanced 50/50
+  //             interleave — the honest, zero-cost stand-in for a "both" middle
+  //   PULSE   → order flips on a slow cycle — a rhythmic priority swap for live use
+  const abState = els.abPriority?.value ?? 'scan';
+  let glitchOnTop;
+  if      (abState === 'glitch')  glitchOnTop = true;
+  else if (abState === 'neutral') glitchOnTop = (frameCount & 1) === 0;
+  else if (abState === 'pulse')   glitchOnTop = (Math.floor(frameCount / 20) & 1) === 0;
+  else /* 'scan' */               glitchOnTop = false;
 
-  // ── FLOW → A/B routing (near-zero cost) ────────────────────────────────────
-  // Flow's pixel warp is perceptually masked on glitch — glitch re-randomizes
-  // every frame, so a smooth few-pixel warp is invisible on it while it clearly
-  // bends the coherent scanline bands. Rather than geometrically warp glitch
-  // (which would cost a per-tile flow-field lookup), we let Flow's motion push
-  // the glitch↔scanline balance instead. Cost: ONE Perlin sample per frame —
-  // no field, no per-pixel work, no extra buffer, no GPU readback.
-  //   STRENGTH → how hard flow pushes the balance (scaled to the slider's max)
-  //   SPEED    → the tempo of that push (shares flow's own time base)
-  // noise() is Perlin (separate from random()), so this does not perturb the
-  // glitch RNG sequence. At high STRENGTH the push can carry abMix across the
-  // 0.5 midpoint, flow-syncing the z-swap itself — keep base abMix off-centre if
-  // you don't want the layer order flipping with the flow.
-  if (els.flowOn?.checked) {
-    const fS = parseInt(els.flowStrength?.value ?? '0', 10);
-    if (fS > 0) {
-      const fMax   = parseFloat(els.flowStrength?.max ?? '50') || 50;
-      const fSpeed = parseFloat(els.flowSpeed?.value ?? '1');
-      const tF     = frameCount * 0.005 * Math.pow(Math.max(0, fSpeed), 1.6);
-      const pulse  = noise(tF * 1.3, 500) * 2 - 1;     // signed −1..1, flow-synced
-      const depth  = 0.4 * Math.min(1, fS / fMax);     // push capped at ±0.4
-      abMix = Math.max(0, Math.min(1, abMix + pulse * depth));
-    }
-  }
-
-  const AB_MIN = 0.35;
-  let glitchPriority = 1.0 - abMix * (1.0 - AB_MIN);
-  let scanPriority   = AB_MIN + abMix * (1.0 - AB_MIN);
-  const glitchOnTop  = (els.abTop?.value ?? 'scan') === 'glitch';
-  // Real frame priority, not just opacity: the TOP layer draws at FULL priority
-  // so it actually OCCLUDES (glitch tiles cover, scanline bands cover), and the
-  // UNDER layer keeps the linear abMix crossfade (floored at AB_MIN) so it bleeds
-  // through by exactly the amount you dial. Without this both layers were semi-
-  // transparent and merely blended, which read as opacity rather than priority.
-  // abMix now = how much the under-layer shows through the TOP layer; TOP = which
-  // layer is the occluder. Both stay linear, so sweet spots are still findable.
-  if (glitchOnTop) glitchPriority = 1.0; else scanPriority = 1.0;
+  // Each layer draws at its own opacity — no A/B crossfade scaling.
+  const glitchPriority = 1.0;
+  const scanPriority   = 1.0;
 
   // Glitch group = glitch tiles + the Luma Key gate. The gate travels WITH glitch
   // (keying the glitched buffer against clean source) so it stays meaningful at
@@ -1294,8 +1269,8 @@ function draw() {
   }
   const _emitScanlines = () => applyScanlines(density, scanAngleArg, scanPriority);
 
-  // Emit in z-order: TOP layer painted last (on top). Opacity of both still
-  // crossfades linearly with abMix regardless of which is on top.
+  // Emit in paint order: the priority layer is painted LAST (on top). Each draws
+  // at its own opacity — no crossfade.
   if (glitchOnTop) { _emitScanlines(); _emitGlitch(); }
   else             { _emitGlitch();    _emitScanlines(); }
 

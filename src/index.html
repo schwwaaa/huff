@@ -1328,24 +1328,18 @@
             </div>
             </div>
 
-            <!-- A/B MIX — layer priority between glitch and scanlines -->
+            <!-- A/B PRIORITY — layer paint order between glitch and scanlines -->
             <div class="group">
-                <div class="group-label">A / B Mix</div>
+                <div class="group-label">A / B Priority</div>
                 <div class="group-body">
                 <div class="group-row">
-                    <span style="font-size:9px;color:rgba(255,255,255,.4);font-family:'Share Tech Mono',monospace;white-space:nowrap">GLITCH ←</span>
-                    <div class="ctrl" style="flex:1">
-                        <input id="abMix" type="range" min="0" max="1" step="0.01" value="0.5" style="width:100%">
-                    </div>
-                    <span style="font-size:9px;color:rgba(255,255,255,.4);font-family:'Share Tech Mono',monospace;white-space:nowrap">→ SCAN</span>
-                    <span class="val" id="abMixVal" style="min-width:30px;text-align:right">0.50</span>
-                </div>
-                <div class="group-row">
                     <div class="ctrl">
-                        <label>TOP</label>
-                        <select id="abTop" style="font-size:10px;padding:1px 2px">
-                            <option value="scan">SCAN</option>
-                            <option value="glitch">GLITCH</option>
+                        <label>PRIORITY</label>
+                        <select id="abPriority" style="font-size:10px;padding:1px 2px">
+                            <option value="scan">SCAN TOP</option>
+                            <option value="glitch">GLITCH TOP</option>
+                            <option value="neutral">NEUTRAL</option>
+                            <option value="pulse">PULSE</option>
                         </select>
                     </div>
                 </div>
