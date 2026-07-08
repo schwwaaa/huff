@@ -1328,19 +1328,24 @@
             </div>
             </div>
 
-            <!-- A/B PRIORITY — layer paint order between glitch and scanlines -->
+            <!-- LAYER PRIORITY — paint order between glitch and scanlines -->
             <div class="group">
-                <div class="group-label">A / B Priority</div>
+                <div class="group-label">Layer Priority</div>
                 <div class="group-body">
                 <div class="group-row">
                     <div class="ctrl">
                         <label>PRIORITY</label>
-                        <select id="abPriority" style="font-size:10px;padding:1px 2px">
+                        <select id="layerPriority" style="font-size:10px;padding:1px 2px">
                             <option value="scan">SCAN TOP</option>
                             <option value="glitch">GLITCH TOP</option>
                             <option value="neutral">NEUTRAL</option>
                             <option value="pulse">PULSE</option>
                         </select>
+                    </div>
+                    <div class="ctrl">
+                        <label>PULSE SPEED</label>
+                        <input id="layerPulseSpeed" type="range" min="0.2" max="12" step="0.1" value="2">
+                        <span class="val" id="layerPulseSpeedVal">2.0</span>
                     </div>
                 </div>
                 </div>

@@ -230,7 +230,7 @@ const PRESET_IDS = [
   'bgMode',
   'cluSpeedVar','cluPulse',
   'cluSteer','cluBreathe','cluBounds','cluCohere',
-  'abPriority',
+  'layerPriority','layerPulseSpeed',
   'globalMixOn','globalMixBlend','globalMixAmt','globalMixPos',
 ];
 
@@ -657,7 +657,7 @@ function hookUI() {
     'depthScatter','depthScatterVal','corruptDrift','corruptDriftVal',
     'scanAngle','bgMode','dim',
     'cluSpeedVar','cluSpeedVarVal','cluPulse','cluPulseVal','cluBreathe','cluBreatheVal','cluBounds',
-    'abPriority',
+    'layerPriority','layerPulseSpeed','layerPulseSpeedVal',
     'lumaKeyOn','lumaKeyMix','lumaKeyMixVal','lumaKeyAB','lumaKeyABVal','lumaKeyInvert',
     'globalMixOn','globalMixBlend','globalMixAmt','globalMixAmtVal','globalMixPos',
   ].forEach(k => els[k] = _$(k));
@@ -854,7 +854,7 @@ function hookSliders() {
     'depthScatter','corruptDrift',
     'solarizeThresh','solarizeAmt','solarizeR','solarizeG','solarizeB',
     'cluSpeedVar','cluPulse','cluBreathe',
-    'lumaKeyMix','lumaKeyAB','globalMixAmt','scanAngle','scanSpinSpeed',
+    'lumaKeyMix','lumaKeyAB','globalMixAmt','scanAngle','scanSpinSpeed','layerPulseSpeed',
   ];
 
   sliderIds.forEach(id => {
@@ -863,7 +863,7 @@ function hookSliders() {
 
   // Checkboxes and selects also get snapshotted for undo
   ['corruptOn','clusters','clusterTiles','flowOn','baseOn','symOn','solarizeOn',
-   'cluBounds','abPriority','seedOnLoad','bgMode','symMode',
+   'cluBounds','layerPriority','seedOnLoad','bgMode','symMode',
    'lumaKeyOn','globalMixOn','globalMixBlend','globalMixPos','scanSpinLeft','scanSpinRight'].forEach(id => {
     _$(id)?.addEventListener('change', snapshotForUndo);
   });
@@ -1001,6 +1001,7 @@ function updateLabels() {
   set(els.cluPulse,         els.cluPulseVal,         f2);
   set(els.cluBreathe,       els.cluBreatheVal,       f2);
   set(els.lumaKeyMix,       els.lumaKeyMixVal,       f2);
+  set(els.layerPulseSpeed,  els.layerPulseSpeedVal,  v => (+v).toFixed(1));
   set(els.lumaKeyAB,        els.lumaKeyABVal,        f2);
   set(els.globalMixAmt,     els.globalMixAmtVal,     f2);
   if (els.baseMix && els.baseMixVal) {
@@ -1211,22 +1212,25 @@ function draw() {
   // paint order IS z-order. A shared buffer can only ever have ONE layer painted
   // last, so priority is inherently BINARY — there is no continuous "51% on top"
   // without giving each layer its own buffer (an FPS cost we're not paying). So
-  // A/B PRIORITY is a discrete selector, NOT a slider, and it does NOT touch
+  // LAYER PRIORITY is a discrete selector, NOT a slider, and it does NOT touch
   // opacity — each effect draws at its own native opacity (glitchAlpha / scanAlpha,
   // which those effects own). This only chooses paint order:
   //   GLITCH  → glitch painted last   (glitch on top)
   //   SCAN    → scanlines painted last (scanlines on top)
   //   NEUTRAL → order flips every frame; the eye integrates to a balanced 50/50
   //             interleave — the honest, zero-cost stand-in for a "both" middle
-  //   PULSE   → order flips on a slow cycle — a rhythmic priority swap for live use
-  const abState = els.abPriority?.value ?? 'scan';
+  //   PULSE   → order flips on a cycle set by PULSE SPEED — a rhythmic swap
+  const layerState = els.layerPriority?.value ?? 'scan';
+  // PULSE SPEED = flips per second; convert to whole frames per half-cycle.
+  const pulseSpd    = parseFloat(els.layerPulseSpeed?.value ?? '2');
+  const pulseFrames = Math.max(1, Math.round(60 / Math.max(0.1, pulseSpd)));
   let glitchOnTop;
-  if      (abState === 'glitch')  glitchOnTop = true;
-  else if (abState === 'neutral') glitchOnTop = (frameCount & 1) === 0;
-  else if (abState === 'pulse')   glitchOnTop = (Math.floor(frameCount / 20) & 1) === 0;
-  else /* 'scan' */               glitchOnTop = false;
+  if      (layerState === 'glitch')  glitchOnTop = true;
+  else if (layerState === 'neutral') glitchOnTop = (frameCount & 1) === 0;
+  else if (layerState === 'pulse')   glitchOnTop = (Math.floor(frameCount / pulseFrames) & 1) === 0;
+  else /* 'scan' */                  glitchOnTop = false;
 
-  // Each layer draws at its own opacity — no A/B crossfade scaling.
+  // Each layer draws at its own opacity — no crossfade scaling.
   const glitchPriority = 1.0;
   const scanPriority   = 1.0;
 
