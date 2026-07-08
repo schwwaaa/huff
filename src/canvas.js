@@ -225,7 +225,7 @@ const PRESET_IDS = [
   'symOn','symMode','symPos',
   'solarizeOn','solarizeThresh','solarizeAmt','solarizeR','solarizeG','solarizeB',
   'scanAlpha','scanShift','scanDrift','scanSpeed','scanGap','scanSkew',
-  'scanAngle','scanFocus','scanRoll',
+  'scanAngle','scanFocus','scanPlaceX','scanPlaceY',
   'scanSpinLeft','scanSpinRight','scanSpinSpeed',
   'bgMode',
   'cluSpeedVar','cluPulse',
@@ -652,7 +652,7 @@ function hookUI() {
     'solarizeR','solarizeRVal','solarizeG','solarizeGVal','solarizeB','solarizeBVal',
     'scanAlpha','scanAlphaVal','scanShift','scanShiftVal','scanDrift','scanDriftVal',
     'scanSpeed','scanSpeedVal','scanGap','scanGapVal','scanSkew','scanSkewVal',
-    'scanAngle','scanAngleVal','scanFocus','scanFocusVal','scanRoll','scanRollVal',
+    'scanAngle','scanAngleVal','scanFocus','scanFocusVal','scanPlaceX','scanPlaceXVal','scanPlaceY','scanPlaceYVal',
     'scanSpinLeft','scanSpinRight','scanSpinSpeed','scanSpinSpeedVal',
     'depthScatter','depthScatterVal','corruptDrift','corruptDriftVal',
     'scanAngle','bgMode','dim',
@@ -848,7 +848,7 @@ function hookSliders() {
     'feedback','persistence','fbX','fbY','fbZ','fbTheta',
     'spatialGap','clusterCount','clusterRadius','cluCenters','cluSpread',
     'cluMinSpread','cluBias','cluDrift','cluSpeed','cluSteer','cluInertia','cluCohere',
-    'scanAlpha','scanShift','scanDrift','scanSpeed','scanGap','scanSkew','scanFocus','scanRoll',
+    'scanAlpha','scanShift','scanDrift','scanSpeed','scanGap','scanSkew','scanFocus','scanPlaceX','scanPlaceY',
     'glitchAlpha','glitchJitter','glitchSmearAngle',
     'flowStrength','flowScale','flowPulse','flowImpl','flowSpeed','flowTurb','flowSwirl','flowSpread','baseMix','symPos','glitchSpeedMul',
     'depthScatter','corruptDrift',
@@ -987,7 +987,8 @@ function updateLabels() {
   set(els.scanSkew,         els.scanSkewVal,         f2);
   set(els.scanAngle,        els.scanAngleVal,        v => Math.round(v)+'°');
   set(els.scanFocus,        els.scanFocusVal,        f2);
-  set(els.scanRoll,         els.scanRollVal,         f2);
+  set(els.scanPlaceX,       els.scanPlaceXVal,       f2);
+  set(els.scanPlaceY,       els.scanPlaceYVal,       f2);
   set(els.scanSpinSpeed,    els.scanSpinSpeedVal,    f2);
   set(els.depthScatter,     els.depthScatterVal,     f2);
   set(els.corruptDrift,     els.corruptDriftVal,     f2);

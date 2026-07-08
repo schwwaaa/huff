@@ -1402,9 +1402,9 @@
                 <div class="group-body">
                 <div class="group-row">
                     <div class="ctrl"><label>ON</label><input id="clusters" type="checkbox"></div>
-                    <div class="ctrl">
+                    <div class="ctrl" style="flex:1 1 100%">
                         <label>ANGLE</label>
-                        <input id="scanAngle" type="range" min="-180" max="180" step="0.5" value="0">
+                        <input id="scanAngle" type="range" min="-180" max="180" step="1" value="0" style="flex:1">
                         <span class="val" id="scanAngleVal">0°</span>
                         <button id="scanAngleReset" class="btn-dim" style="font-size:9px;padding:1px 5px;margin-left:2px" title="Reset to 0°">0°</button>
                         <button id="scanAngle90n" class="btn-dim" style="font-size:9px;padding:1px 5px;margin-left:2px" title="Set to -90°">-90°</button>
@@ -1448,9 +1448,14 @@
                         <span class="val" id="scanDriftVal">1.00</span>
                     </div>
                     <div class="ctrl">
-                        <label>ROLL</label>
-                        <input id="scanRoll" type="range" min="-2" max="2" step="0.01" value="0">
-                        <span class="val" id="scanRollVal">0.00</span>
+                        <label>PLACE X</label>
+                        <input id="scanPlaceX" type="range" min="-1" max="1" step="0.01" value="0">
+                        <span class="val" id="scanPlaceXVal">0.00</span>
+                    </div>
+                    <div class="ctrl">
+                        <label>PLACE Y</label>
+                        <input id="scanPlaceY" type="range" min="-1" max="1" step="0.01" value="0">
+                        <span class="val" id="scanPlaceYVal">0.00</span>
                     </div>
                     <div class="ctrl">
                         <label>SPEED</label>

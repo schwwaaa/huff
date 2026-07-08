@@ -76,8 +76,9 @@ window.resetClusterPhysics = resetClusterPhysics;
 //         Canvas context is rotated before drawing bands; all band math runs in
 //         the rotated frame so displacement is always perpendicular to band axis.
 // FOCUS — biases band positions toward a region of the canvas (0=top/left, 1=bottom/right)
-// ROLL  — steady scroll simulating CRT rolling sync loss, independent of DRIFT
-// DRIFT — dual-frequency noise: slow sync wander + fast instability jitter
+// GAP   — even spacing between band centres (band thickness + GAP); spreads bands apart
+// DRIFT — wander off the even comb: 0 = perfectly even, higher = organic scatter
+// PLACE — X/Y screen-space offset of the whole scanline field
 
 function applyScanlines(density, angleOverride = null, scanPriority = 1.0) {
   if (!els.clusters?.checked) return;
@@ -97,7 +98,9 @@ function applyScanlines(density, angleOverride = null, scanPriority = 1.0) {
   const scanGap    = parseInt(els.scanGap?.value       ?? '0',   10);
   const scanSkew   = parseFloat(els.scanSkew?.value   ?? '0');
   const focus      = parseFloat(els.scanFocus?.value  ?? '0.5');
-  const roll       = parseFloat(els.scanRoll?.value   ?? '0');
+  // PLACE X/Y — shift the entire scanline field in screen space (−1..1 → ±½ screen).
+  const placeX     = parseFloat(els.scanPlaceX?.value ?? '0') * width  * 0.5;
+  const placeY     = parseFloat(els.scanPlaceY?.value ?? '0') * height * 0.5;
 
   const phX = nPhaseScanX;
   const phY = nPhaseScanY;
@@ -112,9 +115,6 @@ function applyScanlines(density, angleOverride = null, scanPriority = 1.0) {
   const cross = width * absC + height * absS;   // displacement axis span
   const bSize = Math.max(4, Math.floor(parseInt(els.clusterRadius?.value ?? '10', 10) * 3));
 
-  // Roll offset scrolls bands along the full rotated span
-  const rollOffset = (phY * roll * 80) % dim;
-
   const ctx       = gBuf.drawingContext;
   const prevAlpha = ctx.globalAlpha;
   const gCurCvs   = gCur.drawingContext.canvas;
@@ -124,26 +124,28 @@ function applyScanlines(density, angleOverride = null, scanPriority = 1.0) {
   // visual centre regardless of angle.
   const rotated = Math.abs(angleRad) > 0.001;
   ctx.save();
+  ctx.translate(placeX, placeY);                // general placement (screen-space)
   ctx.translate(gBuf.width / 2, gBuf.height / 2);
   if (rotated) ctx.rotate(angleRad);
   // Offset so that band Y=0 is at -dim/2 from canvas centre
   ctx.translate(-gBuf.width / 2, -dim / 2);
 
+  // Bands are laid out as an EVEN COMB along the span. GAP sets the space between
+  // band centres (spacing = band thickness + GAP): GAP 0 = bands touching, higher
+  // GAP spreads them apart. DRIFT then wanders each band off its comb slot (0 = a
+  // perfectly even comb, higher = organic scatter). FOCUS pulls bands toward a
+  // point (0.5 = neutral, comb preserved).
+  const spacing  = Math.max(1, bSize + scanGap);
+  const focusStr = Math.abs(focus - 0.5) * 1.4;
   for (let n = 0; n < scanBands; n++) {
-    const slowDrift  = noise(n * 3.7 + phY * 0.25 * driftAmt) * dim;
-    const fastJitter = (noise(n * 11.3 + phY * 1.8 * driftAmt) - 0.5) * dim * 0.12 * driftAmt;
+    const evenBase = (n * spacing) % dim;
+    const wander   = (noise(n * 3.7  + phY * 0.25 * driftAmt) - 0.5) * dim * driftAmt
+                   + (noise(n * 11.3 + phY * 1.8  * driftAmt) - 0.5) * dim * 0.12 * driftAmt;
+    let pos = evenBase + wander;
+    pos = pos * (1 - focusStr) + (focus * dim) * focusStr;
+    const rawPos = (pos % dim + dim) % dim;
 
-    // Focus bias within the full rotated span
-    const biased = slowDrift * (1 - Math.abs(focus - 0.5) * 1.4)
-                 + (focus * dim) * Math.abs(focus - 0.5) * 1.4
-                 + fastJitter;
-
-    const rawPos  = ((biased + rollOffset) % dim + dim) % dim;
-    const gridPos = scanGap > 0
-      ? Math.floor(rawPos / Math.max(1, bSize + scanGap)) * (bSize + scanGap)
-      : rawPos;
-
-    const bStart = Math.max(0, Math.floor(gridPos));
+    const bStart = Math.max(0, Math.floor(rawPos));
     const bEnd   = Math.min(dim, bStart + bSize);
     const bLen   = bEnd - bStart;
     if (bLen <= 0) continue;
