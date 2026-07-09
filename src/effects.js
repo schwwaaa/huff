@@ -94,13 +94,20 @@ function applyScanlines(density, angleOverride = null, scanPriority = 1.0) {
   const angleRad   = (angleDeg * Math.PI) / 180;
   const bandAlpha  = parseFloat(els.scanAlpha?.value  ?? '0.86') * scanPriority;
   const shiftScale = parseFloat(els.scanShift?.value  ?? '0.12');
-  const driftAmt   = parseFloat(els.scanDrift?.value  ?? '1.0');
+  const driftAmt   = parseFloat(els.scanDrift?.value  ?? '0.5');
   const scanGap    = parseInt(els.scanGap?.value       ?? '0',   10);
   const scanSkew   = parseFloat(els.scanSkew?.value   ?? '0');
   const focus      = parseFloat(els.scanFocus?.value  ?? '0.5');
   // PLACE X/Y — shift the entire scanline field in screen space (−1..1 → ±½ screen).
   const placeX     = parseFloat(els.scanPlaceX?.value ?? '0') * width  * 0.5;
   const placeY     = parseFloat(els.scanPlaceY?.value ?? '0') * height * 0.5;
+  // ZOOM — MODE picks what scales. PATTERN scales the whole field from centre
+  // (camera move); CONTENT magnifies the footage sampled inside each band ("band
+  // expand") without moving the bands; BOTH does each. 1 = no zoom.
+  const zoomAmt     = parseFloat(els.scanZoom?.value ?? '1');
+  const zoomMode    = els.scanZoomMode?.value ?? 'content';
+  const patternZoom = (zoomMode === 'pattern' || zoomMode === 'both') ? zoomAmt : 1;
+  const contentZoom = (zoomMode === 'content' || zoomMode === 'both') ? Math.max(0.05, zoomAmt) : 1;
 
   const phX = nPhaseScanX;
   const phY = nPhaseScanY;
@@ -127,6 +134,7 @@ function applyScanlines(density, angleOverride = null, scanPriority = 1.0) {
   ctx.translate(placeX, placeY);                // general placement (screen-space)
   ctx.translate(gBuf.width / 2, gBuf.height / 2);
   if (rotated) ctx.rotate(angleRad);
+  if (patternZoom !== 1) ctx.scale(patternZoom, patternZoom);   // PATTERN zoom (from centre)
   // Offset so that band Y=0 is at -dim/2 from canvas centre
   ctx.translate(-gBuf.width / 2, -dim / 2);
 
@@ -139,8 +147,12 @@ function applyScanlines(density, angleOverride = null, scanPriority = 1.0) {
   const focusStr = Math.abs(focus - 0.5) * 1.4;
   for (let n = 0; n < scanBands; n++) {
     const evenBase = (n * spacing) % dim;
-    const wander   = (noise(n * 3.7  + phY * 0.25 * driftAmt) - 0.5) * dim * driftAmt
-                   + (noise(n * 11.3 + phY * 1.8  * driftAmt) - 0.5) * dim * 0.12 * driftAmt;
+    // DRIFT wanders each band off its comb slot, scaled to the BAND THICKNESS (not
+    // the full span) so the comb — and the GAP between bands — stays the dominant
+    // structure. The old code scaled wander to the whole span, so at any real DRIFT
+    // the bands scattered across the entire screen and the gaps vanished.
+    const wander   = (noise(n * 3.7  + phY * 0.25 * driftAmt) - 0.5) * bSize * driftAmt * 0.5
+                   + (noise(n * 11.3 + phY * 1.8  * driftAmt) - 0.5) * bSize * driftAmt * 0.15;
     let pos = evenBase + wander;
     pos = pos * (1 - focusStr) + (focus * dim) * focusStr;
     const rawPos = (pos % dim + dim) % dim;
@@ -162,8 +174,17 @@ function applyScanlines(density, angleOverride = null, scanPriority = 1.0) {
 
     ctx.globalAlpha = bandAlpha;
     // Source coordinates: sample from gCur at the unshifted position
-    // (srcOff accounts for horizontal shift direction)
-    ctx.drawImage(gCurCvs, srcOff, bStart, bCross, bLen, dstOff, bStart, bCross, bLen);
+    // (srcOff accounts for horizontal shift direction). CONTENT zoom shrinks the
+    // sampled source rect around its centre and stretches it into the band, so the
+    // footage inside the band is magnified without the band itself moving.
+    if (contentZoom !== 1) {
+      const sw = bCross / contentZoom, sh = bLen / contentZoom;
+      const sx = srcOff + (bCross - sw) / 2;
+      const sy = bStart + (bLen  - sh) / 2;
+      ctx.drawImage(gCurCvs, sx, sy, sw, sh, dstOff, bStart, bCross, bLen);
+    } else {
+      ctx.drawImage(gCurCvs, srcOff, bStart, bCross, bLen, dstOff, bStart, bCross, bLen);
+    }
   }
 
   ctx.restore();

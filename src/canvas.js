@@ -225,7 +225,7 @@ const PRESET_IDS = [
   'symOn','symMode','symPos',
   'solarizeOn','solarizeThresh','solarizeAmt','solarizeR','solarizeG','solarizeB',
   'scanAlpha','scanShift','scanDrift','scanSpeed','scanGap','scanSkew',
-  'scanAngle','scanFocus','scanPlaceX','scanPlaceY',
+  'scanAngle','scanFocus','scanPlaceX','scanPlaceY','scanZoom','scanZoomMode',
   'scanSpinLeft','scanSpinRight','scanSpinSpeed',
   'bgMode',
   'cluSpeedVar','cluPulse',
@@ -652,7 +652,7 @@ function hookUI() {
     'solarizeR','solarizeRVal','solarizeG','solarizeGVal','solarizeB','solarizeBVal',
     'scanAlpha','scanAlphaVal','scanShift','scanShiftVal','scanDrift','scanDriftVal',
     'scanSpeed','scanSpeedVal','scanGap','scanGapVal','scanSkew','scanSkewVal',
-    'scanAngle','scanAngleVal','scanFocus','scanFocusVal','scanPlaceX','scanPlaceXVal','scanPlaceY','scanPlaceYVal',
+    'scanAngle','scanAngleVal','scanFocus','scanFocusVal','scanPlaceX','scanPlaceXVal','scanPlaceY','scanPlaceYVal','scanZoom','scanZoomVal','scanZoomMode',
     'scanSpinLeft','scanSpinRight','scanSpinSpeed','scanSpinSpeedVal',
     'depthScatter','depthScatterVal','corruptDrift','corruptDriftVal',
     'scanAngle','bgMode','dim',
@@ -848,7 +848,7 @@ function hookSliders() {
     'feedback','persistence','fbX','fbY','fbZ','fbTheta',
     'spatialGap','clusterCount','clusterRadius','cluCenters','cluSpread',
     'cluMinSpread','cluBias','cluDrift','cluSpeed','cluSteer','cluInertia','cluCohere',
-    'scanAlpha','scanShift','scanDrift','scanSpeed','scanGap','scanSkew','scanFocus','scanPlaceX','scanPlaceY',
+    'scanAlpha','scanShift','scanDrift','scanSpeed','scanGap','scanSkew','scanFocus','scanPlaceX','scanPlaceY','scanZoom',
     'glitchAlpha','glitchJitter','glitchSmearAngle',
     'flowStrength','flowScale','flowPulse','flowImpl','flowSpeed','flowTurb','flowSwirl','flowSpread','baseMix','symPos','glitchSpeedMul',
     'depthScatter','corruptDrift',
@@ -863,7 +863,7 @@ function hookSliders() {
 
   // Checkboxes and selects also get snapshotted for undo
   ['corruptOn','clusters','clusterTiles','flowOn','baseOn','symOn','solarizeOn',
-   'cluBounds','layerPriority','seedOnLoad','bgMode','symMode',
+   'cluBounds','layerPriority','scanZoomMode','seedOnLoad','bgMode','symMode',
    'lumaKeyOn','globalMixOn','globalMixBlend','globalMixPos','scanSpinLeft','scanSpinRight'].forEach(id => {
     _$(id)?.addEventListener('change', snapshotForUndo);
   });
@@ -989,6 +989,7 @@ function updateLabels() {
   set(els.scanFocus,        els.scanFocusVal,        f2);
   set(els.scanPlaceX,       els.scanPlaceXVal,       f2);
   set(els.scanPlaceY,       els.scanPlaceYVal,       f2);
+  set(els.scanZoom,         els.scanZoomVal,         f2);
   set(els.scanSpinSpeed,    els.scanSpinSpeedVal,    f2);
   set(els.depthScatter,     els.depthScatterVal,     f2);
   set(els.corruptDrift,     els.corruptDriftVal,     f2);

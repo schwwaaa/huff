@@ -1444,8 +1444,8 @@
                     </div>
                     <div class="ctrl">
                         <label>DRIFT</label>
-                        <input id="scanDrift" type="range" min="0" max="3" step="0.01" value="1.0">
-                        <span class="val" id="scanDriftVal">1.00</span>
+                        <input id="scanDrift" type="range" min="0" max="3" step="0.01" value="0.5">
+                        <span class="val" id="scanDriftVal">0.50</span>
                     </div>
                     <div class="ctrl">
                         <label>PLACE X</label>
@@ -1456,6 +1456,19 @@
                         <label>PLACE Y</label>
                         <input id="scanPlaceY" type="range" min="-1" max="1" step="0.01" value="0">
                         <span class="val" id="scanPlaceYVal">0.00</span>
+                    </div>
+                    <div class="ctrl">
+                        <label>ZOOM</label>
+                        <input id="scanZoom" type="range" min="0.25" max="4" step="0.01" value="1">
+                        <span class="val" id="scanZoomVal">1.00</span>
+                    </div>
+                    <div class="ctrl">
+                        <label>ZOOM MODE</label>
+                        <select id="scanZoomMode" style="font-size:10px;padding:1px 2px">
+                            <option value="content">CONTENT</option>
+                            <option value="pattern">PATTERN</option>
+                            <option value="both">BOTH</option>
+                        </select>
                     </div>
                     <div class="ctrl">
                         <label>SPEED</label>
