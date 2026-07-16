@@ -1,0 +1,30 @@
+{
+  "name": "Generic — Essential 16",
+  "description": "Minimal map covering the 8 most-used performance parameters on CCs 1-16. Suitable as a starting point for any controller. Duplicate this file and customise CC numbers to match your hardware.",
+  "version": 1,
+  "channel": -1,
+  "note": "channel -1 means accept any MIDI channel. Set to 0-15 to filter a specific channel.",
+  "mappings": [
+    { "_section": "── Core sliders — CCs 1–8 ──────────────────────────────────────────" },
+    { "param": "feedback",       "cc": 1,  "type": "range",  "enabled": true,  "note": "Most controllers put mod-wheel or first fader here" },
+    { "param": "depth",          "cc": 2,  "type": "range",  "enabled": true },
+    { "param": "corrupt",        "cc": 3,  "type": "range",  "enabled": true },
+    { "param": "baseMix",        "cc": 4,  "type": "range",  "enabled": true },
+    { "param": "glitchSpeed",    "cc": 5,  "type": "range",  "enabled": true },
+    { "param": "persistence",    "cc": 6,  "type": "range",  "enabled": true },
+    { "param": "flowStrength",   "cc": 7,  "type": "range",  "enabled": true,  "note": "CC7 = volume on many devices — remap if needed" },
+    { "param": "quality",        "cc": 8,  "type": "range",  "enabled": true },
+
+    { "_section": "── Texture knobs — CCs 9–12 ─────────────────────────────────────" },
+    { "param": "block",          "cc": 9,  "type": "range",  "enabled": true,  "note": "Pixel size" },
+    { "param": "glitchSize",     "cc": 10, "type": "range",  "enabled": true },
+    { "param": "glitchAlpha",    "cc": 11, "type": "range",  "enabled": true,  "note": "CC11 = expression on many devices — remap if needed" },
+    { "param": "solarizeThresh", "cc": 12, "type": "range",  "enabled": true },
+
+    { "_section": "── On/Off toggles — CCs 13–16 ───────────────────────────────────" },
+    { "param": "corruptOn",      "cc": 13, "type": "toggle", "enabled": true,  "note": "Glitch system on/off" },
+    { "param": "flowOn",         "cc": 14, "type": "toggle", "enabled": true },
+    { "param": "solarizeOn",     "cc": 15, "type": "toggle", "enabled": true },
+    { "param": "baseOn",         "cc": 16, "type": "toggle", "enabled": true }
+  ]
+}

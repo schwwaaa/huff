@@ -83,7 +83,7 @@ function connectVideoAudio(videoElement) {
     console.warn('[huff audio] connectVideoAudio failed:', e);
   }
 }
-let gCur, gBuf, gWarp;
+let gCur, gBuf, gWarp, gTemp;
 let _fbCanvas = null, _fbCtx = null;
 let canvas;
 let playing = false;
@@ -220,18 +220,18 @@ const PRESET_IDS = [
   'corruptOn','feedback','persistence','fbX','fbY','fbZ','fbTheta',
   'clusters','clusterTiles','clusterCount','clusterRadius','spatialGap',
   'cluCenters','cluSpread','cluMinSpread','cluBias','cluDrift','cluSpeed','cluInertia',
-  'flowOn','flowStrength','flowScale','flowPulse','flowImpl','flowSpeed','flowTurb','flowSwirl','flowSpread','flowCarry',
-  'flowPulseTrig','flowTarget',
+  'flowOn','flowStrength','flowScale','flowPulse','flowImpl','flowSpeed','flowTurb','flowSwirl',
   'baseOn','baseMix','seedOnLoad',
+  'symOn','symMode','symPos',
+  'solarizeOn','solarizeThresh','solarizeAmt','solarizeR','solarizeG','solarizeB',
   'scanAlpha','scanShift','scanDrift','scanSpeed','scanGap','scanSkew',
-  'scanAngle','scanFocus','scanPlaceX','scanPlaceY','scanZoom','scanZoomMode',
+  'scanAngle','scanFocus','scanRoll',
   'scanSpinLeft','scanSpinRight','scanSpinSpeed',
+  'trailOn','trailLayers','trailDepth',
   'bgMode',
   'cluSpeedVar','cluPulse',
-  'cluSteer','cluBreathe','cluBounds','cluCohere',
-  'layerPriority','layerPulseSpeed',
-  'globalMixOn','globalMixBlend','globalMixAmt','globalMixPos',
-  'smooshOn','smooshBlend','smooshAmt','smooshInvert',
+  'abMix',
+  'globalMixOn','globalMixBlend','globalMixAmt',
 ];
 
 function capturePreset() {
@@ -594,10 +594,11 @@ function allocBuffers() {
   const nCur  = createGraphics(width, height);
   const nBuf  = createGraphics(width, height);
   const nWarp = createGraphics(width, height);
+  const nTemp = createGraphics(width, height);
 
-  [gCur, gBuf, gWarp].forEach(g => { try { if (g) g.remove(); } catch {} });
+  [gCur, gBuf, gWarp, gTemp].forEach(g => { try { if (g) g.remove(); } catch {} });
 
-  gCur = nCur; gBuf = nBuf; gWarp = nWarp;
+  gCur = nCur; gBuf = nBuf; gWarp = nWarp; gTemp = nTemp;
   _fbCanvas = null; _fbCtx = null;
 }
 
@@ -610,11 +611,10 @@ function windowResized() {
 window.windowResized = windowResized;
 
 function clearAll() {
-  [gBuf, gWarp].forEach(g => { try { g.clear(); } catch {} });
+  [gBuf, gWarp, gTemp].forEach(g => { try { g.clear(); } catch {} });
   frameRing.clear();
   seededOnce = false;
   if (typeof resetClusterPhysics === 'function') resetClusterPhysics();
-  if (typeof resetFlowField     === 'function') resetFlowField();
 }
 
 function refreshGlitch() {
@@ -642,30 +642,31 @@ function hookUI() {
     'clusterRadius','clusterRadiusVal','spatialGap','spatialGapVal',
     'cluCenters','cluCentersVal','cluSpread','cluSpreadVal',
     'cluMinSpread','cluMinSpreadVal','cluBias','cluBiasVal','cluDrift','cluDriftVal',
-    'cluSpeed','cluSpeedVal','cluSteer','cluSteerVal','cluInertia','cluInertiaVal','cluCohere','cluCohereVal',
+    'cluSpeed','cluSpeedVal','cluInertia','cluInertiaVal',
     'flowOn','flowStrength','flowStrengthVal','flowScale','flowScaleVal',
     'flowPulse','flowPulseVal','flowImpl','flowImplVal',
-    'flowSpeed','flowSpeedVal','flowTurb','flowTurbVal','flowSwirl','flowSwirlVal','flowSpread','flowSpreadVal',
-    'flowCarry','flowCarryVal','flowPulseTrig','flowPulseFire','flowTarget',
+    'flowSpeed','flowSpeedVal','flowTurb','flowTurbVal','flowSwirl','flowSwirlVal',
     'baseOn','baseMix','baseMixVal','seedOnLoad',
+    'symOn','symMode','symPos','symPosVal',
+    'solarizeOn','solarizeThresh','solarizeThreshVal','solarizeAmt','solarizeAmtVal',
+    'solarizeR','solarizeRVal','solarizeG','solarizeGVal','solarizeB','solarizeBVal',
     'scanAlpha','scanAlphaVal','scanShift','scanShiftVal','scanDrift','scanDriftVal',
     'scanSpeed','scanSpeedVal','scanGap','scanGapVal','scanSkew','scanSkewVal',
-    'scanAngle','scanAngleVal','scanFocus','scanFocusVal','scanPlaceX','scanPlaceXVal','scanPlaceY','scanPlaceYVal','scanZoom','scanZoomVal','scanZoomMode',
+    'scanAngle','scanAngleVal','scanFocus','scanFocusVal','scanRoll','scanRollVal',
     'scanSpinLeft','scanSpinRight','scanSpinSpeed','scanSpinSpeedVal',
     'depthScatter','depthScatterVal','corruptDrift','corruptDriftVal',
+    'trailOn','trailLayers','trailLayersVal','trailDepth','trailDepthVal',
     'scanAngle','bgMode','dim',
-    'cluSpeedVar','cluSpeedVarVal','cluPulse','cluPulseVal','cluBreathe','cluBreatheVal','cluBounds',
-    'layerPriority','layerPulseSpeed','layerPulseSpeedVal',
+    'cluSpeedVar','cluSpeedVarVal','cluPulse','cluPulseVal',
+    'abMix','abMixVal',
     'lumaKeyOn','lumaKeyMix','lumaKeyMixVal','lumaKeyAB','lumaKeyABVal','lumaKeyInvert',
-    'globalMixOn','globalMixBlend','globalMixAmt','globalMixAmtVal','globalMixPos',
-    'smooshOn','smooshBlend','smooshAmt','smooshAmtVal','smooshInvert',
+    'globalMixOn','globalMixBlend','globalMixAmt','globalMixAmtVal',
   ].forEach(k => els[k] = _$(k));
 
   hookFile();
   hookTransport();
   hookCamera();
   hookVolume();
-  hookPulseFire();
   hookSliders();
   hookPresets();
   hookKeyboard();
@@ -847,13 +848,14 @@ function hookSliders() {
     'glitchSize','glitchSmear','glitchBaseX','glitchBaseY',
     'feedback','persistence','fbX','fbY','fbZ','fbTheta',
     'spatialGap','clusterCount','clusterRadius','cluCenters','cluSpread',
-    'cluMinSpread','cluBias','cluDrift','cluSpeed','cluSteer','cluInertia','cluCohere',
-    'scanAlpha','scanShift','scanDrift','scanSpeed','scanGap','scanSkew','scanFocus','scanPlaceX','scanPlaceY','scanZoom',
+    'cluMinSpread','cluBias','cluDrift','cluSpeed','cluInertia',
+    'scanAlpha','scanShift','scanDrift','scanSpeed','scanGap','scanSkew','scanFocus','scanRoll',
     'glitchAlpha','glitchJitter','glitchSmearAngle',
-    'flowStrength','flowScale','flowPulse','flowImpl','flowSpeed','flowTurb','flowSwirl','flowSpread','flowCarry','baseMix','glitchSpeedMul',
-    'depthScatter','corruptDrift',
-    'cluSpeedVar','cluPulse','cluBreathe',
-    'lumaKeyMix','lumaKeyAB','globalMixAmt','smooshAmt','scanAngle','scanSpinSpeed','layerPulseSpeed',
+    'flowStrength','flowScale','flowPulse','flowImpl','flowSpeed','flowTurb','flowSwirl','baseMix','symPos','glitchSpeedMul',
+    'depthScatter','corruptDrift','trailLayers','trailDepth',
+    'solarizeThresh','solarizeAmt','solarizeR','solarizeG','solarizeB',
+    'cluSpeedVar','cluPulse',
+    'lumaKeyMix','lumaKeyAB','globalMixAmt','scanAngle','scanSpinSpeed','abMix',
   ];
 
   sliderIds.forEach(id => {
@@ -861,9 +863,9 @@ function hookSliders() {
   });
 
   // Checkboxes and selects also get snapshotted for undo
-  ['corruptOn','clusters','clusterTiles','flowOn','baseOn','flowPulseTrig','flowTarget',
-   'cluBounds','layerPriority','scanZoomMode','seedOnLoad','bgMode',
-   'lumaKeyOn','globalMixOn','globalMixBlend','globalMixPos','smooshOn','smooshBlend','smooshInvert','scanSpinLeft','scanSpinRight'].forEach(id => {
+  ['corruptOn','clusters','clusterTiles','flowOn','baseOn','symOn','solarizeOn',
+   'trailOn','seedOnLoad','bgMode','symMode',
+   'lumaKeyOn','globalMixOn','scanSpinLeft','scanSpinRight'].forEach(id => {
     _$(id)?.addEventListener('change', snapshotForUndo);
   });
 
@@ -871,24 +873,6 @@ function hookSliders() {
     if (els.baseMix) els.baseMix.disabled = !els.baseOn.checked;
     updateLabels();
   });
-
-  // LAYER PRIORITY is overridden while FLOW TARGET owns the paint order — grey it
-  // out so the panel never shows two controls claiming the same ordering.
-  const _syncLayerPriorityLock = () => {
-    if (!els.layerPriority) return;
-    const owned = !!els.flowOn?.checked
-      && parseInt(els.flowStrength?.value ?? '0', 10) > 0
-      && (els.flowTarget?.value ?? 'final') !== 'final'
-      && !els.smooshOn?.checked;
-    els.layerPriority.disabled = owned;
-    els.layerPriority.title = owned
-      ? 'Overridden by FLOW TARGET — the target layer is the bottom layer'
-      : '';
-  };
-  ['flowTarget','flowOn','smooshOn'].forEach(id =>
-    els[id]?.addEventListener('change', _syncLayerPriorityLock));
-  els.flowStrength?.addEventListener('input', _syncLayerPriorityLock);
-  _syncLayerPriorityLock();
 }
 
 function hookPresets() {
@@ -923,49 +907,6 @@ function hookPresets() {
   // Reset btn
   els.resetBtn?.addEventListener('click', () => { snapshotForUndo(); refreshGlitch(); });
   els.clearBufBtn?.addEventListener('click', () => clearAll());
-}
-
-// ─── FLOW PULSE fire ──────────────────────────────────────────────────────────
-// PULSE replaces flow's source with a clean frameRing frame, so while it is
-// engaged the whole effects chain is discarded for that frame. As a slider that
-// is a permanent state; as a stab it is a gesture. TRIG gates the slider behind
-// this trigger — TRIG off leaves the slider continuous (unchanged behaviour).
-//
-// Two firing modes, because the button has two kinds of caller:
-//   held   — pointerdown/up from an actual pointer: fires for exactly as long as
-//            the button is held. Precise, and the natural gesture live.
-//   oneshot— a programmatic .click() with no pointer behind it, which is what the
-//            MIDI/OSC maps' 'trigger' type sends. A pad sends note-on only, so
-//            there is no release to wait for — it gets a fixed short burst.
-let _pulseHeld        = false;
-let _pulseOneShotEnd  = 0;
-let _pulsePointerDrv  = false;
-
-function _pulseFireActive() {
-  return _pulseHeld || performance.now() < _pulseOneShotEnd;
-}
-
-// Burst length for trigger-style callers, ms.
-const PULSE_ONESHOT_MS = 250;
-
-function hookPulseFire() {
-  const btn = els.flowPulseFire;
-  if (!btn) return;
-
-  const down = () => { _pulseHeld = true;  _pulsePointerDrv = true; btn.classList.add('firing'); };
-  const up   = () => { _pulseHeld = false; btn.classList.remove('firing'); };
-
-  btn.addEventListener('pointerdown',   down);
-  btn.addEventListener('pointerup',     up);
-  btn.addEventListener('pointerleave',  up);
-  btn.addEventListener('pointercancel', up);
-
-  // Fires for pointer clicks too, but _pulsePointerDrv is set by then so the
-  // one-shot is suppressed and the hold above owns it.
-  btn.addEventListener('click', () => {
-    if (_pulsePointerDrv) { _pulsePointerDrv = false; return; }
-    _pulseOneShotEnd = performance.now() + PULSE_ONESHOT_MS;
-  });
 }
 
 function hookKeyboard() {
@@ -1022,16 +963,12 @@ function updateLabels() {
   set(els.cluBias,          els.cluBiasVal,          f2);
   set(els.cluDrift,         els.cluDriftVal,         f2);
   set(els.cluSpeed,         els.cluSpeedVal,         v => (+v).toFixed(1));
-  set(els.cluSteer,         els.cluSteerVal,         f2);
   set(els.cluInertia,       els.cluInertiaVal,       f2);
-  set(els.cluCohere,        els.cluCohereVal,        f2);
   set(els.flowStrength,     els.flowStrengthVal,     v => v);
   set(els.flowScale,        els.flowScaleVal,        v => v);
   set(els.flowPulse,        els.flowPulseVal,        v => (v|0));
   set(els.flowImpl,         els.flowImplVal,         f2);
   set(els.flowSpeed,        els.flowSpeedVal,        f2);
-  set(els.flowSpread,       els.flowSpreadVal,       f2);
-  set(els.flowCarry,        els.flowCarryVal,        f2);
   set(els.flowTurb,         els.flowTurbVal,         f2);
   set(els.flowSwirl,        els.flowSwirlVal,        f2);
   set(els.glitchBaseX,      els.glitchBaseXVal,      v => (v|0));
@@ -1048,20 +985,24 @@ function updateLabels() {
   set(els.scanSkew,         els.scanSkewVal,         f2);
   set(els.scanAngle,        els.scanAngleVal,        v => Math.round(v)+'°');
   set(els.scanFocus,        els.scanFocusVal,        f2);
-  set(els.scanPlaceX,       els.scanPlaceXVal,       f2);
-  set(els.scanPlaceY,       els.scanPlaceYVal,       f2);
-  set(els.scanZoom,         els.scanZoomVal,         f2);
+  set(els.scanRoll,         els.scanRollVal,         f2);
   set(els.scanSpinSpeed,    els.scanSpinSpeedVal,    f2);
   set(els.depthScatter,     els.depthScatterVal,     f2);
   set(els.corruptDrift,     els.corruptDriftVal,     f2);
+  set(els.trailLayers,      els.trailLayersVal,      v => (v|0));
+  set(els.trailDepth,       els.trailDepthVal,       f2);
+  set(els.symPos,           els.symPosVal,           f2);
+  set(els.solarizeThresh,   els.solarizeThreshVal,   f2);
+  set(els.solarizeAmt,      els.solarizeAmtVal,      f2);
+  set(els.solarizeR,        els.solarizeRVal,        f2);
+  set(els.solarizeG,        els.solarizeGVal,        f2);
+  set(els.solarizeB,        els.solarizeBVal,        f2);
   set(els.cluSpeedVar,      els.cluSpeedVarVal,      f2);
   set(els.cluPulse,         els.cluPulseVal,         f2);
-  set(els.cluBreathe,       els.cluBreatheVal,       f2);
   set(els.lumaKeyMix,       els.lumaKeyMixVal,       f2);
-  set(els.layerPulseSpeed,  els.layerPulseSpeedVal,  v => (+v).toFixed(1));
   set(els.lumaKeyAB,        els.lumaKeyABVal,        f2);
+  set(els.abMix,            els.abMixVal,            f2);
   set(els.globalMixAmt,     els.globalMixAmtVal,     f2);
-  set(els.smooshAmt,        els.smooshAmtVal,        f2);
   if (els.baseMix && els.baseMixVal) {
     els.baseMixVal.textContent = f2(els.baseMix.value);
     if (els.baseMix) els.baseMix.disabled = !els.baseOn?.checked;
@@ -1266,52 +1207,39 @@ function draw() {
     ctx.restore();
   }
 
-  // ORDER: [Glitch group ⇄ Scanlines] — both composite onto the SAME gBuf, so
-  // paint order IS z-order. A shared buffer can only ever have ONE layer painted
-  // last, so priority is inherently BINARY — there is no continuous "51% on top"
-  // without giving each layer its own buffer (an FPS cost we're not paying). So
-  // LAYER PRIORITY is a discrete selector, NOT a slider, and it does NOT touch
-  // opacity — each effect draws at its own native opacity (glitchAlpha / scanAlpha,
-  // which those effects own). This only chooses paint order:
-  //   GLITCH  → glitch painted last   (glitch on top)
-  //   SCAN    → scanlines painted last (scanlines on top)
-  //   NEUTRAL → order flips every frame; the eye integrates to a balanced 50/50
-  //             interleave — the honest, zero-cost stand-in for a "both" middle
-  //   PULSE   → order flips on a cycle set by PULSE SPEED — a rhythmic swap
-  const layerState = els.layerPriority?.value ?? 'scan';
-  // PULSE SPEED = flips per second; convert to whole frames per half-cycle.
-  const pulseSpd    = parseFloat(els.layerPulseSpeed?.value ?? '2');
-  const pulseFrames = Math.max(1, Math.round(60 / Math.max(0.1, pulseSpd)));
-  let glitchOnTop;
-  if      (layerState === 'glitch')  glitchOnTop = true;
-  else if (layerState === 'neutral') glitchOnTop = (frameCount & 1) === 0;
-  else if (layerState === 'pulse')   glitchOnTop = (Math.floor(frameCount / pulseFrames) & 1) === 0;
-  else /* 'scan' */                  glitchOnTop = false;
+  // ORDER: Trails → Glitch → Luma Key → Scanlines
+  // Glitch runs first. Luma Key then composites glitch output with clean source
+  // based on luminance — bright areas let glitch show, dark areas revert to clean.
+  // Scanlines runs last as a spatial displacement on top of the keyed result.
+  applyTrails();
 
-  // Glitch tiles and the Luma Key gate, split so SMOOSH can blend the raw glitch
-  // tiles with scanlines while Luma Key still runs normally afterward. Each layer
-  // emits at a priority (opacity scale) — 1.0 normally; SMOOSH passes its AMOUNT
-  // as the over-layer's priority.
+  // A/B layer priority mix — 0=glitch dominant, 0.5=equal, 1=scanlines dominant.
+  // Neither effect drops below MIN so both remain readable at all positions.
+  const abMix = parseFloat(els.abMix?.value ?? '0.5');
+  const AB_MIN = 0.35;
+  const glitchPriority = 1.0 - abMix * (1.0 - AB_MIN);
+  const scanPriority   = AB_MIN + abMix * (1.0 - AB_MIN);
+
+  if (els.corruptOn?.checked) {
+    applyGlitch(density,
+      parseInt(els.glitchBaseX?.value ?? '0', 10),
+      parseInt(els.glitchBaseY?.value ?? '0', 10),
+      glitchPriority);
+  }
+
+  // Luma Key — pipeline gate between glitch and scanlines (only when ON)
   const lkMix = parseFloat(els.lumaKeyMix?.value ?? '0');
-  const _gx = parseInt(els.glitchBaseX?.value ?? '0', 10);
-  const _gy = parseInt(els.glitchBaseY?.value ?? '0', 10);
-  const _glitchTilesAt = (p) => {
-    if (els.corruptOn?.checked) applyGlitch(density, _gx, _gy, p);
-  };
-  const _emitLumaKey = () => {
-    if (els.lumaKeyOn?.checked && lkMix > 0) {
-      applyPipelineLumaKey(
-        parseFloat(els.lumaKeyAB?.value ?? '0.5'),
-        lkMix,
-        !!els.lumaKeyInvert?.checked
-      );
-    }
-  };
+  if (els.lumaKeyOn?.checked && lkMix > 0) {
+    applyPipelineLumaKey(
+      parseFloat(els.lumaKeyAB?.value ?? '0.5'),
+      lkMix,
+      !!els.lumaKeyInvert?.checked
+    );
+  }
 
-  // Advance spin accumulator before scanlines runs in EITHER branch.
-  // Left and right are separate toggles; right wins if both on. When neither is
-  // active, keep the accumulator synced to the manual slider so enabling spin
-  // starts from where the slider currently is — no jump.
+  // Advance spin accumulator. Left and right are separate toggles; right wins if both on.
+  // When neither is active, keep accumulator in sync with the manual slider so
+  // enabling spin starts from where the slider currently is — no jump.
   const spinSpeed = parseFloat(els.scanSpinSpeed?.value ?? '1');
   const spinLeft  = !!els.scanSpinLeft?.checked;
   const spinRight = !!els.scanSpinRight?.checked;
@@ -1325,31 +1253,10 @@ function draw() {
   } else {
     _scanSpinAngle = parseFloat(els.scanAngle?.value ?? '0');
   }
-  const _scanAt = (p) => applyScanlines(density, scanAngleArg, p);
+  applyScanlines(density, scanAngleArg, scanPriority);
 
-  // ── Global Mix ─────────────────────────────────────────────────────────────
-  // Blend the clean source video (gCur) over the effects chain via a selectable
-  // blend mode at AMOUNT opacity. POSITION decides WHERE the clean frame is
-  // injected, which sets how much of the chain still processes it — a "surfaced vs
-  // processed" dial:
-  //   BEFORE FB  → before feedback: clean is pulled INTO the feedback recursion, so
-  //                feedback trails the clean video, not just the dirty result.
-  //   AFTER FB   → after feedback: feedback trails the dirty result, clean is laid
-  //                fresh on top and is then warped by flow. (Feedback off ⇒ BEFORE
-  //                and AFTER are identical — nothing sits between them.)
-  //   AFTER FLOW → immediately after the flow stage, WHEREVER FLOW TARGET put it.
-  //                With TARGET=FINAL that is the tail. With TARGET=GLITCH or SCAN
-  //                flow runs up inside the layer block, so the clean frame is
-  //                injected there — upstream of the other layer, luma key and
-  //                feedback, which all then process it. Most processed of the four.
-  //                If flow is off it has nowhere to land and falls back to FINAL.
-  //   FINAL      → absolute end of chain, after everything. Pristine, unprocessed.
-  // Defined here rather than further down because _runFlow can fire mid-chain and
-  // calls this — a const declared later would be in its temporal dead zone. The
-  // closure reads gBuf live, so it targets the current buffer after any flow swap.
-  const gmPos = els.globalMixPos?.value ?? 'after';
-  const _emitGlobalMix = () => {
-    if (!els.globalMixOn?.checked) return;
+  // Global Mix — blend mode composite of base video over effects chain
+  if (els.globalMixOn?.checked) {
     const gmMix  = parseFloat(els.globalMixAmt?.value ?? '0');
     const gCurEl = gCur.elt ?? gCur.drawingContext?.canvas;
     if (gmMix > 0 && gCurEl) {
@@ -1360,96 +1267,7 @@ function draw() {
       ctx.drawImage(gCurEl, 0, 0, gBuf.width, gBuf.height);
       ctx.restore();
     }
-  };
-
-  // ── FLOW TARGET ────────────────────────────────────────────────────────────
-  // Glitch and scanlines composite onto the SAME gBuf, so there is no separate
-  // "glitch layer" to hand to flow — isolating one would need a second full-res
-  // buffer, which the throughput ceiling rules out. What IS free is paint order:
-  // whatever is painted BEFORE flow gets warped, whatever is painted AFTER lands
-  // on top of the warp, crisp. So TARGET picks which layer sits under the warp:
-  //   GLITCH → glitch, flow, then scanlines on top. Glitch is warped; scans crisp.
-  //   SCAN   → scanlines, flow, then glitch on top. Scans are warped; glitch crisp.
-  //   FINAL  → flow at the tail, after feedback. Warps everything (the default).
-  //
-  // TARGET therefore OVERRIDES LAYER PRIORITY while it is set to GLITCH or SCAN.
-  // It has to: "which layer does flow warp" and "which layer is on top" are the
-  // same question when there is one buffer, because the warp lands between them.
-  // The target layer is by definition the bottom one. Two controls cannot own that
-  // ordering at once, so TARGET wins and LAYER PRIORITY greys out.
-  //
-  // The earlier version let LAYER PRIORITY keep the order and merely inserted flow
-  // after the named layer. With the default priority (SCAN on top) the order is
-  // glitch → scan, so TARGET=SCAN fired flow at the END of the block and warped the
-  // glitch as well — the opposite of what the control said. Both non-FINAL options
-  // shredded glitch. Fixed by making the target authoritative.
-  //
-  // Still inherent to the shared buffer: flow warps the target layer AND whatever
-  // has accumulated beneath it, not the layer alone. SMOOSH captures gBuf's context
-  // around its blend and flow swaps gBuf, which would strand that reference, so
-  // SMOOSH forces FINAL. When flow is off, TARGET does nothing and LAYER PRIORITY
-  // resumes control.
-  const flowS      = parseInt(els.flowStrength?.value ?? '0', 10);
-  const flowOn     = !!els.flowOn?.checked && flowS > 0;
-  const flowTarget = els.flowTarget?.value ?? 'final';
-  // TARGET only seizes the paint order when flow will actually run this frame.
-  // Flow off, STRENGTH 0, or SMOOSH on ⇒ fall back to 'final' and let LAYER
-  // PRIORITY drive, so toggling FLOW OFF never silently reorders the layers.
-  const flowRoute = (flowOn && !els.smooshOn?.checked) ? flowTarget : 'final';
-  let _flowDone = false;
-  const _runFlow = () => {
-    if (!flowOn || _flowDone) return;
-    _flowDone = true;
-    // PULSE depth is gated by TRIG: TRIG off = slider is continuous, as before;
-    // TRIG on = slider only engages while FIRE is held or a trigger burst is live.
-    const pulseDepth = parseInt(els.flowPulse?.value ?? '0', 10);
-    const pulseArg   = (!els.flowPulseTrig?.checked || _pulseFireActive()) ? pulseDepth : 0;
-    applyFlowWarp(gBuf, gWarp, flowS,
-      parseInt(els.flowScale?.value  ?? '80', 10),
-      pulseArg,
-      parseFloat(els.flowImpl?.value  ?? '0'),
-      parseFloat(els.flowSpeed?.value ?? '1'),
-      parseFloat(els.flowTurb?.value  ?? '0'),
-      parseFloat(els.flowSwirl?.value ?? '0'),
-      parseFloat(els.flowSpread?.value ?? '1'),
-      parseFloat(els.flowCarry?.value ?? '0'));
-    [gBuf, gWarp] = [gWarp, gBuf];
-    // AFTER FLOW rides with the flow stage wherever TARGET placed it.
-    if (gmPos === 'afterflow') _emitGlobalMix();
-  };
-
-  // SMOOSH — blend glitch tiles and scanlines together with a blend mode instead
-  // of stacking them by paint order. INVERT picks base vs composited-over layer;
-  // AMOUNT is the over-layer's opacity. Cheap — just sets the composite op around
-  // the over-layer's draw, no extra buffer. Supersedes Layer Priority while on;
-  // Luma Key still runs after, normally.
-  if (els.smooshOn?.checked) {
-    const smooshBlend  = els.smooshBlend?.value ?? 'screen';
-    const smooshAmt    = parseFloat(els.smooshAmt?.value ?? '1');
-    const smooshInvert = !!els.smooshInvert?.checked;
-    const sctx     = gBuf.drawingContext;
-    const emitBase = smooshInvert ? _scanAt : _glitchTilesAt;
-    const emitOver = smooshInvert ? _glitchTilesAt : _scanAt;
-    emitBase(1.0);
-    sctx.save();
-    sctx.globalCompositeOperation = smooshBlend;
-    emitOver(smooshAmt);
-    sctx.restore();
-    _emitLumaKey();
-  } else if (flowRoute === 'glitch') {
-    // Glitch under the warp, scanlines crisp on top. Luma key stays where it
-    // always sits — immediately after the glitch stage.
-    _glitchTilesAt(1.0); _runFlow(); _emitLumaKey(); _scanAt(1.0);
-  } else if (flowRoute === 'scan') {
-    // Scanlines under the warp, glitch tiles crisp on top — glitch untouched.
-    _scanAt(1.0); _runFlow(); _glitchTilesAt(1.0); _emitLumaKey();
-  } else if (glitchOnTop) {
-    _scanAt(1.0); _glitchTilesAt(1.0); _emitLumaKey();
-  } else {
-    _glitchTilesAt(1.0); _emitLumaKey(); _scanAt(1.0);
   }
-
-  if (gmPos === 'before') _emitGlobalMix();
 
   const fb = parseFloat(els.feedback?.value ?? '0');
   if (fb > 0) {
@@ -1479,21 +1297,36 @@ function draw() {
     ctx.restore();
   }
 
-  if (gmPos === 'after') _emitGlobalMix();
+  const flowS = parseInt(els.flowStrength?.value ?? '0', 10);
+  if (els.flowOn?.checked && flowS > 0) {
+    applyFlowWarp(gBuf, gWarp, flowS,
+      parseInt(els.flowScale?.value  ?? '80', 10),
+      parseInt(els.flowPulse?.value  ?? '0',  10),
+      parseFloat(els.flowImpl?.value  ?? '0'),
+      parseFloat(els.flowSpeed?.value ?? '1'),
+      parseFloat(els.flowTurb?.value  ?? '0'),
+      parseFloat(els.flowSwirl?.value ?? '0'));
+    [gBuf, gWarp] = [gWarp, gBuf];
+  }
 
-  // FINAL target, or the fallback for any frame a mid-chain target didn't fire
-  // (SMOOSH on, or the target layer's stage never ran). No-op if already done.
-  _runFlow();
+  if (els.symOn?.checked) {
+    applySymmetry(gBuf, gTemp, els.symMode?.value || 'v', parseFloat(els.symPos?.value ?? '0.5'));
+    [gBuf, gTemp] = [gTemp, gBuf];
+  }
 
-  // FINAL is the true tail — nothing runs after this. AFTER FLOW also lands here
-  // when flow never ran this frame (flow off / STRENGTH 0), so the clean frame is
-  // never silently dropped just because its anchor stage is disabled.
-  if (gmPos === 'final' || (gmPos === 'afterflow' && !_flowDone)) _emitGlobalMix();
+  if (els.solarizeOn?.checked) {
+    applySolarize(gBuf,
+      parseFloat(els.solarizeThresh?.value ?? '0.5'),
+      parseFloat(els.solarizeAmt?.value    ?? '1.0'),
+      parseFloat(els.solarizeR?.value      ?? '1.0'),
+      parseFloat(els.solarizeG?.value      ?? '1.0'),
+      parseFloat(els.solarizeB?.value      ?? '1.0'));
+  }
 
   const anyFxActive =
-    els.corruptOn?.checked || els.clusters?.checked  ||
-    flowOn                  ||
-    (els.globalMixOn?.checked && parseFloat(els.globalMixAmt?.value ?? '0') > 0) ||
+    els.corruptOn?.checked || els.trailOn?.checked   ||
+    els.clusters?.checked  || els.flowOn?.checked    ||
+    els.symOn?.checked     || els.solarizeOn?.checked ||
     parseFloat(els.feedback?.value ?? '0') > 0;
 
   if (anyFxActive) {
@@ -1683,109 +1516,4 @@ function startCamera(deviceId) {
     }
     requestAnimationFrame(pump);
   });
-})();
-
-// ─── Performance profiler — toggle with the backtick ` key ────────────────────
-// Measures the REAL per-frame cost of each effect on THIS machine with THIS
-// footage, so optimization is driven by numbers, not guesses. Renders to a fixed
-// DOM overlay (NOT the canvas), so it never reaches Syphon or the mirror feed.
-// While hidden it costs one boolean check per wrapped call — safe to leave in.
-(function () {
-  let visible = false;
-
-  // Top-level draw() calls only — NOT their internal sub-calls (e.g. drawRingRegion
-  // inside trails/glitch) so nothing is double-counted. _pushToRing runs on the
-  // video-decode callback, so its number
-  // is the ring-snapshot cost amortised across render frames.
-  const NAMES = [
-    '_syncGCur', '_pushToRing',
-    'applyGlitch', 'applyPipelineLumaKey', 'applyScanlines',
-    'applyFlowWarp',
-  ];
-  const acc = Object.create(null);
-  NAMES.forEach(function (n) { acc[n] = 0; });
-
-  function wrap(name) {
-    const fn = window[name];
-    if (typeof fn !== 'function' || fn.__huffProf) return;
-    const wrapped = function () {
-      if (!visible) return fn.apply(this, arguments);   // zero measurement cost when hidden
-      const t0 = performance.now();
-      try { return fn.apply(this, arguments); }
-      finally { acc[name] += performance.now() - t0; }
-    };
-    wrapped.__huffProf = true;
-    window[name] = wrapped;
-  }
-  function wrapAll() { NAMES.forEach(wrap); }
-
-  let overlay = null;
-  function ensureOverlay() {
-    if (overlay) return;
-    overlay = document.createElement('div');
-    overlay.style.cssText = [
-      'position:fixed', 'top:8px', 'right:8px', 'z-index:99999',
-      'font:11px/1.45 ui-monospace,Menlo,Consolas,monospace',
-      'color:#0f0', 'background:rgba(0,0,0,0.82)', 'padding:8px 10px',
-      'border:1px solid #0a0', 'border-radius:4px', 'white-space:pre',
-      'pointer-events:none', 'letter-spacing:0.3px'
-    ].join(';');
-    overlay.style.display = 'none';
-    document.body.appendChild(overlay);
-  }
-
-  let frames = 0, lastReport = performance.now();
-  function report() {
-    const now = performance.now();
-    const dt  = now - lastReport;
-    if (dt >= 500 && visible) {
-      const f       = Math.max(1, frames);
-      const frameMs = dt / f;
-      const fps     = 1000 / frameMs;
-      const rows = NAMES.map(function (n) { return [n, acc[n] / f]; })
-                        .filter(function (r) { return r[1] > 0.005; })
-                        .sort(function (a, b) { return b[1] - a[1]; });
-      let measured = 0; rows.forEach(function (r) { measured += r[1]; });
-      const fmt = function (n, ms) {
-        return n.replace(/^apply|^_/, '').padEnd(13) + ms.toFixed(2).padStart(6) + ' ms';
-      };
-      ensureOverlay();
-      overlay.textContent =
-        'HUFF PROFILER  (toggle: ` )\n' +
-        'fps        ' + fps.toFixed(1).padStart(6) + '\n' +
-        'frame      ' + frameMs.toFixed(2).padStart(6) + ' ms\n' +
-        '──────────────────────\n' +
-        (rows.length ? rows.map(function (r) { return fmt(r[0], r[1]); }).join('\n')
-                     : '(no effects active)') + '\n' +
-        '──────────────────────\n' +
-        fmt('effects', measured) + '\n' +
-        fmt('other',   Math.max(0, frameMs - measured));
-    }
-    if (dt >= 500) { NAMES.forEach(function (n) { acc[n] = 0; }); frames = 0; lastReport = now; }
-  }
-
-  function loop() { frames++; report(); requestAnimationFrame(loop); }
-
-  function toggle() {
-    visible = !visible;
-    ensureOverlay();
-    overlay.style.display = visible ? 'block' : 'none';
-    if (!visible) {
-      overlay.textContent = '';
-      NAMES.forEach(function (n) { acc[n] = 0; });
-      frames = 0; lastReport = performance.now();
-    }
-  }
-
-  window.addEventListener('keydown', function (e) {
-    if (e.key !== '`' || e.ctrlKey || e.metaKey || e.altKey) return;
-    const tag = (e.target && e.target.tagName) || '';
-    if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target && e.target.isContentEditable)) return;
-    toggle();
-  });
-
-  if (document.readyState === 'complete') wrapAll();
-  window.addEventListener('load', wrapAll);
-  setTimeout(wrapAll, 0);
-  requestAnimationFrame(loop);
 })();
