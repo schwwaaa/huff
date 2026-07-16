@@ -1351,6 +1351,43 @@
                 </div>
             </div>
 
+            <!-- SMOOSH — blend glitch and scanlines together with a blend mode -->
+            <div class="group">
+                <div class="group-label">Smoosh</div>
+                <div class="group-body">
+                <div class="group-row">
+                    <div class="ctrl"><label>ON</label><input id="smooshOn" type="checkbox"></div>
+                    <div class="ctrl">
+                        <label>BLEND</label>
+                        <select id="smooshBlend" style="font-size:10px;padding:1px 2px">
+                            <option value="screen">SCREEN</option>
+                            <option value="lighter">ADD</option>
+                            <option value="lighten">LIGHTEN</option>
+                            <option value="color-dodge">DODGE</option>
+                            <option value="multiply">MULTIPLY</option>
+                            <option value="darken">DARKEN</option>
+                            <option value="color-burn">BURN</option>
+                            <option value="overlay">OVERLAY</option>
+                            <option value="soft-light">SOFT LIGHT</option>
+                            <option value="hard-light">HARD LIGHT</option>
+                            <option value="difference">DIFFERENCE</option>
+                            <option value="exclusion">EXCLUSION</option>
+                            <option value="hue">HUE</option>
+                            <option value="saturation">SATURATION</option>
+                            <option value="color">COLOR</option>
+                            <option value="luminosity">LUMINOSITY</option>
+                        </select>
+                    </div>
+                    <div class="ctrl">
+                        <label>AMOUNT</label>
+                        <input id="smooshAmt" type="range" min="0" max="1" step="0.01" value="1">
+                        <span class="val" id="smooshAmtVal">1.00</span>
+                    </div>
+                    <div class="ctrl"><label>INVERT</label><input id="smooshInvert" type="checkbox"></div>
+                </div>
+                </div>
+            </div>
+
             <!-- LUMA KEY — gates glitch output by source luminance before scanlines -->
             <div class="group">
                 <div class="group-label">Luma Key</div>
@@ -1429,22 +1466,22 @@
                     </div>
                     <div class="ctrl">
                         <label>FOCUS</label>
-                        <input id="scanFocus" type="range" min="0" max="1" step="0.01" value="0.5">
+                        <input id="scanFocus" type="range" min="0" max="2" step="0.01" value="0.5">
                         <span class="val" id="scanFocusVal">0.50</span>
                     </div>
                     <div class="ctrl">
                         <label>SHIFT</label>
-                        <input id="scanShift" type="range" min="0" max="0.5" step="0.01" value="0.12">
+                        <input id="scanShift" type="range" min="-4" max="4.0" step="0.01" value="0.12">
                         <span class="val" id="scanShiftVal">0.12</span>
                     </div>
                     <div class="ctrl">
                         <label>SKEW</label>
-                        <input id="scanSkew" type="range" min="-1" max="1" step="0.01" value="0">
+                        <input id="scanSkew" type="range" min="-3" max="3" step="0.01" value="0">
                         <span class="val" id="scanSkewVal">0.00</span>
                     </div>
                     <div class="ctrl">
                         <label>DRIFT</label>
-                        <input id="scanDrift" type="range" min="0" max="3" step="0.01" value="0.5">
+                        <input id="scanDrift" type="range" min="0" max="5" step="0.01" value="0.5">
                         <span class="val" id="scanDriftVal">0.50</span>
                     </div>
                     <div class="ctrl">
@@ -1459,7 +1496,7 @@
                     </div>
                     <div class="ctrl">
                         <label>ZOOM</label>
-                        <input id="scanZoom" type="range" min="0.25" max="4" step="0.01" value="1">
+                        <input id="scanZoom" type="range" min="0.25" max="6" step="0.01" value="1">
                         <span class="val" id="scanZoomVal">1.00</span>
                     </div>
                     <div class="ctrl">

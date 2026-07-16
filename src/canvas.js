@@ -232,6 +232,7 @@ const PRESET_IDS = [
   'cluSteer','cluBreathe','cluBounds','cluCohere',
   'layerPriority','layerPulseSpeed',
   'globalMixOn','globalMixBlend','globalMixAmt','globalMixPos',
+  'smooshOn','smooshBlend','smooshAmt','smooshInvert',
 ];
 
 function capturePreset() {
@@ -660,6 +661,7 @@ function hookUI() {
     'layerPriority','layerPulseSpeed','layerPulseSpeedVal',
     'lumaKeyOn','lumaKeyMix','lumaKeyMixVal','lumaKeyAB','lumaKeyABVal','lumaKeyInvert',
     'globalMixOn','globalMixBlend','globalMixAmt','globalMixAmtVal','globalMixPos',
+    'smooshOn','smooshBlend','smooshAmt','smooshAmtVal','smooshInvert',
   ].forEach(k => els[k] = _$(k));
 
   hookFile();
@@ -854,7 +856,7 @@ function hookSliders() {
     'depthScatter','corruptDrift',
     'solarizeThresh','solarizeAmt','solarizeR','solarizeG','solarizeB',
     'cluSpeedVar','cluPulse','cluBreathe',
-    'lumaKeyMix','lumaKeyAB','globalMixAmt','scanAngle','scanSpinSpeed','layerPulseSpeed',
+    'lumaKeyMix','lumaKeyAB','globalMixAmt','smooshAmt','scanAngle','scanSpinSpeed','layerPulseSpeed',
   ];
 
   sliderIds.forEach(id => {
@@ -864,7 +866,7 @@ function hookSliders() {
   // Checkboxes and selects also get snapshotted for undo
   ['corruptOn','clusters','clusterTiles','flowOn','baseOn','symOn','solarizeOn',
    'cluBounds','layerPriority','scanZoomMode','seedOnLoad','bgMode','symMode',
-   'lumaKeyOn','globalMixOn','globalMixBlend','globalMixPos','scanSpinLeft','scanSpinRight'].forEach(id => {
+   'lumaKeyOn','globalMixOn','globalMixBlend','globalMixPos','smooshOn','smooshBlend','smooshInvert','scanSpinLeft','scanSpinRight'].forEach(id => {
     _$(id)?.addEventListener('change', snapshotForUndo);
   });
 
@@ -1006,6 +1008,7 @@ function updateLabels() {
   set(els.layerPulseSpeed,  els.layerPulseSpeedVal,  v => (+v).toFixed(1));
   set(els.lumaKeyAB,        els.lumaKeyABVal,        f2);
   set(els.globalMixAmt,     els.globalMixAmtVal,     f2);
+  set(els.smooshAmt,        els.smooshAmtVal,        f2);
   if (els.baseMix && els.baseMixVal) {
     els.baseMixVal.textContent = f2(els.baseMix.value);
     if (els.baseMix) els.baseMix.disabled = !els.baseOn?.checked;
@@ -1232,21 +1235,17 @@ function draw() {
   else if (layerState === 'pulse')   glitchOnTop = (Math.floor(frameCount / pulseFrames) & 1) === 0;
   else /* 'scan' */                  glitchOnTop = false;
 
-  // Each layer draws at its own opacity — no crossfade scaling.
-  const glitchPriority = 1.0;
-  const scanPriority   = 1.0;
-
-  // Glitch group = glitch tiles + the Luma Key gate. The gate travels WITH glitch
-  // (keying the glitched buffer against clean source) so it stays meaningful at
-  // whichever depth glitch sits — this is what gives Luma Key real reach now.
+  // Glitch tiles and the Luma Key gate, split so SMOOSH can blend the raw glitch
+  // tiles with scanlines while Luma Key still runs normally afterward. Each layer
+  // emits at a priority (opacity scale) — 1.0 normally; SMOOSH passes its AMOUNT
+  // as the over-layer's priority.
   const lkMix = parseFloat(els.lumaKeyMix?.value ?? '0');
-  const _emitGlitch = () => {
-    if (els.corruptOn?.checked) {
-      applyGlitch(density,
-        parseInt(els.glitchBaseX?.value ?? '0', 10),
-        parseInt(els.glitchBaseY?.value ?? '0', 10),
-        glitchPriority);
-    }
+  const _gx = parseInt(els.glitchBaseX?.value ?? '0', 10);
+  const _gy = parseInt(els.glitchBaseY?.value ?? '0', 10);
+  const _glitchTilesAt = (p) => {
+    if (els.corruptOn?.checked) applyGlitch(density, _gx, _gy, p);
+  };
+  const _emitLumaKey = () => {
     if (els.lumaKeyOn?.checked && lkMix > 0) {
       applyPipelineLumaKey(
         parseFloat(els.lumaKeyAB?.value ?? '0.5'),
@@ -1273,12 +1272,31 @@ function draw() {
   } else {
     _scanSpinAngle = parseFloat(els.scanAngle?.value ?? '0');
   }
-  const _emitScanlines = () => applyScanlines(density, scanAngleArg, scanPriority);
+  const _scanAt = (p) => applyScanlines(density, scanAngleArg, p);
 
-  // Emit in paint order: the priority layer is painted LAST (on top). Each draws
-  // at its own opacity — no crossfade.
-  if (glitchOnTop) { _emitScanlines(); _emitGlitch(); }
-  else             { _emitGlitch();    _emitScanlines(); }
+  // SMOOSH — blend glitch tiles and scanlines together with a blend mode instead
+  // of stacking them by paint order. INVERT picks base vs composited-over layer;
+  // AMOUNT is the over-layer's opacity. Cheap — just sets the composite op around
+  // the over-layer's draw, no extra buffer. Supersedes Layer Priority while on;
+  // Luma Key still runs after, normally.
+  if (els.smooshOn?.checked) {
+    const smooshBlend  = els.smooshBlend?.value ?? 'screen';
+    const smooshAmt    = parseFloat(els.smooshAmt?.value ?? '1');
+    const smooshInvert = !!els.smooshInvert?.checked;
+    const sctx     = gBuf.drawingContext;
+    const emitBase = smooshInvert ? _scanAt : _glitchTilesAt;
+    const emitOver = smooshInvert ? _glitchTilesAt : _scanAt;
+    emitBase(1.0);
+    sctx.save();
+    sctx.globalCompositeOperation = smooshBlend;
+    emitOver(smooshAmt);
+    sctx.restore();
+    _emitLumaKey();
+  } else if (glitchOnTop) {
+    _scanAt(1.0); _glitchTilesAt(1.0); _emitLumaKey();
+  } else {
+    _glitchTilesAt(1.0); _emitLumaKey(); _scanAt(1.0);
+  }
 
   // Global Mix — blend the clean source video (gCur) over the effects chain via a
   // selectable blend mode at AMOUNT opacity. POSITION decides where in the chain
