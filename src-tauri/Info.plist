@@ -2,11 +2,9 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <!-- Required for WKWebView getUserMedia in a bundled macOS app -->
   <key>NSCameraUsageDescription</key>
-  <string>Camera access is required for live video input.</string>
-  <!-- Even with audio:false, some WebKit builds behave better if this is present -->
+  <string>Huff uses the selected camera as a native GPU texture source for live visual experiments.</string>
   <key>NSMicrophoneUsageDescription</key>
-  <string>Microphone access is optional; used only if you enable audio.</string>
+  <string>Huff uses the selected audio input for real-time FFT and envelope analysis.</string>
 </dict>
 </plist>

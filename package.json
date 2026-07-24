@@ -1,30 +1,16 @@
 {
-  "name": "huff",
+  "name": "huff-native-wgpu",
+  "version": "0.2.1",
   "private": true,
-  "version": "1.0.2",
   "type": "module",
   "scripts": {
     "dev": "tauri dev",
-    "build": "node scripts/tauri-build.cjs",
-    "tauri": "tauri"
+    "dev:metal": "node scripts/run-backend.mjs metal",
+    "dev:vulkan": "node scripts/run-backend.mjs vulkan",
+    "dev:dx12": "node scripts/run-backend.mjs dx12",
+    "build": "tauri build"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^1.6.3"
-  },
-  "main": "index.js",
-  "dependencies": {
-    "semver": "^7.7.2"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/schwwaaa/huff.git"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "bugs": {
-    "url": "https://github.com/schwwaaa/huff/issues"
-  },
-  "homepage": "https://github.com/schwwaaa/huff#readme",
-  "description": ""
+    "@tauri-apps/cli": "^2.11.0"
+  }
 }

@@ -1,556 +1,660 @@
-// src-tauri/src/main.rs
-// Tauri v1 — Embedded, role-aware WebSocket relay.
-// Text: broadcast to other clients.
-// Handshake: update role only when {"type":"hello","role":"index|canvas"}.
-// Binary: forward only to clients with role == "canvas" (not back to sender).
-
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-// macOS-only Syphon output module
-#[cfg(target_os = "macos")]
-#[macro_use]
-extern crate objc;
+mod audio;
+mod audio_router;
+mod camera;
+mod gesture;
+mod midi;
+mod osc;
+mod parameters;
+mod renderer;
+mod source;
+mod video;
+mod video_audio;
 
-#[cfg(target_os = "macos")]
-mod syphon;
+use audio::{AudioCommand, AudioHandle};
+use audio_router::{AudioRouterCommand, AudioRouterHandle};
+use camera::{CameraDevice, CameraHandle};
+use gesture::{GestureHandle, GesturePoint};
+use midi::{MidiCommand, MidiHandle};
+use osc::{OscCommand, OscHandle};
+use parameters::{ParameterDefinition, ParameterSnapshot, ParameterStore};
+use renderer::{RenderCommand, RendererHandle};
+use source::{ActiveSource, SourceSelector};
+use rosc::{encoder, OscMessage, OscPacket, OscType};
+use serde::Serialize;
+use std::{
+    collections::BTreeMap,
+    net::UdpSocket,
+    path::PathBuf,
+};
+use tauri::Manager;
+use video::VideoHandle;
+use video_audio::{VideoAudioCommand, VideoAudioHandle};
 
-mod spout;
-
-use std::{collections::HashMap, net::SocketAddr, sync::Arc};
-
-use futures_util::{SinkExt, StreamExt};
-use midir::{MidiInput, MidiInputConnection};
-use once_cell::sync::{Lazy, OnceCell};
-use rosc::{OscPacket, OscType};
-use serde::{Deserialize, Serialize};
-use tokio::{net::{TcpListener, UdpSocket}, sync::Mutex};
-use tokio_tungstenite::{accept_async, tungstenite::Message};
-use tauri::{command, Manager, Window};
-
-// ── MIDI event ────────────────────────────────────────────────────────────────
-
-#[derive(Serialize, Clone, Debug)]
-pub struct MidiEvent {
-    /// "note_on" | "note_off" | "cc" | "pitch_bend" | "aftertouch" | "program_change" | "pressure" | "unknown"
-    pub kind: String,
-    /// MIDI channel 1–16
-    pub channel: u8,
-    /// note / CC number
-    pub data1: u8,
-    /// velocity / CC value
-    pub data2: u8,
-    /// data2 / 127.0 — normalised 0.0–1.0
-    pub value: f32,
-    pub raw: Vec<u8>,
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AudioSystemInfo {
+    router: audio_router::AudioRouterInfo,
+    microphone: audio::AudioInfo,
+    video: video_audio::VideoAudioInfo,
 }
 
-type MidiConn = Option<MidiInputConnection<()>>;
-
-static MIDI_CONN: Lazy<std::sync::Mutex<Option<MidiConn>>> =
-    Lazy::new(|| std::sync::Mutex::new(None));
-
-fn parse_midi(bytes: &[u8]) -> MidiEvent {
-    let status   = bytes.get(0).copied().unwrap_or(0);
-    let data1    = bytes.get(1).copied().unwrap_or(0);
-    let data2    = bytes.get(2).copied().unwrap_or(0);
-    let msg_type = status & 0xF0;
-    let channel  = (status & 0x0F) + 1;
-
-    let (kind, d1, d2): (String, u8, u8) = match msg_type {
-        0x90 if data2 > 0 => ("note_on".into(),        data1, data2),
-        0x80 | 0x90       => ("note_off".into(),        data1, data2),
-        0xB0              => ("cc".into(),               data1, data2),
-        0xE0 => {
-            let raw14 = (data2 as u16) << 7 | data1 as u16;
-            let norm  = (raw14 as f32 / 16383.0 * 127.0) as u8;
-            ("pitch_bend".into(), 0, norm)
-        }
-        0xA0 => ("aftertouch".into(),      data1, data2),
-        0xC0 => ("program_change".into(),  data1, 0),
-        0xD0 => ("pressure".into(),        data1, 0),
-        _    => ("unknown".into(),         data1, data2),
-    };
-
-    MidiEvent { kind, channel, data1: d1, data2: d2, value: d2 as f32 / 127.0, raw: bytes.to_vec() }
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AppInfo {
+    build: String,
+    renderer: renderer::RendererInfo,
+    camera: camera::CameraStatus,
+    camera_devices: Vec<CameraDevice>,
+    video: video::VideoStatus,
+    audio: AudioSystemInfo,
+    midi: midi::MidiInfo,
+    osc: osc::OscInfo,
+    gesture: gesture::GestureInfo,
+    parameter_revision: u64,
+    native_milestone: String,
+    active_source: String,
 }
 
-// ── Tauri MIDI commands ───────────────────────────────────────────────────────
-
-/// Returns all MIDI input port names visible to the OS right now.
-/// Creates a fresh MidiInput each call so virtual ports (IAC Bus, loopMIDI,
-/// Max/MSP, Pure Data) that appear after launch are always included.
-#[command]
-fn list_midi_ports() -> Vec<String> {
-    match MidiInput::new("huff-list") {
-        Ok(m) => {
-            let names: Vec<String> = m.ports().iter()
-                .filter_map(|p| m.port_name(p).ok())
-                .collect();
-            println!("[midi] {} port(s): {:?}", names.len(), names);
-            names
-        }
-        Err(e) => { eprintln!("[midi] list error: {e}"); vec![] }
+#[tauri::command]
+fn get_app_info(
+    renderer: tauri::State<'_, RendererHandle>,
+    camera: tauri::State<'_, CameraHandle>,
+    video: tauri::State<'_, VideoHandle>,
+    microphone_audio: tauri::State<'_, AudioHandle>,
+    video_audio: tauri::State<'_, VideoAudioHandle>,
+    audio_router: tauri::State<'_, AudioRouterHandle>,
+    midi: tauri::State<'_, MidiHandle>,
+    osc: tauri::State<'_, OscHandle>,
+    gesture: tauri::State<'_, GestureHandle>,
+    parameters: tauri::State<'_, ParameterStore>,
+    source: tauri::State<'_, SourceSelector>,
+) -> AppInfo {
+    AppInfo {
+        build: "HNW-02.1".into(),
+        renderer: renderer.info(),
+        camera: camera.status(),
+        camera_devices: camera.devices(),
+        video: video.status(),
+        audio: AudioSystemInfo {
+            router: audio_router.info(),
+            microphone: microphone_audio.info(),
+            video: video_audio.info(),
+        },
+        midi: midi.info(),
+        osc: osc.info(),
+        gesture: gesture.info(),
+        parameter_revision: parameters.revision(),
+        native_milestone: "HNW-02.1".into(),
+        active_source: source.get().label().into(),
     }
 }
 
-/// Logs all ports to stdout and returns a debug string — call from JS when
-/// the port list looks wrong.  invoke('debug_midi_ports')
-#[command]
-fn debug_midi_ports() -> String {
-    match MidiInput::new("huff-debug") {
-        Ok(m) => {
-            let ports = m.ports();
-            if ports.is_empty() {
-                let msg = "[midi] No ports. Check Audio MIDI Setup / loopMIDI / device driver.";
-                eprintln!("{msg}"); return msg.to_string();
-            }
-            let lines: Vec<String> = ports.iter().enumerate()
-                .map(|(i, p)| format!("  [{i}] {}", m.port_name(p).unwrap_or_else(|_| "<?>".into())))
-                .collect();
-            let out = format!("[midi] {} port(s):\n{}", ports.len(), lines.join("\n"));
-            println!("{out}"); out
-        }
-        Err(e) => format!("[midi] MidiInput::new failed: {e}")
-    }
+#[tauri::command]
+fn get_parameter_registry() -> Vec<ParameterDefinition> {
+    parameters::definitions().to_vec()
 }
 
-/// Connect by name (exact match first, then case-insensitive substring).
-/// invoke('connect_midi_port_by_name', { portName: "nanoKONTROL2" })
-#[command]
-fn connect_midi_port_by_name(port_name: String, window: Window) -> Result<(), String> {
-    { let mut g = MIDI_CONN.lock().unwrap(); *g = None; } // drop existing connection
+#[tauri::command]
+fn get_parameter_state(state: tauri::State<'_, ParameterStore>) -> ParameterSnapshot {
+    state.snapshot()
+}
 
-    let midi_in = MidiInput::new("huff-input").map_err(|e| e.to_string())?;
-    let ports   = midi_in.ports();
+#[tauri::command]
+fn set_parameter(
+    state: tauri::State<'_, ParameterStore>,
+    id: String,
+    value: serde_json::Value,
+) -> Result<u64, String> {
+    state.set(&id, value)
+}
 
-    let port = ports.iter()
-        .find(|p| midi_in.port_name(p).ok().as_deref() == Some(&port_name))
-        .or_else(|| {
-            let lower = port_name.to_lowercase();
-            ports.iter().find(|p| {
-                midi_in.port_name(p).ok()
-                    .map(|n| n.to_lowercase().contains(&lower))
-                    .unwrap_or(false)
-            })
-        })
-        .ok_or_else(|| {
-            let avail: Vec<String> = ports.iter()
-                .filter_map(|p| midi_in.port_name(p).ok()).collect();
-            format!("Port '{port_name}' not found. Available: {avail:?}")
-        })?;
+#[tauri::command]
+fn set_parameter_batch(
+    state: tauri::State<'_, ParameterStore>,
+    values: BTreeMap<String, serde_json::Value>,
+) -> Result<u64, String> {
+    state.set_many(values)
+}
 
-    let resolved = midi_in.port_name(port).unwrap_or_else(|_| port_name.clone());
-    println!("[midi] connecting → {resolved}");
+#[tauri::command]
+fn reset_parameters(
+    state: tauri::State<'_, ParameterStore>,
+    renderer: tauri::State<'_, RendererHandle>,
+) -> u64 {
+    renderer.send(RenderCommand::ClearFeedback);
+    state.reset()
+}
 
-    let win = Arc::new(window);
-    let conn = midi_in.connect(port, "huff-conn", move |_ts, bytes, _| {
-        let ev = parse_midi(bytes);
-        if let Err(e) = win.emit("midi-event", &ev) {
-            eprintln!("[midi] emit error: {e}");
-        }
-    }, ()).map_err(|e| e.to_string())?;
+#[tauri::command]
+fn clear_native_buffers(renderer: tauri::State<'_, RendererHandle>) {
+    renderer.send(RenderCommand::ClearFeedback);
+}
 
-    *MIDI_CONN.lock().unwrap() = Some(Some(conn));
-    println!("[midi] connected to {resolved}");
+#[tauri::command]
+fn focus_renderer(app: tauri::AppHandle) -> Result<(), String> {
+    let window = app
+        .get_window("renderer")
+        .ok_or_else(|| "renderer window unavailable".to_string())?;
+    window.show().map_err(|error| error.to_string())?;
+    window.unminimize().map_err(|error| error.to_string())?;
+    window.set_focus().map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn refresh_cameras(state: tauri::State<'_, CameraHandle>) {
+    state.refresh();
+}
+
+#[tauri::command]
+fn start_camera(
+    state: tauri::State<'_, CameraHandle>,
+    video: tauri::State<'_, VideoHandle>,
+    video_audio: tauri::State<'_, VideoAudioHandle>,
+    source: tauri::State<'_, SourceSelector>,
+    slot: usize,
+    profile: String,
+) -> Result<(), String> {
+    if !matches!(profile.as_str(), "lowLatency" | "balanced" | "speed" | "quality") {
+        return Err("profile must be lowLatency, balanced, speed, or quality".into());
+    }
+    // Camera and file playback are mutually exclusive authoritative sources.
+    // Keep the loaded file and position, but stop its decoder/audio while the
+    // camera is active so no hidden transport continues in the background.
+    video_audio.send(VideoAudioCommand::Pause);
+    video.pause();
+    source.set(ActiveSource::Camera);
+    state.start_camera(slot, profile);
     Ok(())
 }
 
-/// Legacy index-based connect — kept for compatibility.
-#[command]
-fn connect_midi_port(port_index: usize, window: Window) -> Result<(), String> {
-    let midi_in = MidiInput::new("huff-list").map_err(|e| e.to_string())?;
-    let name = midi_in.ports().get(port_index)
-        .and_then(|p| midi_in.port_name(p).ok())
-        .ok_or_else(|| format!("port {port_index} out of range"))?;
-    connect_midi_port_by_name(name, window)
-}
-
-#[command]
-fn disconnect_midi() {
-    *MIDI_CONN.lock().unwrap() = None;
-    println!("[midi] disconnected");
-}
-
-// ── OSC ───────────────────────────────────────────────────────────────────────
-
-const OSC_PORT: u16 = 9000;
-
-/// Sent to JS as the "osc-message" event payload.
-#[derive(Serialize, Clone, Debug)]
-pub struct OscEvent {
-    /// OSC address string e.g. "/huff/feedback", "/1/fader1"
-    pub addr: String,
-    /// First numeric arg normalised — float as-is, int divided by 127
-    pub value: f32,
-    /// All args serialised as strings for the monitor display
-    pub args: Vec<String>,
-}
-
-static OSC_SHUTDOWN: OnceCell<tokio::sync::oneshot::Sender<()>> = OnceCell::new();
-
-/// Converts an OscPacket recursively (handles bundles) and emits each message.
-fn dispatch_osc(packet: OscPacket, app: &tauri::AppHandle) {
-    match packet {
-        OscPacket::Message(msg) => {
-            let value = msg.args.iter().find_map(|a| match a {
-                OscType::Float(f)  => Some(*f),
-                OscType::Int(i)    => Some(*i as f32 / 127.0),
-                OscType::Double(d) => Some(*d as f32),
-                _                  => None,
-            }).unwrap_or(0.0);
-
-            let args: Vec<String> = msg.args.iter().map(|a| match a {
-                OscType::Float(f)  => format!("f:{f:.3}"),
-                OscType::Int(i)    => format!("i:{i}"),
-                OscType::Double(d) => format!("d:{d:.3}"),
-                OscType::String(s) => format!("s:{s}"),
-                OscType::Bool(b)   => format!("b:{b}"),
-                _                  => "?".into(),
-            }).collect();
-
-            let event = OscEvent { addr: msg.addr, value, args };
-            app.emit_all("osc-message", &event).ok();
-        }
-        OscPacket::Bundle(bundle) => {
-            for p in bundle.content { dispatch_osc(p, app); }
-        }
-    }
-}
-
-/// Async UDP listener — runs for the lifetime of the app.
-async fn run_osc_listener(
-    app: tauri::AppHandle,
-    mut shutdown_rx: tokio::sync::oneshot::Receiver<()>,
+#[tauri::command]
+fn stop_camera(
+    state: tauri::State<'_, CameraHandle>,
+    video: tauri::State<'_, VideoHandle>,
+    source: tauri::State<'_, SourceSelector>,
 ) {
-    let addr = format!("0.0.0.0:{OSC_PORT}");
-    let socket = match UdpSocket::bind(&addr).await {
-        Ok(s)  => s,
-        Err(e) => { eprintln!("[osc] bind failed on {addr}: {e}"); return; }
-    };
-    println!("[osc] listening on {addr}");
-    app.emit_all("osc-port", OSC_PORT).ok();
-
-    let mut buf = [0u8; 4096];
-    loop {
-        tokio::select! {
-            _ = &mut shutdown_rx => {
-                println!("[osc] listener stopped");
-                break;
-            }
-            result = socket.recv_from(&mut buf) => {
-                match result {
-                    Ok((size, _from)) => {
-                        match rosc::decoder::decode_udp(&buf[..size]) {
-                            Ok((_, packet)) => dispatch_osc(packet, &app),
-                            Err(e)          => eprintln!("[osc] decode error: {e}"),
-                        }
-                    }
-                    Err(e) => eprintln!("[osc] recv error: {e}"),
-                }
-            }
-        }
-    }
-}
-
-#[command]
-fn get_osc_port() -> u16 { OSC_PORT }
-
-#[derive(Clone, Debug)]
-struct Client {
-  role: String, // "index" | "canvas" | "unknown"
-  tx: tokio::sync::mpsc::Sender<Message>,
-}
-
-type ClientMap = Arc<Mutex<HashMap<SocketAddr, Client>>>;
-
-static CLIENTS: Lazy<ClientMap> =
-  Lazy::new(|| Arc::new(Mutex::new(HashMap::new())));
-
-#[derive(Deserialize, Debug)]
-struct HelloMsg {
-  #[serde(default)]
-  r#type: String,
-  #[serde(default)]
-  role: String,
-}
-
-const PORT: u16 = 8787;
-// Keep at most two pending messages per socket. Binary mirror frames use
-// try_send and are dropped when the client is behind, so latency and memory
-// remain bounded instead of growing for the lifetime of a slow connection.
-const CLIENT_QUEUE_CAPACITY: usize = 2;
-
-async fn run_listener(bind_addr: String, clients: ClientMap) -> Result<(), String> {
-  let listener = TcpListener::bind(&bind_addr).await.map_err(|e| e.to_string())?;
-  println!("[huff] listening on ws://{bind_addr}");
-  loop {
-    let (stream, peer_addr) = listener.accept().await.map_err(|e| e.to_string())?;
-    let clients = Arc::clone(&clients);
-    tokio::spawn(async move {
-      if let Err(e) = handle_ws(stream, peer_addr, clients).await {
-        eprintln!("[huff] client {peer_addr} error: {e}");
-      }
+    state.stop_camera();
+    source.set(if video.status().loaded {
+        ActiveSource::Video
+    } else {
+        ActiveSource::None
     });
-  }
 }
 
-async fn broadcast_text(clients: &ClientMap, sender: SocketAddr, txt: String) {
-  let targets: Vec<tokio::sync::mpsc::Sender<Message>> = {
-    let map = clients.lock().await;
-    map.iter()
-      .filter(|(addr, _)| **addr != sender)
-      .map(|(_, client)| client.tx.clone())
-      .collect()
-  };
-
-  for tx in targets {
-    // Text carries control state, so preserve ordering instead of dropping it.
-    // The map lock is released before awaiting any individual socket.
-    let _ = tx.send(Message::Text(txt.clone())).await;
-  }
-}
-
-async fn broadcast_binary(
-  clients: &ClientMap,
-  sender: SocketAddr,
-  bin: Vec<u8>,
-) -> (usize, usize) {
-  let targets: Vec<tokio::sync::mpsc::Sender<Message>> = {
-    let map = clients.lock().await;
-    map.iter()
-      .filter(|(addr, client)| **addr != sender && client.role == "canvas")
-      .map(|(_, client)| client.tx.clone())
-      .collect()
-  };
-
-  let mut sent = 0usize;
-  let mut dropped = 0usize;
-  for tx in targets {
-    match tx.try_send(Message::Binary(bin.clone())) {
-      Ok(()) => sent += 1,
-      Err(tokio::sync::mpsc::error::TrySendError::Full(_)) => dropped += 1,
-      Err(tokio::sync::mpsc::error::TrySendError::Closed(_)) => {}
+#[tauri::command]
+fn open_video_file(
+    camera: tauri::State<'_, CameraHandle>,
+    video: tauri::State<'_, VideoHandle>,
+    video_audio: tauri::State<'_, VideoAudioHandle>,
+    source: tauri::State<'_, SourceSelector>,
+) -> Result<Option<String>, String> {
+    let path = rfd::FileDialog::new()
+        .add_filter(
+            "Video",
+            &["mp4", "mov", "m4v", "mkv", "webm", "avi", "mpeg", "mpg", "ts"],
+        )
+        .pick_file();
+    if let Some(path) = path {
+        let display = path.display().to_string();
+        // Select video immediately instead of waiting for the asynchronous
+        // camera stop command or the first decoded file frame.
+        source.set(ActiveSource::Video);
+        camera.stop_camera();
+        video_audio.send(VideoAudioCommand::Open(path.clone()));
+        video.open(path);
+        Ok(Some(display))
+    } else {
+        Ok(None)
     }
-  }
-  (sent, dropped)
 }
 
-async fn handle_ws(
-  stream: tokio::net::TcpStream,
-  peer_addr: SocketAddr,
-  clients: ClientMap,
+#[tauri::command]
+fn open_video_path(
+    camera: tauri::State<'_, CameraHandle>,
+    video: tauri::State<'_, VideoHandle>,
+    video_audio: tauri::State<'_, VideoAudioHandle>,
+    source: tauri::State<'_, SourceSelector>,
+    path: String,
 ) -> Result<(), String> {
-  let ws_stream = accept_async(stream).await.map_err(|e| e.to_string())?;
-  let (mut ws_tx, mut ws_rx) = ws_stream.split();
-  let (tx, mut rx) = tokio::sync::mpsc::channel::<Message>(CLIENT_QUEUE_CAPACITY);
-
-  {
-    let mut map = clients.lock().await;
-    map.insert(peer_addr, Client { role: "unknown".to_string(), tx: tx.clone() });
-  }
-
-  // writer task: drains the channel and sends to the socket
-  let writer = tokio::spawn(async move {
-    while let Some(msg) = rx.recv().await {
-      if ws_tx.send(msg).await.is_err() {
-        break;
-      }
+    let path = PathBuf::from(path);
+    if !path.is_file() {
+        return Err("selected path is not a file".into());
     }
-  });
-
-  // reader task: receives from socket and routes messages
-  let clients_r = Arc::clone(&clients);
-  let reader = tokio::spawn(async move {
-    while let Some(msg) = ws_rx.next().await {
-      match msg {
-        Ok(Message::Text(txt)) => {
-          // Update role only on an explicit hello
-          if let Ok(parsed) = serde_json::from_str::<HelloMsg>(&txt) {
-            if parsed.r#type == "hello" && !parsed.role.is_empty() {
-              let mut map = clients_r.lock().await;
-              if let Some(c) = map.get_mut(&peer_addr) {
-                c.role = parsed.role.clone();
-                println!("[huff] {peer_addr} set role = {}", c.role);
-              }
-            }
-          }
-          broadcast_text(&clients_r, peer_addr, txt).await;
-        }
-
-        Ok(Message::Binary(bin)) => {
-          // macOS: intercept Syphon frames before relaying
-          #[cfg(target_os = "macos")]
-          if bin.starts_with(b"HUFFSYPH") {
-            syphon::submit_frame(bin);
-            // Do not relay native-output frames to the canvas window. The
-            // latest-frame worker owns publication and replaces stale frames.
-          } else {
-            let (sent, dropped) = broadcast_binary(&clients_r, peer_addr, bin).await;
-            if sent == 0 && dropped == 0 {
-              println!("[huff] binary from {peer_addr}, but no canvas clients yet");
-            }
-          }
-
-          // Windows: intercept Spout frames before relaying
-          #[cfg(target_os = "windows")]
-          if bin.starts_with(b"HUFFSPOUT") {
-            spout::submit_frame(bin);
-            // Do not relay native-output frames to the canvas window.
-          } else {
-            let (sent, dropped) = broadcast_binary(&clients_r, peer_addr, bin).await;
-            if sent == 0 && dropped == 0 {
-              println!("[huff] binary from {peer_addr}, but no canvas clients yet");
-            }
-          }
-
-          #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-          {
-            let (sent, dropped) = broadcast_binary(&clients_r, peer_addr, bin).await;
-            if sent == 0 && dropped == 0 {
-              println!("[huff] binary from {peer_addr}, but no canvas clients yet");
-            }
-          }
-        }
-
-        Ok(Message::Ping(p)) => {
-          // Reply via channel so the writer handles it without an extra lock
-          let _ = tx.send(Message::Pong(p)).await;
-        }
-        Ok(Message::Close(_)) => break,
-        Ok(_) => {}
-        Err(e) => {
-          eprintln!("[huff] recv error from {peer_addr}: {e}");
-          break;
-        }
-      }
-    }
-
-    clients_r.lock().await.remove(&peer_addr);
-    println!("[huff] {peer_addr} disconnected");
-    Ok::<(), ()>(())
-  });
-
-  let _ = tokio::join!(writer, reader);
-  Ok(())
+    source.set(ActiveSource::Video);
+    camera.stop_camera();
+    video_audio.send(VideoAudioCommand::Open(path.clone()));
+    video.open(path);
+    Ok(())
 }
 
-// ── Syphon commands (macOS only) ──────────────────────────────────────────────
+#[tauri::command]
+fn play_video(
+    camera: tauri::State<'_, CameraHandle>,
+    video: tauri::State<'_, VideoHandle>,
+    video_audio: tauri::State<'_, VideoAudioHandle>,
+    source: tauri::State<'_, SourceSelector>,
+) {
+    camera.stop_camera();
+    source.set(ActiveSource::Video);
+    let position = video.status().position_seconds;
+    video_audio.send(VideoAudioCommand::Play(position));
+    video.play();
+}
 
-#[command]
-fn start_syphon(width: u32, height: u32) -> Result<String, String> {
-    #[cfg(target_os = "macos")]
-    {
-        syphon::start(width, height)?;
-        Ok(format!("Syphon server started — {}×{}", width, height))
+#[tauri::command]
+fn pause_video(
+    video: tauri::State<'_, VideoHandle>,
+    video_audio: tauri::State<'_, VideoAudioHandle>,
+) {
+    video_audio.send(VideoAudioCommand::Pause);
+    video.pause();
+}
+
+#[tauri::command]
+fn stop_video(
+    video: tauri::State<'_, VideoHandle>,
+    video_audio: tauri::State<'_, VideoAudioHandle>,
+) {
+    video_audio.send(VideoAudioCommand::Stop);
+    video.stop();
+}
+
+#[tauri::command]
+fn seek_video(
+    video: tauri::State<'_, VideoHandle>,
+    video_audio: tauri::State<'_, VideoAudioHandle>,
+    seconds: f64,
+) -> Result<(), String> {
+    if !seconds.is_finite() {
+        return Err("seek position must be finite".into());
     }
-    #[cfg(not(target_os = "macos"))]
-    {
-        let _ = (width, height);
-        Err("Syphon is macOS only".into())
+    let status = video.status();
+    let target = seconds.clamp(0.0, status.duration_seconds.max(0.0));
+    video_audio.send(VideoAudioCommand::Seek {
+        seconds: target,
+        playing: status.playing,
+    });
+    video.seek(target);
+    Ok(())
+}
+
+#[tauri::command]
+fn step_video(
+    video: tauri::State<'_, VideoHandle>,
+    video_audio: tauri::State<'_, VideoAudioHandle>,
+    direction: i32,
+) {
+    let status = video.status();
+    let frame_seconds = 1.0 / status.source_fps.max(1.0);
+    let target = (status.position_seconds + frame_seconds * direction.signum() as f64)
+        .clamp(0.0, status.duration_seconds.max(0.0));
+    video_audio.send(VideoAudioCommand::Seek {
+        seconds: target,
+        playing: false,
+    });
+    video.step(direction);
+}
+
+#[tauri::command]
+fn set_video_rate(
+    video: tauri::State<'_, VideoHandle>,
+    video_audio: tauri::State<'_, VideoAudioHandle>,
+    rate: f64,
+) -> Result<(), String> {
+    if !rate.is_finite() {
+        return Err("playback rate must be finite".into());
     }
+    let status = video.status();
+    let clamped = rate.clamp(0.25, 4.0);
+    video_audio.send(VideoAudioCommand::SetRate {
+        rate: clamped,
+        position: status.position_seconds,
+        playing: status.playing,
+    });
+    video.set_rate(clamped);
+    Ok(())
 }
 
-#[command]
-fn stop_syphon() -> String {
-    #[cfg(target_os = "macos")]
-    { syphon::stop(); "Syphon server stopped".into() }
-    #[cfg(not(target_os = "macos"))]
-    { "Syphon is macOS only".into() }
-}
-
-#[command]
-fn syphon_status() -> String {
-    #[cfg(target_os = "macos")]
-    { syphon::status() }
-    #[cfg(not(target_os = "macos"))]
-    { "unavailable (macOS only)".into() }
-}
-
-// ── Spout commands (Windows only) ─────────────────────────────────────────────
-
-#[command]
-fn start_spout(width: u32, height: u32) -> Result<String, String> {
-    #[cfg(target_os = "windows")]
-    {
-        spout::start(width, height)?;
-        Ok(format!("Spout sender started — {}×{}", width, height))
+#[tauri::command]
+fn set_video_decode_mode(
+    video: tauri::State<'_, VideoHandle>,
+    mode: String,
+) -> Result<(), String> {
+    if !matches!(mode.as_str(), "software" | "auto") {
+        return Err("decode mode must be software or auto".into());
     }
-    #[cfg(not(target_os = "windows"))]
-    {
-        let _ = (width, height);
-        Err("Spout is Windows-only".into())
+    video.set_decode_mode(mode);
+    Ok(())
+}
+
+#[tauri::command]
+fn set_video_loop(
+    video: tauri::State<'_, VideoHandle>,
+    video_audio: tauri::State<'_, VideoAudioHandle>,
+    looping: bool,
+) {
+    video_audio.send(VideoAudioCommand::SetLoop(looping));
+    video.set_loop(looping);
+}
+
+#[tauri::command]
+fn refresh_audio_devices(state: tauri::State<'_, AudioHandle>) {
+    state.send(AudioCommand::RefreshDevices);
+}
+
+#[tauri::command]
+fn select_audio_device(state: tauri::State<'_, AudioHandle>, name: String) {
+    state.send(AudioCommand::SelectDevice(name));
+}
+
+#[tauri::command]
+fn start_audio(state: tauri::State<'_, AudioHandle>) {
+    state.send(AudioCommand::Start);
+}
+
+#[tauri::command]
+fn stop_audio(state: tauri::State<'_, AudioHandle>) {
+    state.send(AudioCommand::Stop);
+}
+
+#[tauri::command]
+fn set_audio_fft_source(
+    state: tauri::State<'_, AudioRouterHandle>,
+    source: String,
+) -> Result<(), String> {
+    if !matches!(source.as_str(), "microphone" | "video" | "mix") {
+        return Err("audio FFT source must be microphone, video, or mix".into());
     }
+    state.send(AudioRouterCommand::SetSource(source));
+    Ok(())
 }
 
-#[command]
-fn stop_spout() -> String {
-    #[cfg(target_os = "windows")]
-    { spout::stop(); "Spout sender stopped".into() }
-    #[cfg(not(target_os = "windows"))]
-    { "Spout is Windows-only".into() }
+#[tauri::command]
+fn set_video_audio_preview(
+    state: tauri::State<'_, VideoAudioHandle>,
+    enabled: bool,
+) {
+    state.send(VideoAudioCommand::SetPreview(enabled));
 }
 
-#[command]
-fn spout_status() -> String {
-    #[cfg(target_os = "windows")]
-    { spout::status() }
-    #[cfg(not(target_os = "windows"))]
-    { "unavailable (Windows only)".into() }
+#[tauri::command]
+fn set_video_audio_volume(
+    state: tauri::State<'_, VideoAudioHandle>,
+    volume: f32,
+) -> Result<(), String> {
+    if !volume.is_finite() {
+        return Err("volume must be finite".into());
+    }
+    state.send(VideoAudioCommand::SetVolume(volume.clamp(0.0, 1.0)));
+    Ok(())
+}
+
+#[tauri::command]
+fn refresh_midi_ports(state: tauri::State<'_, MidiHandle>) {
+    state.send(MidiCommand::RefreshPorts);
+}
+
+#[tauri::command]
+fn connect_midi(state: tauri::State<'_, MidiHandle>, name: String) -> Result<(), String> {
+    if name.trim().is_empty() {
+        return Err("select a MIDI input".into());
+    }
+    state.send(MidiCommand::Connect(name));
+    state.send(MidiCommand::LoadStarterMappings);
+    Ok(())
+}
+
+#[tauri::command]
+fn disconnect_midi(state: tauri::State<'_, MidiHandle>) {
+    state.send(MidiCommand::Disconnect);
+}
+
+#[tauri::command]
+fn bind_osc(
+    state: tauri::State<'_, OscHandle>,
+    host: String,
+    port: u16,
+) -> Result<(), String> {
+    if port == 0 {
+        return Err("OSC port must be between 1 and 65535".into());
+    }
+    state.send(OscCommand::Bind(host, port));
+    state.send(OscCommand::LoadStarterMappings);
+    Ok(())
+}
+
+#[tauri::command]
+fn stop_osc(state: tauri::State<'_, OscHandle>) {
+    state.send(OscCommand::Stop);
+}
+
+#[tauri::command]
+fn send_osc_test(host: String, port: u16, address: String, value: f32) -> Result<(), String> {
+    if port == 0 || !value.is_finite() {
+        return Err("invalid OSC test arguments".into());
+    }
+    let address = if address.trim().starts_with('/') {
+        address.trim().to_string()
+    } else {
+        format!("/{}", address.trim())
+    };
+    let packet = OscPacket::Message(OscMessage {
+        addr: address,
+        args: vec![OscType::Float(value)],
+    });
+    let bytes = encoder::encode(&packet).map_err(|error| error.to_string())?;
+    let socket = UdpSocket::bind("0.0.0.0:0").map_err(|error| error.to_string())?;
+    socket
+        .send_to(&bytes, format!("{}:{}", host.trim(), port))
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn push_gesture_point(state: tauri::State<'_, GestureHandle>, point: GesturePoint) {
+    state.push(point);
+}
+
+#[tauri::command]
+fn clear_gesture(state: tauri::State<'_, GestureHandle>) {
+    state.clear();
+}
+
+#[tauri::command]
+fn set_compositor_param(
+    state: tauri::State<'_, ParameterStore>,
+    name: String,
+    value: f32,
+) -> Result<u64, String> {
+    let canonical = match name.as_str() {
+        "sourceMix" => "source.base_mix",
+        "feedback" => "feedback.persistence",
+        "exposure" => "color.brightness",
+        "contrast" => "color.contrast",
+        _ => return Err(format!("legacy compositor parameter is not part of Huff Milestone 02: {name}")),
+    };
+    state.set(canonical, serde_json::json!(value))
+}
+
+#[tauri::command]
+fn set_compositor_mode(mode: String) -> Result<(), String> {
+    let _ = mode;
+    Ok(())
+}
+
+#[tauri::command]
+fn reset_compositor(
+    state: tauri::State<'_, ParameterStore>,
+    renderer: tauri::State<'_, RendererHandle>,
+) {
+    renderer.send(RenderCommand::ClearFeedback);
+    state.reset();
+}
+
+#[tauri::command]
+fn toggle_renderer_fullscreen(app: tauri::AppHandle) -> Result<bool, String> {
+    let window = app
+        .get_window("renderer")
+        .ok_or_else(|| "renderer window unavailable".to_string())?;
+    let next = !window.is_fullscreen().map_err(|error| error.to_string())?;
+    window
+        .set_fullscreen(next)
+        .map_err(|error| error.to_string())?;
+    Ok(next)
 }
 
 fn main() {
-tauri::Builder::default()
-  .invoke_handler(tauri::generate_handler![
-      list_midi_ports,
-      debug_midi_ports,
-      connect_midi_port,
-      connect_midi_port_by_name,
-      disconnect_midi,
-      get_osc_port,
-      start_syphon,
-      stop_syphon,
-      syphon_status,
-      start_spout,
-      stop_spout,
-      spout_status,
-  ])
-  .setup(|app| {
-      const PORT: u16 = 8787;
+    tauri::Builder::default()
+        .setup(|app| {
+            let camera = camera::start().map_err(std::io::Error::other)?;
+            let video = video::start().map_err(std::io::Error::other)?;
+            let microphone_audio = audio::start().map_err(std::io::Error::other)?;
+            let video_audio = video_audio::start().map_err(std::io::Error::other)?;
+            let audio_router = audio_router::start(
+                microphone_audio.snapshot(),
+                video_audio.snapshot(),
+            )
+            .map_err(std::io::Error::other)?;
+            let midi = midi::start().map_err(std::io::Error::other)?;
+            let osc = osc::start().map_err(std::io::Error::other)?;
+            let gesture = GestureHandle::new();
+            let parameters = ParameterStore::new();
+            let source = SourceSelector::new(ActiveSource::Camera);
 
-      println!("[huff] setup: starting listeners on 127.0.0.1:{PORT} and [::1]:{PORT}");
+            osc.send(OscCommand::LoadStarterMappings);
+            osc.send(OscCommand::Bind("0.0.0.0".into(), 9000));
+            midi.send(MidiCommand::LoadStarterMappings);
 
-      #[cfg(target_os = "macos")]
-      syphon::start_worker();
-      #[cfg(target_os = "windows")]
-      spout::start_worker();
+            let renderer_window = tauri::window::WindowBuilder::new(app, "renderer")
+                .title("huff · native wgpu output")
+                .inner_size(1280.0, 720.0)
+                .min_inner_size(480.0, 270.0)
+                .resizable(true)
+                .build()?;
 
-      let clients_v4 = Arc::clone(&CLIENTS);
-      let clients_v6 = Arc::clone(&CLIENTS);
+            let renderer = renderer::start(
+                renderer_window.clone(),
+                renderer::InputSources {
+                    camera: camera.frame_source(),
+                    video: video.frame_source(),
+                    audio: audio_router.snapshot(),
+                    midi: midi.snapshot(),
+                    osc: osc.snapshot(),
+                    gesture: gesture.snapshot(),
+                    source: source.clone(),
+                },
+                parameters.clone(),
+            )
+            .map_err(std::io::Error::other)?;
 
-      tauri::async_runtime::spawn(async move {
-          let addr = format!("127.0.0.1:{PORT}");
-          println!("[huff] trying IPv4 bind on {}", addr);
-          if let Err(e) = run_listener(addr, clients_v4).await {
-              eprintln!("[huff] IPv4 listener error: {e}");
-          }
-      });
+            let resize = renderer.clone();
+            renderer_window.on_window_event(move |event| match event {
+                tauri::WindowEvent::Resized(size) => {
+                    resize.send(RenderCommand::Resize(size.width, size.height))
+                }
+                tauri::WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
+                    resize.send(RenderCommand::Resize(
+                        new_inner_size.width,
+                        new_inner_size.height,
+                    ))
+                }
+                tauri::WindowEvent::Focused(focused) => {
+                    if *focused {
+                        resize.send(RenderCommand::RecoverSurface);
+                    }
+                }
+                tauri::WindowEvent::Destroyed => resize.send(RenderCommand::Shutdown),
+                _ => {}
+            });
 
-      tauri::async_runtime::spawn(async move {
-          let addr = format!("[::1]:{PORT}");
-          println!("[huff] trying IPv6 bind on {}", addr);
-          if let Err(e) = run_listener(addr, clients_v6).await {
-              eprintln!("[huff] IPv6 listener error: {e}");
-          }
-      });
+            if let Some(controls) = app.get_webview_window("controls") {
+                let app_handle = app.handle().clone();
+                let close_renderer = renderer.clone();
+                let close_camera = camera.clone();
+                let close_video = video.clone();
+                let close_microphone_audio = microphone_audio.clone();
+                let close_video_audio = video_audio.clone();
+                let close_audio_router = audio_router.clone();
+                let close_midi = midi.clone();
+                let close_osc = osc.clone();
+                controls.on_window_event(move |event| match event {
+                    tauri::WindowEvent::Focused(focused) => {
+                        if *focused {
+                            close_renderer.send(RenderCommand::RecoverSurface);
+                        }
+                    }
+                    tauri::WindowEvent::CloseRequested { .. } => {
+                        close_renderer.send(RenderCommand::Shutdown);
+                        close_camera.shutdown();
+                        close_video.shutdown();
+                        close_microphone_audio.send(AudioCommand::Shutdown);
+                        close_video_audio.send(VideoAudioCommand::Shutdown);
+                        close_audio_router.send(AudioRouterCommand::Shutdown);
+                        close_midi.send(MidiCommand::Shutdown);
+                        close_osc.send(OscCommand::Shutdown);
+                        app_handle.exit(0);
+                    }
+                    _ => {}
+                });
+            }
 
-      // ── OSC UDP listener ────────────────────────────────────────────────
-      let (tx, rx) = tokio::sync::oneshot::channel::<()>();
-      OSC_SHUTDOWN.set(tx).ok();
-      let app_handle = app.handle();
-      tauri::async_runtime::spawn(run_osc_listener(app_handle, rx));
-
-      Ok(())
-  })
-  .run(tauri::generate_context!())
-  .expect("error while running tauri app");
+            app.manage(camera);
+            app.manage(video);
+            app.manage(microphone_audio);
+            app.manage(video_audio);
+            app.manage(audio_router);
+            app.manage(midi);
+            app.manage(osc);
+            app.manage(gesture);
+            app.manage(parameters);
+            app.manage(source);
+            app.manage(renderer);
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            get_app_info,
+            get_parameter_registry,
+            get_parameter_state,
+            set_parameter,
+            set_parameter_batch,
+            reset_parameters,
+            clear_native_buffers,
+            focus_renderer,
+            refresh_cameras,
+            start_camera,
+            stop_camera,
+            open_video_file,
+            open_video_path,
+            play_video,
+            pause_video,
+            stop_video,
+            seek_video,
+            step_video,
+            set_video_rate,
+            set_video_decode_mode,
+            set_video_loop,
+            refresh_audio_devices,
+            select_audio_device,
+            start_audio,
+            stop_audio,
+            set_audio_fft_source,
+            set_video_audio_preview,
+            set_video_audio_volume,
+            refresh_midi_ports,
+            connect_midi,
+            disconnect_midi,
+            bind_osc,
+            stop_osc,
+            send_osc_test,
+            push_gesture_point,
+            clear_gesture,
+            set_compositor_param,
+            set_compositor_mode,
+            reset_compositor,
+            toggle_renderer_fullscreen
+        ])
+        .run(tauri::generate_context!())
+        .expect("error while running Huff native wgpu engine");
 }

@@ -3,8 +3,8 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>huff</title>
-    <link rel="icon" href="../src-tauri/icons/icon.png">
+    <title>huff · native wgpu</title>
+    <link rel="icon" href="icon-name.jpg">
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -782,21 +782,6 @@
         }
     </style>
 
-    <!-- keep form defaults; block Enter submitting -->
-    <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            const form = document.getElementById('controlsForm');
-            if (!form) return;
-            form.reset();
-            form.addEventListener('submit', e => e.preventDefault());
-            form.addEventListener('keydown', e => {
-                if (e.key === 'Enter' && (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement)) {
-                    e.preventDefault(); e.target.blur();
-                }
-            });
-        });
-    </script>
-
     <style id="ws-mirror-style">
         /* ws-mirror.js injects its own pill — we keep this stub so it doesn't error */
         :root { color-scheme: dark; }
@@ -807,14 +792,46 @@
         }
     </style>
 
-    <script>
-        function __getWSURL__(port = 8787) {
-            const fallback = `ws://127.0.0.1:${port}`;
-            if (typeof window !== 'undefined' && typeof window.WS_MIRROR_URL === 'string' && window.WS_MIRROR_URL.length > 0)
-                return window.WS_MIRROR_URL;
-            return fallback;
+    <style id="huff-native-m02-style">
+        .native-file-picker {
+            display: inline-flex; align-items: center; max-width: 205px;
+            height: 21px; background: var(--win-light); color: var(--term-bg);
+            border-top: 1px solid var(--win-dark); border-left: 1px solid var(--win-dark);
+            border-bottom: 1px solid var(--win-light); border-right: 1px solid var(--win-light);
+            overflow: hidden; white-space: nowrap;
         }
-    </script>
+        .native-file-picker button {
+            height: 21px; flex: 0 0 auto; padding: 1px 6px; margin: 0 5px 0 0;
+            font-size: 11px;
+        }
+        #fileName {
+            overflow: hidden; text-overflow: ellipsis; min-width: 74px;
+            color: #00a000; font-family: 'Share Tech Mono', monospace; font-size: 9px;
+            padding-right: 5px;
+        }
+        .ctrl.native-pending, button.native-pending, select.native-pending, input.native-pending {
+            opacity: .36;
+        }
+        .group.native-pending-group > .group-label::before {
+            content: 'PORT PENDING · ';
+            color: #ffff00;
+        }
+        .group.native-partial-group > .group-label::before {
+            content: 'NATIVE PARTIAL · ';
+            color: #ffff00;
+        }
+        .native-pending-note {
+            color: #ffff00 !important;
+        }
+        #status { cursor: pointer; }
+        #nativeToast {
+            position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%);
+            z-index: 10020; min-width: 280px; max-width: 70vw; padding: 7px 12px;
+            background: #000; color: #00ff00; border: 2px solid #00ff00;
+            font: 13px 'Share Tech Mono', monospace; display: none;
+        }
+        #nativeToast.error { color:#ff4040; border-color:#ff4040; }
+    </style>
 </head>
 
 <body>
@@ -827,12 +844,13 @@
             <button id="aboutClose">×</button>
             <div class="a-icon"></div>
             <h1 style="font-family:'VT323',monospace;font-weight:normal;letter-spacing:.14em">huff</h1>
-            <div class="build">v2.0 · beta · 2025</div>
-            <p>Real-time datamosh &amp; glitch-art engine. Load a video or connect a camera,
-            then sculpt temporal tile displacement, feedback loops, flow warps, clusters,
-            and scanlines — streamed live to a fullscreen mirror window over WebSocket.</p>
-            <p>Built with <strong>Tauri v1</strong> + <strong>p5.js</strong>.<br>
-            Embedded WS relay on <strong>port 8787</strong>.</p>
+            <div class="build">native engine · milestone 02 · 2026</div>
+            <p>Huff is being migrated to a native Rust + wgpu media engine. The existing
+            control surface is preserved while playback, timing, GPU rendering, and
+            output move out of the WebView.</p>
+            <p><strong>Milestone 02:</strong> native playback, canonical parameter state,
+            render resolution, source controls, color controls, and feedback foundation.
+            Unported controls remain visible and are clearly marked.</p>
         </div>
     </div>
 
@@ -1016,7 +1034,10 @@
         <div class="topbar">
             <span class="topbar-title">huff</span>
             <div class="topbar-sep"></div>
-            <input id="file" type="file" accept="video/mp4,video/quicktime,video/mov,video/*">
+            <span class="native-file-picker" title="Uses the native file dialog so Rust receives a real filesystem path">
+                <button id="fileOpenBtn" type="button">Choose File</button>
+                <span id="fileName">no file selected</span>
+            </span>
             <button id="playBtn"  disabled>▶ Play</button>
             <button id="pauseBtn" disabled>⏸ Pause</button>
             <div class="ctrl" style="border:none;background:none;padding:0 2px">
@@ -1046,7 +1067,7 @@
             <button id="camRefreshBtn">↻</button>
             <select id="cams" style="max-width:115px"></select>
             <div style="flex:1"></div>
-            <span class="pill" id="status">WS: …</span>
+            <span class="pill" id="status" title="Click to focus native output">NATIVE: STARTING</span>
             <span class="pill" id="midiPill" style="color:rgba(255,160,0,.7);border-color:rgba(255,160,0,.25);cursor:pointer" title="Open MIDI settings">MIDI: —</span>
             <span class="pill" id="oscPill"    style="color:rgba(80,220,120,.6);border-color:rgba(80,220,120,.2);cursor:pointer"  title="Open OSC settings">OSC: —</span>
             <span class="pill" id="syphonPill" style="color:rgba(180,100,255,.6);border-color:rgba(180,100,255,.2);cursor:pointer" title="Open Syphon settings">SYPHON: OFF</span>
@@ -1095,7 +1116,6 @@
             </div>
         </div>
         </div>
-        <input id="presetLoadInput" type="file" accept=".json" style="display:none">
 
         <!-- grouped controls -->
         <form id="controlsForm" autocomplete="off" novalidate>
@@ -1128,8 +1148,94 @@
                         <input id="quality" type="range" min="0" max="3.00" step="0.05" value="1.00">
                         <span class="val" id="qualityVal">1.00</span>
                     </div>
+                    <div class="ctrl">
+                        <label>BRIGHT</label>
+                        <input id="brightness" type="range" min="0" max="2" step="0.01" value="1">
+                        <span class="val" id="brightnessVal">1.00</span>
+                    </div>
+                    <div class="ctrl">
+                        <label>CONTRAST</label>
+                        <input id="contrast" type="range" min="0" max="2" step="0.01" value="1">
+                        <span class="val" id="contrastVal">1.00</span>
+                    </div>
+                    <div class="ctrl">
+                        <label>RENDER</label>
+                        <select id="renderResolution" title="Internal effect-processing resolution">
+                            <option value="match" selected>Match Window</option>
+                            <option value="640x360">640×360</option>
+                            <option value="960x540">960×540</option>
+                            <option value="1280x720">1280×720</option>
+                            <option value="1920x1080">1920×1080</option>
+                            <option value="custom">Custom</option>
+                        </select>
+                    </div>
+                    <div class="ctrl">
+                        <label>WIDTH</label>
+                        <input id="renderCustomW" type="number" value="1280" min="160" max="3840" step="1" style="width:60px" disabled>
+                    </div>
+                    <div class="ctrl">
+                        <label>HEIGHT</label>
+                        <input id="renderCustomH" type="number" value="720" min="160" max="2160" step="1" style="width:60px" disabled>
+                    </div>
+                    <button id="renderApplyBtn" type="button" class="btn-dim" style="font-size:9px;padding:2px 7px" title="Rebuild effect buffers at the selected internal resolution">APPLY</button>
+                    <span class="pill" id="dim" style="cursor:help">R: —</span>
                 </div>
             </div>
+            </div>
+
+            <!-- FRAME HISTORY -->
+            <div class="group">
+                <div class="group-label">Frame History</div>
+                <div class="group-body">
+                <div class="group-row">
+                    <div class="ctrl">
+                        <label>PRESET</label>
+                        <select id="historyPreset" title="Configure temporal-frame storage without changing final render resolution">
+                            <option value="maximum" selected>Maximum</option>
+                            <option value="balanced">Balanced</option>
+                            <option value="performance">Performance</option>
+                            <option value="custom">Custom</option>
+                        </select>
+                    </div>
+                    <div class="ctrl">
+                        <label>RESOLUTION</label>
+                        <select id="historyResolution" title="Resolution used only for stored historical frames">
+                            <option value="full" selected>Full</option>
+                            <option value="75">75%</option>
+                            <option value="50">50%</option>
+                            <option value="25">25%</option>
+                            <option value="custom">Custom</option>
+                        </select>
+                    </div>
+                    <div class="ctrl">
+                        <label>WIDTH</label>
+                        <input id="historyCustomW" type="number" value="960" min="64" max="3840" step="1" style="width:60px" disabled>
+                    </div>
+                    <div class="ctrl">
+                        <label>HEIGHT</label>
+                        <input id="historyCustomH" type="number" value="540" min="64" max="2160" step="1" style="width:60px" disabled>
+                    </div>
+                    <div class="ctrl">
+                        <label>CAPTURE</label>
+                        <select id="historyCaptureRate" title="Maximum rate at which decoded frames enter temporal history">
+                            <option value="every" selected>Every Frame</option>
+                            <option value="30">30 FPS</option>
+                            <option value="24">24 FPS</option>
+                            <option value="15">15 FPS</option>
+                            <option value="10">10 FPS</option>
+                        </select>
+                    </div>
+                    <div class="ctrl">
+                        <label>SAMPLING</label>
+                        <select id="historySampling" title="How reduced historical frames are scaled into the final render">
+                            <option value="smooth" selected>Smooth</option>
+                            <option value="crisp">Crisp</option>
+                        </select>
+                    </div>
+                    <button id="historyApplyBtn" type="button" class="btn-dim" style="font-size:9px;padding:2px 7px" title="Apply history settings; resolution changes clear existing history">APPLY</button>
+                    <span class="pill" id="historyDim" style="cursor:help">H: —</span>
+                </div>
+                </div>
             </div>
 
             <!-- FEEDBACK -->
@@ -1633,1074 +1739,7 @@
         </form>
     </header>
 
-    <script defer src="p5.js"></script>
-    <script defer src="effects.js"></script>
-    <script defer src="canvas.js"></script>
-
-    <!-- ═══ About + Collapsible groups ══════════════════════════════════ -->
-    <script>
-    (() => {
-        'use strict';
-
-        /* ── Collapsible groups ───────────────────────────────── */
-        document.querySelectorAll('.group-label').forEach(label => {
-            label.addEventListener('click', () => {
-                label.closest('.group').classList.toggle('collapsed');
-            });
-        });
-
-        /* ── About ───────────────────────────────────────────── */
-        const overlay  = document.getElementById('aboutOverlay');
-        document.getElementById('aboutBtn')  ?.addEventListener('click', () => overlay?.classList.add('open'));
-        document.getElementById('aboutClose')?.addEventListener('click', () => overlay?.classList.remove('open'));
-        overlay?.addEventListener('click', e => { if (e.target === overlay) overlay.classList.remove('open'); });
-        window.addEventListener('keydown', e => { if (e.key === 'Escape') overlay?.classList.remove('open'); }, true);
-
-        /* ── Reset all parameters to HTML defaults ────────────── */
-        document.getElementById('resetBtn')?.addEventListener('click', () => {
-            document.getElementById('controlsForm')?.reset();
-            document.querySelectorAll('#controlsForm input[type=range], #controlsForm input[type=number]')
-                .forEach(el => el.dispatchEvent(new Event('input', { bubbles: true })));
-            document.querySelectorAll('#controlsForm input[type=checkbox], #controlsForm select')
-                .forEach(el => el.dispatchEvent(new Event('change', { bubbles: true })));
-        });
-
-        /* ── Reset Feedback motion sliders ───────────────────── */
-        document.getElementById('resetMotionBtn')?.addEventListener('click', () => {
-            const defaults = { fbX: '1', fbY: '1', fbZ: '1.000', fbTheta: '0.01' };
-            Object.entries(defaults).forEach(([id, val]) => {
-                const el = document.getElementById(id);
-                if (!el) return;
-                el.value = val;
-                el.dispatchEvent(new Event('input', { bubbles: true }));
-            });
-        });
-
-        /* ── Scanline angle snap buttons ──────────────────────── */
-        [['scanAngleReset', '0'], ['scanAngle90n', '-90'], ['scanAngle90p', '90']].forEach(([id, val]) => {
-            document.getElementById(id)?.addEventListener('click', () => {
-                const el = document.getElementById('scanAngle');
-                if (!el) return;
-                el.value = val;
-                el.dispatchEvent(new Event('input', { bubbles: true }));
-            });
-        });
-
-    })();
-    </script>
-
-
-    <!-- ═══ MIDI Engine ══════════════════════════════════════════════════ -->
-    <script>
-    (() => {
-        'use strict';
-
-        /* ─────────────────────────────────────────────────────────────────────
-         * MIDI ENGINE  v2.0  —  Tauri-native via midir (Rust)
-         *
-         * Architecture:
-         *   MIDI device ──midir(Rust)──► window.emit("midi-event")
-         *                                    ▼
-         *   tauriEvent.listen("midi-event") ──► applyCC() ──► DOM params
-         *
-         * The Web MIDI API doesn't work in Tauri's WebView (not a secure
-         * context). Instead, midir runs in Rust, exposes Tauri commands for
-         * port listing/connecting, and emits "midi-event" for every message.
-         *
-         * Commands (Rust):
-         *   list_midi_ports()                          → string[]
-         *   connect_midi_port_by_name({ portName })    → void | throws
-         *   disconnect_midi()                          → void
-         *   debug_midi_ports()                         → string
-         *
-         * Event payload (from Rust parse_midi):
-         *   { kind, channel, data1, data2, value }
-         *   kind: "cc" | "note_on" | "note_off" | "pitch_bend" | ...
-         *   value: data2 / 127.0
-         * ───────────────────────────────────────────────────────────────────── */
-
-        // Tauri v1 globals — injected by the runtime before any user scripts
-        const invoke     = window.__TAURI__?.invoke;
-        const tauriEvent = window.__TAURI__?.event;
-
-        // ── DOM refs ──────────────────────────────────────────────────────────
-        const overlay       = document.getElementById('midiOverlay');
-        const closeBtn      = document.getElementById('midiClose');
-        const portSelect    = document.getElementById('midiPortSelect');
-        const refreshBtn    = document.getElementById('midiRefreshBtn');
-        const connectBtn    = document.getElementById('midiConnectBtn');
-        const disconnectBtn = document.getElementById('midiDisconnectBtn');
-        const statusEl      = document.getElementById('midiBridgeStatus');
-        const debugBtn      = document.getElementById('midiDebugBtn');
-        const loadMapBtn    = document.getElementById('midiLoadMapBtn');
-        const clearMapBtn   = document.getElementById('midiClearMapBtn');
-        const mapNameEl     = document.getElementById('midiMapName');
-        const tbody         = document.getElementById('midiMapTbody');
-        const midiBtn       = document.getElementById('midiBtn');
-        const pill          = document.getElementById('midiPill');
-
-        // ── modal open/close — wired unconditionally so button always works ───
-        const openModal  = () => overlay.classList.add('open');
-        const closeModal = () => overlay.classList.remove('open');
-        midiBtn .addEventListener('click', openModal);
-        pill    .addEventListener('click', openModal);
-        closeBtn.addEventListener('click', closeModal);
-        overlay .addEventListener('click', e => { if (e.target === overlay) closeModal(); });
-        window  .addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); }, true);
-
-        if (!invoke || !tauriEvent) {
-            // Running in a plain browser (dev preview without Tauri) — show warning
-            if (statusEl) { statusEl.textContent = 'MIDI unavailable outside Tauri app'; statusEl.style.color = '#ff8060'; }
-            return;
-        }
-
-        // ── connection state ──────────────────────────────────────────────────
-        let connectedPort = null;
-
-        function setStatus(text, ok) {
-            statusEl.textContent = text;
-            statusEl.style.color = ok === true  ? '#50dc78'
-                                 : ok === false ? '#ff6060'
-                                 : 'rgba(255,255,255,.4)';
-        }
-
-        function updatePill() {
-            if (connectedPort) {
-                pill.textContent = 'MIDI: ' + connectedPort.substring(0, 20);
-                pill.style.color = '#50dc78';
-                pill.style.borderColor = 'rgba(80,220,120,.3)';
-            } else {
-                pill.textContent = 'MIDI: —';
-                pill.style.color = 'rgba(255,160,0,.7)';
-                pill.style.borderColor = 'rgba(255,160,0,.25)';
-            }
-        }
-        updatePill();
-
-        // ── port listing ──────────────────────────────────────────────────────
-        async function refreshPorts() {
-            refreshBtn.disabled = true;
-            setStatus('Scanning ports…');
-            try {
-                const ports = await invoke('list_midi_ports');
-                portSelect.innerHTML = ports.length === 0
-                    ? '<option value="">— no MIDI ports found —</option>'
-                    : ports.map(n => `<option value="${n}">${n}</option>`).join('');
-                setStatus(ports.length === 0
-                    ? 'No ports found — connect a device and refresh'
-                    : ports.length + ' port(s) found', ports.length > 0);
-                console.log('[huff-midi] ports:', ports);
-            } catch (err) {
-                console.error('[huff-midi] list_midi_ports failed:', err);
-                const isNotFound = String(err).includes('not found') || String(err).includes('Command');
-                setStatus(
-                    isNotFound
-                        ? '⚠ MIDI commands not found — rebuild required: cd src-tauri && cargo build'
-                        : '⚠ ' + err,
-                    false
-                );
-                portSelect.innerHTML = '<option value="">— rebuild Tauri to enable MIDI —</option>';
-            } finally {
-                refreshBtn.disabled = false;
-            }
-        }
-
-        refreshBtn.addEventListener('click', refreshPorts);
-
-        // ── connect ───────────────────────────────────────────────────────────
-        connectBtn.addEventListener('click', async () => {
-            const name = portSelect.value;
-            if (!name) { setStatus('Select a port first', false); return; }
-            connectBtn.disabled = true;
-            setStatus('Connecting…');
-            try {
-                await invoke('connect_midi_port_by_name', { portName: name });
-                connectedPort = name;
-                connectBtn.classList.add('midi-bound');
-                setStatus('Connected → ' + name, true);
-                updatePill();
-                try { localStorage.setItem('huffMidiPort', name); } catch {}
-            } catch (err) {
-                setStatus('Connect failed: ' + err, false);
-            } finally {
-                connectBtn.disabled = false;
-            }
-        });
-
-        // ── disconnect ────────────────────────────────────────────────────────
-        disconnectBtn.addEventListener('click', async () => {
-            await invoke('disconnect_midi');
-            connectedPort = null;
-            connectBtn.classList.remove('midi-bound');
-            setStatus('Disconnected');
-            updatePill();
-            try { localStorage.removeItem('huffMidiPort'); } catch {}
-        });
-
-        // ── debug ─────────────────────────────────────────────────────────────
-        debugBtn.addEventListener('click', async () => {
-            const result = await invoke('debug_midi_ports');
-            setStatus(result);
-            console.log('[huff-midi]', result);
-        });
-
-        // ── map storage ───────────────────────────────────────────────────────
-        let currentMap = null;
-        let ccLookup   = new Map(); // cc(int) → [{paramId, type}]
-
-        function buildLookup(map) {
-            ccLookup.clear();
-            if (!map) return;
-            for (const entry of map.mappings) {
-                if (entry._section || entry.enabled === false) continue;
-                if (typeof entry.cc !== 'number') continue;
-                const list = ccLookup.get(entry.cc) || [];
-                list.push({ paramId: entry.param, type: entry.type || 'range' });
-                ccLookup.set(entry.cc, list);
-            }
-        }
-
-        function renderTable(map) {
-            if (!map?.mappings) {
-                tbody.innerHTML = '<tr><td colspan="4" style="color:rgba(255,255,255,.25);font-style:italic;padding:8px 6px">Load a map file to see mappings.</td></tr>';
-                return;
-            }
-            let html = '';
-            for (const e of map.mappings) {
-                if (e._section) {
-                    html += `<tr><td colspan="4" style="padding:7px 6px 2px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.2)">${e._section}</td></tr>`;
-                    continue;
-                }
-                const dis = e.enabled === false ? ' class="dis"' : '';
-                html += `<tr${dis}>
-                    <td class="cc-cell">CC ${e.cc}</td>
-                    <td><code style="color:#e8eaf0">${e.param}</code></td>
-                    <td class="type-cell">${e.type || 'range'}</td>
-                    <td><span style="color:rgba(255,255,255,.3)">${e.note || ''}</span></td>
-                </tr>`;
-            }
-            tbody.innerHTML = html;
-        }
-
-        // ── map file loading ──────────────────────────────────────────────────
-        const fileInput = document.createElement('input');
-        fileInput.type = 'file'; fileInput.accept = '.json';
-        fileInput.style.display = 'none'; document.body.appendChild(fileInput);
-
-        loadMapBtn.addEventListener('click', () => fileInput.click());
-
-        fileInput.addEventListener('change', () => {
-            const file = fileInput.files?.[0]; if (!file) return;
-            const reader = new FileReader();
-            reader.onload = e => {
-                try {
-                    const map = JSON.parse(e.target.result);
-                    if (!Array.isArray(map.mappings)) throw new Error('missing mappings array');
-                    currentMap = map;
-                    buildLookup(currentMap);
-                    renderTable(currentMap);
-                    mapNameEl.textContent = map.name || file.name;
-                    mapNameEl.title = map.description || map.name || file.name;
-                    try { localStorage.setItem('huffMidiMap', JSON.stringify(map)); } catch {}
-                } catch (err) {
-                    mapNameEl.textContent = '⚠ Parse error: ' + err.message;
-                }
-            };
-            reader.readAsText(file);
-            fileInput.value = '';
-        });
-
-        clearMapBtn.addEventListener('click', () => {
-            currentMap = null; buildLookup(null); renderTable(null);
-            mapNameEl.textContent = 'No map loaded'; mapNameEl.title = '';
-            try { localStorage.removeItem('huffMidiMap'); } catch {}
-        });
-
-        // restore last map from localStorage
-        try {
-            const saved = localStorage.getItem('huffMidiMap');
-            if (saved) {
-                const map = JSON.parse(saved);
-                if (Array.isArray(map.mappings)) {
-                    currentMap = map; buildLookup(currentMap); renderTable(currentMap);
-                    mapNameEl.textContent = map.name || 'Loaded map';
-                    mapNameEl.title = map.description || '';
-                }
-            }
-        } catch {}
-
-        // ── CC dispatcher ─────────────────────────────────────────────────────
-        const flashTimers = {};
-
-        function flashCtrl(paramId) {
-            const el = document.getElementById(paramId);
-            const chip = el?.closest?.('.ctrl');
-            if (!chip) return;
-            chip.classList.add('midi-active');
-            clearTimeout(flashTimers[paramId]);
-            flashTimers[paramId] = setTimeout(() => chip.classList.remove('midi-active'), 120);
-        }
-
-        function applyCC(cc, val127, channel) {
-            if (currentMap) {
-                const mapCh = typeof currentMap.channel === 'number' ? currentMap.channel : -1;
-                if (mapCh !== -1 && mapCh !== channel) return;
-            }
-
-            const entries = ccLookup.get(cc);
-            if (!entries) return;
-
-            for (const { paramId, type } of entries) {
-                const el = document.getElementById(paramId);
-                if (!el) continue;
-
-                if (type === 'toggle') {
-                    el.checked = val127 > 63;
-                    el.dispatchEvent(new Event('change', { bubbles: true }));
-                } else if (type === 'trigger') {
-                    if (val127 > 0) el.click();
-                } else {
-                    const mn = parseFloat(el.min ?? 0);
-                    const mx = parseFloat(el.max ?? 1);
-                    el.value = mn + (val127 / 127) * (mx - mn);
-                    el.dispatchEvent(new Event('input', { bubbles: true }));
-                }
-                flashCtrl(paramId);
-            }
-        }
-
-        // ── Tauri event listener ──────────────────────────────────────────────
-        tauriEvent.listen('midi-event', ({ payload }) => {
-            const { kind, channel, data1, data2, value } = payload;
-
-            if (kind === 'cc') {
-                applyCC(data1, data2, channel);
-                // brief pill flash showing CC number
-                pill.textContent = 'CC ' + data1 + '=' + data2;
-                clearTimeout(pill._t);
-                pill._t = setTimeout(updatePill, 600);
-            }
-            // note_on / note_off / pitch_bend available for future extension
-        });
-
-        // ── auto-reconnect last port on load ──────────────────────────────────
-        (async () => {
-            await refreshPorts();
-            const lastPort = localStorage.getItem('huffMidiPort');
-            if (lastPort) {
-                // try to auto-reconnect silently
-                try {
-                    await invoke('connect_midi_port_by_name', { portName: lastPort });
-                    connectedPort = lastPort;
-                    connectBtn.classList.add('midi-bound');
-                    setStatus('Auto-reconnected → ' + lastPort, true);
-                    updatePill();
-                    // select the port in the dropdown if it's still in the list
-                    for (const opt of portSelect.options) {
-                        if (opt.value === lastPort) { portSelect.value = lastPort; break; }
-                    }
-                } catch {
-                    setStatus('Last port "' + lastPort + '" not found — reconnect manually');
-                }
-            }
-        })();
-
-    })();
-    </script>
-    <!-- ═══ Syphon Engine ════════════════════════════════════════════════ -->
-    <script>
-    (() => {
-        'use strict';
-        // ────────────────────────────────────────────────────────────────────
-        // SYPHON ENGINE
-        //
-        // Flow:
-        //   RAF loop → p5 canvas.getImageData() → prepend "HUFFSYPH" header
-        //       → binary WebSocket → Rust relay intercepts on b"HUFFSYPH"
-        //       → syphon::push_frame() → MTLTexture upload → SyphonMetalServer
-        //       → Syphon clients (Resolume, VDMX, MadMapper, etc.)
-        //
-        // The HUFFSYPH magic prefix lets Rust distinguish syphon frames from
-        // normal p5 canvas-mirror frames without a separate WS connection.
-        //
-        // Frame binary layout:
-        //   Bytes  0– 7  : b"HUFFSYPH"
-        //   Bytes  8–11  : width  u32 LE
-        //   Bytes 12–15  : height u32 LE
-        //   Bytes 16+    : raw RGBA8 pixels (width × height × 4)
-        // ────────────────────────────────────────────────────────────────────
-
-        const invoke     = window.__TAURI__?.invoke;
-        const overlay    = document.getElementById('syphonOverlay');
-        const closeBtn   = document.getElementById('syphonClose');
-        const toggleBtn  = document.getElementById('syphonToggleBtn');
-        const statusBox  = document.getElementById('syphonStatus');
-        const pill       = document.getElementById('syphonPill');
-        const syphonBtn  = document.getElementById('syphonBtn');
-        const frameLabel = document.getElementById('syphonFrameCount');
-        const wInput     = document.getElementById('syphW');
-        const hInput     = document.getElementById('syphH');
-        const fpsSelect  = document.getElementById('syphFps');
-
-        // ── modal ────────────────────────────────────────────────────────────
-        const openModal  = () => overlay.classList.add('open');
-        const closeModal = () => overlay.classList.remove('open');
-        syphonBtn.addEventListener('click', openModal);
-        pill     .addEventListener('click', openModal);
-        closeBtn .addEventListener('click', closeModal);
-        overlay  .addEventListener('click', e => { if (e.target === overlay) closeModal(); });
-        window   .addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); }, true);
-
-        if (!invoke) {
-            statusBox.textContent = 'Syphon unavailable outside Tauri app.';
-            statusBox.className   = 'error';
-            pill.textContent      = 'SYPHON: N/A';
-            return;
-        }
-
-        // ── state ─────────────────────────────────────────────────────────────
-        let active        = false;
-        let rafId         = null;
-        let lastTs        = 0;
-        let localFrames   = 0;
-        let browserDrops  = 0;
-        let outputW       = 1280;
-        let outputH       = 720;
-
-        // Reuse a single offscreen canvas for pixel extraction
-        const offscreen  = document.createElement('canvas');
-        const offCtx     = offscreen.getContext('2d', { willReadFrequently: true });
-
-        // Shared WS connection — reuse the relay socket that canvas.js already
-        // maintains. We grab it from the global scope if available, otherwise
-        // open our own to the same relay URL.
-        function getRelayWS() {
-            // canvas.js exposes its ws instance on window.__huffWS if present.
-            // Fallback: open a second connection as role "syphon-sender".
-            if (window.__huffWS && window.__huffWS.readyState === WebSocket.OPEN) {
-                return window.__huffWS;
-            }
-            return null; // will use dedicated socket
-        }
-
-        // Dedicated WS socket for syphon frames (avoids interfering with canvas mirror)
-        let syphWS   = null;
-        let wsReady  = false;
-
-        function ensureSyphWS() {
-            if (syphWS && (syphWS.readyState === WebSocket.OPEN || syphWS.readyState === WebSocket.CONNECTING)) return;
-            const url = window.WS_MIRROR_URL || 'ws://127.0.0.1:8787';
-            syphWS = new WebSocket(url);
-            syphWS.binaryType = 'arraybuffer';
-            syphWS.onopen  = () => {
-                wsReady = true;
-                syphWS.send(JSON.stringify({ type: 'hello', role: 'syphon-sender' }));
-            };
-            syphWS.onclose = () => { wsReady = false; syphWS = null; };
-            syphWS.onerror = () => { wsReady = false; };
-        }
-
-        // ── pixel sender ──────────────────────────────────────────────────────
-        const MAGIC       = new Uint8Array([72,85,70,70,83,89,80,72]); // "HUFFSYPH"
-        const HEADER_SIZE = 16;
-        let frameBuf      = null;
-        let frameView     = null;
-        let nativeStatus  = '';
-
-        function updateSyphonFrameLabel() {
-            if (!frameLabel) return;
-            const local = `${localFrames} browser sent · ${browserDrops} browser drops`;
-            frameLabel.textContent = nativeStatus ? `${local} · ${nativeStatus}` : local;
-        }
-
-        function findCanvas() {
-            // p5 canvas is the first canvas in the document
-            return document.querySelector('canvas');
-        }
-
-        function sendFrame(ts) {
-            if (!active) return;
-
-            const fpsCap = parseInt(fpsSelect.value, 10) || 30;
-            const period = 1000 / fpsCap;
-            if (ts - lastTs < period) { rafId = requestAnimationFrame(sendFrame); return; }
-            lastTs = ts;
-
-            if (!wsReady) { ensureSyphWS(); rafId = requestAnimationFrame(sendFrame); return; }
-
-            // Freeze dimensions when output starts. Editing the fields while live
-            // no longer creates packets that disagree with the active native texture.
-            const targetW = outputW;
-            const targetH = outputH;
-            const packetSize = HEADER_SIZE + targetW * targetH * 4;
-
-            // Keep at most approximately one raw frame queued in Chromium. Rust
-            // applies a second latest-frame boundary before Metal publication.
-            if (syphWS.bufferedAmount > packetSize) {
-                browserDrops++;
-                rafId = requestAnimationFrame(sendFrame);
-                return;
-            }
-
-            const cnv = findCanvas();
-            if (!cnv) { rafId = requestAnimationFrame(sendFrame); return; }
-
-            if (offscreen.width !== targetW || offscreen.height !== targetH) {
-                offscreen.width  = targetW;
-                offscreen.height = targetH;
-                frameBuf = null;
-                frameView = null;
-            }
-
-            offCtx.drawImage(cnv, 0, 0, targetW, targetH);
-            let imgData;
-            try { imgData = offCtx.getImageData(0, 0, targetW, targetH); }
-            catch (e) { rafId = requestAnimationFrame(sendFrame); return; }
-
-            // Reuse one exact-sized packet. WebSocket.send() snapshots typed-array
-            // data synchronously, avoiding Blob creation and blob.arrayBuffer().
-            if (!frameBuf || frameBuf.byteLength !== packetSize) {
-                frameBuf = new Uint8Array(packetSize);
-                frameView = new DataView(frameBuf.buffer);
-                frameBuf.set(MAGIC, 0);
-            }
-            frameView.setUint32(8,  targetW, true);
-            frameView.setUint32(12, targetH, true);
-            frameBuf.set(imgData.data, HEADER_SIZE);
-
-            try {
-                syphWS.send(frameBuf);
-                localFrames++;
-                updateSyphonFrameLabel();
-            } catch {}
-
-            rafId = requestAnimationFrame(sendFrame);
-        }
-
-        // ── start / stop ─────────────────────────────────────────────────────
-        async function startSyphon() {
-            const w = Math.max(64, parseInt(wInput.value, 10) || 1280);
-            const h = Math.max(64, parseInt(hInput.value, 10) || 720);
-
-            statusBox.textContent = 'Starting…';
-            statusBox.className   = '';
-
-            try {
-                const msg = await invoke('start_syphon', { width: w, height: h });
-                active = true;
-                outputW = w;
-                outputH = h;
-                localFrames = 0;
-                browserDrops = 0;
-                frameBuf = null;
-                frameView = null;
-                nativeStatus = '';
-                updateSyphonFrameLabel();
-                ensureSyphWS();
-
-                statusBox.textContent = `${msg}\nSending ${w}×${h} pixels → Syphon → look for "huff" in your VJ software.`;
-                statusBox.className   = 'active';
-                pill.textContent      = `SYPHON: ${w}×${h}`;
-                pill.style.color      = 'rgba(180,100,255,.9)';
-                toggleBtn.textContent = '■ Stop';
-                toggleBtn.classList.add('active');
-
-                rafId = requestAnimationFrame(sendFrame);
-            } catch (e) {
-                statusBox.textContent = `⚠ ${e}`;
-                statusBox.className   = 'error';
-            }
-        }
-
-        async function stopSyphon() {
-            active = false;
-            if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
-
-            try {
-                const msg = await invoke('stop_syphon');
-                statusBox.textContent = msg;
-            } catch {}
-
-            statusBox.className   = '';
-            pill.textContent      = 'SYPHON: OFF';
-            pill.style.color      = 'rgba(180,100,255,.5)';
-            toggleBtn.textContent = '▶ Start';
-            toggleBtn.classList.remove('active');
-            nativeStatus = '';
-            if (frameLabel) frameLabel.textContent = '';
-        }
-
-        toggleBtn.addEventListener('click', () => {
-            if (active) stopSyphon(); else startSyphon();
-        });
-
-        // ── status poll ───────────────────────────────────────────────────────
-        // Poll Rust every 2s while active to get authoritative frame count
-        setInterval(async () => {
-            if (!active) return;
-            try {
-                const s = await invoke('syphon_status');
-                nativeStatus = s || '';
-                updateSyphonFrameLabel();
-            } catch {}
-        }, 2000);
-
-    })();
-    </script>
-
-    <!-- ═══ Spout Engine (Windows) ════════════════════════════════════════ -->
-    <script>
-    (() => {
-        'use strict';
-
-        // ── Spout Engine — mirrors the Syphon engine, Windows only ───────────
-        //
-        // Frame pipeline:
-        //   p5 canvas → getImageData() → "HUFFSPOUT" binary WS frame
-        //       → Rust relay intercepts → spout::push_frame()
-        //       → OpenGL texture upload → Spout SendTexture()
-        //       → Spout receivers (Resolume, MadMapper, etc.)
-        //
-        // Frame binary layout:
-        //   Bytes  0– 8 : "HUFFSPOUT" (9 bytes)
-        //   Bytes  9–12 : width  u32 LE
-        //   Bytes 13–16 : height u32 LE
-        //   Bytes 17+   : raw RGBA8 pixels (width × height × 4)
-
-        const invoke     = window.__TAURI__?.invoke;
-        const tauriEvent = window.__TAURI__?.event;
-
-        const overlay       = document.getElementById('spoutOverlay');
-        const closeBtn      = document.getElementById('spoutClose');
-        const statusBox     = document.getElementById('spoutStatus');
-        const toggleBtn     = document.getElementById('spoutToggleBtn');
-        const frameCountEl  = document.getElementById('spoutFrameCount');
-        const wInput        = document.getElementById('spoutW');
-        const hInput        = document.getElementById('spoutH');
-        const fpsSelect     = document.getElementById('spoutFps');
-        const spoutBtn      = document.getElementById('spoutBtn');
-        const pill          = document.getElementById('spoutPill');
-
-        // ── modal ─────────────────────────────────────────────────────────────
-        const openModal  = () => overlay.classList.add('open');
-        const closeModal = () => overlay.classList.remove('open');
-        spoutBtn?.addEventListener('click', openModal);
-        pill    ?.addEventListener('click', openModal);
-        closeBtn?.addEventListener('click', closeModal);
-        overlay ?.addEventListener('click', e => { if (e.target === overlay) closeModal(); });
-        window  .addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); }, true);
-
-        if (!invoke || !tauriEvent) {
-            if (statusBox) {
-                statusBox.textContent = 'Spout unavailable outside Tauri app';
-                statusBox.className   = 'error';
-            }
-            if (pill) pill.textContent = 'SPOUT: N/A';
-            return;
-        }
-
-        // ── state ─────────────────────────────────────────────────────────────
-        let running       = false;
-        let frameCount    = 0;
-        let browserDrops  = 0;
-        let outputW       = 1280;
-        let outputH       = 720;
-        let rafId         = null;
-        let lastTs        = 0;
-        let spoutCanvas   = null;
-        let spoutCtx      = null;
-
-        // ── helpers ───────────────────────────────────────────────────────────
-        function setStatus(text, cls = '') {
-            if (statusBox) { statusBox.textContent = text; statusBox.className = cls; }
-        }
-
-        function setPillActive(on) {
-            if (!pill) return;
-            const w = wInput?.value || 1280;
-            const h = hInput?.value || 720;
-            if (on) {
-                pill.textContent      = `SPOUT: ${w}×${h}`;
-                pill.style.color      = 'rgba(0,200,220,.9)';
-                pill.style.borderColor= 'rgba(0,200,220,.4)';
-            } else {
-                pill.textContent      = 'SPOUT: OFF';
-                pill.style.color      = 'rgba(0,200,220,.6)';
-                pill.style.borderColor= 'rgba(0,200,220,.2)';
-            }
-        }
-
-        // ── frame sender ──────────────────────────────────────────────────────
-        // Finds the p5 canvas, reads raw RGBA pixels, prepends the HUFFSPOUT
-        // header, and sends it as a binary WS message to Rust.
-        function findCanvas() {
-            try {
-                if (typeof canvas !== 'undefined' && canvas?.elt instanceof HTMLCanvasElement)
-                    return canvas.elt;
-            } catch {}
-            return document.querySelector('canvas') || null;
-        }
-
-        // Pre-allocated frame buffer and static magic — no per-frame allocations
-        const SPOUT_MAGIC = new Uint8Array([
-            0x48,0x55,0x46,0x46,0x53,0x50,0x4F,0x55,0x54 // "HUFFSPOUT"
-        ]);
-        const HEADER_SIZE = 9 + 4 + 4; // magic + width(u32) + height(u32)
-        let frameBuf    = null; // reused Uint8Array, grown as needed
-        let frameHeader = new DataView(new ArrayBuffer(HEADER_SIZE));
-        SPOUT_MAGIC.forEach((b, i) => frameHeader.setUint8(i, b));
-
-        function sendSpoutFrame(ts) {
-            if (!running) return;
-
-            const fpsCap = parseInt(fpsSelect?.value || '30', 10);
-            const period = 1000 / fpsCap;
-
-            rafId = requestAnimationFrame(sendSpoutFrame);
-
-            if (ts - lastTs < period) return;
-
-            // Backpressure — allow no more than approximately one raw frame in
-            // Chromium. The Rust worker independently replaces stale frames.
-            const ws = sendSpoutFrame._ws;
-            const w = outputW;
-            const h = outputH;
-            const packetSize = HEADER_SIZE + w * h * 4;
-            if (ws && ws.readyState === WebSocket.OPEN && ws.bufferedAmount > packetSize) {
-                browserDrops++;
-                return;
-            }
-
-            lastTs = ts;
-
-            const src = findCanvas();
-            if (!src) return;
-
-            // Lazy-allocate offscreen canvas; invalidate frameBuf if size changes
-            if (!spoutCanvas || spoutCanvas.width !== w || spoutCanvas.height !== h) {
-                spoutCanvas = document.createElement('canvas');
-                spoutCanvas.width  = w;
-                spoutCanvas.height = h;
-                spoutCtx = spoutCanvas.getContext('2d', { willReadFrequently: true });
-                frameBuf = null;
-            }
-
-            spoutCtx.drawImage(src, 0, 0, w, h);
-            const imageData = spoutCtx.getImageData(0, 0, w, h);
-            const pixels    = imageData.data;
-
-            // Reuse frame buffer — only reallocate when dimensions change
-            const totalSize = HEADER_SIZE + pixels.byteLength;
-            if (!frameBuf || frameBuf.byteLength !== totalSize) {
-                frameBuf = new Uint8Array(totalSize);
-            }
-
-            // Write header (magic already set, just update w/h)
-            frameHeader.setUint32(9,  w, true);
-            frameHeader.setUint32(13, h, true);
-            frameBuf.set(new Uint8Array(frameHeader.buffer), 0);
-            frameBuf.set(pixels, HEADER_SIZE);
-
-            // Reconnect if needed
-            if (!ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
-                const wsUrl = (typeof __getWSURL__ === 'function') ? __getWSURL__() : 'ws://127.0.0.1:8787';
-                sendSpoutFrame._ws = new WebSocket(wsUrl);
-                sendSpoutFrame._ws.binaryType = 'arraybuffer';
-                sendSpoutFrame._ws.onopen = () => {
-                    try { sendSpoutFrame._ws.send(JSON.stringify({ type: 'hello', role: 'spout' })); } catch {}
-                };
-                return; // skip this frame while connecting
-            }
-
-            if (ws.readyState === WebSocket.OPEN) {
-                // frameBuf is exact-sized; sending the typed array avoids the
-                // previous full-frame ArrayBuffer.slice() allocation.
-                ws.send(frameBuf);
-                frameCount++;
-                if (frameCountEl) {
-                    frameCountEl.textContent = `${frameCount} sent · ${browserDrops} browser drops`;
-                }
-            }
-        }
-
-        // ── start / stop ──────────────────────────────────────────────────────
-        async function startSpout() {
-            const w = parseInt(wInput?.value || '1280', 10);
-            const h = parseInt(hInput?.value || '720',  10);
-
-            setStatus(`Starting Spout sender at ${w}×${h}…`);
-            try {
-                const msg = await invoke('start_spout', { width: w, height: h });
-                setStatus(`${msg}\nSending ${w}×${h} pixels → Spout → look for "huff" in your VJ software.`, 'active');
-                running      = true;
-                outputW       = w;
-                outputH       = h;
-                frameCount    = 0;
-                browserDrops  = 0;
-                frameBuf      = null;
-                toggleBtn.textContent = '■ Stop';
-                toggleBtn.classList.add('active');
-                setPillActive(true);
-                rafId = requestAnimationFrame(sendSpoutFrame);
-            } catch(e) {
-                setStatus(`⚠ ${e}`, 'error');
-            }
-        }
-
-        async function stopSpout() {
-            running = false;
-            if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
-            toggleBtn.textContent = '▶ Start';
-            toggleBtn.classList.remove('active');
-            setPillActive(false);
-            if (frameCountEl) frameCountEl.textContent = '';
-            try {
-                const msg = await invoke('stop_spout');
-                setStatus(msg);
-            } catch(e) {
-                setStatus(`⚠ stop failed: ${e}`, 'error');
-            }
-        }
-
-        toggleBtn?.addEventListener('click', () => {
-            running ? stopSpout() : startSpout();
-        });
-
-        // ── status poll ───────────────────────────────────────────────────────
-        setInterval(async () => {
-            if (!running) return;
-            try {
-                const s = await invoke('spout_status');
-                if (running) setStatus(s, 'active');
-            } catch {}
-        }, 2000);
-
-    })();
-    </script>
-
-    <!-- ═══ OSC Engine ═══════════════════════════════════════════════════ -->
-    <script>
-    (() => {
-        'use strict';
-
-        /* ─────────────────────────────────────────────────────────────────────
-         * OSC ENGINE  v1.0  —  Tauri-native via rosc (Rust)
-         *
-         * Architecture:
-         *   OSC sender (TouchOSC, Max, Pd…) ──UDP:9000──► rosc (Rust)
-         *                                                      │
-         *                                           window.emit("osc-message")
-         *                                                      ▼
-         *   tauriEvent.listen("osc-message") ──► applyOsc() ──► DOM params
-         *
-         * The browser has no UDP API. Rust binds 0.0.0.0:9000, decodes OSC
-         * packets via rosc, and emits each message as "osc-message".
-         *
-         * Event payload:
-         *   { addr: "/huff/feedback", value: 0.73, args: ["f:0.730"] }
-         *   value — first numeric arg (float as-is; int ÷ 127)
-         *
-         * Map JSON:
-         *   { "name", "description", "version", "mappings": [
-         *     { "param":"feedback", "addr":"/huff/feedback",
-         *       "type":"range|toggle|trigger",
-         *       "inputMin":0, "inputMax":1,   ← TouchOSC sends 0–1
-         *       "enabled":true, "note":"…" }
-         *   ]}
-         * ───────────────────────────────────────────────────────────────────── */
-
-        const invoke     = window.__TAURI__?.invoke;
-        const tauriEvent = window.__TAURI__?.event;
-
-        // ── DOM refs ──────────────────────────────────────────────────────────
-        const overlay    = document.getElementById('oscOverlay');
-        const closeBtn   = document.getElementById('oscClose');
-        const statusBox  = document.getElementById('oscStatusBox');
-        const loadMapBtn = document.getElementById('oscLoadMapBtn');
-        const clearMapBtn= document.getElementById('oscClearMapBtn');
-        const mapNameEl  = document.getElementById('oscMapName');
-        const tbody      = document.getElementById('oscMapTbody');
-        const oscBtn     = document.getElementById('oscBtn');
-        const pill       = document.getElementById('oscPill');
-
-        // ── modal open/close ──────────────────────────────────────────────────
-        const openModal  = () => overlay.classList.add('open');
-        const closeModal = () => overlay.classList.remove('open');
-        oscBtn  .addEventListener('click', openModal);
-        pill    .addEventListener('click', openModal);
-        closeBtn.addEventListener('click', closeModal);
-        overlay .addEventListener('click', e => { if (e.target === overlay) closeModal(); });
-        window  .addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); }, true);
-
-        if (!invoke || !tauriEvent) {
-            statusBox.textContent = 'OSC unavailable outside Tauri app';
-            statusBox.className = 'error';
-            pill.textContent = 'OSC: N/A';
-            return;
-        }
-
-        // ── port display ──────────────────────────────────────────────────────
-        function setPort(port) {
-            statusBox.textContent  = `Listening on UDP port ${port} · Send OSC to this machine on port ${port}`;
-            statusBox.className = 'ok';
-            pill.textContent    = `OSC :${port}`;
-            pill.style.color    = 'rgba(80,220,120,.85)';
-            pill.style.borderColor = 'rgba(80,220,120,.3)';
-        }
-
-        invoke('get_osc_port').then(setPort).catch(() => {
-            statusBox.textContent = '⚠ get_osc_port failed — rebuild required';
-            statusBox.className = 'error';
-        });
-
-        tauriEvent.listen('osc-port', e => setPort(e.payload));
-
-        // ── map storage ───────────────────────────────────────────────────────
-        let currentMap  = null;
-        let addrLookup  = new Map(); // addr(string) → [{paramId, type, inputMin, inputMax}]
-
-        function buildLookup(map) {
-            addrLookup.clear();
-            if (!map) return;
-            for (const e of map.mappings) {
-                if (e._section || e.enabled === false) continue;
-                if (!e.addr) continue;
-                const list = addrLookup.get(e.addr) || [];
-                list.push({
-                    paramId:  e.param,
-                    type:     e.type     || 'range',
-                    inputMin: e.inputMin ?? 0,
-                    inputMax: e.inputMax ?? 1,
-                });
-                addrLookup.set(e.addr, list);
-            }
-        }
-
-        function renderTable(map) {
-            if (!map?.mappings) {
-                tbody.innerHTML = '<tr><td colspan="5" style="color:rgba(255,255,255,.25);font-style:italic;padding:8px 6px">Load a map file to see mappings.</td></tr>';
-                return;
-            }
-            let html = '';
-            for (const e of map.mappings) {
-                if (e._section) {
-                    html += `<tr><td colspan="5" style="padding:7px 6px 2px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(80,220,120,.3)">${e._section}</td></tr>`;
-                    continue;
-                }
-                const dis  = e.enabled === false ? ' class="dis"' : '';
-                const range = (e.type === 'range' || !e.type)
-                    ? `${e.inputMin ?? 0}–${e.inputMax ?? 1}`
-                    : '—';
-                html += `<tr${dis}>
-                    <td class="addr-cell">${e.addr}</td>
-                    <td><code style="color:#e8eaf0">${e.param}</code></td>
-                    <td class="type-cell">${e.type || 'range'}</td>
-                    <td style="color:rgba(255,255,255,.35)">${range}</td>
-                    <td><span style="color:rgba(255,255,255,.3)">${e.note || ''}</span></td>
-                </tr>`;
-            }
-            tbody.innerHTML = html;
-        }
-
-        // ── map file loading ──────────────────────────────────────────────────
-        const fileInput = document.createElement('input');
-        fileInput.type = 'file'; fileInput.accept = '.json';
-        fileInput.style.display = 'none'; document.body.appendChild(fileInput);
-
-        loadMapBtn.addEventListener('click', () => fileInput.click());
-
-        fileInput.addEventListener('change', () => {
-            const file = fileInput.files?.[0]; if (!file) return;
-            const reader = new FileReader();
-            reader.onload = e => {
-                try {
-                    const map = JSON.parse(e.target.result);
-                    if (!Array.isArray(map.mappings)) throw new Error('missing mappings array');
-                    currentMap = map;
-                    buildLookup(currentMap);
-                    renderTable(currentMap);
-                    mapNameEl.textContent = map.name || file.name;
-                    mapNameEl.title = map.description || map.name || file.name;
-                    try { localStorage.setItem('huffOscMap', JSON.stringify(map)); } catch {}
-                } catch (err) {
-                    mapNameEl.textContent = '⚠ ' + err.message;
-                }
-            };
-            reader.readAsText(file);
-            fileInput.value = '';
-        });
-
-        clearMapBtn.addEventListener('click', () => {
-            currentMap = null; buildLookup(null); renderTable(null);
-            mapNameEl.textContent = 'No map loaded'; mapNameEl.title = '';
-            try { localStorage.removeItem('huffOscMap'); } catch {}
-        });
-
-        // restore saved map
-        try {
-            const saved = localStorage.getItem('huffOscMap');
-            if (saved) {
-                const map = JSON.parse(saved);
-                if (Array.isArray(map.mappings)) {
-                    currentMap = map; buildLookup(currentMap); renderTable(currentMap);
-                    mapNameEl.textContent = map.name || 'Loaded map';
-                    mapNameEl.title = map.description || '';
-                }
-            }
-        } catch {}
-
-        // ── OSC dispatcher ────────────────────────────────────────────────────
-        const flashTimers = {};
-
-        function flashCtrl(paramId) {
-            const el = document.getElementById(paramId)?.closest?.('.ctrl');
-            if (!el) return;
-            el.classList.add('osc-active');
-            clearTimeout(flashTimers[paramId]);
-            flashTimers[paramId] = setTimeout(() => el.classList.remove('osc-active'), 120);
-        }
-
-        function applyOsc(addr, rawValue) {
-            const entries = addrLookup.get(addr);
-            if (!entries) return;
-
-            for (const { paramId, type, inputMin, inputMax } of entries) {
-                const el = document.getElementById(paramId);
-                if (!el) continue;
-
-                if (type === 'toggle') {
-                    // TouchOSC buttons send 1.0 on press, 0.0 on release
-                    el.checked = rawValue > 0.5;
-                    el.dispatchEvent(new Event('change', { bubbles: true }));
-                } else if (type === 'trigger') {
-                    if (rawValue > 0.5) el.click();
-                } else {
-                    // range — normalise inputMin–inputMax to 0–1, then scale to el min–max
-                    const span = inputMax - inputMin || 1;
-                    const t    = Math.max(0, Math.min(1, (rawValue - inputMin) / span));
-                    const mn   = parseFloat(el.min ?? 0);
-                    const mx   = parseFloat(el.max ?? 1);
-                    el.value   = mn + t * (mx - mn);
-                    el.dispatchEvent(new Event('input', { bubbles: true }));
-                }
-                flashCtrl(paramId);
-            }
-        }
-
-        // ── Tauri event listener ──────────────────────────────────────────────
-        tauriEvent.listen('osc-message', ({ payload }) => {
-            const { addr, value } = payload;
-            applyOsc(addr, value);
-
-            // pill flash: show the address briefly
-            pill.textContent = addr.length > 22 ? addr.slice(0, 22) + '…' : addr;
-            clearTimeout(pill._t);
-            pill._t = setTimeout(() => {
-                invoke('get_osc_port').then(p => { pill.textContent = `OSC :${p}`; }).catch(() => {});
-            }, 700);
-        });
-
-    })();
-    </script>
+    <div id="nativeToast" role="status"></div>
+    <script type="module" src="app.js"></script>
 </body>
 </html>

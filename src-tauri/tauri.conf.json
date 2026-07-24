@@ -1,51 +1,37 @@
 {
-  "$schema": "https://schema.tauri.app/config/1",
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Huff Native",
+  "version": "0.2.1",
+  "identifier": "com.schwwaaa.huff.native.wgpu",
   "build": {
     "beforeBuildCommand": "",
     "beforeDevCommand": "",
-    "devPath": "../src",
-    "distDir": "../src",
-    "withGlobalTauri": true
+    "frontendDist": "../src"
   },
-  "package": {
-    "productName": "huff",
-    "version": "1.0.2"
-  },
-  "tauri": {
+  "app": {
+    "withGlobalTauri": true,
     "windows": [
       {
-        "label": "main",
-        "title": "win",
-        "url": "canvas.html",
-        "width": 1024,
-        "height": 768,
-        "resizable": true,
-        "decorations": true
-      },
-      {
         "label": "controls",
-        "title": "ctrl",
+        "title": "huff \u00b7 native wgpu",
         "url": "index.html",
-        "width": 800,
-        "height": 1200,
+        "width": 1280,
+        "height": 940,
+        "minWidth": 720,
+        "minHeight": 680,
         "resizable": true,
         "decorations": true
       }
     ],
-    "bundle": {
-      "active": true,
-      "identifier": "com.example.huff",
-      "icon": [
-        "icons/icon.icns",
-        "icons/icon.png",
-        "icons/icon.ico"
-      ],
-      "macOS": {
-        "entitlements": "src-tauri/entitlements.plist",
-        "frameworks": [
-          "frameworks/Syphon.framework"
-        ]
-      }
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data:"
     }
+  },
+  "bundle": {
+    "active": true,
+    "icon": [
+      "icons/icon.png",
+      "icons/icon.ico"
+    ]
   }
 }
