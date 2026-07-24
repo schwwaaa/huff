@@ -2,10 +2,11 @@ use crate::{
     audio::AudioSnapshot,
     camera::{CameraFrame, SharedCameraFrame},
     gesture::{GestureSnapshot, MAX_POINTS},
+    history::{GpuHistoryRing, HISTORY_FORMAT},
     midi::MidiSnapshot,
     osc::OscSnapshot,
     parameters::{ParameterSnapshot, ParameterStore},
-    source::SourceSelector,
+    source::{ActiveSource, SourceSelector},
     video::{SharedVideoFrame, VideoFrame},
 };
 use bytemuck::{Pod, Zeroable};
@@ -81,6 +82,13 @@ pub struct RendererInfo {
     pub history_capture_rate: String,
     pub history_sampling: String,
     pub history_status: String,
+    pub history_capacity: u32,
+    pub history_count: u32,
+    pub history_memory_bytes: u64,
+    pub history_captured_frames: u64,
+    pub history_rate_skips: u64,
+    pub history_rebuilds: u64,
+    pub history_preview_active: bool,
     pub parameter_revision: u64,
     pub active_source: String,
     pub surface_skips: u64,
@@ -136,6 +144,8 @@ struct Uniforms {
     audio0: [f32; 4],
     input0: [f32; 4],
     network0: [f32; 4],
+    history_state: [f32; 4],
+    history_controls: [f32; 4],
 }
 
 #[repr(C)]
@@ -172,8 +182,10 @@ struct OffscreenTargets {
     feedback_a_view: wgpu::TextureView,
     _feedback_b: wgpu::Texture,
     feedback_b_view: wgpu::TextureView,
-    feedback_bind_a: wgpu::BindGroup,
-    feedback_bind_b: wgpu::BindGroup,
+    feedback_bind_a_smooth: wgpu::BindGroup,
+    feedback_bind_b_smooth: wgpu::BindGroup,
+    feedback_bind_a_crisp: wgpu::BindGroup,
+    feedback_bind_b_crisp: wgpu::BindGroup,
     present_bind_a: wgpu::BindGroup,
     present_bind_b: wgpu::BindGroup,
 }
@@ -190,6 +202,7 @@ struct Renderer {
     composite_pipeline: wgpu::RenderPipeline,
     feedback_pipeline: wgpu::RenderPipeline,
     present_pipeline: wgpu::RenderPipeline,
+    history_capture_pipeline: wgpu::RenderPipeline,
     uniform_buffer: wgpu::Buffer,
     gesture_buffer: wgpu::Buffer,
     signals_buffer: wgpu::Buffer,
@@ -198,10 +211,13 @@ struct Renderer {
     feedback_layout: wgpu::BindGroupLayout,
     present_layout: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
+    crisp_sampler: wgpu::Sampler,
     source_bind: wgpu::BindGroup,
     camera_texture: SourceTexture,
     video_texture: SourceTexture,
     targets: OffscreenTargets,
+    history_capture_bind: wgpu::BindGroup,
+    history: GpuHistoryRing,
     write_a: bool,
 
     sources: InputSources,
@@ -230,6 +246,12 @@ struct Renderer {
     history_height: u32,
     history_capture_rate: String,
     history_sampling: String,
+    history_quality: f32,
+    history_preview_enabled: bool,
+    history_preview_depth: f32,
+    history_preview_mix: f32,
+    history_preview_alpha: f32,
+    last_history_source: ActiveSource,
 
     minimized: bool,
     surface_skips: u64,
@@ -322,6 +344,8 @@ impl Renderer {
             audio0: [0.0; 4],
             input0: [0.0; 4],
             network0: [0.0; 4],
+            history_state: [0.0; 4],
+            history_controls: [0.0; 4],
         };
         let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("huff native uniform buffer"),
@@ -414,6 +438,8 @@ impl Renderer {
                     texture_layout_entry(0),
                     texture_layout_entry(1),
                     sampler_layout_entry(2),
+                    history_texture_layout_entry(3),
+                    sampler_layout_entry(4),
                 ],
             });
         let present_layout =
@@ -427,6 +453,16 @@ impl Renderer {
             address_mode_v: wgpu::AddressMode::ClampToEdge,
             mag_filter: wgpu::FilterMode::Linear,
             min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::MipmapFilterMode::Nearest,
+            ..Default::default()
+        });
+
+        let crisp_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("huff native nearest sampler"),
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Nearest,
+            min_filter: wgpu::FilterMode::Nearest,
             mipmap_filter: wgpu::MipmapFilterMode::Nearest,
             ..Default::default()
         });
@@ -468,13 +504,23 @@ impl Renderer {
         let feedback_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("huff native feedback pipeline layout"),
-                bind_group_layouts: &[Some(&global_layout), None, Some(&feedback_layout), None],
+                bind_group_layouts: &[
+                    Some(&global_layout),
+                    None,
+                    Some(&feedback_layout),
+                ],
                 immediate_size: 0,
             });
         let present_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("huff native present pipeline layout"),
                 bind_group_layouts: &[Some(&global_layout), None, None, Some(&present_layout)],
+                immediate_size: 0,
+            });
+        let history_capture_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("huff native history capture pipeline layout"),
+                bind_group_layouts: &[None, None, None, Some(&present_layout)],
                 immediate_size: 0,
             });
 
@@ -502,6 +548,27 @@ impl Renderer {
             "fs_present",
             config.format,
         );
+        let history_capture_pipeline = create_pipeline(
+            &device,
+            &shader,
+            &history_capture_pipeline_layout,
+            "huff native history capture pipeline",
+            "fs_history_capture",
+            HISTORY_FORMAT,
+        );
+        let history_capacity = GpuHistoryRing::capacity_for(
+            render_width,
+            render_height,
+            1.0,
+            device.limits().max_texture_array_layers,
+        );
+        let history = GpuHistoryRing::new(
+            &device,
+            render_width,
+            render_height,
+            history_capacity,
+            0,
+        );
         let targets = create_targets(
             &device,
             render_width,
@@ -509,6 +576,15 @@ impl Renderer {
             &feedback_layout,
             &present_layout,
             &sampler,
+            &crisp_sampler,
+            history.array_view(),
+        );
+        let history_capture_bind = create_present_bind(
+            &device,
+            &present_layout,
+            &targets.composite_view,
+            &sampler,
+            "huff history capture source bind",
         );
 
         let now = Instant::now();
@@ -523,6 +599,7 @@ impl Renderer {
             composite_pipeline,
             feedback_pipeline,
             present_pipeline,
+            history_capture_pipeline,
             uniform_buffer,
             gesture_buffer,
             signals_buffer,
@@ -531,10 +608,13 @@ impl Renderer {
             feedback_layout,
             present_layout,
             sampler,
+            crisp_sampler,
             source_bind,
             camera_texture,
             video_texture,
             targets,
+            history_capture_bind,
+            history,
             write_a: true,
             sources,
             parameters,
@@ -560,6 +640,12 @@ impl Renderer {
             history_height: render_height,
             history_capture_rate: "every".into(),
             history_sampling: "smooth".into(),
+            history_quality: 1.0,
+            history_preview_enabled: false,
+            history_preview_depth: 0.5,
+            history_preview_mix: 0.3,
+            history_preview_alpha: 1.0,
+            last_history_source: ActiveSource::None,
             minimized: false,
             surface_skips: 0,
             surface_recoveries: 0,
@@ -621,11 +707,23 @@ impl Renderer {
             contrast: self.contrast,
             feedback: self.feedback,
             persistence: self.persistence,
-            history_width: self.history_width,
-            history_height: self.history_height,
+            history_width: self.history.width,
+            history_height: self.history.height,
             history_capture_rate: self.history_capture_rate.clone(),
             history_sampling: self.history_sampling.clone(),
-            history_status: "configured · GPU temporal ring arrives in Milestone 03".into(),
+            history_status: format!(
+                "GPU temporal ring · {}/{} frames · {:.1} MiB",
+                self.history.count,
+                self.history.capacity,
+                self.history.estimated_bytes() as f64 / (1024.0 * 1024.0),
+            ),
+            history_capacity: self.history.capacity,
+            history_count: self.history.count,
+            history_memory_bytes: self.history.estimated_bytes(),
+            history_captured_frames: self.history.captured_frames,
+            history_rate_skips: self.history.rate_skips,
+            history_rebuilds: self.history.rebuilds,
+            history_preview_active: self.history_preview_enabled,
             parameter_revision: self.parameter_snapshot.revision,
             active_source: self.sources.source.get().label().into(),
             surface_skips: self.surface_skips,
@@ -666,6 +764,15 @@ impl Renderer {
             &self.feedback_layout,
             &self.present_layout,
             &self.sampler,
+            &self.crisp_sampler,
+            self.history.array_view(),
+        );
+        self.history_capture_bind = create_present_bind(
+            &self.device,
+            &self.present_layout,
+            &self.targets.composite_view,
+            &self.sampler,
+            "huff history capture source bind",
         );
         self.write_a = true;
     }
@@ -678,6 +785,57 @@ impl Renderer {
             &self.feedback_layout,
             &self.present_layout,
             &self.sampler,
+            &self.crisp_sampler,
+            self.history.array_view(),
+        );
+        self.history_capture_bind = create_present_bind(
+            &self.device,
+            &self.present_layout,
+            &self.targets.composite_view,
+            &self.sampler,
+            "huff history capture source bind",
+        );
+        self.history.clear();
+        self.write_a = true;
+    }
+
+    fn rebuild_history_if_needed(&mut self, width: u32, height: u32, capacity: u32) {
+        let width = width.max(1);
+        let height = height.max(1);
+        let capacity = capacity.max(1);
+        if self.history.width == width
+            && self.history.height == height
+            && self.history.capacity == capacity
+        {
+            return;
+        }
+        let rebuilds = self.history.rebuilds.wrapping_add(1);
+        self.history = GpuHistoryRing::new(
+            &self.device,
+            width,
+            height,
+            capacity,
+            rebuilds,
+        );
+        // The temporal history texture is part of bind group 2 so Huff stays
+        // within the portable four-bind-group limit (groups 0 through 3).
+        // Rebuild only the offscreen bind groups/targets when the array changes.
+        self.targets = create_targets(
+            &self.device,
+            self.render_width,
+            self.render_height,
+            &self.feedback_layout,
+            &self.present_layout,
+            &self.sampler,
+            &self.crisp_sampler,
+            self.history.array_view(),
+        );
+        self.history_capture_bind = create_present_bind(
+            &self.device,
+            &self.present_layout,
+            &self.targets.composite_view,
+            &self.sampler,
+            "huff history capture source bind",
         );
         self.write_a = true;
     }
@@ -701,6 +859,11 @@ impl Renderer {
         self.feedback_y = snapshot.number("feedback.translate_y", 1.0) as f32;
         self.feedback_scale = snapshot.number("feedback.scale", 1.0).clamp(0.8, 1.2) as f32;
         self.feedback_rotation = snapshot.number("feedback.rotation", 0.01) as f32;
+        self.history_quality = snapshot.number("render.quality", 1.0).clamp(0.0, 3.0) as f32;
+        self.history_preview_enabled = snapshot.bool_value("glitch.corrupt_on", false);
+        self.history_preview_depth = snapshot.number("glitch.depth", 0.5).clamp(0.0, 0.5) as f32;
+        self.history_preview_mix = snapshot.number("glitch.corrupt", 0.3).clamp(0.0, 1.0) as f32;
+        self.history_preview_alpha = snapshot.number("glitch.glitch_alpha", 1.0).clamp(0.0, 1.0) as f32;
 
         self.render_mode = snapshot.text("render.resolution_mode", "match").to_string();
         let desired = match self.render_mode.as_str() {
@@ -753,6 +916,13 @@ impl Renderer {
         };
         self.history_width = history_width.max(1);
         self.history_height = history_height.max(1);
+        let capacity = GpuHistoryRing::capacity_for(
+            self.history_width,
+            self.history_height,
+            self.history_quality,
+            self.device.limits().max_texture_array_layers,
+        );
+        self.rebuild_history_if_needed(self.history_width, self.history_height, capacity);
     }
 
     fn handle_commands(&mut self, rx: &Receiver<RenderCommand>) -> bool {
@@ -785,6 +955,9 @@ impl Renderer {
         };
         if frame.sequence == self.camera_texture.sequence {
             return;
+        }
+        if frame.sequence < self.camera_texture.sequence {
+            self.history.clear();
         }
         self.ensure_camera_texture(&frame);
         self.queue.write_texture(
@@ -824,6 +997,9 @@ impl Renderer {
         };
         if frame.sequence == self.video_texture.sequence {
             return;
+        }
+        if frame.sequence < self.video_texture.sequence {
+            self.history.clear();
         }
         self.ensure_video_texture(&frame);
         self.queue.write_texture(
@@ -911,6 +1087,12 @@ impl Renderer {
         self.gesture_sequence = gesture.sequence;
         self.active_gesture_points = gesture.count;
 
+        let active_source = self.sources.source.get();
+        if active_source != self.last_history_source {
+            self.history.clear();
+            self.last_history_source = active_source;
+        }
+
         let background_code = match self.background_mode.as_str() {
             "green" => 1.0,
             "blue" => 2.0,
@@ -961,6 +1143,18 @@ impl Renderer {
             midi.parameters[2],
             osc.parameters[2],
         ];
+        self.uniforms.history_state = [
+            self.history.newest_layer() as f32,
+            self.history.count as f32,
+            self.history.capacity as f32,
+            self.history_quality,
+        ];
+        self.uniforms.history_controls = [
+            if self.history_preview_enabled { 1.0 } else { 0.0 },
+            self.history_preview_depth,
+            self.history_preview_mix,
+            self.history_preview_alpha,
+        ];
 
         let mut gpu_gestures = GpuGestureData {
             points: [GpuPoint::zeroed(); MAX_POINTS],
@@ -983,6 +1177,21 @@ impl Renderer {
             .write_buffer(&self.gesture_buffer, 0, bytemuck::bytes_of(&gpu_gestures));
         self.queue
             .write_buffer(&self.signals_buffer, 0, bytemuck::bytes_of(&gpu_signals));
+    }
+
+    fn active_source_sequence(&self) -> u64 {
+        match self.sources.source.get() {
+            ActiveSource::Video => self.video_texture.sequence,
+            ActiveSource::Camera => self.camera_texture.sequence,
+            ActiveSource::Automatic => {
+                if self.camera_texture.sequence > 0 {
+                    self.camera_texture.sequence
+                } else {
+                    self.video_texture.sequence
+                }
+            }
+            ActiveSource::None => 0,
+        }
     }
 
     fn render(&mut self) -> Result<RenderOutcome, String> {
@@ -1039,28 +1248,58 @@ impl Renderer {
             wgpu::Color::BLACK,
         );
 
+        let source_sequence = self.active_source_sequence();
+        if let Some(layer) = self
+            .history
+            .reserve_capture(source_sequence, &self.history_capture_rate, now)
+        {
+            begin_texture_pass(
+                &mut encoder,
+                "huff GPU history capture pass",
+                self.history.layer_view(layer),
+                &self.history_capture_pipeline,
+                3,
+                &self.history_capture_bind,
+                wgpu::Color::BLACK,
+            );
+            self.uniforms.history_state = [
+                self.history.newest_layer() as f32,
+                self.history.count as f32,
+                self.history.capacity as f32,
+                self.history_quality,
+            ];
+            self.queue
+                .write_buffer(&self.uniform_buffer, 0, bytemuck::bytes_of(&self.uniforms));
+        }
+
+        let use_crisp_history = self.history_sampling == "crisp";
         let (feedback_view, feedback_bind, present_bind) = if self.write_a {
             (
                 &self.targets.feedback_a_view,
-                &self.targets.feedback_bind_a,
+                if use_crisp_history {
+                    &self.targets.feedback_bind_a_crisp
+                } else {
+                    &self.targets.feedback_bind_a_smooth
+                },
                 &self.targets.present_bind_a,
             )
         } else {
             (
                 &self.targets.feedback_b_view,
-                &self.targets.feedback_bind_b,
+                if use_crisp_history {
+                    &self.targets.feedback_bind_b_crisp
+                } else {
+                    &self.targets.feedback_bind_b_smooth
+                },
                 &self.targets.present_bind_b,
             )
         };
-        begin_fullscreen_pass(
+        begin_feedback_pass(
             &mut encoder,
-            "huff feedback pass",
             feedback_view,
             &self.feedback_pipeline,
             &self.global_bind,
-            2,
             feedback_bind,
-            wgpu::Color::BLACK,
         );
         begin_fullscreen_pass(
             &mut encoder,
@@ -1144,6 +1383,19 @@ fn texture_layout_entry(binding: u32) -> wgpu::BindGroupLayoutEntry {
         ty: wgpu::BindingType::Texture {
             sample_type: wgpu::TextureSampleType::Float { filterable: true },
             view_dimension: wgpu::TextureViewDimension::D2,
+            multisampled: false,
+        },
+        count: None,
+    }
+}
+
+fn history_texture_layout_entry(binding: u32) -> wgpu::BindGroupLayoutEntry {
+    wgpu::BindGroupLayoutEntry {
+        binding,
+        visibility: wgpu::ShaderStages::FRAGMENT,
+        ty: wgpu::BindingType::Texture {
+            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+            view_dimension: wgpu::TextureViewDimension::D2Array,
             multisampled: false,
         },
         count: None,
@@ -1238,6 +1490,29 @@ fn create_source_bind(
     })
 }
 
+fn create_present_bind(
+    device: &wgpu::Device,
+    layout: &wgpu::BindGroupLayout,
+    view: &wgpu::TextureView,
+    sampler: &wgpu::Sampler,
+    label: &str,
+) -> wgpu::BindGroup {
+    device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some(label),
+        layout,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::TextureView(view),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: wgpu::BindingResource::Sampler(sampler),
+            },
+        ],
+    })
+}
+
 fn create_hdr_texture(device: &wgpu::Device, label: &str, width: u32, height: u32) -> (wgpu::Texture, wgpu::TextureView) {
     let texture = device.create_texture(&wgpu::TextureDescriptor {
         label: Some(label),
@@ -1260,27 +1535,53 @@ fn create_targets(
     feedback_layout: &wgpu::BindGroupLayout,
     present_layout: &wgpu::BindGroupLayout,
     sampler: &wgpu::Sampler,
+    crisp_sampler: &wgpu::Sampler,
+    history_view: &wgpu::TextureView,
 ) -> OffscreenTargets {
     let (composite, composite_view) = create_hdr_texture(device, "huff native composite target", width, height);
     let (feedback_a, feedback_a_view) = create_hdr_texture(device, "huff native feedback A", width, height);
     let (feedback_b, feedback_b_view) = create_hdr_texture(device, "huff native feedback B", width, height);
 
-    let feedback_bind_a = device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: Some("feedback bind A"), layout: feedback_layout,
-        entries: &[
-            wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&composite_view) },
-            wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&feedback_b_view) },
-            wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::Sampler(sampler) },
-        ],
-    });
-    let feedback_bind_b = device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: Some("feedback bind B"), layout: feedback_layout,
-        entries: &[
-            wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&composite_view) },
-            wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&feedback_a_view) },
-            wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::Sampler(sampler) },
-        ],
-    });
+    let create_feedback_bind = |
+        label: &str,
+        previous_feedback: &wgpu::TextureView,
+        history_sampler: &wgpu::Sampler,
+    | {
+        device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some(label),
+            layout: feedback_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&composite_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(previous_feedback),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::Sampler(sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: wgpu::BindingResource::TextureView(history_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: wgpu::BindingResource::Sampler(history_sampler),
+                },
+            ],
+        })
+    };
+    let feedback_bind_a_smooth =
+        create_feedback_bind("feedback bind A smooth history", &feedback_b_view, sampler);
+    let feedback_bind_b_smooth =
+        create_feedback_bind("feedback bind B smooth history", &feedback_a_view, sampler);
+    let feedback_bind_a_crisp =
+        create_feedback_bind("feedback bind A crisp history", &feedback_b_view, crisp_sampler);
+    let feedback_bind_b_crisp =
+        create_feedback_bind("feedback bind B crisp history", &feedback_a_view, crisp_sampler);
     let present_bind_a = device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: Some("present bind A"), layout: present_layout,
         entries: &[
@@ -1300,8 +1601,72 @@ fn create_targets(
         _composite: composite, composite_view,
         _feedback_a: feedback_a, feedback_a_view,
         _feedback_b: feedback_b, feedback_b_view,
-        feedback_bind_a, feedback_bind_b, present_bind_a, present_bind_b,
+        feedback_bind_a_smooth,
+        feedback_bind_b_smooth,
+        feedback_bind_a_crisp,
+        feedback_bind_b_crisp,
+        present_bind_a,
+        present_bind_b,
     }
+}
+
+fn begin_texture_pass(
+    encoder: &mut wgpu::CommandEncoder,
+    label: &str,
+    view: &wgpu::TextureView,
+    pipeline: &wgpu::RenderPipeline,
+    bind_index: u32,
+    bind: &wgpu::BindGroup,
+    clear: wgpu::Color,
+) {
+    let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        label: Some(label),
+        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+            view,
+            resolve_target: None,
+            depth_slice: None,
+            ops: wgpu::Operations {
+                load: wgpu::LoadOp::Clear(clear),
+                store: wgpu::StoreOp::Store,
+            },
+        })],
+        depth_stencil_attachment: None,
+        timestamp_writes: None,
+        occlusion_query_set: None,
+        multiview_mask: None,
+    });
+    pass.set_pipeline(pipeline);
+    pass.set_bind_group(bind_index, bind, &[]);
+    pass.draw(0..3, 0..1);
+}
+
+fn begin_feedback_pass(
+    encoder: &mut wgpu::CommandEncoder,
+    view: &wgpu::TextureView,
+    pipeline: &wgpu::RenderPipeline,
+    global_bind: &wgpu::BindGroup,
+    feedback_bind: &wgpu::BindGroup,
+) {
+    let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        label: Some("huff feedback + temporal history pass"),
+        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+            view,
+            resolve_target: None,
+            depth_slice: None,
+            ops: wgpu::Operations {
+                load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                store: wgpu::StoreOp::Store,
+            },
+        })],
+        depth_stencil_attachment: None,
+        timestamp_writes: None,
+        occlusion_query_set: None,
+        multiview_mask: None,
+    });
+    pass.set_pipeline(pipeline);
+    pass.set_bind_group(0, global_bind, &[]);
+    pass.set_bind_group(2, feedback_bind, &[]);
+    pass.draw(0..3, 0..1);
 }
 
 fn begin_fullscreen_pass(

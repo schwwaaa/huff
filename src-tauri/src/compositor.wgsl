@@ -8,6 +8,8 @@ struct Uniforms {
     audio0: vec4<f32>,
     input0: vec4<f32>,
     network0: vec4<f32>,
+    history_state: vec4<f32>,
+    history_controls: vec4<f32>,
 };
 
 struct GesturePoint {
@@ -34,6 +36,8 @@ struct SignalData {
 @group(2) @binding(0) var composite_texture: texture_2d<f32>;
 @group(2) @binding(1) var previous_feedback: texture_2d<f32>;
 @group(2) @binding(2) var feedback_sampler: sampler;
+@group(2) @binding(3) var temporal_history: texture_2d_array<f32>;
+@group(2) @binding(4) var temporal_history_sampler: sampler;
 
 @group(3) @binding(0) var final_texture: texture_2d<f32>;
 @group(3) @binding(1) var final_sampler: sampler;
@@ -117,8 +121,38 @@ fn fs_composite(input: VertexOutput) -> @location(0) vec4<f32> {
 }
 
 @fragment
+fn fs_history_capture(input: VertexOutput) -> @location(0) vec4<f32> {
+    return vec4<f32>(textureSample(final_texture, final_sampler, input.uv).rgb, 1.0);
+}
+
+fn temporal_history_color(uv: vec2<f32>) -> vec3<f32> {
+    let count = u32(u.history_state.y + 0.5);
+    let capacity = max(u32(u.history_state.z + 0.5), 1u);
+    if (count == 0u) {
+        return vec3<f32>(0.0);
+    }
+    let newest = u32(u.history_state.x + 0.5) % capacity;
+    let depth_normalized = clamp(u.history_controls.y / 0.5, 0.0, 1.0);
+    let frames_back = u32(round(depth_normalized * f32(count - 1u)));
+    let layer = (newest + capacity - (frames_back % capacity)) % capacity;
+    return textureSample(
+        temporal_history,
+        temporal_history_sampler,
+        uv,
+        i32(layer)
+    ).rgb;
+}
+
+@fragment
 fn fs_feedback(input: VertexOutput) -> @location(0) vec4<f32> {
-    let source_color = textureSample(composite_texture, feedback_sampler, input.uv).rgb;
+    var source_color = textureSample(composite_texture, feedback_sampler, input.uv).rgb;
+    let history_enabled = u.history_controls.x > 0.5 && u.history_state.y > 0.5;
+    if (history_enabled) {
+        let delayed = temporal_history_color(input.uv);
+        let history_mix = clamp(u.history_controls.z, 0.0, 1.0)
+            * clamp(u.history_controls.w, 0.0, 1.0);
+        source_color = mix(source_color, delayed, history_mix);
+    }
     let feedback_amount = clamp(u.controls0.y, 0.0, 1.0);
     let persistence = clamp(u.controls0.z, 0.0, 1.0);
 

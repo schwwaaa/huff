@@ -4,6 +4,7 @@ mod audio;
 mod audio_router;
 mod camera;
 mod gesture;
+mod history;
 mod midi;
 mod osc;
 mod parameters;
@@ -72,7 +73,7 @@ fn get_app_info(
     source: tauri::State<'_, SourceSelector>,
 ) -> AppInfo {
     AppInfo {
-        build: "HNW-02.1".into(),
+        build: "HNW-03.2".into(),
         renderer: renderer.info(),
         camera: camera.status(),
         camera_devices: camera.devices(),
@@ -86,7 +87,7 @@ fn get_app_info(
         osc: osc.info(),
         gesture: gesture.info(),
         parameter_revision: parameters.revision(),
-        native_milestone: "HNW-02.1".into(),
+        native_milestone: "HNW-03.2".into(),
         active_source: source.get().label().into(),
     }
 }
@@ -473,7 +474,7 @@ fn set_compositor_param(
         "feedback" => "feedback.persistence",
         "exposure" => "color.brightness",
         "contrast" => "color.contrast",
-        _ => return Err(format!("legacy compositor parameter is not part of Huff Milestone 02: {name}")),
+        _ => return Err(format!("legacy compositor parameter is not part of Huff Milestone 03: {name}")),
     };
     state.set(canonical, serde_json::json!(value))
 }
