@@ -11,6 +11,8 @@ struct Uniforms {
     history_state: vec4<f32>,
     history_controls: vec4<f32>,
     effect_state: vec4<f32>,
+    scan_transform: vec4<f32>,
+    scan_dimensions: vec4<f32>,
 };
 
 struct GesturePoint {
@@ -32,10 +34,17 @@ struct GlitchTile {
     layer_alpha: vec4<f32>,
 };
 
+struct ScanBand {
+    dest_rect: vec4<f32>,
+    source_rect: vec4<f32>,
+    alpha_pad: vec4<f32>,
+};
+
 @group(0) @binding(0) var<uniform> u: Uniforms;
 @group(0) @binding(1) var<storage, read> gestures: GestureData;
 @group(0) @binding(2) var<storage, read> signals: SignalData;
 @group(0) @binding(3) var<storage, read> glitch_tiles: array<GlitchTile>;
+@group(0) @binding(4) var<storage, read> scan_bands: array<ScanBand>;
 
 @group(1) @binding(0) var camera_texture: texture_2d<f32>;
 @group(1) @binding(1) var video_texture: texture_2d<f32>;
@@ -183,12 +192,71 @@ fn fs_glitch(input: GlitchVertexOutput) -> @location(0) vec4<f32> {
     return vec4<f32>(color, alpha);
 }
 
+struct ScanVertexOutput {
+    @builtin(position) position: vec4<f32>,
+    @location(0) uv: vec2<f32>,
+    @location(1) alpha: f32,
+};
+
+@vertex
+fn vs_scan(
+    @builtin(vertex_index) vertex_index: u32,
+    @builtin(instance_index) instance_index: u32,
+) -> ScanVertexOutput {
+    var corners = array<vec2<f32>, 6>(
+        vec2<f32>(0.0, 0.0),
+        vec2<f32>(1.0, 0.0),
+        vec2<f32>(1.0, 1.0),
+        vec2<f32>(0.0, 0.0),
+        vec2<f32>(1.0, 1.0),
+        vec2<f32>(0.0, 1.0),
+    );
+    let band = scan_bands[instance_index];
+    let corner = corners[vertex_index];
+    let render_size = max(u.resolution_time.xy, vec2<f32>(1.0));
+    let local_pixel = band.dest_rect.xy + corner * band.dest_rect.zw;
+
+    // Canvas2D order: translate to screen center, rotate, pattern-scale, then
+    // draw in a coordinate system whose Y origin is -rotatedSpan/2.
+    let local_centered = local_pixel - vec2<f32>(render_size.x * 0.5, u.scan_dimensions.x * 0.5);
+    let scaled = local_centered * max(u.scan_transform.y, 0.0001);
+    let cosine = cos(u.scan_transform.x);
+    let sine = sin(u.scan_transform.x);
+    let rotated = vec2<f32>(
+        scaled.x * cosine - scaled.y * sine,
+        scaled.x * sine + scaled.y * cosine
+    );
+    let destination = rotated + render_size * 0.5 + u.scan_transform.zw;
+
+    var output: ScanVertexOutput;
+    output.position = vec4<f32>(
+        destination.x / render_size.x * 2.0 - 1.0,
+        1.0 - destination.y / render_size.y * 2.0,
+        0.0,
+        1.0
+    );
+    output.uv = band.source_rect.xy + corner * band.source_rect.zw;
+    output.alpha = band.alpha_pad.x;
+    return output;
+}
+
+@fragment
+fn fs_scan(input: ScanVertexOutput) -> @location(0) vec4<f32> {
+    // Canvas drawImage clips source rectangles outside the source canvas. Do
+    // not clamp and smear edge pixels when a rotated span extends past it.
+    if (any(input.uv < vec2<f32>(0.0)) || any(input.uv > vec2<f32>(1.0))) {
+        return vec4<f32>(0.0);
+    }
+    let color = textureSample(clean_composite, effect_sampler, input.uv).rgb;
+    return vec4<f32>(color, clamp(input.alpha, 0.0, 1.0));
+}
+
 // Emulates the beginning of the original draw loop. With no active effects the
 // persistent buffer is refreshed from the clean source. Otherwise, destination-
 // out persistence fades the existing premultiplied RGBA buffer very slightly.
 @fragment
 fn fs_effect_prepare(input: VertexOutput) -> @location(0) vec4<f32> {
-    let any_effect = u.history_controls.x > 0.5 || u.controls0.y > 0.0;
+    let any_effect = u.history_controls.x > 0.5 || u.controls0.y > 0.0 || u.effect_state.y > 0.5;
     if (u.effect_state.x < 0.5 || !any_effect) {
         return textureSample(clean_composite, effect_sampler, input.uv);
     }
@@ -248,7 +316,7 @@ fn fs_present(input: VertexOutput) -> @location(0) vec4<f32> {
     }
 
     let clean = textureSample(clean_source, final_sampler, uv).rgb;
-    let any_effect = u.history_controls.x > 0.5 || u.controls0.y > 0.0;
+    let any_effect = u.history_controls.x > 0.5 || u.controls0.y > 0.0 || u.effect_state.y > 0.5;
     var color = clean;
     if (any_effect) {
         let background = background_color(u.source_state.z);

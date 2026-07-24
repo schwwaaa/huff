@@ -26,6 +26,7 @@ use wgpu::util::DeviceExt;
 
 const SIGNAL_COUNT: usize = 160;
 const MAX_GLITCH_INSTANCES: usize = 32_768;
+const MAX_SCAN_BANDS: usize = 128;
 const HDR_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
 
 #[derive(Clone)]
@@ -97,6 +98,16 @@ pub struct RendererInfo {
     pub glitch_instance_capacity: u32,
     pub glitch_generation_ms: f64,
     pub glitch_dropped_instances: u64,
+    pub scanlines_enabled: bool,
+    pub scan_band_count: u32,
+    pub scan_generation_ms: f64,
+    pub scan_angle: f32,
+    pub layer_priority: String,
+    pub cluster_tiles_enabled: bool,
+    pub cluster_centers_active: u32,
+    pub cluster_bias_tiles: u32,
+    pub cluster_rerolled_offsets: u32,
+    pub cluster_pulses: u64,
     pub parameter_revision: u64,
     pub active_source: String,
     pub surface_skips: u64,
@@ -155,6 +166,8 @@ struct Uniforms {
     history_state: [f32; 4],
     history_controls: [f32; 4],
     effect_state: [f32; 4],
+    scan_transform: [f32; 4],
+    scan_dimensions: [f32; 4],
 }
 
 #[repr(C)]
@@ -184,6 +197,85 @@ struct GpuGlitchTile {
     layer_alpha: [f32; 4],
 }
 
+#[repr(C)]
+#[derive(Clone, Copy, Pod, Zeroable)]
+struct GpuScanBand {
+    dest_rect: [f32; 4],
+    source_rect: [f32; 4],
+    alpha_pad: [f32; 4],
+}
+
+#[derive(Clone, Copy)]
+struct ClusterTileOffset {
+    angle: f64,
+    radius_norm: f64,
+}
+
+struct ClusterCenter {
+    x: f64,
+    y: f64,
+    velocity_x: f64,
+    velocity_y: f64,
+    noise_offset_x: f64,
+    noise_offset_y: f64,
+    speed_multiplier: f64,
+    tiles: Vec<ClusterTileOffset>,
+}
+
+struct SpatialGapGrid {
+    gap: f64,
+    gap_squared: f64,
+    grid_width: i64,
+    cells: HashMap<i64, Vec<[f64; 2]>>,
+}
+
+impl SpatialGapGrid {
+    fn new(width: f64, gap: f64) -> Self {
+        Self {
+            gap,
+            gap_squared: gap * gap,
+            grid_width: (width / gap).ceil() as i64 + 2,
+            cells: HashMap::new(),
+        }
+    }
+
+    fn accept(&mut self, x: f64, y: f64) -> bool {
+        let grid_x = (x / self.gap).floor() as i64;
+        let grid_y = (y / self.gap).floor() as i64;
+        for delta_y in -1_i64..=1 {
+            for delta_x in -1_i64..=1 {
+                let key = (grid_y + delta_y) * self.grid_width + (grid_x + delta_x);
+                if let Some(points) = self.cells.get(&key) {
+                    for point in points {
+                        let dx = x - point[0];
+                        let dy = y - point[1];
+                        if dx * dx + dy * dy < self.gap_squared {
+                            return false;
+                        }
+                    }
+                }
+            }
+        }
+        let key = grid_y * self.grid_width + grid_x;
+        self.cells.entry(key).or_default().push([x, y]);
+        true
+    }
+}
+
+fn try_add_glitch_target(
+    targets: &mut Vec<[f64; 2]>,
+    grid: &mut Option<SpatialGapGrid>,
+    x: f64,
+    y: f64,
+) -> bool {
+    if let Some(grid) = grid {
+        if !grid.accept(x, y) {
+            return false;
+        }
+    }
+    targets.push([x, y]);
+    true
+}
 
 // p5.js uses the Numerical Recipes LCG for randomSeed()/random().  Huff's
 // original glitch engine re-seeds it once per draw with baseSeed + frameCount.
@@ -336,11 +428,14 @@ struct Renderer {
     present_pipeline: wgpu::RenderPipeline,
     history_capture_pipeline: wgpu::RenderPipeline,
     glitch_pipeline: wgpu::RenderPipeline,
+    scan_pipeline: wgpu::RenderPipeline,
     uniform_buffer: wgpu::Buffer,
     gesture_buffer: wgpu::Buffer,
     signals_buffer: wgpu::Buffer,
     glitch_tile_buffer: wgpu::Buffer,
     glitch_tiles_cpu: Vec<GpuGlitchTile>,
+    scan_band_buffer: wgpu::Buffer,
+    scan_bands_cpu: Vec<GpuScanBand>,
     global_bind: wgpu::BindGroup,
     source_layout: wgpu::BindGroupLayout,
     feedback_layout: wgpu::BindGroupLayout,
@@ -403,6 +498,52 @@ struct Renderer {
     glitch_base_x: f32,
     glitch_base_y: f32,
     glitch_spatial_gap: f32,
+    layer_priority: String,
+    layer_pulse_speed: f32,
+    scanlines_enabled: bool,
+    scan_angle_manual: f32,
+    scan_spin_left: bool,
+    scan_spin_right: bool,
+    scan_spin_speed: f32,
+    scan_requested_bands: u32,
+    scan_radius: f32,
+    scan_focus: f32,
+    scan_shift: f32,
+    scan_skew: f32,
+    scan_drift: f32,
+    scan_place_x: f32,
+    scan_place_y: f32,
+    scan_zoom: f32,
+    scan_zoom_mode: String,
+    scan_speed: f32,
+    scan_gap: f32,
+    scan_alpha: f32,
+    scan_phase_x: f64,
+    scan_phase_y: f64,
+    scan_spin_angle: f64,
+    scan_effective_angle: f32,
+    scan_band_count: u32,
+    scan_generation_ms: f64,
+    cluster_tiles_enabled: bool,
+    cluster_center_count: u32,
+    cluster_spread: f32,
+    cluster_min_spread: f32,
+    cluster_bias: f32,
+    cluster_drift: f32,
+    cluster_speed: f32,
+    cluster_steer: f32,
+    cluster_speed_variation: f32,
+    cluster_pulse: f32,
+    cluster_inertia: f32,
+    cluster_coherence: f32,
+    cluster_breathe: f32,
+    cluster_bounds: String,
+    cluster_physics: Vec<ClusterCenter>,
+    cluster_physics_time: f64,
+    cluster_last_pulse_seconds: Option<f64>,
+    cluster_pulses: u64,
+    cluster_bias_tiles: u32,
+    cluster_rerolled_offsets: u32,
     glitch_seed: u64,
     glitch_phase_x: f64,
     glitch_phase_y: f64,
@@ -508,6 +649,8 @@ impl Renderer {
             history_state: [0.0; 4],
             history_controls: [0.0; 4],
             effect_state: [0.0; 4],
+            scan_transform: [0.0; 4],
+            scan_dimensions: [0.0; 4],
         };
         let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("huff native uniform buffer"),
@@ -536,13 +679,19 @@ impl Renderer {
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
+        let scan_band_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("huff native scan band storage"),
+            size: (MAX_SCAN_BANDS * std::mem::size_of::<GpuScanBand>()) as u64,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
 
         let global_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("huff native global layout"),
             entries: &[
                 wgpu::BindGroupLayoutEntry {
                     binding: 0,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Uniform,
                         has_dynamic_offset: false,
@@ -580,6 +729,16 @@ impl Renderer {
                     },
                     count: None,
                 },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 4,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
             ],
         });
         let global_bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -601,6 +760,10 @@ impl Renderer {
                 wgpu::BindGroupEntry {
                     binding: 3,
                     resource: glitch_tile_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: scan_band_buffer.as_entire_binding(),
                 },
             ],
         });
@@ -724,6 +887,12 @@ impl Renderer {
                 ],
                 immediate_size: 0,
             });
+        let scan_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("huff native scanline pipeline layout"),
+                bind_group_layouts: &[Some(&global_layout), None, Some(&feedback_layout)],
+                immediate_size: 0,
+            });
 
         let composite_pipeline = create_pipeline(
             &device,
@@ -769,6 +938,12 @@ impl Renderer {
             &device,
             &shader,
             &glitch_pipeline_layout,
+            HDR_FORMAT,
+        );
+        let scan_pipeline = create_scan_pipeline(
+            &device,
+            &shader,
+            &scan_pipeline_layout,
             HDR_FORMAT,
         );
         let history_capacity = GpuHistoryRing::capacity_for(
@@ -832,11 +1007,14 @@ impl Renderer {
             present_pipeline,
             history_capture_pipeline,
             glitch_pipeline,
+            scan_pipeline,
             uniform_buffer,
             gesture_buffer,
             signals_buffer,
             glitch_tile_buffer,
             glitch_tiles_cpu: Vec::with_capacity(MAX_GLITCH_INSTANCES),
+            scan_band_buffer,
+            scan_bands_cpu: Vec::with_capacity(MAX_SCAN_BANDS),
             global_bind,
             source_layout,
             feedback_layout,
@@ -896,6 +1074,52 @@ impl Renderer {
             glitch_base_x: 0.0,
             glitch_base_y: 0.0,
             glitch_spatial_gap: 40.0,
+            layer_priority: "scan".into(),
+            layer_pulse_speed: 2.0,
+            scanlines_enabled: false,
+            scan_angle_manual: 0.0,
+            scan_spin_left: false,
+            scan_spin_right: false,
+            scan_spin_speed: 1.0,
+            scan_requested_bands: 3,
+            scan_radius: 10.0,
+            scan_focus: 0.5,
+            scan_shift: 0.12,
+            scan_skew: 0.0,
+            scan_drift: 0.5,
+            scan_place_x: 0.0,
+            scan_place_y: 0.0,
+            scan_zoom: 1.0,
+            scan_zoom_mode: "content".into(),
+            scan_speed: 1.0,
+            scan_gap: 0.0,
+            scan_alpha: 0.86,
+            scan_phase_x: 0.0,
+            scan_phase_y: 2000.0,
+            scan_spin_angle: 0.0,
+            scan_effective_angle: 0.0,
+            scan_band_count: 0,
+            scan_generation_ms: 0.0,
+            cluster_tiles_enabled: false,
+            cluster_center_count: 3,
+            cluster_spread: 80.0,
+            cluster_min_spread: 0.0,
+            cluster_bias: 0.85,
+            cluster_drift: 0.0,
+            cluster_speed: 0.0,
+            cluster_steer: 1.0,
+            cluster_speed_variation: 0.0,
+            cluster_pulse: 0.0,
+            cluster_inertia: 0.92,
+            cluster_coherence: 0.8,
+            cluster_breathe: 0.0,
+            cluster_bounds: "bounce".into(),
+            cluster_physics: Vec::new(),
+            cluster_physics_time: 0.0,
+            cluster_last_pulse_seconds: None,
+            cluster_pulses: 0,
+            cluster_bias_tiles: 0,
+            cluster_rerolled_offsets: 0,
             glitch_seed: 912_831,
             glitch_phase_x: 0.0,
             glitch_phase_y: 1000.0,
@@ -990,6 +1214,16 @@ impl Renderer {
             glitch_instance_capacity: MAX_GLITCH_INSTANCES as u32,
             glitch_generation_ms: self.glitch_generation_ms,
             glitch_dropped_instances: self.glitch_dropped_instances,
+            scanlines_enabled: self.scanlines_enabled,
+            scan_band_count: self.scan_band_count,
+            scan_generation_ms: self.scan_generation_ms,
+            scan_angle: self.scan_effective_angle,
+            layer_priority: self.layer_priority.clone(),
+            cluster_tiles_enabled: self.cluster_tiles_enabled,
+            cluster_centers_active: self.cluster_physics.len() as u32,
+            cluster_bias_tiles: self.cluster_bias_tiles,
+            cluster_rerolled_offsets: self.cluster_rerolled_offsets,
+            cluster_pulses: self.cluster_pulses,
             parameter_revision: self.parameter_snapshot.revision,
             active_source: self.sources.source.get().label().into(),
             surface_skips: self.surface_skips,
@@ -1023,6 +1257,7 @@ impl Renderer {
         }
         self.render_width = width;
         self.render_height = height;
+        self.reset_cluster_physics();
         self.targets = create_targets(
             &self.device,
             width,
@@ -1043,6 +1278,14 @@ impl Renderer {
         );
         self.effect_is_a = false;
         self.effect_seeded = false;
+    }
+
+    fn reset_cluster_physics(&mut self) {
+        self.cluster_physics.clear();
+        self.cluster_physics_time = 0.0;
+        self.cluster_last_pulse_seconds = None;
+        self.cluster_bias_tiles = 0;
+        self.cluster_rerolled_offsets = 0;
     }
 
     fn clear_feedback(&mut self) {
@@ -1070,6 +1313,12 @@ impl Renderer {
         self.glitch_instance_count = 0;
         self.glitch_phase_x = 0.0;
         self.glitch_phase_y = 1000.0;
+        self.scan_phase_x = 0.0;
+        self.scan_phase_y = 2000.0;
+        self.scan_spin_angle = f64::from(self.scan_angle_manual);
+        self.scan_bands_cpu.clear();
+        self.scan_band_count = 0;
+        self.reset_cluster_physics();
         self.effect_is_a = false;
         self.effect_seeded = false;
     }
@@ -1170,6 +1419,40 @@ impl Renderer {
         // SPATIAL GAP belongs to the cluster panel in the UI, but the original
         // applyGlitch() uses it for ordinary, non-cluster tile placement too.
         self.glitch_spatial_gap = snapshot.number("clusters.spatial_gap", 40.0).clamp(0.0, 200.0) as f32;
+        self.layer_priority = snapshot.text("layers.layer_priority", "scan").to_string();
+        self.layer_pulse_speed = snapshot.number("layers.layer_pulse_speed", 2.0).clamp(0.2, 12.0) as f32;
+        self.scanlines_enabled = snapshot.bool_value("scanlines.clusters", false);
+        self.scan_angle_manual = snapshot.number("scanlines.scan_angle", 0.0).clamp(-180.0, 180.0) as f32;
+        self.scan_spin_left = snapshot.bool_value("scanlines.scan_spin_left", false);
+        self.scan_spin_right = snapshot.bool_value("scanlines.scan_spin_right", false);
+        self.scan_spin_speed = snapshot.number("scanlines.scan_spin_speed", 1.0).clamp(0.1, 10.0) as f32;
+        self.scan_requested_bands = snapshot.number("scanlines.cluster_count", 3.0).round().clamp(1.0, 50.0) as u32;
+        self.scan_radius = snapshot.number("scanlines.cluster_radius", 10.0).clamp(1.0, 120.0) as f32;
+        self.scan_focus = snapshot.number("scanlines.scan_focus", 0.5).clamp(0.0, 2.0) as f32;
+        self.scan_shift = snapshot.number("scanlines.scan_shift", 0.12).clamp(-4.0, 4.0) as f32;
+        self.scan_skew = snapshot.number("scanlines.scan_skew", 0.0).clamp(-3.0, 3.0) as f32;
+        self.scan_drift = snapshot.number("scanlines.scan_drift", 0.5).clamp(0.0, 5.0) as f32;
+        self.scan_place_x = snapshot.number("scanlines.scan_place_x", 0.0).clamp(-1.0, 1.0) as f32;
+        self.scan_place_y = snapshot.number("scanlines.scan_place_y", 0.0).clamp(-1.0, 1.0) as f32;
+        self.scan_zoom = snapshot.number("scanlines.scan_zoom", 1.0).clamp(0.25, 6.0) as f32;
+        self.scan_zoom_mode = snapshot.text("scanlines.scan_zoom_mode", "content").to_string();
+        self.scan_speed = snapshot.number("scanlines.scan_speed", 1.0).clamp(0.0, 5.0) as f32;
+        self.scan_gap = snapshot.number("scanlines.scan_gap", 0.0).clamp(0.0, 200.0) as f32;
+        self.scan_alpha = snapshot.number("scanlines.scan_alpha", 0.86).clamp(0.0, 1.0) as f32;
+        self.cluster_tiles_enabled = snapshot.bool_value("clusters.cluster_tiles", false);
+        self.cluster_center_count = snapshot.number("clusters.clu_centers", 3.0).round().clamp(1.0, 20.0) as u32;
+        self.cluster_spread = snapshot.number("clusters.clu_spread", 80.0).clamp(1.0, 300.0) as f32;
+        self.cluster_min_spread = snapshot.number("clusters.clu_min_spread", 0.0).clamp(0.0, 150.0) as f32;
+        self.cluster_bias = snapshot.number("clusters.clu_bias", 0.85).clamp(0.0, 1.0) as f32;
+        self.cluster_drift = snapshot.number("clusters.clu_drift", 0.0).clamp(0.0, 5.0) as f32;
+        self.cluster_speed = snapshot.number("clusters.clu_speed", 0.0).clamp(0.0, 10.0) as f32;
+        self.cluster_steer = snapshot.number("clusters.clu_steer", 1.0).clamp(0.0, 10.0) as f32;
+        self.cluster_speed_variation = snapshot.number("clusters.clu_speed_var", 0.0).clamp(0.0, 2.0) as f32;
+        self.cluster_pulse = snapshot.number("clusters.clu_pulse", 0.0).clamp(0.0, 10.0) as f32;
+        self.cluster_inertia = snapshot.number("clusters.clu_inertia", 0.92).clamp(0.01, 0.99) as f32;
+        self.cluster_coherence = snapshot.number("clusters.clu_cohere", 0.8).clamp(0.0, 1.0) as f32;
+        self.cluster_breathe = snapshot.number("clusters.clu_breathe", 0.0).clamp(0.0, 0.9) as f32;
+        self.cluster_bounds = snapshot.text("clusters.clu_bounds", "bounce").to_string();
         self.glitch_seed = snapshot.number("source.seed", 912_831.0).round().max(0.0) as u64;
         if self.glitch_seed != self.p5_noise_seed {
             self.p5_noise_seed = self.glitch_seed;
@@ -1421,6 +1704,7 @@ impl Renderer {
             );
             self.effect_is_a = false;
             self.effect_seeded = false;
+            self.reset_cluster_physics();
             self.last_history_source = active_source;
         }
 
@@ -1488,10 +1772,11 @@ impl Renderer {
         ];
         self.uniforms.effect_state = [
             if self.effect_seeded { 1.0 } else { 0.0 },
-            0.0,
+            if self.scanlines_enabled { 1.0 } else { 0.0 },
             0.0,
             0.0,
         ];
+        self.update_scan_bands();
 
         let mut gpu_gestures = GpuGestureData {
             points: [GpuPoint::zeroed(); MAX_POINTS],
@@ -1516,11 +1801,279 @@ impl Renderer {
             .write_buffer(&self.signals_buffer, 0, bytemuck::bytes_of(&gpu_signals));
     }
 
+    fn update_scan_bands(&mut self) {
+        let generation_started = Instant::now();
+
+        // Scanline motion is independent from glitch speed in the original
+        // engine. These are frame-based p5 phases, not elapsed-time velocities.
+        self.scan_phase_x += f64::from(self.scan_speed) * 0.008;
+        self.scan_phase_y += f64::from(self.scan_speed) * 0.009;
+
+        if self.scan_spin_right {
+            self.scan_spin_angle =
+                (self.scan_spin_angle + f64::from(self.scan_spin_speed) * 0.5).rem_euclid(360.0);
+        } else if self.scan_spin_left {
+            self.scan_spin_angle =
+                (self.scan_spin_angle - f64::from(self.scan_spin_speed) * 0.5).rem_euclid(360.0);
+        } else {
+            self.scan_spin_angle = f64::from(self.scan_angle_manual);
+        }
+        self.scan_effective_angle = self.scan_spin_angle as f32;
+        self.scan_bands_cpu.clear();
+
+        let width = f64::from(self.render_width.max(1));
+        let height = f64::from(self.render_height.max(1));
+        let angle_radians = self.scan_spin_angle.to_radians();
+        let absolute_sine = angle_radians.sin().abs();
+        let absolute_cosine = angle_radians.cos().abs();
+        let span = width * absolute_sine + height * absolute_cosine;
+        let cross = width * absolute_cosine + height * absolute_sine;
+        let pattern_zoom = if matches!(self.scan_zoom_mode.as_str(), "pattern" | "both") {
+            f64::from(self.scan_zoom)
+        } else {
+            1.0
+        };
+        let content_zoom = if matches!(self.scan_zoom_mode.as_str(), "content" | "both") {
+            f64::from(self.scan_zoom).max(0.05)
+        } else {
+            1.0
+        };
+        self.uniforms.scan_transform = [
+            angle_radians as f32,
+            pattern_zoom as f32,
+            self.scan_place_x * self.render_width as f32 * 0.5,
+            self.scan_place_y * self.render_height as f32 * 0.5,
+        ];
+        self.uniforms.scan_dimensions = [span as f32, cross as f32, 0.0, 0.0];
+
+        if !self.scanlines_enabled || self.scan_requested_bands == 0 || self.scan_alpha <= 0.0 {
+            self.scan_band_count = 0;
+            self.scan_generation_ms = generation_started.elapsed().as_secs_f64() * 1000.0;
+            return;
+        }
+
+        let band_size = f64::from((self.scan_radius * 3.0).floor().max(4.0));
+        let spacing = (band_size + f64::from(self.scan_gap)).max(1.0);
+        let focus = f64::from(self.scan_focus);
+        let focus_strength = (focus - 0.5).abs() * 1.4;
+        let drift = f64::from(self.scan_drift);
+        let shift_scale = f64::from(self.scan_shift);
+        let skew = f64::from(self.scan_skew);
+        let phase_x = self.scan_phase_x;
+        let phase_y = self.scan_phase_y;
+
+        for band_index in 0..self.scan_requested_bands.min(MAX_SCAN_BANDS as u32) {
+            let n = f64::from(band_index);
+            let even_base = (n * spacing).rem_euclid(span.max(1.0));
+            let wander = (self.p5_noise.sample1(n * 3.7 + phase_y * 0.25 * drift) - 0.5)
+                * band_size
+                * drift
+                * 0.5
+                + (self.p5_noise.sample1(n * 11.3 + phase_y * 1.8 * drift) - 0.5)
+                    * band_size
+                    * drift
+                    * 0.15;
+            let mut position = even_base + wander;
+            position = position * (1.0 - focus_strength) + (focus * span) * focus_strength;
+            let raw_position = position.rem_euclid(span.max(1.0));
+            let band_start = raw_position.floor().max(0.0);
+            let band_end = span.min(band_start + band_size);
+            let band_length = band_end - band_start;
+            if band_length <= 0.0 {
+                continue;
+            }
+
+            let skew_offset = (skew * band_start).floor();
+            let shift_noise = self.p5_noise.sample1(n * 2.3 + phase_x * 0.5);
+            let shift = (-cross * shift_scale
+                + shift_noise * (cross * shift_scale * 2.0))
+                .floor()
+                + skew_offset;
+            let source_offset = if shift < 0.0 { -shift } else { 0.0 };
+            let destination_offset = if shift > 0.0 { shift } else { 0.0 };
+            let band_cross = cross - shift.abs();
+            if band_cross <= 0.0 {
+                continue;
+            }
+
+            let (source_x, source_y, source_width, source_height) = if (content_zoom - 1.0).abs() > f64::EPSILON {
+                let source_width = band_cross / content_zoom;
+                let source_height = band_length / content_zoom;
+                (
+                    source_offset + (band_cross - source_width) * 0.5,
+                    band_start + (band_length - source_height) * 0.5,
+                    source_width,
+                    source_height,
+                )
+            } else {
+                (source_offset, band_start, band_cross, band_length)
+            };
+
+            self.scan_bands_cpu.push(GpuScanBand {
+                // Destination coordinates are in the original rotated scanline
+                // coordinate system. The vertex shader applies PLACE, ANGLE and
+                // PATTERN ZOOM in the same order as Canvas2D.
+                dest_rect: [
+                    destination_offset as f32,
+                    band_start as f32,
+                    band_cross as f32,
+                    band_length as f32,
+                ],
+                source_rect: [
+                    (source_x / width) as f32,
+                    (source_y / height) as f32,
+                    (source_width / width) as f32,
+                    (source_height / height) as f32,
+                ],
+                alpha_pad: [self.scan_alpha, 0.0, 0.0, 0.0],
+            });
+        }
+
+        self.scan_band_count = self.scan_bands_cpu.len() as u32;
+        if !self.scan_bands_cpu.is_empty() {
+            self.queue.write_buffer(
+                &self.scan_band_buffer,
+                0,
+                bytemuck::cast_slice(&self.scan_bands_cpu),
+            );
+        }
+        self.scan_generation_ms = generation_started.elapsed().as_secs_f64() * 1000.0;
+    }
+
+    fn glitch_should_be_on_top(&self) -> bool {
+        match self.layer_priority.as_str() {
+            "glitch" => true,
+            "neutral" => (self.frame_count & 1) == 0,
+            "pulse" => {
+                let pulse_frames =
+                    (60.0 / f64::from(self.layer_pulse_speed.max(0.1))).round().max(1.0) as u64;
+                ((self.frame_count / pulse_frames) & 1) == 0
+            }
+            _ => false,
+        }
+    }
+
+    fn update_cluster_physics(
+        &mut self,
+        random: &mut P5Random,
+        width: f64,
+        height: f64,
+    ) {
+        let desired_count = self.cluster_center_count.max(1) as usize;
+        while self.cluster_physics.len() < desired_count {
+            self.cluster_physics.push(ClusterCenter {
+                x: random.next() * width,
+                y: random.next() * height,
+                velocity_x: (random.next() - 0.5) * 2.0,
+                velocity_y: (random.next() - 0.5) * 2.0,
+                noise_offset_x: random.next() * 1000.0,
+                noise_offset_y: random.next() * 1000.0,
+                speed_multiplier: 1.0
+                    + (random.next() - 0.5)
+                        * 2.0
+                        * f64::from(self.cluster_speed_variation),
+                tiles: Vec::new(),
+            });
+        }
+        self.cluster_physics.truncate(desired_count);
+
+        self.cluster_physics_time += f64::from(self.cluster_steer) * 0.004;
+        let cluster_travel = (f64::from(self.cluster_speed).max(0.0) / 10.0).powf(1.7) * 7.0;
+        let pulse = f64::from(self.cluster_pulse);
+        let now_seconds = self.started.elapsed().as_secs_f64();
+
+        if pulse > 0.0 {
+            let pulse_interval = (3.0 - pulse * 0.25).max(0.2);
+            let should_pulse = match self.cluster_last_pulse_seconds {
+                Some(last_pulse) => now_seconds - last_pulse >= pulse_interval,
+                None => {
+                    self.cluster_last_pulse_seconds = Some(now_seconds);
+                    false
+                }
+            };
+            if should_pulse {
+                self.cluster_last_pulse_seconds = Some(now_seconds);
+                for center in &mut self.cluster_physics {
+                    let angle = random.next() * std::f64::consts::TAU;
+                    let force = pulse * cluster_travel * 0.6;
+                    center.velocity_x += angle.cos() * force;
+                    center.velocity_y += angle.sin() * force;
+                }
+                self.cluster_pulses = self.cluster_pulses.wrapping_add(1);
+            }
+        } else {
+            self.cluster_last_pulse_seconds = None;
+        }
+
+        let physics_time = self.cluster_physics_time;
+        let inertia = f64::from(self.cluster_inertia);
+        let drift = f64::from(self.cluster_drift);
+        let bounce = self.cluster_bounds == "bounce";
+        let noise = &self.p5_noise;
+
+        for center in &mut self.cluster_physics {
+            let effective_speed = cluster_travel * center.speed_multiplier;
+            let steering_angle = noise.sample2(
+                center.noise_offset_x + physics_time * 0.7,
+                center.noise_offset_y + physics_time * 0.5,
+            ) * std::f64::consts::TAU
+                * 2.0;
+            let desired_velocity_x = steering_angle.cos() * effective_speed;
+            let desired_velocity_y = steering_angle.sin() * effective_speed;
+
+            center.velocity_x =
+                center.velocity_x * inertia + desired_velocity_x * (1.0 - inertia);
+            center.velocity_y =
+                center.velocity_y * inertia + desired_velocity_y * (1.0 - inertia);
+
+            if drift > 0.0 {
+                center.velocity_x += (noise.sample1(
+                    center.noise_offset_x * 2.1 + physics_time * 1.3,
+                ) - 0.5)
+                    * drift
+                    * 0.5;
+                center.velocity_y += (noise.sample1(
+                    center.noise_offset_y * 2.1 + physics_time * 1.1,
+                ) - 0.5)
+                    * drift
+                    * 0.5;
+            }
+
+            let next_x = center.x + center.velocity_x;
+            let next_y = center.y + center.velocity_y;
+            if bounce {
+                if next_x < 0.0 {
+                    center.x = -next_x;
+                    center.velocity_x = -center.velocity_x;
+                } else if next_x > width {
+                    center.x = 2.0 * width - next_x;
+                    center.velocity_x = -center.velocity_x;
+                } else {
+                    center.x = next_x;
+                }
+                if next_y < 0.0 {
+                    center.y = -next_y;
+                    center.velocity_y = -center.velocity_y;
+                } else if next_y > height {
+                    center.y = 2.0 * height - next_y;
+                    center.velocity_y = -center.velocity_y;
+                } else {
+                    center.y = next_y;
+                }
+            } else {
+                center.x = next_x.rem_euclid(width);
+                center.y = next_y.rem_euclid(height);
+            }
+        }
+    }
+
     fn update_glitch_tiles(&mut self, _delta_seconds: f32, source_sequence: u64) {
         let generation_started = Instant::now();
         self.glitch_tiles_cpu.clear();
         self.glitch_base_tiles = 0;
         self.glitch_instance_count = 0;
+        self.cluster_bias_tiles = 0;
+        self.cluster_rerolled_offsets = 0;
 
         // Exact original semantics: SPEED, FINE and MULT only advance the two
         // p5 noise phases. They do not multiply CORRUPT, move every rectangle,
@@ -1609,51 +2162,115 @@ impl Renderer {
             (angle.cos(), angle.sin())
         };
 
-        // SPATIAL GAP is part of ordinary applyGlitch(), not only cluster mode.
-        // Match its cell-indexed rejection sampler so CORRUPT and PIXEL SIZE have
-        // the same density/overlap relationship as the original application.
+        // SPATIAL GAP is shared by ordinary and cluster-biased placement.
+        // The grid stores accepted points so both modes keep the original
+        // minimum-distance behavior without an O(n²) scan.
         let gap = f64::from(self.glitch_spatial_gap).trunc().max(0.0);
         let mut targets = Vec::<[f64; 2]>::with_capacity(base_tile_limit as usize);
-        if gap <= 0.0 {
-            for _ in 0..base_tile_limit {
-                targets.push([
-                    (random.next() * f64::from(columns)).floor() * block,
-                    (random.next() * f64::from(rows)).floor() * block,
-                ]);
+        let mut gap_grid = if gap > 0.0 {
+            Some(SpatialGapGrid::new(width, gap))
+        } else {
+            None
+        };
+        if self.cluster_tiles_enabled && self.cluster_center_count > 0 {
+            // This is the original moving-body cluster model: persistent centers
+            // carry persistent center-relative tile offsets. COHERENCE controls
+            // how often those offsets are re-rolled, while BREATHE only changes
+            // the radius used to draw the same constellation.
+            self.update_cluster_physics(&mut random, width, height);
+            let center_count = self.cluster_physics.len().max(1);
+            let bias_count = (f64::from(base_tile_limit) * f64::from(self.cluster_bias))
+                .round()
+                .clamp(0.0, f64::from(base_tile_limit)) as u32;
+            let per_center = ((bias_count as usize) / center_count).max(1);
+            let breathe_factor = if self.cluster_breathe > 0.0 {
+                1.0
+                    + (self.started.elapsed().as_secs_f64() * 0.6).sin()
+                        * f64::from(self.cluster_breathe)
+            } else {
+                1.0
+            };
+            let effective_spread =
+                (f64::from(self.cluster_spread) * breathe_factor).max(1.0);
+            let effective_minimum = f64::from(self.cluster_min_spread) * breathe_factor;
+            let reroll_probability = 1.0 - f64::from(self.cluster_coherence);
+            let mut rerolled_offsets = 0_u32;
+
+            for center in &mut self.cluster_physics {
+                for tile_index in 0..per_center {
+                    if targets.len() >= bias_count as usize {
+                        break;
+                    }
+                    let needs_offset = tile_index >= center.tiles.len()
+                        || random.next() < reroll_probability;
+                    if needs_offset {
+                        let offset = ClusterTileOffset {
+                            angle: random.next() * std::f64::consts::TAU,
+                            radius_norm: random.next(),
+                        };
+                        if tile_index < center.tiles.len() {
+                            center.tiles[tile_index] = offset;
+                        } else {
+                            center.tiles.push(offset);
+                        }
+                        rerolled_offsets = rerolled_offsets.wrapping_add(1);
+                    }
+
+                    let offset = center.tiles[tile_index];
+                    let radius = effective_minimum
+                        + offset.radius_norm
+                            * (effective_spread - effective_minimum).max(1.0);
+                    let x = (center.x + offset.angle.cos() * radius).rem_euclid(width);
+                    let y = (center.y + offset.angle.sin() * radius).rem_euclid(height);
+                    let mut accepted = try_add_glitch_target(
+                        &mut targets,
+                        &mut gap_grid,
+                        x.floor(),
+                        y.floor(),
+                    );
+
+                    for _ in 0..6 {
+                        if accepted {
+                            break;
+                        }
+                        let fallback_angle = random.next() * std::f64::consts::TAU;
+                        let fallback_radius = effective_minimum
+                            + random.next()
+                                * (effective_spread - effective_minimum).max(1.0);
+                        accepted = try_add_glitch_target(
+                            &mut targets,
+                            &mut gap_grid,
+                            (center.x + fallback_angle.cos() * fallback_radius)
+                                .rem_euclid(width)
+                                .floor(),
+                            (center.y + fallback_angle.sin() * fallback_radius)
+                                .rem_euclid(height)
+                                .floor(),
+                        );
+                    }
+                }
+                center.tiles.truncate(per_center);
+            }
+
+            self.cluster_bias_tiles = targets.len().min(bias_count as usize) as u32;
+            self.cluster_rerolled_offsets = rerolled_offsets;
+
+            let mut guard = 0_u32;
+            let maximum_guard = base_tile_limit.saturating_mul(4);
+            while targets.len() < base_tile_limit as usize && guard < maximum_guard {
+                guard = guard.saturating_add(1);
+                let x = (random.next() * f64::from(columns)).floor() * block;
+                let y = (random.next() * f64::from(rows)).floor() * block;
+                try_add_glitch_target(&mut targets, &mut gap_grid, x, y);
             }
         } else {
-            let grid_width = (width / gap).ceil() as i64 + 2;
-            let mut grid_cells: HashMap<i64, Vec<[f64; 2]>> = HashMap::new();
-            let gap_squared = gap * gap;
             let mut attempts = 0_u32;
             let maximum_attempts = base_tile_limit.saturating_mul(8);
             while targets.len() < base_tile_limit as usize && attempts < maximum_attempts {
                 attempts = attempts.saturating_add(1);
                 let x = (random.next() * f64::from(columns)).floor() * block;
                 let y = (random.next() * f64::from(rows)).floor() * block;
-                let grid_x = (x / gap).floor() as i64;
-                let grid_y = (y / gap).floor() as i64;
-                let mut accepted = true;
-                'neighbors: for dy in -1_i64..=1 {
-                    for dx in -1_i64..=1 {
-                        let key = (grid_y + dy) * grid_width + (grid_x + dx);
-                        if let Some(points) = grid_cells.get(&key) {
-                            for point in points {
-                                let delta_x = x - point[0];
-                                let delta_y = y - point[1];
-                                if delta_x * delta_x + delta_y * delta_y < gap_squared {
-                                    accepted = false;
-                                    break 'neighbors;
-                                }
-                            }
-                        }
-                    }
-                }
-                if accepted {
-                    let key = grid_y * grid_width + grid_x;
-                    grid_cells.entry(key).or_default().push([x, y]);
-                    targets.push([x, y]);
-                }
+                try_add_glitch_target(&mut targets, &mut gap_grid, x, y);
             }
         }
 
@@ -1895,20 +2512,54 @@ impl Renderer {
             work_bind,
         );
 
-        if self.glitch_instance_count > 0 {
-            let glitch_history_bind = if use_crisp_history {
-                &self.glitch_history_bind_crisp
-            } else {
-                &self.glitch_history_bind_smooth
-            };
-            begin_glitch_pass(
-                &mut encoder,
-                work_view,
-                &self.glitch_pipeline,
-                &self.global_bind,
-                glitch_history_bind,
-                self.glitch_instance_count,
-            );
+        let glitch_history_bind = if use_crisp_history {
+            &self.glitch_history_bind_crisp
+        } else {
+            &self.glitch_history_bind_smooth
+        };
+        let glitch_on_top = self.glitch_should_be_on_top();
+        if glitch_on_top {
+            if self.scan_band_count > 0 {
+                begin_scan_pass(
+                    &mut encoder,
+                    work_view,
+                    &self.scan_pipeline,
+                    &self.global_bind,
+                    work_bind,
+                    self.scan_band_count,
+                );
+            }
+            if self.glitch_instance_count > 0 {
+                begin_glitch_pass(
+                    &mut encoder,
+                    work_view,
+                    &self.glitch_pipeline,
+                    &self.global_bind,
+                    glitch_history_bind,
+                    self.glitch_instance_count,
+                );
+            }
+        } else {
+            if self.glitch_instance_count > 0 {
+                begin_glitch_pass(
+                    &mut encoder,
+                    work_view,
+                    &self.glitch_pipeline,
+                    &self.global_bind,
+                    glitch_history_bind,
+                    self.glitch_instance_count,
+                );
+            }
+            if self.scan_band_count > 0 {
+                begin_scan_pass(
+                    &mut encoder,
+                    work_view,
+                    &self.scan_pipeline,
+                    &self.global_bind,
+                    work_bind,
+                    self.scan_band_count,
+                );
+            }
         }
 
         let mut final_is_a = !previous_is_a;
@@ -2077,6 +2728,42 @@ fn create_glitch_pipeline(
         fragment: Some(wgpu::FragmentState {
             module: shader,
             entry_point: Some("fs_glitch"),
+            compilation_options: Default::default(),
+            targets: &[Some(wgpu::ColorTargetState {
+                format,
+                blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+        }),
+        multiview_mask: None,
+        cache: None,
+    })
+}
+
+fn create_scan_pipeline(
+    device: &wgpu::Device,
+    shader: &wgpu::ShaderModule,
+    layout: &wgpu::PipelineLayout,
+    format: wgpu::TextureFormat,
+) -> wgpu::RenderPipeline {
+    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("huff native scanline pipeline"),
+        layout: Some(layout),
+        vertex: wgpu::VertexState {
+            module: shader,
+            entry_point: Some("vs_scan"),
+            compilation_options: Default::default(),
+            buffers: &[],
+        },
+        primitive: wgpu::PrimitiveState {
+            topology: wgpu::PrimitiveTopology::TriangleList,
+            ..Default::default()
+        },
+        depth_stencil: None,
+        multisample: wgpu::MultisampleState::default(),
+        fragment: Some(wgpu::FragmentState {
+            module: shader,
+            entry_point: Some("fs_scan"),
             compilation_options: Default::default(),
             targets: &[Some(wgpu::ColorTargetState {
                 format,
@@ -2387,6 +3074,36 @@ fn begin_glitch_pass(
     pass.set_pipeline(pipeline);
     pass.set_bind_group(0, global_bind, &[]);
     pass.set_bind_group(2, history_bind, &[]);
+    pass.draw(0..6, 0..instance_count);
+}
+
+fn begin_scan_pass(
+    encoder: &mut wgpu::CommandEncoder,
+    view: &wgpu::TextureView,
+    pipeline: &wgpu::RenderPipeline,
+    global_bind: &wgpu::BindGroup,
+    feedback_bind: &wgpu::BindGroup,
+    instance_count: u32,
+) {
+    let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        label: Some("huff native scanline band pass"),
+        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+            view,
+            resolve_target: None,
+            depth_slice: None,
+            ops: wgpu::Operations {
+                load: wgpu::LoadOp::Load,
+                store: wgpu::StoreOp::Store,
+            },
+        })],
+        depth_stencil_attachment: None,
+        timestamp_writes: None,
+        occlusion_query_set: None,
+        multiview_mask: None,
+    });
+    pass.set_pipeline(pipeline);
+    pass.set_bind_group(0, global_bind, &[]);
+    pass.set_bind_group(2, feedback_bind, &[]);
     pass.draw(0..6, 0..instance_count);
 }
 

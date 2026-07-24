@@ -72,7 +72,9 @@ function updateReadout(element) {
   let digits = 0;
   if (step < 0.01) digits = 3;
   else if (step < 1) digits = 2;
-  output.textContent = number.toFixed(digits);
+  output.textContent = element.id === 'scanAngle'
+    ? `${Math.round(number)}°`
+    : number.toFixed(digits);
 }
 
 function snapshotDom() {
@@ -188,7 +190,13 @@ function configureRegistryControls() {
     feedbackGroup.title = 'Native HDR feedback is active; final effect-order parity continues with later render-graph milestones.';
   }
   const glitchGroup = byId('corruptOn')?.closest('.group');
-  if (glitchGroup) glitchGroup.title = "Milestone 04.1 restores Huff's persistent flying frame buffer. Rust generates p5-compatible historical tile stamps; feedback transforms that buffer non-additively. Cluster placement remains pending.";
+  if (glitchGroup) glitchGroup.title = "Milestone 05 keeps Huff's corrected flying frame buffer and adds the original persistent cluster-body placement model.";
+  const clusterGroup = byId('clusterTiles')?.closest('.group');
+  if (clusterGroup) clusterGroup.title = 'Native cluster bodies are active: persistent centers, coherence, speed, steering, variance, pulse, inertia, breathing, bounce/wrap, bias, spread, and minimum spread.';
+  const scanGroup = byId('clusters')?.closest('.group');
+  if (scanGroup) scanGroup.title = 'Milestone 06 ports Huff scanline bands: angle/spin, count, radius, focus, shift, skew, drift, placement, pattern/content zoom, speed, gap, and alpha.';
+  const layerGroup = byId('layerPriority')?.closest('.group');
+  if (layerGroup) layerGroup.title = 'Native paint ordering between the glitch and scanline layers. Neutral alternates every frame; Pulse alternates at the selected rate.';
 }
 
 function updateConditionalInputs() {
@@ -351,6 +359,16 @@ function wireNativeActions() {
       toast('Feedback motion reset');
     } catch (_) {}
   });
+  for (const [buttonId, angle] of [['scanAngleReset', 0], ['scanAngle90n', -90], ['scanAngle90p', 90]]) {
+    byId(buttonId)?.addEventListener('click', async () => {
+      const element = byId('scanAngle');
+      const definition = appState.byLegacy.get('scanAngle');
+      if (!element || !definition) return;
+      element.value = String(angle);
+      updateReadout(element);
+      try { await setParameter(definition, angle); } catch (_) {}
+    });
+  }
   byId('renderResolution')?.addEventListener('change', updateConditionalInputs);
   byId('renderApplyBtn')?.addEventListener('click', () => applyRenderSettings().catch(() => {}));
   byId('historyPreset')?.addEventListener('change', applyHistoryPresetUi);
@@ -504,7 +522,7 @@ function displayInfo(info) {
 
   const stateText = video.playing ? 'PLAY' : (loaded ? 'PAUSE' : 'IDLE');
   byId('status').textContent = `NATIVE: ${stateText} · ${(renderer.fps || 0).toFixed(0)} fps`;
-  byId('status').title = `${renderer.backend || 'GPU'} · ${renderer.adapter || ''}\nSource: ${info.activeSource || renderer.activeSource || 'automatic'}\nRender ${renderer.width || 0}×${renderer.height || 0}\nSurface ${renderer.surfaceWidth || 0}×${renderer.surfaceHeight || 0}\nGlitch: ${renderer.glitchBaseTiles || 0} tiles · ${renderer.glitchInstances || 0}/${renderer.glitchInstanceCapacity || 0} instances · ${(renderer.glitchGenerationMs || 0).toFixed(2)} ms\nGlitch drops: ${renderer.glitchDroppedInstances || 0}\nSurface skips: ${renderer.surfaceSkips || 0} · recoveries: ${renderer.surfaceRecoveries || 0}\nClick to focus output`;
+  byId('status').title = `${renderer.backend || 'GPU'} · ${renderer.adapter || ''}\nSource: ${info.activeSource || renderer.activeSource || 'automatic'}\nRender ${renderer.width || 0}×${renderer.height || 0}\nSurface ${renderer.surfaceWidth || 0}×${renderer.surfaceHeight || 0}\nGlitch: ${renderer.glitchBaseTiles || 0} tiles · ${renderer.glitchInstances || 0}/${renderer.glitchInstanceCapacity || 0} instances · ${(renderer.glitchGenerationMs || 0).toFixed(2)} ms\nScanlines: ${renderer.scanlinesEnabled ? 'on' : 'off'} · ${renderer.scanBandCount || 0} bands · ${(renderer.scanGenerationMs || 0).toFixed(2)} ms · angle ${(renderer.scanAngle || 0).toFixed(1)}° · layer ${renderer.layerPriority || 'scan'}\nClusters: ${renderer.clusterTilesEnabled ? 'on' : 'off'} · ${renderer.clusterCentersActive || 0} centers · ${renderer.clusterBiasTiles || 0} biased tiles · ${renderer.clusterRerolledOffsets || 0} rerolls · ${renderer.clusterPulses || 0} pulses\nGlitch drops: ${renderer.glitchDroppedInstances || 0}\nSurface skips: ${renderer.surfaceSkips || 0} · recoveries: ${renderer.surfaceRecoveries || 0}\nClick to focus output`;
 
   byId('midiPill').textContent = midi.connected ? `MIDI: ${midi.connectedPort}` : 'MIDI: OFF';
   byId('oscPill').textContent = osc.listening ? `OSC :${osc.port}` : 'OSC: OFF';
@@ -535,7 +553,7 @@ function displayInfo(info) {
   byId('dim').textContent = `R: ${renderer.width || 0}×${renderer.height || 0}`;
   byId('dim').title = `Internal native render size\nSurface: ${renderer.surfaceWidth || 0}×${renderer.surfaceHeight || 0}\nMode: ${renderer.renderMode || 'match'}`;
   byId('historyDim').textContent = `H: ${renderer.historyWidth || 0}×${renderer.historyHeight || 0}`;
-  byId('historyDim').title = `${renderer.historyStatus || 'configured'}\nCapture: ${renderer.historyCaptureRate || 'every'}\nSampling: ${renderer.historySampling || 'smooth'}\nGlitch tiles: ${renderer.glitchBaseTiles || 0} · instances: ${renderer.glitchInstances || 0}`;
+  byId('historyDim').title = `${renderer.historyStatus || 'configured'}\nCapture: ${renderer.historyCaptureRate || 'every'}\nSampling: ${renderer.historySampling || 'smooth'}\nGlitch tiles: ${renderer.glitchBaseTiles || 0} · instances: ${renderer.glitchInstances || 0}\nClusters: ${renderer.clusterTilesEnabled ? 'on' : 'off'} · ${renderer.clusterCentersActive || 0} centers · ${renderer.clusterBiasTiles || 0} biased\nScanlines: ${renderer.scanlinesEnabled ? 'on' : 'off'} · ${renderer.scanBandCount || 0} bands`;
 
   if (camera.streaming) byId('camStartBtn').textContent = `⬤ ${camera.captureFps?.toFixed?.(0) || ''}fps`;
   else byId('camStartBtn').textContent = '⬤ Cam';
@@ -579,7 +597,7 @@ async function boot() {
   await refreshParameterState();
   await poll();
   setInterval(poll, 250);
-  console.info('Huff Native wgpu Milestone 03 loaded', {
+  console.info('Huff Native wgpu Milestone 06 loaded', {
     parameters: appState.registry.length,
     implemented: appState.registry.filter((definition) => definition.implemented).length,
   });
