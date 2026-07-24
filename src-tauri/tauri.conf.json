@@ -1,6 +1,5 @@
 {
   "$schema": "https://schema.tauri.app/config/1",
-
   "build": {
     "beforeBuildCommand": "",
     "beforeDevCommand": "",
@@ -8,12 +7,10 @@
     "distDir": "../src",
     "withGlobalTauri": true
   },
-
   "package": {
     "productName": "huff",
-    "version": "0.1.0"
+    "version": "1.0.2"
   },
-
   "tauri": {
     "windows": [
       {
@@ -28,14 +25,13 @@
       {
         "label": "controls",
         "title": "ctrl",
-        "url": "controls.html",
+        "url": "index.html",
         "width": 800,
         "height": 1200,
         "resizable": true,
         "decorations": true
       }
     ],
-
     "bundle": {
       "active": true,
       "identifier": "com.example.huff",

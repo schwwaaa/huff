@@ -2059,10 +2059,13 @@
         }
 
         // ── state ─────────────────────────────────────────────────────────────
-        let active       = false;
-        let rafId        = null;
-        let lastTs       = 0;
-        let localFrames  = 0;
+        let active        = false;
+        let rafId         = null;
+        let lastTs        = 0;
+        let localFrames   = 0;
+        let browserDrops  = 0;
+        let outputW       = 1280;
+        let outputH       = 720;
 
         // Reuse a single offscreen canvas for pixel extraction
         const offscreen  = document.createElement('canvas');
@@ -2098,7 +2101,17 @@
         }
 
         // ── pixel sender ──────────────────────────────────────────────────────
-        const MAGIC = new Uint8Array([72,85,70,70,83,89,80,72]); // "HUFFSYPH"
+        const MAGIC       = new Uint8Array([72,85,70,70,83,89,80,72]); // "HUFFSYPH"
+        const HEADER_SIZE = 16;
+        let frameBuf      = null;
+        let frameView     = null;
+        let nativeStatus  = '';
+
+        function updateSyphonFrameLabel() {
+            if (!frameLabel) return;
+            const local = `${localFrames} browser sent · ${browserDrops} browser drops`;
+            frameLabel.textContent = nativeStatus ? `${local} · ${nativeStatus}` : local;
+        }
 
         function findCanvas() {
             // p5 canvas is the first canvas in the document
@@ -2115,14 +2128,16 @@
 
             if (!wsReady) { ensureSyphWS(); rafId = requestAnimationFrame(sendFrame); return; }
 
-            // Backpressure — THE memory-leak guard. Each frame is raw RGBA
-            // (~8.3 MB at 1080p). With no ceiling, syphWS.send() queues frames into
-            // the socket's send buffer faster than the relay can drain them, and
-            // that buffer grows without bound in RAM — the runaway that filled
-            // memory and locked the machine. If the socket is already backed up,
-            // skip this frame entirely: no readback, no allocation, no send.
-            const WS_MAX_BUFFERED = 8 * 1024 * 1024; // ~8 MB ≈ one 1080p frame
-            if (syphWS.bufferedAmount > WS_MAX_BUFFERED) {
+            // Freeze dimensions when output starts. Editing the fields while live
+            // no longer creates packets that disagree with the active native texture.
+            const targetW = outputW;
+            const targetH = outputH;
+            const packetSize = HEADER_SIZE + targetW * targetH * 4;
+
+            // Keep at most approximately one raw frame queued in Chromium. Rust
+            // applies a second latest-frame boundary before Metal publication.
+            if (syphWS.bufferedAmount > packetSize) {
+                browserDrops++;
                 rafId = requestAnimationFrame(sendFrame);
                 return;
             }
@@ -2130,14 +2145,11 @@
             const cnv = findCanvas();
             if (!cnv) { rafId = requestAnimationFrame(sendFrame); return; }
 
-            // Always output at the user-specified resolution — this is what
-            // OBS / Resolume / VDMX will see. drawImage handles the scale.
-            const targetW = Math.max(64, parseInt(wInput.value, 10) || 1280);
-            const targetH = Math.max(64, parseInt(hInput.value, 10) || 720);
-
             if (offscreen.width !== targetW || offscreen.height !== targetH) {
                 offscreen.width  = targetW;
                 offscreen.height = targetH;
+                frameBuf = null;
+                frameView = null;
             }
 
             offCtx.drawImage(cnv, 0, 0, targetW, targetH);
@@ -2145,22 +2157,22 @@
             try { imgData = offCtx.getImageData(0, 0, targetW, targetH); }
             catch (e) { rafId = requestAnimationFrame(sendFrame); return; }
 
-            // Build binary packet: 8-byte magic + 4-byte W + 4-byte H + pixels
-            const header = new ArrayBuffer(16);
-            const hView  = new DataView(header);
-            MAGIC.forEach((b, i) => hView.setUint8(i, b));
-            hView.setUint32(8,  targetW, true);
-            hView.setUint32(12, targetH, true);
+            // Reuse one exact-sized packet. WebSocket.send() snapshots typed-array
+            // data synchronously, avoiding Blob creation and blob.arrayBuffer().
+            if (!frameBuf || frameBuf.byteLength !== packetSize) {
+                frameBuf = new Uint8Array(packetSize);
+                frameView = new DataView(frameBuf.buffer);
+                frameBuf.set(MAGIC, 0);
+            }
+            frameView.setUint32(8,  targetW, true);
+            frameView.setUint32(12, targetH, true);
+            frameBuf.set(imgData.data, HEADER_SIZE);
 
-            // Concatenate without copying pixels (just reference the buffer)
-            const blob = new Blob([header, imgData.data.buffer]);
-            blob.arrayBuffer().then(ab => {
-                if (wsReady && syphWS?.readyState === WebSocket.OPEN) {
-                    syphWS.send(ab);
-                    localFrames++;
-                    if (frameLabel) frameLabel.textContent = `${localFrames} frames sent`;
-                }
-            }).catch(() => {});
+            try {
+                syphWS.send(frameBuf);
+                localFrames++;
+                updateSyphonFrameLabel();
+            } catch {}
 
             rafId = requestAnimationFrame(sendFrame);
         }
@@ -2176,7 +2188,14 @@
             try {
                 const msg = await invoke('start_syphon', { width: w, height: h });
                 active = true;
+                outputW = w;
+                outputH = h;
                 localFrames = 0;
+                browserDrops = 0;
+                frameBuf = null;
+                frameView = null;
+                nativeStatus = '';
+                updateSyphonFrameLabel();
                 ensureSyphWS();
 
                 statusBox.textContent = `${msg}\nSending ${w}×${h} pixels → Syphon → look for "huff" in your VJ software.`;
@@ -2207,6 +2226,7 @@
             pill.style.color      = 'rgba(180,100,255,.5)';
             toggleBtn.textContent = '▶ Start';
             toggleBtn.classList.remove('active');
+            nativeStatus = '';
             if (frameLabel) frameLabel.textContent = '';
         }
 
@@ -2220,7 +2240,8 @@
             if (!active) return;
             try {
                 const s = await invoke('syphon_status');
-                if (frameLabel && s) frameLabel.textContent = s;
+                nativeStatus = s || '';
+                updateSyphonFrameLabel();
             } catch {}
         }, 2000);
 
@@ -2279,12 +2300,15 @@
         }
 
         // ── state ─────────────────────────────────────────────────────────────
-        let running      = false;
-        let frameCount   = 0;
-        let rafId        = null;
-        let lastTs       = 0;
-        let spoutCanvas  = null;
-        let spoutCtx     = null;
+        let running       = false;
+        let frameCount    = 0;
+        let browserDrops  = 0;
+        let outputW       = 1280;
+        let outputH       = 720;
+        let rafId         = null;
+        let lastTs        = 0;
+        let spoutCanvas   = null;
+        let spoutCtx      = null;
 
         // ── helpers ───────────────────────────────────────────────────────────
         function setStatus(text, cls = '') {
@@ -2336,17 +2360,21 @@
 
             if (ts - lastTs < period) return;
 
-            // Backpressure — skip frame if WS buffer is backlogged
+            // Backpressure — allow no more than approximately one raw frame in
+            // Chromium. The Rust worker independently replaces stale frames.
             const ws = sendSpoutFrame._ws;
-            if (ws && ws.readyState === WebSocket.OPEN && ws.bufferedAmount > 0) return;
+            const w = outputW;
+            const h = outputH;
+            const packetSize = HEADER_SIZE + w * h * 4;
+            if (ws && ws.readyState === WebSocket.OPEN && ws.bufferedAmount > packetSize) {
+                browserDrops++;
+                return;
+            }
 
             lastTs = ts;
 
             const src = findCanvas();
             if (!src) return;
-
-            const w = parseInt(wInput?.value || '1280', 10);
-            const h = parseInt(hInput?.value || '720',  10);
 
             // Lazy-allocate offscreen canvas; invalidate frameBuf if size changes
             if (!spoutCanvas || spoutCanvas.width !== w || spoutCanvas.height !== h) {
@@ -2385,9 +2413,13 @@
             }
 
             if (ws.readyState === WebSocket.OPEN) {
-                ws.send(frameBuf.buffer.slice(0, totalSize));
+                // frameBuf is exact-sized; sending the typed array avoids the
+                // previous full-frame ArrayBuffer.slice() allocation.
+                ws.send(frameBuf);
                 frameCount++;
-                if (frameCountEl) frameCountEl.textContent = `${frameCount} frames`;
+                if (frameCountEl) {
+                    frameCountEl.textContent = `${frameCount} sent · ${browserDrops} browser drops`;
+                }
             }
         }
 
@@ -2400,8 +2432,12 @@
             try {
                 const msg = await invoke('start_spout', { width: w, height: h });
                 setStatus(`${msg}\nSending ${w}×${h} pixels → Spout → look for "huff" in your VJ software.`, 'active');
-                running    = true;
-                frameCount = 0;
+                running      = true;
+                outputW       = w;
+                outputH       = h;
+                frameCount    = 0;
+                browserDrops  = 0;
+                frameBuf      = null;
                 toggleBtn.textContent = '■ Stop';
                 toggleBtn.classList.add('active');
                 setPillActive(true);

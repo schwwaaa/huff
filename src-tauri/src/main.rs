@@ -258,7 +258,7 @@ fn get_osc_port() -> u16 { OSC_PORT }
 #[derive(Clone, Debug)]
 struct Client {
   role: String, // "index" | "canvas" | "unknown"
-  tx: tokio::sync::mpsc::UnboundedSender<Message>,
+  tx: tokio::sync::mpsc::Sender<Message>,
 }
 
 type ClientMap = Arc<Mutex<HashMap<SocketAddr, Client>>>;
@@ -275,6 +275,10 @@ struct HelloMsg {
 }
 
 const PORT: u16 = 8787;
+// Keep at most two pending messages per socket. Binary mirror frames use
+// try_send and are dropped when the client is behind, so latency and memory
+// remain bounded instead of growing for the lifetime of a slow connection.
+const CLIENT_QUEUE_CAPACITY: usize = 2;
 
 async fn run_listener(bind_addr: String, clients: ClientMap) -> Result<(), String> {
   let listener = TcpListener::bind(&bind_addr).await.map_err(|e| e.to_string())?;
@@ -291,24 +295,44 @@ async fn run_listener(bind_addr: String, clients: ClientMap) -> Result<(), Strin
 }
 
 async fn broadcast_text(clients: &ClientMap, sender: SocketAddr, txt: String) {
-  let map = clients.lock().await;
-  for (addr, c) in map.iter() {
-    if *addr != sender {
-      let _ = c.tx.send(Message::Text(txt.clone()));
-    }
+  let targets: Vec<tokio::sync::mpsc::Sender<Message>> = {
+    let map = clients.lock().await;
+    map.iter()
+      .filter(|(addr, _)| **addr != sender)
+      .map(|(_, client)| client.tx.clone())
+      .collect()
+  };
+
+  for tx in targets {
+    // Text carries control state, so preserve ordering instead of dropping it.
+    // The map lock is released before awaiting any individual socket.
+    let _ = tx.send(Message::Text(txt.clone())).await;
   }
 }
 
-async fn broadcast_binary(clients: &ClientMap, sender: SocketAddr, bin: Vec<u8>) -> usize {
-  let map = clients.lock().await;
+async fn broadcast_binary(
+  clients: &ClientMap,
+  sender: SocketAddr,
+  bin: Vec<u8>,
+) -> (usize, usize) {
+  let targets: Vec<tokio::sync::mpsc::Sender<Message>> = {
+    let map = clients.lock().await;
+    map.iter()
+      .filter(|(addr, client)| **addr != sender && client.role == "canvas")
+      .map(|(_, client)| client.tx.clone())
+      .collect()
+  };
+
   let mut sent = 0usize;
-  for (addr, c) in map.iter() {
-    if *addr != sender && c.role == "canvas" {
-      let _ = c.tx.send(Message::Binary(bin.clone()));
-      sent += 1;
+  let mut dropped = 0usize;
+  for tx in targets {
+    match tx.try_send(Message::Binary(bin.clone())) {
+      Ok(()) => sent += 1,
+      Err(tokio::sync::mpsc::error::TrySendError::Full(_)) => dropped += 1,
+      Err(tokio::sync::mpsc::error::TrySendError::Closed(_)) => {}
     }
   }
-  sent
+  (sent, dropped)
 }
 
 async fn handle_ws(
@@ -318,7 +342,7 @@ async fn handle_ws(
 ) -> Result<(), String> {
   let ws_stream = accept_async(stream).await.map_err(|e| e.to_string())?;
   let (mut ws_tx, mut ws_rx) = ws_stream.split();
-  let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<Message>();
+  let (tx, mut rx) = tokio::sync::mpsc::channel::<Message>(CLIENT_QUEUE_CAPACITY);
 
   {
     let mut map = clients.lock().await;
@@ -357,12 +381,12 @@ async fn handle_ws(
           // macOS: intercept Syphon frames before relaying
           #[cfg(target_os = "macos")]
           if bin.starts_with(b"HUFFSYPH") {
-            syphon::push_frame(&bin);
-            // do NOT relay syphon frames to the canvas window — they're large
-            // and the canvas already draws from its own p5 loop
+            syphon::submit_frame(bin);
+            // Do not relay native-output frames to the canvas window. The
+            // latest-frame worker owns publication and replaces stale frames.
           } else {
-            let sent = broadcast_binary(&clients_r, peer_addr, bin).await;
-            if sent == 0 {
+            let (sent, dropped) = broadcast_binary(&clients_r, peer_addr, bin).await;
+            if sent == 0 && dropped == 0 {
               println!("[huff] binary from {peer_addr}, but no canvas clients yet");
             }
           }
@@ -370,19 +394,19 @@ async fn handle_ws(
           // Windows: intercept Spout frames before relaying
           #[cfg(target_os = "windows")]
           if bin.starts_with(b"HUFFSPOUT") {
-            spout::push_frame(&bin);
-            // do NOT relay spout frames to the canvas window
+            spout::submit_frame(bin);
+            // Do not relay native-output frames to the canvas window.
           } else {
-            let sent = broadcast_binary(&clients_r, peer_addr, bin).await;
-            if sent == 0 {
+            let (sent, dropped) = broadcast_binary(&clients_r, peer_addr, bin).await;
+            if sent == 0 && dropped == 0 {
               println!("[huff] binary from {peer_addr}, but no canvas clients yet");
             }
           }
 
           #[cfg(not(any(target_os = "macos", target_os = "windows")))]
           {
-            let sent = broadcast_binary(&clients_r, peer_addr, bin).await;
-            if sent == 0 {
+            let (sent, dropped) = broadcast_binary(&clients_r, peer_addr, bin).await;
+            if sent == 0 && dropped == 0 {
               println!("[huff] binary from {peer_addr}, but no canvas clients yet");
             }
           }
@@ -390,7 +414,7 @@ async fn handle_ws(
 
         Ok(Message::Ping(p)) => {
           // Reply via channel so the writer handles it without an extra lock
-          let _ = tx.send(Message::Pong(p));
+          let _ = tx.send(Message::Pong(p)).await;
         }
         Ok(Message::Close(_)) => break,
         Ok(_) => {}
@@ -494,6 +518,11 @@ tauri::Builder::default()
       const PORT: u16 = 8787;
 
       println!("[huff] setup: starting listeners on 127.0.0.1:{PORT} and [::1]:{PORT}");
+
+      #[cfg(target_os = "macos")]
+      syphon::start_worker();
+      #[cfg(target_os = "windows")]
+      spout::start_worker();
 
       let clients_v4 = Arc::clone(&CLIENTS);
       let clients_v6 = Arc::clone(&CLIENTS);

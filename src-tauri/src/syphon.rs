@@ -22,7 +22,9 @@ use once_cell::sync::Lazy;
 use std::ffi::CString;
 use std::os::raw::c_void;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Mutex;
+use std::sync::{Condvar, Mutex, Once};
+use std::thread;
+use std::time::Instant;
 
 // ── Metal framework link ──────────────────────────────────────────────────────
 
@@ -87,6 +89,7 @@ struct SyphonState {
     device:  *mut Object,  // id<MTLDevice>
     queue:   *mut Object,  // id<MTLCommandQueue>
     server:  *mut Object,  // SyphonMetalServer *
+    texture: *mut Object,  // persistent id<MTLTexture>
     width:   u32,
     height:  u32,
 }
@@ -98,7 +101,22 @@ unsafe impl Send for SyphonState {}
 static SYPHON: Lazy<Mutex<Option<SyphonState>>> =
     Lazy::new(|| Mutex::new(None));
 
+// Latest-frame boundary copied from the newer Junkpile media examples.
+// The WebSocket task only replaces this slot; Metal/Syphon work runs on a
+// dedicated native thread. Slow publication can therefore drop/rewrite a
+// pending frame, but it can never build an unbounded queue.
+static PENDING_FRAME: Lazy<(Mutex<Option<Vec<u8>>>, Condvar)> =
+    Lazy::new(|| (Mutex::new(None), Condvar::new()));
+static WORKER_START: Once = Once::new();
+
 pub static FRAME_COUNT: AtomicU64 = AtomicU64::new(0);
+pub static FRAME_RECEIVED: AtomicU64 = AtomicU64::new(0);
+pub static FRAME_REPLACED: AtomicU64 = AtomicU64::new(0);
+pub static FRAME_REJECTED: AtomicU64 = AtomicU64::new(0);
+pub static LAST_UPLOAD_US: AtomicU64 = AtomicU64::new(0);
+
+const MAX_FRAME_WIDTH: u32 = 8192;
+const MAX_FRAME_HEIGHT: u32 = 8192;
 
 // ── Framework loader ──────────────────────────────────────────────────────────
 
@@ -183,40 +201,122 @@ fn ensure_framework_loaded() -> Result<(), String> {
     )
 }
 
+// ── Frame validation and persistent Metal resource helpers ───────────────────
+
+fn frame_byte_len(width: u32, height: u32) -> Option<usize> {
+    if width == 0 || height == 0 || width > MAX_FRAME_WIDTH || height > MAX_FRAME_HEIGHT {
+        return None;
+    }
+    (width as usize)
+        .checked_mul(height as usize)?
+        .checked_mul(4)
+}
+
+fn clear_pending_frame() {
+    let (lock, _) = &*PENDING_FRAME;
+    lock.lock().unwrap().take();
+}
+
+unsafe fn create_texture(
+    device: *mut Object,
+    width: u32,
+    height: u32,
+) -> Result<*mut Object, String> {
+    let desc_cls = Class::get("MTLTextureDescriptor")
+        .ok_or("MTLTextureDescriptor not available")?;
+
+    let desc: *mut Object = msg_send![
+        desc_cls,
+        texture2DDescriptorWithPixelFormat: MTL_PIXEL_FORMAT_RGBA8_UNORM
+        width: width as u64
+        height: height as u64
+        mipmapped: objc::runtime::NO
+    ];
+
+    let _: () = msg_send![desc, setStorageMode: MTL_STORAGE_MODE_SHARED];
+    let _: () = msg_send![desc, setUsage:
+        MTL_TEXTURE_USAGE_RENDER_TARGET | MTL_TEXTURE_USAGE_SHADER_READ
+    ];
+
+    let texture: *mut Object = msg_send![device, newTextureWithDescriptor: desc];
+    if texture.is_null() {
+        Err("newTextureWithDescriptor returned nil".into())
+    } else {
+        Ok(texture)
+    }
+}
+
+unsafe fn release_state(state: SyphonState) {
+    let _: () = msg_send![state.server, stop];
+    let _: () = msg_send![state.texture, release];
+    let _: () = msg_send![state.server, release];
+    let _: () = msg_send![state.queue, release];
+    let _: () = msg_send![state.device, release];
+}
+
+/// Start the dedicated latest-frame publisher thread once for the process.
+pub fn start_worker() {
+    WORKER_START.call_once(|| {
+        thread::Builder::new()
+            .name("huff-syphon-output".into())
+            .spawn(|| loop {
+                let frame = {
+                    let (lock, ready) = &*PENDING_FRAME;
+                    let mut pending = lock.lock().unwrap();
+                    while pending.is_none() {
+                        pending = ready.wait(pending).unwrap();
+                    }
+                    pending.take().unwrap()
+                };
+                push_frame(&frame);
+            })
+            .expect("failed to start Syphon output worker");
+    });
+}
+
+/// Replace the currently pending frame instead of queueing behind it.
+pub fn submit_frame(data: Vec<u8>) {
+    FRAME_RECEIVED.fetch_add(1, Ordering::Relaxed);
+    let (lock, ready) = &*PENDING_FRAME;
+    let mut pending = lock.lock().unwrap();
+    if pending.replace(data).is_some() {
+        FRAME_REPLACED.fetch_add(1, Ordering::Relaxed);
+    }
+    ready.notify_one();
+}
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /// Start a SyphonMetalServer named "huff".
 /// Creates a MTLDevice and MTLCommandQueue that persist until stop() is called.
 pub fn start(width: u32, height: u32) -> Result<(), String> {
     ensure_framework_loaded()?;
+    frame_byte_len(width, height)
+        .ok_or_else(|| format!("invalid Syphon dimensions: {width}×{height}"))?;
 
-    // Drop any existing server
+    // Drop any existing server and pending stale frame.
     let mut guard = SYPHON.lock().unwrap();
     if let Some(old) = guard.take() {
-        unsafe {
-            let _: () = msg_send![old.server, stop];
-        }
+        unsafe { release_state(old); }
     }
+    clear_pending_frame();
 
     unsafe {
-        // 1. Default Metal device (the GPU)
         let device = MTLCreateSystemDefaultDevice();
         if device.is_null() {
             return Err("MTLCreateSystemDefaultDevice returned nil — Metal not supported on this machine".into());
         }
 
-        // 2. Command queue for submitting work each frame
         let queue: *mut Object = msg_send![device, newCommandQueue];
         if queue.is_null() {
+            let _: () = msg_send![device, release];
             return Err("newCommandQueue failed".into());
         }
 
-        // 3. SyphonMetalServer alloc+init
         let cls = Class::get("SyphonMetalServer")
             .ok_or("SyphonMetalServer class missing after framework load")?;
-
         let str_cls = Class::get("NSString").ok_or("NSString missing")?;
-        let cname   = CString::new("huff").unwrap();
+        let cname = CString::new("huff").unwrap();
         let ns_name: *mut Object = msg_send![
             str_cls, stringWithUTF8String: cname.as_ptr()
         ];
@@ -224,30 +324,56 @@ pub fn start(width: u32, height: u32) -> Result<(), String> {
         let alloc: *mut Object = msg_send![cls, alloc];
         let server: *mut Object = msg_send![
             alloc,
-            initWithName:   ns_name
-            device:         device
-            options:        std::ptr::null_mut::<Object>()
+            initWithName: ns_name
+            device: device
+            options: std::ptr::null_mut::<Object>()
         ];
 
         if server.is_null() {
+            let _: () = msg_send![queue, release];
+            let _: () = msg_send![device, release];
             return Err("SyphonMetalServer initWithName:device:options: returned nil".into());
         }
 
-        println!("[syphon] server started — {}×{} — visible as 'huff' in Syphon clients", width, height);
-        FRAME_COUNT.store(0, Ordering::Relaxed);
+        let texture = match create_texture(device, width, height) {
+            Ok(texture) => texture,
+            Err(error) => {
+                let _: () = msg_send![server, stop];
+                let _: () = msg_send![server, release];
+                let _: () = msg_send![queue, release];
+                let _: () = msg_send![device, release];
+                return Err(error);
+            }
+        };
 
-        *guard = Some(SyphonState { device, queue, server, width, height });
+        println!(
+            "[syphon] server started — {}×{} — persistent Metal texture — visible as 'huff'",
+            width, height
+        );
+        FRAME_COUNT.store(0, Ordering::Relaxed);
+        FRAME_RECEIVED.store(0, Ordering::Relaxed);
+        FRAME_REPLACED.store(0, Ordering::Relaxed);
+        FRAME_REJECTED.store(0, Ordering::Relaxed);
+        LAST_UPLOAD_US.store(0, Ordering::Relaxed);
+
+        *guard = Some(SyphonState {
+            device,
+            queue,
+            server,
+            texture,
+            width,
+            height,
+        });
         Ok(())
     }
 }
 
-/// Stop the Syphon server and release Metal resources.
+/// Stop the Syphon server and release persistent Metal resources.
 pub fn stop() {
+    clear_pending_frame();
     let mut guard = SYPHON.lock().unwrap();
     if let Some(state) = guard.take() {
-        unsafe {
-            let _: () = msg_send![state.server, stop];
-        }
+        unsafe { release_state(state); }
         println!("[syphon] server stopped");
     }
 }
@@ -260,112 +386,120 @@ pub fn status() -> String {
     let guard = SYPHON.lock().unwrap();
     match &*guard {
         None => "stopped".into(),
-        Some(s) => {
-            let n = FRAME_COUNT.load(Ordering::Relaxed);
-            format!("active — {}×{} — {} frames published", s.width, s.height, n)
-        }
+        Some(s) => format!(
+            "active — {}×{} — published {} — received {} — replaced {} — rejected {} — upload {} µs",
+            s.width,
+            s.height,
+            FRAME_COUNT.load(Ordering::Relaxed),
+            FRAME_RECEIVED.load(Ordering::Relaxed),
+            FRAME_REPLACED.load(Ordering::Relaxed),
+            FRAME_REJECTED.load(Ordering::Relaxed),
+            LAST_UPLOAD_US.load(Ordering::Relaxed),
+        ),
     }
 }
 
-/// Upload a raw RGBA frame to a MTLTexture and publish it via Syphon.
-/// Called from the WS relay when a binary message starts with "HUFFSYPH".
-///
-/// Frame binary layout (produced by canvas.js):
-///   Bytes  0– 7 : b"HUFFSYPH" magic
-///   Bytes  8–11 : width  as u32 LE
-///   Bytes 12–15 : height as u32 LE
-///   Bytes 16+   : raw RGBA8 pixels (width × height × 4 bytes)
-pub fn push_frame(data: &[u8]) {
-    // Minimum: 16-byte header + at least one pixel
-    if data.len() < 17 {
+/// Upload one validated raw RGBA frame into the persistent Metal texture.
+fn push_frame(data: &[u8]) {
+    if data.len() < 17 || !data.starts_with(b"HUFFSYPH") {
+        FRAME_REJECTED.fetch_add(1, Ordering::Relaxed);
         return;
     }
 
-    // Parse header
-    let width  = u32::from_le_bytes([data[8], data[9],  data[10], data[11]]);
+    let width = u32::from_le_bytes([data[8], data[9], data[10], data[11]]);
     let height = u32::from_le_bytes([data[12], data[13], data[14], data[15]]);
+    let expected = match frame_byte_len(width, height) {
+        Some(size) => size,
+        None => {
+            FRAME_REJECTED.fetch_add(1, Ordering::Relaxed);
+            return;
+        }
+    };
     let pixels = &data[16..];
-
-    let expected = (width as usize) * (height as usize) * 4;
-    if pixels.len() < expected || width == 0 || height == 0 {
-        eprintln!("[syphon] bad frame: {}×{} needs {} bytes, got {}", width, height, expected, pixels.len());
+    if pixels.len() != expected {
+        FRAME_REJECTED.fetch_add(1, Ordering::Relaxed);
+        eprintln!(
+            "[syphon] bad frame: {}×{} needs exactly {} bytes, got {}",
+            width,
+            height,
+            expected,
+            pixels.len()
+        );
         return;
     }
 
     let guard = SYPHON.lock().unwrap();
     let state = match &*guard {
-        Some(s) => s,
-        None    => return, // server not started
-    };
-
-    unsafe {
-        // 1. Texture descriptor — shared storage so CPU can write directly
-        let desc_cls = match Class::get("MTLTextureDescriptor") {
-            Some(c) => c,
-            None    => { eprintln!("[syphon] MTLTextureDescriptor not available"); return; }
-        };
-
-        let desc: *mut Object = msg_send![
-            desc_cls,
-            texture2DDescriptorWithPixelFormat: MTL_PIXEL_FORMAT_RGBA8_UNORM
-            width:    width  as u64
-            height:   height as u64
-            mipmapped: objc::runtime::NO
-        ];
-
-        let _: () = msg_send![desc, setStorageMode: MTL_STORAGE_MODE_SHARED];
-        let _: () = msg_send![desc, setUsage:
-            MTL_TEXTURE_USAGE_RENDER_TARGET | MTL_TEXTURE_USAGE_SHADER_READ
-        ];
-
-        // 2. Create texture and upload pixels (CPU → GPU, shared memory — no DMA copy)
-        let texture: *mut Object = msg_send![state.device, newTextureWithDescriptor: desc];
-        if texture.is_null() {
-            eprintln!("[syphon] newTextureWithDescriptor returned nil");
+        Some(state) if state.width == width && state.height == height => state,
+        Some(state) => {
+            FRAME_REJECTED.fetch_add(1, Ordering::Relaxed);
+            eprintln!(
+                "[syphon] rejected {}×{} frame; active output is {}×{}",
+                width, height, state.width, state.height
+            );
             return;
         }
+        None => return,
+    };
+
+    let started = Instant::now();
+    unsafe {
+        // The publisher runs on a plain Rust thread. Drain autoreleased Metal
+        // objects each frame instead of letting them accumulate indefinitely.
+        let pool: *mut Object = match Class::get("NSAutoreleasePool") {
+            Some(pool_cls) => msg_send![pool_cls, new],
+            None => std::ptr::null_mut(),
+        };
 
         let region = MTLRegion {
             origin: MTLOrigin { x: 0, y: 0, z: 0 },
-            size:   MTLSize   { width: width as u64, height: height as u64, depth: 1 },
+            size: MTLSize {
+                width: width as u64,
+                height: height as u64,
+                depth: 1,
+            },
         };
 
         let _: () = msg_send![
-            texture,
+            state.texture,
             replaceRegion: region
-            mipmapLevel:   0usize
-            withBytes:     pixels.as_ptr() as *const c_void
-            bytesPerRow:   (width * 4) as u64
+            mipmapLevel: 0usize
+            withBytes: pixels.as_ptr() as *const c_void
+            bytesPerRow: (width * 4) as u64
         ];
 
-        // 3. Command buffer for Syphon's Metal synchronisation
         let cmd_buf: *mut Object = msg_send![state.queue, commandBuffer];
         if cmd_buf.is_null() {
+            FRAME_REJECTED.fetch_add(1, Ordering::Relaxed);
             eprintln!("[syphon] commandBuffer returned nil");
-            let _: () = msg_send![texture, release];
+            if !pool.is_null() {
+                let _: () = msg_send![pool, drain];
+            }
             return;
         }
 
-        // 4. Publish — flipped:YES because Canvas 2D pixel origin is top-left,
-        //    but Metal/Syphon expects bottom-left origin
         let rect = NSRect {
             origin: NSPoint { x: 0.0, y: 0.0 },
-            size:   NSSize  { width: width as f64, height: height as f64 },
+            size: NSSize {
+                width: width as f64,
+                height: height as f64,
+            },
         };
 
         let _: () = msg_send![
             state.server,
-            publishFrameTexture: texture
-            onCommandBuffer:     cmd_buf
-            imageRegion:         rect
-            flipped:             YES
+            publishFrameTexture: state.texture
+            onCommandBuffer: cmd_buf
+            imageRegion: rect
+            flipped: YES
         ];
-
         let _: () = msg_send![cmd_buf, commit];
-
-        // Release per-frame texture (device and queue are long-lived)
-        let _: () = msg_send![texture, release];
-
-        FRAME_COUNT.fetch_add(1, Ordering::Relaxed);
+        let _: () = msg_send![cmd_buf, waitUntilCompleted];
+        if !pool.is_null() {
+            let _: () = msg_send![pool, drain];
+        }
     }
+
+    LAST_UPLOAD_US.store(started.elapsed().as_micros() as u64, Ordering::Relaxed);
+    FRAME_COUNT.fetch_add(1, Ordering::Relaxed);
 }
