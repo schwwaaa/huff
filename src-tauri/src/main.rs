@@ -73,7 +73,7 @@ fn get_app_info(
     source: tauri::State<'_, SourceSelector>,
 ) -> AppInfo {
     AppInfo {
-        build: "HNW-03.2".into(),
+        build: "HNW-04".into(),
         renderer: renderer.info(),
         camera: camera.status(),
         camera_devices: camera.devices(),
@@ -87,7 +87,7 @@ fn get_app_info(
         osc: osc.info(),
         gesture: gesture.info(),
         parameter_revision: parameters.revision(),
-        native_milestone: "HNW-03.2".into(),
+        native_milestone: "HNW-04".into(),
         active_source: source.get().label().into(),
     }
 }

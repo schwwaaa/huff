@@ -12,6 +12,7 @@ use crate::{
 use bytemuck::{Pod, Zeroable};
 use serde::Serialize;
 use std::{
+    collections::HashMap,
     env,
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -24,6 +25,7 @@ use std::{
 use wgpu::util::DeviceExt;
 
 const SIGNAL_COUNT: usize = 160;
+const MAX_GLITCH_INSTANCES: usize = 32_768;
 const HDR_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
 
 #[derive(Clone)]
@@ -89,6 +91,12 @@ pub struct RendererInfo {
     pub history_rate_skips: u64,
     pub history_rebuilds: u64,
     pub history_preview_active: bool,
+    pub glitch_enabled: bool,
+    pub glitch_base_tiles: u32,
+    pub glitch_instances: u32,
+    pub glitch_instance_capacity: u32,
+    pub glitch_generation_ms: f64,
+    pub glitch_dropped_instances: u64,
     pub parameter_revision: u64,
     pub active_source: String,
     pub surface_skips: u64,
@@ -146,6 +154,7 @@ struct Uniforms {
     network0: [f32; 4],
     history_state: [f32; 4],
     history_controls: [f32; 4],
+    effect_state: [f32; 4],
 }
 
 #[repr(C)]
@@ -165,6 +174,128 @@ struct GpuGestureData {
 #[derive(Clone, Copy, Pod, Zeroable)]
 struct GpuSignals {
     values: [f32; SIGNAL_COUNT],
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Pod, Zeroable)]
+struct GpuGlitchTile {
+    dest_rect: [f32; 4],
+    source_rect: [f32; 4],
+    layer_alpha: [f32; 4],
+}
+
+
+// p5.js uses the Numerical Recipes LCG for randomSeed()/random().  Huff's
+// original glitch engine re-seeds it once per draw with baseSeed + frameCount.
+// Keeping this sequence is important: PIXEL SIZE/CORRUPT produce a fresh but
+// deterministic grid selection each rendered frame rather than a set of
+// continuously animated generic rectangles.
+struct P5Random {
+    state: u32,
+}
+
+impl P5Random {
+    fn new(seed: u32) -> Self {
+        Self { state: seed }
+    }
+
+    fn next(&mut self) -> f64 {
+        self.state = self
+            .state
+            .wrapping_mul(1_664_525)
+            .wrapping_add(1_013_904_223);
+        self.state as f64 / 4_294_967_296.0
+    }
+}
+
+const PERLIN_SIZE: usize = 4095;
+const PERLIN_YWRAPB: usize = 4;
+const PERLIN_YWRAP: usize = 1 << PERLIN_YWRAPB;
+const PERLIN_ZWRAPB: usize = 8;
+const PERLIN_ZWRAP: usize = 1 << PERLIN_ZWRAPB;
+
+struct P5Noise {
+    // p5.js performs noise math in JavaScript Number (IEEE-754 f64). Keeping
+    // the table and phases in f64 prevents long-running SPEED drift.
+    values: Vec<f64>,
+}
+
+impl P5Noise {
+    fn new(seed: u32) -> Self {
+        let mut random = P5Random::new(seed);
+        let mut values = Vec::with_capacity(PERLIN_SIZE + 1);
+        for _ in 0..=PERLIN_SIZE {
+            values.push(random.next());
+        }
+        Self { values }
+    }
+
+    fn sample(&self, mut x: f64, mut y: f64, mut z: f64) -> f64 {
+        x = x.abs();
+        y = y.abs();
+        z = z.abs();
+        let mut xi = x.floor() as usize;
+        let mut yi = y.floor() as usize;
+        let mut zi = z.floor() as usize;
+        let mut xf = x - xi as f64;
+        let mut yf = y - yi as f64;
+        let mut zf = z - zi as f64;
+        let mut result = 0.0;
+        let mut amplitude = 0.5_f64;
+
+        for _ in 0..4 {
+            let mut offset = xi + (yi << PERLIN_YWRAPB) + (zi << PERLIN_ZWRAPB);
+            let rxf = 0.5 * (1.0 - (xf * std::f64::consts::PI).cos());
+            let ryf = 0.5 * (1.0 - (yf * std::f64::consts::PI).cos());
+
+            let mut n1 = self.values[offset & PERLIN_SIZE];
+            n1 += rxf * (self.values[(offset + 1) & PERLIN_SIZE] - n1);
+            let mut n2 = self.values[(offset + PERLIN_YWRAP) & PERLIN_SIZE];
+            n2 += rxf
+                * (self.values[(offset + PERLIN_YWRAP + 1) & PERLIN_SIZE] - n2);
+            n1 += ryf * (n2 - n1);
+
+            offset += PERLIN_ZWRAP;
+            n2 = self.values[offset & PERLIN_SIZE];
+            n2 += rxf * (self.values[(offset + 1) & PERLIN_SIZE] - n2);
+            let mut n3 = self.values[(offset + PERLIN_YWRAP) & PERLIN_SIZE];
+            n3 += rxf
+                * (self.values[(offset + PERLIN_YWRAP + 1) & PERLIN_SIZE] - n3);
+            n2 += ryf * (n3 - n2);
+            let rzf = 0.5 * (1.0 - (zf * std::f64::consts::PI).cos());
+            n1 += rzf * (n2 - n1);
+            result += n1 * amplitude;
+            amplitude *= 0.5;
+
+            xi <<= 1;
+            xf *= 2.0;
+            yi <<= 1;
+            yf *= 2.0;
+            zi <<= 1;
+            zf *= 2.0;
+            if xf >= 1.0 {
+                xi += 1;
+                xf -= 1.0;
+            }
+            if yf >= 1.0 {
+                yi += 1;
+                yf -= 1.0;
+            }
+            if zf >= 1.0 {
+                zi += 1;
+                zf -= 1.0;
+            }
+        }
+        result
+    }
+
+    fn sample1(&self, x: f64) -> f64 {
+        self.sample(x, 0.0, 0.0)
+    }
+
+    fn sample2(&self, x: f64, y: f64) -> f64 {
+        self.sample(x, y, 0.0)
+    }
 }
 
 struct SourceTexture {
@@ -200,15 +331,20 @@ struct Renderer {
     adapter_info: wgpu::AdapterInfo,
 
     composite_pipeline: wgpu::RenderPipeline,
+    effect_prepare_pipeline: wgpu::RenderPipeline,
     feedback_pipeline: wgpu::RenderPipeline,
     present_pipeline: wgpu::RenderPipeline,
     history_capture_pipeline: wgpu::RenderPipeline,
+    glitch_pipeline: wgpu::RenderPipeline,
     uniform_buffer: wgpu::Buffer,
     gesture_buffer: wgpu::Buffer,
     signals_buffer: wgpu::Buffer,
+    glitch_tile_buffer: wgpu::Buffer,
+    glitch_tiles_cpu: Vec<GpuGlitchTile>,
     global_bind: wgpu::BindGroup,
     source_layout: wgpu::BindGroupLayout,
     feedback_layout: wgpu::BindGroupLayout,
+    glitch_history_layout: wgpu::BindGroupLayout,
     present_layout: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
     crisp_sampler: wgpu::Sampler,
@@ -217,8 +353,11 @@ struct Renderer {
     video_texture: SourceTexture,
     targets: OffscreenTargets,
     history_capture_bind: wgpu::BindGroup,
+    glitch_history_bind_smooth: wgpu::BindGroup,
+    glitch_history_bind_crisp: wgpu::BindGroup,
     history: GpuHistoryRing,
-    write_a: bool,
+    effect_is_a: bool,
+    effect_seeded: bool,
 
     sources: InputSources,
     parameters: ParameterStore,
@@ -251,6 +390,28 @@ struct Renderer {
     history_preview_depth: f32,
     history_preview_mix: f32,
     history_preview_alpha: f32,
+    glitch_depth_scatter: f32,
+    glitch_corrupt_drift: f32,
+    glitch_block: f32,
+    glitch_size: f32,
+    glitch_jitter: f32,
+    glitch_smear: f32,
+    glitch_smear_angle: f32,
+    glitch_speed: f32,
+    glitch_speed_fine: f32,
+    glitch_speed_mul: f32,
+    glitch_base_x: f32,
+    glitch_base_y: f32,
+    glitch_spatial_gap: f32,
+    glitch_seed: u64,
+    glitch_phase_x: f64,
+    glitch_phase_y: f64,
+    p5_noise_seed: u64,
+    p5_noise: P5Noise,
+    glitch_base_tiles: u32,
+    glitch_instance_count: u32,
+    glitch_generation_ms: f64,
+    glitch_dropped_instances: u64,
     last_history_source: ActiveSource,
 
     minimized: bool,
@@ -346,6 +507,7 @@ impl Renderer {
             network0: [0.0; 4],
             history_state: [0.0; 4],
             history_controls: [0.0; 4],
+            effect_state: [0.0; 4],
         };
         let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("huff native uniform buffer"),
@@ -367,6 +529,12 @@ impl Renderer {
             label: Some("huff native signal storage"),
             contents: bytemuck::bytes_of(&empty_signals),
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+        });
+        let glitch_tile_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("huff native glitch tile storage"),
+            size: (MAX_GLITCH_INSTANCES * std::mem::size_of::<GpuGlitchTile>()) as u64,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
         });
 
         let global_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -402,6 +570,16 @@ impl Renderer {
                     },
                     count: None,
                 },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 3,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
             ],
         });
         let global_bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -419,6 +597,10 @@ impl Renderer {
                 wgpu::BindGroupEntry {
                     binding: 2,
                     resource: signals_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: glitch_tile_buffer.as_entire_binding(),
                 },
             ],
         });
@@ -442,10 +624,19 @@ impl Renderer {
                     sampler_layout_entry(4),
                 ],
             });
+        let glitch_history_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("huff native glitch history layout"),
+                entries: &[history_texture_layout_entry(5), sampler_layout_entry(6)],
+            });
         let present_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: Some("huff native present layout"),
-                entries: &[texture_layout_entry(0), sampler_layout_entry(1)],
+                entries: &[
+                    texture_layout_entry(0),
+                    sampler_layout_entry(1),
+                    texture_layout_entry(2),
+                ],
             });
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("huff native linear sampler"),
@@ -523,6 +714,16 @@ impl Renderer {
                 bind_group_layouts: &[None, None, None, Some(&present_layout)],
                 immediate_size: 0,
             });
+        let glitch_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("huff native glitch tile pipeline layout"),
+                bind_group_layouts: &[
+                    Some(&global_layout),
+                    None,
+                    Some(&glitch_history_layout),
+                ],
+                immediate_size: 0,
+            });
 
         let composite_pipeline = create_pipeline(
             &device,
@@ -532,11 +733,19 @@ impl Renderer {
             "fs_composite",
             HDR_FORMAT,
         );
+        let effect_prepare_pipeline = create_pipeline(
+            &device,
+            &shader,
+            &feedback_pipeline_layout,
+            "huff native persistent buffer prepare pipeline",
+            "fs_effect_prepare",
+            HDR_FORMAT,
+        );
         let feedback_pipeline = create_pipeline(
             &device,
             &shader,
             &feedback_pipeline_layout,
-            "huff native feedback pipeline",
+            "huff native feedback transform pipeline",
             "fs_feedback",
             HDR_FORMAT,
         );
@@ -556,6 +765,12 @@ impl Renderer {
             "fs_history_capture",
             HISTORY_FORMAT,
         );
+        let glitch_pipeline = create_glitch_pipeline(
+            &device,
+            &shader,
+            &glitch_pipeline_layout,
+            HDR_FORMAT,
+        );
         let history_capacity = GpuHistoryRing::capacity_for(
             render_width,
             render_height,
@@ -568,6 +783,20 @@ impl Renderer {
             render_height,
             history_capacity,
             0,
+        );
+        let glitch_history_bind_smooth = create_glitch_history_bind(
+            &device,
+            &glitch_history_layout,
+            history.array_view(),
+            &sampler,
+            "huff glitch history smooth bind",
+        );
+        let glitch_history_bind_crisp = create_glitch_history_bind(
+            &device,
+            &glitch_history_layout,
+            history.array_view(),
+            &crisp_sampler,
+            "huff glitch history crisp bind",
         );
         let targets = create_targets(
             &device,
@@ -583,6 +812,7 @@ impl Renderer {
             &device,
             &present_layout,
             &targets.composite_view,
+            &targets.composite_view,
             &sampler,
             "huff history capture source bind",
         );
@@ -597,15 +827,20 @@ impl Renderer {
             config,
             adapter_info,
             composite_pipeline,
+            effect_prepare_pipeline,
             feedback_pipeline,
             present_pipeline,
             history_capture_pipeline,
+            glitch_pipeline,
             uniform_buffer,
             gesture_buffer,
             signals_buffer,
+            glitch_tile_buffer,
+            glitch_tiles_cpu: Vec::with_capacity(MAX_GLITCH_INSTANCES),
             global_bind,
             source_layout,
             feedback_layout,
+            glitch_history_layout,
             present_layout,
             sampler,
             crisp_sampler,
@@ -614,8 +849,11 @@ impl Renderer {
             video_texture,
             targets,
             history_capture_bind,
+            glitch_history_bind_smooth,
+            glitch_history_bind_crisp,
             history,
-            write_a: true,
+            effect_is_a: false,
+            effect_seeded: false,
             sources,
             parameters,
             parameter_snapshot,
@@ -645,6 +883,28 @@ impl Renderer {
             history_preview_depth: 0.5,
             history_preview_mix: 0.3,
             history_preview_alpha: 1.0,
+            glitch_depth_scatter: 1.0,
+            glitch_corrupt_drift: 0.0,
+            glitch_block: 1000.0,
+            glitch_size: 10.0,
+            glitch_jitter: 1.0,
+            glitch_smear: 6.0,
+            glitch_smear_angle: 0.0,
+            glitch_speed: 0.8,
+            glitch_speed_fine: 1.0,
+            glitch_speed_mul: 1.0,
+            glitch_base_x: 0.0,
+            glitch_base_y: 0.0,
+            glitch_spatial_gap: 40.0,
+            glitch_seed: 912_831,
+            glitch_phase_x: 0.0,
+            glitch_phase_y: 1000.0,
+            p5_noise_seed: 912_831,
+            p5_noise: P5Noise::new(912_831),
+            glitch_base_tiles: 0,
+            glitch_instance_count: 0,
+            glitch_generation_ms: 0.0,
+            glitch_dropped_instances: 0,
             last_history_source: ActiveSource::None,
             minimized: false,
             surface_skips: 0,
@@ -724,6 +984,12 @@ impl Renderer {
             history_rate_skips: self.history.rate_skips,
             history_rebuilds: self.history.rebuilds,
             history_preview_active: self.history_preview_enabled,
+            glitch_enabled: self.history_preview_enabled,
+            glitch_base_tiles: self.glitch_base_tiles,
+            glitch_instances: self.glitch_instance_count,
+            glitch_instance_capacity: MAX_GLITCH_INSTANCES as u32,
+            glitch_generation_ms: self.glitch_generation_ms,
+            glitch_dropped_instances: self.glitch_dropped_instances,
             parameter_revision: self.parameter_snapshot.revision,
             active_source: self.sources.source.get().label().into(),
             surface_skips: self.surface_skips,
@@ -771,10 +1037,12 @@ impl Renderer {
             &self.device,
             &self.present_layout,
             &self.targets.composite_view,
+            &self.targets.composite_view,
             &self.sampler,
             "huff history capture source bind",
         );
-        self.write_a = true;
+        self.effect_is_a = false;
+        self.effect_seeded = false;
     }
 
     fn clear_feedback(&mut self) {
@@ -792,11 +1060,18 @@ impl Renderer {
             &self.device,
             &self.present_layout,
             &self.targets.composite_view,
+            &self.targets.composite_view,
             &self.sampler,
             "huff history capture source bind",
         );
         self.history.clear();
-        self.write_a = true;
+        self.glitch_tiles_cpu.clear();
+        self.glitch_base_tiles = 0;
+        self.glitch_instance_count = 0;
+        self.glitch_phase_x = 0.0;
+        self.glitch_phase_y = 1000.0;
+        self.effect_is_a = false;
+        self.effect_seeded = false;
     }
 
     fn rebuild_history_if_needed(&mut self, width: u32, height: u32, capacity: u32) {
@@ -817,6 +1092,20 @@ impl Renderer {
             capacity,
             rebuilds,
         );
+        self.glitch_history_bind_smooth = create_glitch_history_bind(
+            &self.device,
+            &self.glitch_history_layout,
+            self.history.array_view(),
+            &self.sampler,
+            "huff glitch history smooth bind",
+        );
+        self.glitch_history_bind_crisp = create_glitch_history_bind(
+            &self.device,
+            &self.glitch_history_layout,
+            self.history.array_view(),
+            &self.crisp_sampler,
+            "huff glitch history crisp bind",
+        );
         // The temporal history texture is part of bind group 2 so Huff stays
         // within the portable four-bind-group limit (groups 0 through 3).
         // Rebuild only the offscreen bind groups/targets when the array changes.
@@ -834,10 +1123,12 @@ impl Renderer {
             &self.device,
             &self.present_layout,
             &self.targets.composite_view,
+            &self.targets.composite_view,
             &self.sampler,
             "huff history capture source bind",
         );
-        self.write_a = true;
+        self.effect_is_a = false;
+        self.effect_seeded = false;
     }
 
     fn apply_parameter_state(&mut self, force: bool) {
@@ -857,13 +1148,33 @@ impl Renderer {
         self.persistence = snapshot.number("feedback.persistence", 0.7).clamp(0.0, 10.0) as f32;
         self.feedback_x = snapshot.number("feedback.translate_x", 1.0) as f32;
         self.feedback_y = snapshot.number("feedback.translate_y", 1.0) as f32;
-        self.feedback_scale = snapshot.number("feedback.scale", 1.0).clamp(0.8, 1.2) as f32;
+        self.feedback_scale = snapshot.number("feedback.scale", 1.0).clamp(0.98, 1.03) as f32;
         self.feedback_rotation = snapshot.number("feedback.rotation", 0.01) as f32;
         self.history_quality = snapshot.number("render.quality", 1.0).clamp(0.0, 3.0) as f32;
         self.history_preview_enabled = snapshot.bool_value("glitch.corrupt_on", false);
         self.history_preview_depth = snapshot.number("glitch.depth", 0.5).clamp(0.0, 0.5) as f32;
-        self.history_preview_mix = snapshot.number("glitch.corrupt", 0.3).clamp(0.0, 1.0) as f32;
+        self.history_preview_mix = snapshot.number("glitch.corrupt", 0.3).clamp(0.0, 7.0) as f32;
         self.history_preview_alpha = snapshot.number("glitch.glitch_alpha", 1.0).clamp(0.0, 1.0) as f32;
+        self.glitch_depth_scatter = snapshot.number("glitch.depth_scatter", 1.0).clamp(0.0, 1.0) as f32;
+        self.glitch_corrupt_drift = snapshot.number("glitch.corrupt_drift", 0.0).clamp(0.0, 1.0) as f32;
+        self.glitch_block = snapshot.number("glitch.block", 1000.0).clamp(2.0, 4096.0) as f32;
+        self.glitch_size = snapshot.number("glitch.glitch_size", 10.0).clamp(1.0, 60.0) as f32;
+        self.glitch_jitter = snapshot.number("glitch.glitch_jitter", 1.0).clamp(0.0, 1.0) as f32;
+        self.glitch_smear = snapshot.number("glitch.glitch_smear", 6.0).clamp(0.0, 200.0) as f32;
+        self.glitch_smear_angle = snapshot.number("glitch.glitch_smear_angle", 0.0).rem_euclid(360.0) as f32;
+        self.glitch_speed = snapshot.number("glitch.glitch_speed", 0.8).clamp(0.0, 5.0) as f32;
+        self.glitch_speed_fine = snapshot.number("glitch.glitch_speed_fine", 1.0).clamp(0.0, 10.0) as f32;
+        self.glitch_speed_mul = snapshot.number("glitch.glitch_speed_mul", 1.0).clamp(0.0, 10.0) as f32;
+        self.glitch_base_x = snapshot.number("glitch.glitch_base_x", 0.0).clamp(-1000.0, 1000.0) as f32;
+        self.glitch_base_y = snapshot.number("glitch.glitch_base_y", 0.0).clamp(-1000.0, 1000.0) as f32;
+        // SPATIAL GAP belongs to the cluster panel in the UI, but the original
+        // applyGlitch() uses it for ordinary, non-cluster tile placement too.
+        self.glitch_spatial_gap = snapshot.number("clusters.spatial_gap", 40.0).clamp(0.0, 200.0) as f32;
+        self.glitch_seed = snapshot.number("source.seed", 912_831.0).round().max(0.0) as u64;
+        if self.glitch_seed != self.p5_noise_seed {
+            self.p5_noise_seed = self.glitch_seed;
+            self.p5_noise = P5Noise::new(self.glitch_seed as u32);
+        }
 
         self.render_mode = snapshot.text("render.resolution_mode", "match").to_string();
         let desired = match self.render_mode.as_str() {
@@ -1090,6 +1401,26 @@ impl Renderer {
         let active_source = self.sources.source.get();
         if active_source != self.last_history_source {
             self.history.clear();
+            self.targets = create_targets(
+                &self.device,
+                self.render_width,
+                self.render_height,
+                &self.feedback_layout,
+                &self.present_layout,
+                &self.sampler,
+                &self.crisp_sampler,
+                self.history.array_view(),
+            );
+            self.history_capture_bind = create_present_bind(
+                &self.device,
+                &self.present_layout,
+                &self.targets.composite_view,
+                &self.targets.composite_view,
+                &self.sampler,
+                "huff history capture source bind",
+            );
+            self.effect_is_a = false;
+            self.effect_seeded = false;
             self.last_history_source = active_source;
         }
 
@@ -1155,6 +1486,12 @@ impl Renderer {
             self.history_preview_mix,
             self.history_preview_alpha,
         ];
+        self.uniforms.effect_state = [
+            if self.effect_seeded { 1.0 } else { 0.0 },
+            0.0,
+            0.0,
+            0.0,
+        ];
 
         let mut gpu_gestures = GpuGestureData {
             points: [GpuPoint::zeroed(); MAX_POINTS],
@@ -1177,6 +1514,256 @@ impl Renderer {
             .write_buffer(&self.gesture_buffer, 0, bytemuck::bytes_of(&gpu_gestures));
         self.queue
             .write_buffer(&self.signals_buffer, 0, bytemuck::bytes_of(&gpu_signals));
+    }
+
+    fn update_glitch_tiles(&mut self, _delta_seconds: f32, source_sequence: u64) {
+        let generation_started = Instant::now();
+        self.glitch_tiles_cpu.clear();
+        self.glitch_base_tiles = 0;
+        self.glitch_instance_count = 0;
+
+        // Exact original semantics: SPEED, FINE and MULT only advance the two
+        // p5 noise phases. They do not multiply CORRUPT, move every rectangle,
+        // or directly set a pixels-per-second velocity.
+        let density = f64::from(self.glitch_speed)
+            * f64::from(self.glitch_speed_fine)
+            * f64::from(self.glitch_speed_mul);
+        self.glitch_phase_x += density * 0.01;
+        self.glitch_phase_y += density * 0.011;
+
+        if !self.history_preview_enabled
+            || self.history.count < 2
+            || source_sequence == 0
+            || self.history_preview_alpha <= 0.0
+        {
+            self.glitch_generation_ms = generation_started.elapsed().as_secs_f64() * 1000.0;
+            return;
+        }
+
+        let width = f64::from(self.render_width.max(1));
+        let height = f64::from(self.render_height.max(1));
+        let block = f64::from(self.glitch_block).trunc().max(2.0);
+        let columns = ((width / block).floor() as u32).max(1);
+        let rows = ((height / block).floor() as u32).max(1);
+        let total_cells = columns.saturating_mul(rows).max(1);
+        let available_back = self.history.count.saturating_sub(1);
+        let max_back = ((f64::from(available_back) * f64::from(self.history_preview_depth))
+            .floor() as u32)
+            .max(1)
+            .min(available_back.max(1));
+
+        let phase_x = self.glitch_phase_x;
+        let phase_y = self.glitch_phase_y;
+        let base_back = (f64::from(max_back)
+            * (0.3 + 0.7 * self.p5_noise.sample1(phase_x * 0.1 + phase_y * 0.07)))
+            .floor()
+            .max(1.0) as u32;
+        let drift_mod = if self.glitch_corrupt_drift > 0.0 {
+            self.p5_noise.sample2(phase_x * 0.08, phase_y * 0.08) * 2.0 - 1.0
+        } else {
+            0.0
+        };
+        let corrupt_multiplier =
+            (1.0 + f64::from(self.glitch_corrupt_drift) * drift_mod).max(0.05);
+
+        // CORRUPT controls tile count only. As in the original, enabling the
+        // effect with CORRUPT=0 still requests one historical tile.
+        let requested_base_tiles = (f64::from(total_cells)
+            * f64::from(self.history_preview_mix)
+            * corrupt_multiplier)
+            .floor()
+            .max(1.0) as u32;
+        let smear_steps = f64::from(self.glitch_smear)
+            .floor()
+            .clamp(0.0, 200.0) as u32;
+        let instances_per_tile = smear_steps.saturating_add(1).max(1);
+        let maximum_base_tiles = (MAX_GLITCH_INSTANCES as u32 / instances_per_tile).max(1);
+        let base_tile_limit = requested_base_tiles.min(maximum_base_tiles);
+
+        let raw_tile_extent = block * (f64::from(self.glitch_size).floor() / 20.0);
+        let newest = self.history.newest_layer();
+        let capacity = self.history.capacity.max(1);
+        // Canvas globalAlpha used floor(slider*255), so preserve its 8-bit step.
+        let alpha = ((f64::from(self.history_preview_alpha).clamp(0.0, 1.0) * 255.0)
+            .floor()
+            / 255.0) as f32;
+
+        // p5 frameCount is 1 on the first draw. Native frame_count increments at
+        // the end of render(), hence +1 here for matching randomSeed(seed+frameCount).
+        let mut random = P5Random::new(
+            (self.glitch_seed as u32)
+                .wrapping_add(self.frame_count.wrapping_add(1) as u32),
+        );
+
+        // Smear direction is shared by every tile in a frame.
+        let (smear_dx, smear_dy) = if self.glitch_smear_angle.abs() < f32::EPSILON {
+            (
+                self.p5_noise.sample1(phase_x) * 2.0 - 1.0,
+                self.p5_noise.sample1(phase_y) * 2.0 - 1.0,
+            )
+        } else {
+            let angle = f64::from(self.glitch_smear_angle).to_radians()
+                + (self.p5_noise.sample1(phase_x * 0.5) * 2.0 - 1.0)
+                    * std::f64::consts::PI
+                    / 6.0;
+            (angle.cos(), angle.sin())
+        };
+
+        // SPATIAL GAP is part of ordinary applyGlitch(), not only cluster mode.
+        // Match its cell-indexed rejection sampler so CORRUPT and PIXEL SIZE have
+        // the same density/overlap relationship as the original application.
+        let gap = f64::from(self.glitch_spatial_gap).trunc().max(0.0);
+        let mut targets = Vec::<[f64; 2]>::with_capacity(base_tile_limit as usize);
+        if gap <= 0.0 {
+            for _ in 0..base_tile_limit {
+                targets.push([
+                    (random.next() * f64::from(columns)).floor() * block,
+                    (random.next() * f64::from(rows)).floor() * block,
+                ]);
+            }
+        } else {
+            let grid_width = (width / gap).ceil() as i64 + 2;
+            let mut grid_cells: HashMap<i64, Vec<[f64; 2]>> = HashMap::new();
+            let gap_squared = gap * gap;
+            let mut attempts = 0_u32;
+            let maximum_attempts = base_tile_limit.saturating_mul(8);
+            while targets.len() < base_tile_limit as usize && attempts < maximum_attempts {
+                attempts = attempts.saturating_add(1);
+                let x = (random.next() * f64::from(columns)).floor() * block;
+                let y = (random.next() * f64::from(rows)).floor() * block;
+                let grid_x = (x / gap).floor() as i64;
+                let grid_y = (y / gap).floor() as i64;
+                let mut accepted = true;
+                'neighbors: for dy in -1_i64..=1 {
+                    for dx in -1_i64..=1 {
+                        let key = (grid_y + dy) * grid_width + (grid_x + dx);
+                        if let Some(points) = grid_cells.get(&key) {
+                            for point in points {
+                                let delta_x = x - point[0];
+                                let delta_y = y - point[1];
+                                if delta_x * delta_x + delta_y * delta_y < gap_squared {
+                                    accepted = false;
+                                    break 'neighbors;
+                                }
+                            }
+                        }
+                    }
+                }
+                if accepted {
+                    let key = grid_y * grid_width + grid_x;
+                    grid_cells.entry(key).or_default().push([x, y]);
+                    targets.push([x, y]);
+                }
+            }
+        }
+
+        let actual_base_tiles = targets.len() as u32;
+        let missing_base_tiles = requested_base_tiles.saturating_sub(actual_base_tiles);
+        let mut dropped_this_frame =
+            u64::from(missing_base_tiles).saturating_mul(u64::from(instances_per_tile));
+
+        for (tile_index_usize, target) in targets.into_iter().enumerate() {
+            let tile_index = tile_index_usize as u32;
+            let mut cx = target[0];
+            let mut cy = target[1];
+
+            let ox = (((self
+                .p5_noise
+                .sample1(phase_x + f64::from(tile_index) * 0.013)
+                * 2.0
+                - 1.0)
+                * block
+                * 2.0)
+                * f64::from(self.glitch_jitter))
+            .floor();
+            let oy = (((self
+                .p5_noise
+                .sample1(phase_y + f64::from(tile_index) * 0.017)
+                * 2.0
+                - 1.0)
+                * block
+                * 2.0)
+                * f64::from(self.glitch_jitter))
+            .floor();
+            cx = (cx + ox).rem_euclid(width);
+            cy = (cy + oy).rem_euclid(height);
+
+            // PIXEL SIZE defines the selection grid. GLITCH SIZE independently
+            // scales the sampled rectangle as block*(size/20). Right/bottom edge
+            // tiles crop rather than shifting inward.
+            let tile_width = raw_tile_extent.min(width - cx);
+            let tile_height = raw_tile_extent.min(height - cy);
+            if tile_width <= 0.0 || tile_height <= 0.0 {
+                continue;
+            }
+
+            let destination_x = (cx + f64::from(self.glitch_base_x).trunc())
+                .clamp(0.0, (width - tile_width).max(0.0));
+            let destination_y = (cy + f64::from(self.glitch_base_y).trunc())
+                .clamp(0.0, (height - tile_height).max(0.0));
+
+            // Stable history selection per decoded source frame, matching _vfc.
+            let hash = (source_sequence as u32)
+                .wrapping_mul(1_664_525)
+                .wrapping_add(tile_index.wrapping_mul(1_013_904_223));
+            let random_back = (hash % max_back).saturating_add(1);
+            let blended_back = (f64::from(base_back)
+                + (f64::from(random_back) - f64::from(base_back))
+                    * f64::from(self.glitch_depth_scatter))
+            .round() as u32;
+            let frames_back = blended_back.clamp(1, max_back);
+            let layer = (newest + capacity - (frames_back % capacity)) % capacity;
+
+            let source_rect = [
+                (cx / width) as f32,
+                (cy / height) as f32,
+                (tile_width / width) as f32,
+                (tile_height / height) as f32,
+            ];
+            let mut push_instance =
+                |dest_x: f64, dest_y: f64, tiles: &mut Vec<GpuGlitchTile>| {
+                    if tiles.len() >= MAX_GLITCH_INSTANCES {
+                        dropped_this_frame = dropped_this_frame.wrapping_add(1);
+                        return;
+                    }
+                    let clamped_x = dest_x.clamp(0.0, (width - tile_width).max(0.0));
+                    let clamped_y = dest_y.clamp(0.0, (height - tile_height).max(0.0));
+                    tiles.push(GpuGlitchTile {
+                        dest_rect: [
+                            (clamped_x / width) as f32,
+                            (clamped_y / height) as f32,
+                            (tile_width / width) as f32,
+                            (tile_height / height) as f32,
+                        ],
+                        source_rect,
+                        layer_alpha: [layer as f32, alpha, 0.0, 0.0],
+                    });
+                };
+
+            push_instance(destination_x, destination_y, &mut self.glitch_tiles_cpu);
+            for smear_index in 1..=smear_steps {
+                let distance = f64::from(smear_index) * block;
+                push_instance(
+                    destination_x + smear_dx * distance,
+                    destination_y + smear_dy * distance,
+                    &mut self.glitch_tiles_cpu,
+                );
+            }
+        }
+
+        self.glitch_base_tiles = actual_base_tiles;
+        self.glitch_instance_count = self.glitch_tiles_cpu.len() as u32;
+        self.glitch_dropped_instances = self
+            .glitch_dropped_instances
+            .wrapping_add(dropped_this_frame);
+        if !self.glitch_tiles_cpu.is_empty() {
+            self.queue.write_buffer(
+                &self.glitch_tile_buffer,
+                0,
+                bytemuck::cast_slice(&self.glitch_tiles_cpu),
+            );
+        }
+        self.glitch_generation_ms = generation_started.elapsed().as_secs_f64() * 1000.0;
     }
 
     fn active_source_sequence(&self) -> u64 {
@@ -1272,18 +1859,15 @@ impl Renderer {
                 .write_buffer(&self.uniform_buffer, 0, bytemuck::bytes_of(&self.uniforms));
         }
 
+        self.update_glitch_tiles(delta as f32, source_sequence);
         let use_crisp_history = self.history_sampling == "crisp";
-        let (feedback_view, feedback_bind, present_bind) = if self.write_a {
-            (
-                &self.targets.feedback_a_view,
-                if use_crisp_history {
-                    &self.targets.feedback_bind_a_crisp
-                } else {
-                    &self.targets.feedback_bind_a_smooth
-                },
-                &self.targets.present_bind_a,
-            )
-        } else {
+
+        // gBuf parity: one persistent effect buffer is carried from frame to
+        // frame. First copy/fade the previous buffer into the alternate target,
+        // then stamp historical tiles into it. The clean source is not injected
+        // into this recursion every frame.
+        let previous_is_a = self.effect_is_a;
+        let (work_view, work_bind) = if previous_is_a {
             (
                 &self.targets.feedback_b_view,
                 if use_crisp_history {
@@ -1291,16 +1875,87 @@ impl Renderer {
                 } else {
                     &self.targets.feedback_bind_b_smooth
                 },
-                &self.targets.present_bind_b,
+            )
+        } else {
+            (
+                &self.targets.feedback_a_view,
+                if use_crisp_history {
+                    &self.targets.feedback_bind_a_crisp
+                } else {
+                    &self.targets.feedback_bind_a_smooth
+                },
             )
         };
         begin_feedback_pass(
             &mut encoder,
-            feedback_view,
-            &self.feedback_pipeline,
+            "huff persistent buffer prepare pass",
+            work_view,
+            &self.effect_prepare_pipeline,
             &self.global_bind,
-            feedback_bind,
+            work_bind,
         );
+
+        if self.glitch_instance_count > 0 {
+            let glitch_history_bind = if use_crisp_history {
+                &self.glitch_history_bind_crisp
+            } else {
+                &self.glitch_history_bind_smooth
+            };
+            begin_glitch_pass(
+                &mut encoder,
+                work_view,
+                &self.glitch_pipeline,
+                &self.global_bind,
+                glitch_history_bind,
+                self.glitch_instance_count,
+            );
+        }
+
+        let mut final_is_a = !previous_is_a;
+        if self.feedback > 0.0 {
+            // Original Huff snapshots the just-assembled gBuf, clears the target,
+            // and draws the snapshot once with transform + globalAlpha. It is not
+            // additive source + previous history, which caused Milestone 04's
+            // brightness blowout.
+            let (feedback_view, feedback_bind) = if final_is_a {
+                (
+                    &self.targets.feedback_b_view,
+                    if use_crisp_history {
+                        &self.targets.feedback_bind_b_crisp
+                    } else {
+                        &self.targets.feedback_bind_b_smooth
+                    },
+                )
+            } else {
+                (
+                    &self.targets.feedback_a_view,
+                    if use_crisp_history {
+                        &self.targets.feedback_bind_a_crisp
+                    } else {
+                        &self.targets.feedback_bind_a_smooth
+                    },
+                )
+            };
+            begin_feedback_pass(
+                &mut encoder,
+                "huff flying frame-buffer transform pass",
+                feedback_view,
+                &self.feedback_pipeline,
+                &self.global_bind,
+                feedback_bind,
+            );
+            final_is_a = previous_is_a;
+        }
+        self.effect_is_a = final_is_a;
+        if source_sequence > 0 {
+            self.effect_seeded = true;
+        }
+
+        let present_bind = if final_is_a {
+            &self.targets.present_bind_a
+        } else {
+            &self.targets.present_bind_b
+        };
         begin_fullscreen_pass(
             &mut encoder,
             "huff presentation pass",
@@ -1317,7 +1972,6 @@ impl Renderer {
         if reconfigure {
             self.surface.configure(&self.device, &self.config);
         }
-        self.write_a = !self.write_a;
         self.frame_count = self.frame_count.wrapping_add(1);
         self.surface_skips = 0;
         Ok(RenderOutcome::Presented)
@@ -1374,6 +2028,65 @@ impl Renderer {
         }
         alive.store(false, Ordering::Relaxed);
     }
+}
+
+fn create_glitch_history_bind(
+    device: &wgpu::Device,
+    layout: &wgpu::BindGroupLayout,
+    history_view: &wgpu::TextureView,
+    sampler: &wgpu::Sampler,
+    label: &str,
+) -> wgpu::BindGroup {
+    device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some(label),
+        layout,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 5,
+                resource: wgpu::BindingResource::TextureView(history_view),
+            },
+            wgpu::BindGroupEntry {
+                binding: 6,
+                resource: wgpu::BindingResource::Sampler(sampler),
+            },
+        ],
+    })
+}
+
+fn create_glitch_pipeline(
+    device: &wgpu::Device,
+    shader: &wgpu::ShaderModule,
+    layout: &wgpu::PipelineLayout,
+    format: wgpu::TextureFormat,
+) -> wgpu::RenderPipeline {
+    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("huff native glitch tile pipeline"),
+        layout: Some(layout),
+        vertex: wgpu::VertexState {
+            module: shader,
+            entry_point: Some("vs_glitch"),
+            compilation_options: Default::default(),
+            buffers: &[],
+        },
+        primitive: wgpu::PrimitiveState {
+            topology: wgpu::PrimitiveTopology::TriangleList,
+            ..Default::default()
+        },
+        depth_stencil: None,
+        multisample: wgpu::MultisampleState::default(),
+        fragment: Some(wgpu::FragmentState {
+            module: shader,
+            entry_point: Some("fs_glitch"),
+            compilation_options: Default::default(),
+            targets: &[Some(wgpu::ColorTargetState {
+                format,
+                blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+        }),
+        multiview_mask: None,
+        cache: None,
+    })
 }
 
 fn texture_layout_entry(binding: u32) -> wgpu::BindGroupLayoutEntry {
@@ -1494,6 +2207,7 @@ fn create_present_bind(
     device: &wgpu::Device,
     layout: &wgpu::BindGroupLayout,
     view: &wgpu::TextureView,
+    clean_source_view: &wgpu::TextureView,
     sampler: &wgpu::Sampler,
     label: &str,
 ) -> wgpu::BindGroup {
@@ -1508,6 +2222,10 @@ fn create_present_bind(
             wgpu::BindGroupEntry {
                 binding: 1,
                 resource: wgpu::BindingResource::Sampler(sampler),
+            },
+            wgpu::BindGroupEntry {
+                binding: 2,
+                resource: wgpu::BindingResource::TextureView(clean_source_view),
             },
         ],
     })
@@ -1587,6 +2305,7 @@ fn create_targets(
         entries: &[
             wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&feedback_a_view) },
             wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::Sampler(sampler) },
+            wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::TextureView(&composite_view) },
         ],
     });
     let present_bind_b = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -1594,6 +2313,7 @@ fn create_targets(
         entries: &[
             wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&feedback_b_view) },
             wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::Sampler(sampler) },
+            wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::TextureView(&composite_view) },
         ],
     });
 
@@ -1640,15 +2360,46 @@ fn begin_texture_pass(
     pass.draw(0..3, 0..1);
 }
 
+fn begin_glitch_pass(
+    encoder: &mut wgpu::CommandEncoder,
+    view: &wgpu::TextureView,
+    pipeline: &wgpu::RenderPipeline,
+    global_bind: &wgpu::BindGroup,
+    history_bind: &wgpu::BindGroup,
+    instance_count: u32,
+) {
+    let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        label: Some("huff native temporal glitch tile pass"),
+        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+            view,
+            resolve_target: None,
+            depth_slice: None,
+            ops: wgpu::Operations {
+                load: wgpu::LoadOp::Load,
+                store: wgpu::StoreOp::Store,
+            },
+        })],
+        depth_stencil_attachment: None,
+        timestamp_writes: None,
+        occlusion_query_set: None,
+        multiview_mask: None,
+    });
+    pass.set_pipeline(pipeline);
+    pass.set_bind_group(0, global_bind, &[]);
+    pass.set_bind_group(2, history_bind, &[]);
+    pass.draw(0..6, 0..instance_count);
+}
+
 fn begin_feedback_pass(
     encoder: &mut wgpu::CommandEncoder,
+    label: &str,
     view: &wgpu::TextureView,
     pipeline: &wgpu::RenderPipeline,
     global_bind: &wgpu::BindGroup,
     feedback_bind: &wgpu::BindGroup,
 ) {
     let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-        label: Some("huff feedback + temporal history pass"),
+        label: Some(label),
         color_attachments: &[Some(wgpu::RenderPassColorAttachment {
             view,
             resolve_target: None,

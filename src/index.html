@@ -844,12 +844,12 @@
             <button id="aboutClose">×</button>
             <div class="a-icon"></div>
             <h1 style="font-family:'VT323',monospace;font-weight:normal;letter-spacing:.14em">huff</h1>
-            <div class="build">native engine · milestone 02 · 2026</div>
+            <div class="build">native engine · milestone 03 · 2026</div>
             <p>Huff is being migrated to a native Rust + wgpu media engine. The existing
             control surface is preserved while playback, timing, GPU rendering, and
             output move out of the WebView.</p>
-            <p><strong>Milestone 02:</strong> native playback, canonical parameter state,
-            render resolution, source controls, color controls, and feedback foundation.
+            <p><strong>Milestone 03:</strong> native GPU temporal history, bounded texture-array storage,
+            configurable capture resolution/rate/sampling, and the first history-depth compositor.
             Unported controls remain visible and are clearly marked.</p>
         </div>
     </div>
@@ -1307,12 +1307,12 @@
                     <div class="ctrl">
                         <label>PIXEL SIZE</label>
                         <input id="block" type="range" min="150" max="2000" step="2" value="1000">
-                        <span class="val" id="blockVal">32</span>
+                        <span class="val" id="blockVal">1000</span>
                     </div>
                     <div class="ctrl">
                         <label>GLITCH SIZE</label>
                         <input id="glitchSize" type="range" min="1" max="60" step="0.01" value="10">
-                        <span class="val" id="glitchSizeVal">20</span>
+                        <span class="val" id="glitchSizeVal">10</span>
                     </div>
                     <div class="ctrl">
                         <label>OPACITY</label>

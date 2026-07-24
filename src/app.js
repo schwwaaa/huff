@@ -180,15 +180,15 @@ function configureRegistryControls() {
     });
   }
   groupPortStatus();
-  for (const id of ['historyPreset', 'feedback']) {
-    const group = byId(id)?.closest('.group');
-    if (group) {
-      group.classList.add('native-partial-group');
-      group.title = id === 'historyPreset'
-        ? 'Configuration is stored natively; the GPU temporal texture ring arrives in Milestone 03.'
-        : 'The native feedback foundation is active; exact Huff feedback parity continues in Milestone 03.';
-    }
+  const historyGroup = byId('historyPreset')?.closest('.group');
+  if (historyGroup) historyGroup.title = 'Native GPU texture history is active. Resolution or capacity changes clear the ring.';
+  const feedbackGroup = byId('feedback')?.closest('.group');
+  if (feedbackGroup) {
+    feedbackGroup.classList.add('native-partial-group');
+    feedbackGroup.title = 'Native HDR feedback is active; final effect-order parity continues with later render-graph milestones.';
   }
+  const glitchGroup = byId('corruptOn')?.closest('.group');
+  if (glitchGroup) glitchGroup.title = "Milestone 04.1 restores Huff's persistent flying frame buffer. Rust generates p5-compatible historical tile stamps; feedback transforms that buffer non-additively. Cluster placement remains pending.";
 }
 
 function updateConditionalInputs() {
@@ -235,7 +235,7 @@ async function applyHistorySettings() {
     'history.sampling': byId('historySampling').value,
   };
   await setBatch(values);
-  toast('History configuration stored · GPU history arrives in Milestone 03');
+  toast('GPU temporal history applied · ring cleared if its allocation changed');
 }
 
 function wireGroupsAndModals() {
@@ -336,19 +336,15 @@ function wireNativeActions() {
     toast('Native parameters reset');
   });
   byId('clearBufBtn')?.addEventListener('click', () => {
-    call('clear_native_buffers').then(() => toast('Native feedback buffers cleared')).catch(() => {});
+    call('clear_native_buffers').then(() => toast('Native feedback + GPU history cleared')).catch(() => {});
   });
   byId('resetMotionBtn')?.addEventListener('click', async () => {
-    const ids = [
-      'feedback.translate_x',
-      'feedback.translate_y',
-      'feedback.scale',
-      'feedback.rotation',
-    ];
-    const values = Object.fromEntries(ids.map((id) => {
-      const definition = appState.byId.get(id);
-      return [id, definition?.default ?? (id === 'feedback.rotation' ? 0.01 : 1)];
-    }));
+    const values = {
+      'feedback.translate_x': 0,
+      'feedback.translate_y': 0,
+      'feedback.scale': 1,
+      'feedback.rotation': 0,
+    };
     try {
       await setBatch(values);
       await refreshParameterState();
@@ -508,7 +504,7 @@ function displayInfo(info) {
 
   const stateText = video.playing ? 'PLAY' : (loaded ? 'PAUSE' : 'IDLE');
   byId('status').textContent = `NATIVE: ${stateText} · ${(renderer.fps || 0).toFixed(0)} fps`;
-  byId('status').title = `${renderer.backend || 'GPU'} · ${renderer.adapter || ''}\nSource: ${info.activeSource || renderer.activeSource || 'automatic'}\nRender ${renderer.width || 0}×${renderer.height || 0}\nSurface ${renderer.surfaceWidth || 0}×${renderer.surfaceHeight || 0}\nSurface skips: ${renderer.surfaceSkips || 0} · recoveries: ${renderer.surfaceRecoveries || 0}\nClick to focus output`;
+  byId('status').title = `${renderer.backend || 'GPU'} · ${renderer.adapter || ''}\nSource: ${info.activeSource || renderer.activeSource || 'automatic'}\nRender ${renderer.width || 0}×${renderer.height || 0}\nSurface ${renderer.surfaceWidth || 0}×${renderer.surfaceHeight || 0}\nGlitch: ${renderer.glitchBaseTiles || 0} tiles · ${renderer.glitchInstances || 0}/${renderer.glitchInstanceCapacity || 0} instances · ${(renderer.glitchGenerationMs || 0).toFixed(2)} ms\nGlitch drops: ${renderer.glitchDroppedInstances || 0}\nSurface skips: ${renderer.surfaceSkips || 0} · recoveries: ${renderer.surfaceRecoveries || 0}\nClick to focus output`;
 
   byId('midiPill').textContent = midi.connected ? `MIDI: ${midi.connectedPort}` : 'MIDI: OFF';
   byId('oscPill').textContent = osc.listening ? `OSC :${osc.port}` : 'OSC: OFF';
@@ -539,7 +535,7 @@ function displayInfo(info) {
   byId('dim').textContent = `R: ${renderer.width || 0}×${renderer.height || 0}`;
   byId('dim').title = `Internal native render size\nSurface: ${renderer.surfaceWidth || 0}×${renderer.surfaceHeight || 0}\nMode: ${renderer.renderMode || 'match'}`;
   byId('historyDim').textContent = `H: ${renderer.historyWidth || 0}×${renderer.historyHeight || 0}`;
-  byId('historyDim').title = `${renderer.historyStatus || 'configured'}\nCapture: ${renderer.historyCaptureRate || 'every'}\nSampling: ${renderer.historySampling || 'smooth'}`;
+  byId('historyDim').title = `${renderer.historyStatus || 'configured'}\nCapture: ${renderer.historyCaptureRate || 'every'}\nSampling: ${renderer.historySampling || 'smooth'}\nGlitch tiles: ${renderer.glitchBaseTiles || 0} · instances: ${renderer.glitchInstances || 0}`;
 
   if (camera.streaming) byId('camStartBtn').textContent = `⬤ ${camera.captureFps?.toFixed?.(0) || ''}fps`;
   else byId('camStartBtn').textContent = '⬤ Cam';
@@ -583,7 +579,7 @@ async function boot() {
   await refreshParameterState();
   await poll();
   setInterval(poll, 250);
-  console.info('Huff Native wgpu Milestone 02 loaded', {
+  console.info('Huff Native wgpu Milestone 03 loaded', {
     parameters: appState.registry.length,
     implemented: appState.registry.filter((definition) => definition.implemented).length,
   });
