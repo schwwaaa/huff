@@ -1,6 +1,7 @@
 use crate::{
     audio::AudioSnapshot,
     camera::{CameraFrame, SharedCameraFrame},
+    export::{ExportHandle, StillExportConfig, StillExportMetadata},
     gesture::{GestureSnapshot, MAX_POINTS},
     history::{GpuHistoryRing, HISTORY_FORMAT},
     midi::MidiSnapshot,
@@ -52,6 +53,11 @@ pub enum RenderCommand {
     ClearFeedback,
     RecoverSurface,
     FireFlowPulse,
+    CaptureStill {
+        config: StillExportConfig,
+        metadata: StillExportMetadata,
+        reply: SyncSender<Result<(), String>>,
+    },
     StartSyphon {
         fps: u32,
         reply: SyncSender<Result<(), String>>,
@@ -164,6 +170,24 @@ impl RendererHandle {
         self.info.read().expect("renderer info poisoned").clone()
     }
 
+    pub fn capture_still(
+        &self,
+        config: StillExportConfig,
+        metadata: StillExportMetadata,
+    ) -> Result<(), String> {
+        let (reply_tx, reply_rx) = sync_channel(1);
+        self.tx
+            .send(RenderCommand::CaptureStill {
+                config,
+                metadata,
+                reply: reply_tx,
+            })
+            .map_err(|_| "renderer command channel is unavailable".to_string())?;
+        reply_rx
+            .recv_timeout(Duration::from_secs(4))
+            .map_err(|_| "timed out queuing still export".to_string())?
+    }
+
     pub fn start_syphon(&self, fps: u32) -> Result<(), String> {
         let (reply_tx, reply_rx) = sync_channel(1);
         self.tx
@@ -205,10 +229,11 @@ pub fn start(
     sources: InputSources,
     parameters: ParameterStore,
     recording: RecordingHandle,
+    export: ExportHandle,
 ) -> Result<RendererHandle, String> {
     let (tx, rx) = sync_channel(128);
     let alive = Arc::new(AtomicBool::new(true));
-    let mut renderer = pollster::block_on(Renderer::new(window, sources, parameters, recording))?;
+    let mut renderer = pollster::block_on(Renderer::new(window, sources, parameters, recording, export))?;
     let info = Arc::new(RwLock::new(renderer.info()));
     let thread_info = Arc::clone(&info);
     let thread_alive = Arc::clone(&alive);
@@ -242,6 +267,14 @@ struct Uniforms {
     flow_state0: [f32; 4],
     flow_state1: [f32; 4],
     flow_state2: [f32; 4],
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Pod, Zeroable)]
+struct ExportUniforms {
+    source_size: [f32; 2],
+    target_size: [f32; 2],
+    fit_mode: [f32; 4],
 }
 
 #[repr(C)]
@@ -692,6 +725,269 @@ impl OutputReadback {
     }
 }
 
+struct PendingStillCapture {
+    config: StillExportConfig,
+    metadata: StillExportMetadata,
+    started_at: Instant,
+}
+
+struct StillCaptureInFlight {
+    generation: u64,
+    config: StillExportConfig,
+    metadata: StillExportMetadata,
+    started_at: Instant,
+    padded_bytes_per_row: u32,
+    buffer: wgpu::Buffer,
+    _texture: wgpu::Texture,
+    _view: wgpu::TextureView,
+    _uniform_buffer: wgpu::Buffer,
+    _uniform_bind: wgpu::BindGroup,
+    _source_bind: wgpu::BindGroup,
+}
+
+struct StillCapture {
+    pending: Option<PendingStillCapture>,
+    in_flight: Option<StillCaptureInFlight>,
+    completion_tx: Sender<(u64, Result<(), String>)>,
+    completion_rx: Receiver<(u64, Result<(), String>)>,
+    generation: u64,
+}
+
+impl StillCapture {
+    fn new() -> Self {
+        let (completion_tx, completion_rx) = channel();
+        Self {
+            pending: None,
+            in_flight: None,
+            completion_tx,
+            completion_rx,
+            generation: 0,
+        }
+    }
+
+    fn queue(
+        &mut self,
+        config: StillExportConfig,
+        metadata: StillExportMetadata,
+    ) -> Result<(), String> {
+        if self.pending.is_some() || self.in_flight.is_some() {
+            return Err("another GPU still capture is already pending".into());
+        }
+        self.pending = Some(PendingStillCapture {
+            config,
+            metadata,
+            started_at: Instant::now(),
+        });
+        Ok(())
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn encode_pending(
+        &mut self,
+        device: &wgpu::Device,
+        encoder: &mut wgpu::CommandEncoder,
+        pipeline: &wgpu::RenderPipeline,
+        uniform_layout: &wgpu::BindGroupLayout,
+        source_layout: &wgpu::BindGroupLayout,
+        smooth_sampler: &wgpu::Sampler,
+        crisp_sampler: &wgpu::Sampler,
+        source_view: &wgpu::TextureView,
+    ) -> bool {
+        if self.in_flight.is_some() {
+            return false;
+        }
+        let Some(request) = self.pending.take() else {
+            return false;
+        };
+        self.generation = self.generation.wrapping_add(1);
+        let generation = self.generation;
+        let width = request.config.width.max(1);
+        let height = request.config.height.max(1);
+        let uniforms = ExportUniforms {
+            source_size: [
+                request.config.source_width.max(1) as f32,
+                request.config.source_height.max(1) as f32,
+            ],
+            target_size: [width as f32, height as f32],
+            fit_mode: [
+                match request.config.fit_mode.as_str() {
+                    "crop" => 1.0,
+                    "stretch" => 2.0,
+                    _ => 0.0,
+                },
+                0.0,
+                0.0,
+                0.0,
+            ],
+        };
+        let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("huff still export uniforms"),
+            contents: bytemuck::bytes_of(&uniforms),
+            usage: wgpu::BufferUsages::UNIFORM,
+        });
+        let uniform_bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("huff still export uniform bind"),
+            layout: uniform_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: uniform_buffer.as_entire_binding(),
+            }],
+        });
+        let selected_sampler = if request.config.sampling == "crisp" {
+            crisp_sampler
+        } else {
+            smooth_sampler
+        };
+        let source_bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("huff still export source bind"),
+            layout: source_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(source_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(selected_sampler),
+                },
+            ],
+        });
+        let (texture, view) = create_output_texture(
+            device,
+            "huff high resolution still target",
+            width,
+            height,
+        );
+        {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("huff high resolution still render pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    depth_slice: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            pass.set_pipeline(pipeline);
+            pass.set_bind_group(0, &uniform_bind, &[]);
+            pass.set_bind_group(1, &source_bind, &[]);
+            pass.draw(0..3, 0..1);
+        }
+
+        let dense_bytes_per_row = width.saturating_mul(OUTPUT_BYTES_PER_PIXEL);
+        let padded_bytes_per_row = align_copy_bytes_per_row(dense_bytes_per_row);
+        let buffer_size = u64::from(padded_bytes_per_row).saturating_mul(u64::from(height));
+        let buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("huff high resolution still readback"),
+            size: buffer_size.max(4),
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+        encoder.copy_texture_to_buffer(
+            wgpu::TexelCopyTextureInfo {
+                texture: &texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::TexelCopyBufferInfo {
+                buffer: &buffer,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(padded_bytes_per_row),
+                    rows_per_image: Some(height),
+                },
+            },
+            wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+        );
+        self.in_flight = Some(StillCaptureInFlight {
+            generation,
+            config: request.config,
+            metadata: request.metadata,
+            started_at: request.started_at,
+            padded_bytes_per_row,
+            buffer,
+            _texture: texture,
+            _view: view,
+            _uniform_buffer: uniform_buffer,
+            _uniform_bind: uniform_bind,
+            _source_bind: source_bind,
+        });
+        true
+    }
+
+    fn begin_mapping(&self) {
+        let Some(in_flight) = self.in_flight.as_ref() else {
+            return;
+        };
+        let generation = in_flight.generation;
+        let tx = self.completion_tx.clone();
+        in_flight
+            .buffer
+            .slice(..)
+            .map_async(wgpu::MapMode::Read, move |result| {
+                let _ = tx.send((generation, result.map_err(|error| error.to_string())));
+            });
+    }
+
+    fn process_completion(&mut self, export: &ExportHandle) {
+        while let Ok((generation, result)) = self.completion_rx.try_recv() {
+            let Some(in_flight) = self.in_flight.take() else {
+                continue;
+            };
+            if generation != in_flight.generation {
+                self.in_flight = Some(in_flight);
+                continue;
+            }
+            if let Err(error) = result {
+                export.fail(format!("still export GPU readback failed: {error}"));
+                continue;
+            }
+            let width = in_flight.config.width.max(1);
+            let height = in_flight.config.height.max(1);
+            let dense_bytes_per_row = width as usize * OUTPUT_BYTES_PER_PIXEL as usize;
+            let slice = in_flight.buffer.slice(..);
+            let mapped = slice.get_mapped_range();
+            let mut pixels = vec![0_u8; dense_bytes_per_row * height as usize];
+            for row in 0..height as usize {
+                let source_start = row * in_flight.padded_bytes_per_row as usize;
+                let source_end = source_start + dense_bytes_per_row;
+                let destination_start = row * dense_bytes_per_row;
+                let destination_end = destination_start + dense_bytes_per_row;
+                pixels[destination_start..destination_end]
+                    .copy_from_slice(&mapped[source_start..source_end]);
+            }
+            drop(mapped);
+            drop(slice);
+            in_flight.buffer.unmap();
+            let frame = OutputFrame::new(width, height, pixels);
+            if let Err(error) = export.submit(
+                in_flight.config,
+                in_flight.metadata,
+                frame,
+                in_flight.started_at,
+            ) {
+                export.fail(error);
+            }
+        }
+    }
+
+    fn busy(&self) -> bool {
+        self.pending.is_some() || self.in_flight.is_some()
+    }
+}
+
 fn align_copy_bytes_per_row(value: u32) -> u32 {
     let alignment = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
     value.div_ceil(alignment) * alignment
@@ -736,6 +1032,7 @@ struct Renderer {
     feedback_pipeline: wgpu::RenderPipeline,
     output_pipeline: wgpu::RenderPipeline,
     present_pipeline: wgpu::RenderPipeline,
+    export_pipeline: wgpu::RenderPipeline,
     history_capture_pipeline: wgpu::RenderPipeline,
     glitch_pipeline: wgpu::RenderPipeline,
     scan_pipeline: wgpu::RenderPipeline,
@@ -757,6 +1054,8 @@ struct Renderer {
     glitch_history_layout: wgpu::BindGroupLayout,
     smoosh_layout: wgpu::BindGroupLayout,
     present_layout: wgpu::BindGroupLayout,
+    export_uniform_layout: wgpu::BindGroupLayout,
+    export_source_layout: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
     crisp_sampler: wgpu::Sampler,
     source_bind: wgpu::BindGroup,
@@ -768,7 +1067,9 @@ struct Renderer {
     glitch_history_bind_crisp: wgpu::BindGroup,
     history: GpuHistoryRing,
     output_readback: OutputReadback,
+    still_capture: StillCapture,
     recording: RecordingHandle,
+    export: ExportHandle,
     syphon_enabled: bool,
     syphon_fps: u32,
     spout_enabled: bool,
@@ -940,6 +1241,7 @@ impl Renderer {
         sources: InputSources,
         parameters: ParameterStore,
         recording: RecordingHandle,
+        export: ExportHandle,
     ) -> Result<Self, String> {
         let size = window.inner_size().map_err(|error| error.to_string())?;
         let surface_width = size.width.max(1);
@@ -1180,6 +1482,25 @@ impl Renderer {
                     texture_layout_entry(2),
                 ],
             });
+        let export_uniform_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("huff still export uniform layout"),
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }],
+            });
+        let export_source_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("huff still export source layout"),
+                entries: &[texture_layout_entry(0), sampler_layout_entry(1)],
+            });
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("huff native linear sampler"),
             address_mode_u: wgpu::AddressMode::ClampToEdge,
@@ -1227,6 +1548,10 @@ impl Renderer {
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("huff native WGSL"),
             source: wgpu::ShaderSource::Wgsl(include_str!("compositor.wgsl").into()),
+        });
+        let export_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("huff still export WGSL"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("export.wgsl").into()),
         });
         let composite_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -1278,6 +1603,12 @@ impl Renderer {
                 bind_group_layouts: &[Some(&global_layout), None, Some(&smoosh_layout)],
                 immediate_size: 0,
             });
+        let export_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("huff still export pipeline layout"),
+                bind_group_layouts: &[Some(&export_uniform_layout), Some(&export_source_layout)],
+                immediate_size: 0,
+            });
 
         let composite_pipeline = create_pipeline(
             &device,
@@ -1318,6 +1649,14 @@ impl Renderer {
             "huff native surface presentation pipeline",
             "fs_surface",
             config.format,
+        );
+        let export_pipeline = create_pipeline(
+            &device,
+            &export_shader,
+            &export_pipeline_layout,
+            "huff high resolution still export pipeline",
+            "fs_export",
+            OUTPUT_FORMAT,
         );
         let history_capture_pipeline = create_pipeline(
             &device,
@@ -1434,6 +1773,7 @@ impl Renderer {
             feedback_pipeline,
             output_pipeline,
             present_pipeline,
+            export_pipeline,
             history_capture_pipeline,
             glitch_pipeline,
             scan_pipeline,
@@ -1455,6 +1795,8 @@ impl Renderer {
             glitch_history_layout,
             smoosh_layout,
             present_layout,
+            export_uniform_layout,
+            export_source_layout,
             sampler,
             crisp_sampler,
             source_bind,
@@ -1465,8 +1807,10 @@ impl Renderer {
             glitch_history_bind_smooth,
             glitch_history_bind_crisp,
             output_readback,
+            still_capture: StillCapture::new(),
             history,
             recording,
+            export,
             syphon_enabled: false,
             syphon_fps: 30,
             spout_enabled: false,
@@ -2075,6 +2419,47 @@ impl Renderer {
                     self.flow_pulse_until = Some(Instant::now() + Duration::from_millis(220));
                     self.flow_pulse_fires = self.flow_pulse_fires.wrapping_add(1);
                 }
+                Ok(RenderCommand::CaptureStill {
+                    mut config,
+                    mut metadata,
+                    reply,
+                }) => {
+                    let max_dimension = self
+                        .device
+                        .limits()
+                        .max_texture_dimension_2d
+                        .min(8192);
+                    let pixels = u64::from(config.width).saturating_mul(u64::from(config.height));
+                    let result = if config.width == 0 || config.height == 0 {
+                        Err("still export dimensions must be greater than zero".into())
+                    } else if config.width > max_dimension || config.height > max_dimension {
+                        Err(format!(
+                            "still export exceeds the supported {}×{} maximum",
+                            max_dimension, max_dimension
+                        ))
+                    } else if pixels > 35_000_000 {
+                        Err("still export exceeds the bounded 35 megapixel limit".into())
+                    } else {
+                        config.source_width = self.render_width;
+                        config.source_height = self.render_height;
+                        metadata.render_width = self.render_width;
+                        metadata.render_height = self.render_height;
+                        metadata.export_width = config.width;
+                        metadata.export_height = config.height;
+                        self.export.begin(&config).and_then(|_| {
+                            self.still_capture
+                                .queue(config, metadata)
+                                .map_err(|error| {
+                                    self.export.fail(error.clone());
+                                    error
+                                })
+                        })
+                    };
+                    if let Err(error) = &result {
+                        self.last_error = error.clone();
+                    }
+                    let _ = reply.send(result);
+                }
                 Ok(RenderCommand::StartSyphon { fps, reply }) => {
                     let result = self.start_syphon_output(fps);
                     if let Err(error) = &result {
@@ -2098,6 +2483,9 @@ impl Renderer {
                 Ok(RenderCommand::Shutdown) => {
                     self.stop_syphon_output();
                     self.stop_spout_output();
+                    if self.still_capture.busy() || self.export.info().active {
+                        self.export.fail("still export interrupted by application shutdown".into());
+                    }
                     return false;
                 },
                 Err(TryRecvError::Empty) => return true,
@@ -3094,6 +3482,7 @@ impl Renderer {
             self.last_error = format!("native output GPU polling failed: {error}");
         }
         self.output_readback.process_completions(&self.recording);
+        self.still_capture.process_completion(&self.export);
 
         let recording = self.recording.info();
         let recording_busy = recording.active || recording.finalizing;
@@ -3117,7 +3506,8 @@ impl Renderer {
 
         let external_output_active = self.syphon_enabled
             || self.spout_enabled
-            || self.recording.info().active;
+            || self.recording.info().active
+            || self.export.info().active;
         let (surface_frame, reconfigure) = if self.minimized {
             (None, false)
         } else {
@@ -3595,6 +3985,17 @@ impl Renderer {
             now,
         );
 
+        let still_mapping_started = self.still_capture.encode_pending(
+            &self.device,
+            &mut encoder,
+            &self.export_pipeline,
+            &self.export_uniform_layout,
+            &self.export_source_layout,
+            &self.sampler,
+            &self.crisp_sampler,
+            &self.targets.output_view,
+        );
+
         if let Some(surface_view) = surface_view.as_ref() {
             begin_fullscreen_pass(
                 &mut encoder,
@@ -3611,6 +4012,9 @@ impl Renderer {
         self.queue.submit([encoder.finish()]);
         if let Some(index) = readback_slot {
             self.output_readback.begin_mapping(index);
+        }
+        if still_mapping_started {
+            self.still_capture.begin_mapping();
         }
         if let Some(frame) = surface_frame {
             frame.present();
@@ -3657,6 +4061,7 @@ impl Renderer {
                 && !self.syphon_enabled
                 && !self.spout_enabled
                 && !self.recording.info().active
+                && !self.export.info().active
             {
                 self.apply_parameter_state(false);
                 *info.write().expect("renderer info poisoned") = self.info();
@@ -3678,6 +4083,9 @@ impl Renderer {
         }
         self.stop_syphon_output();
         self.stop_spout_output();
+        if self.still_capture.busy() || self.export.info().active {
+            self.export.fail("still export interrupted because the renderer stopped".into());
+        }
         alive.store(false, Ordering::Relaxed);
     }
 }

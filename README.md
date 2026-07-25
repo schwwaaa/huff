@@ -1,81 +1,18 @@
-# Huff Native wgpu · Milestone 09
+# Huff Native wgpu · Milestone 10
 
-Milestone 09 adds **native synchronized MP4 recording** to the working Milestone 08.1 engine.
+Milestone 10 adds **independent high-resolution PNG still export** to the native Huff engine.
 
-Huff now has a complete live native path from media input through GPU effects to presentation, Syphon/Spout, and recording:
+The application now includes:
 
-```text
-Native video / camera + native audio
-        ↓
-GPU temporal history
-        ↓
-Huff flying-frame-buffer render graph
-        ↓
-Authoritative RGBA8 output texture at R: resolution
-        ├── Native output window
-        ├── Syphon on macOS
-        ├── Spout on Windows
-        └── CFR MP4 recorder
-```
+- native FFmpeg video and audio playback;
+- native camera capture;
+- wgpu temporal history, flying feedback, glitch, clusters, scanlines, Smoosh, Luma Key, Global Mix, and Flow;
+- Syphon output on macOS;
+- SpoutDX output path on Windows;
+- synchronized 30/60 FPS MP4 recording;
+- native, 1080p, 4K, 8K, and custom PNG still export.
 
-The HTML/CSS interface remains the control surface. Decoding, timing, history, effects, feedback, output, and recording are native Rust + wgpu systems.
-
-## Native recorder
-
-The recorder consumes the same authoritative image used by native presentation and external outputs. It does not record the WebView or the visible window.
-
-Features:
-
-- 30 or 60 FPS constant-frame-rate recording
-- Current internal `R:` render resolution
-- Video-audio capture
-- Microphone capture for camera use
-- Silent recording
-- Automatic source selection
-- MP4/H.264/AAC output
-- Bounded latest-frame transport
-- Timestamp-aligned audio chunks
-- Frame duplication when the renderer or encoder is late
-- Silence insertion for missing audio regions
-- Safe finalization on Stop or application close
-- Recording while Syphon or Spout is active
-- Recording while the native presentation window is minimized
-
-## Recording controls
-
-Use the controls in the top bar:
-
-1. Select `REC 30` or `REC 60`.
-2. Select `AUDIO AUTO`, `VIDEO AUDIO`, `MIC`, or `SILENT`.
-3. Press **Rec** and choose an MP4 destination.
-4. Press **Stop** to finalize and mux the file.
-
-`AUDIO AUTO` uses video audio for the file source and microphone audio for the camera source. When microphone capture is selected, Huff starts the current default microphone automatically.
-
-Hover the `REC:` pill for:
-
-- Recording path
-- Resolution and CFR
-- Audio source and format
-- Encoded and duplicated video frames
-- Skipped, rejected, and replaced submissions
-- Audio samples and dropped chunks
-- Current audio queue depth
-- Approximate temporary-file size
-
-## Bounded output behavior
-
-The recorder shares Huff's three persistent asynchronous wgpu readback buffers with Syphon and Spout. A busy readback is dropped rather than queued. The recording worker stores only the latest complete pending frame and uses CFR duplication to keep time stable.
-
-This means heavy effects can reduce unique captured frames without causing memory growth or continuously increasing output latency.
-
-## Requirements
-
-- FFmpeg available on `PATH`
-- macOS: Metal backend recommended
-- Windows: DX12 backend recommended
-
-## Run on macOS
+## Run
 
 ```bash
 npm install
@@ -88,20 +25,61 @@ Automatic backend selection:
 npm run dev
 ```
 
-## Build
+Windows DX12:
 
-```bash
-npm run build
+```powershell
+npm run dev:dx12
 ```
 
-## Major remaining work
+FFmpeg must be available on `PATH` for file decoding, recording, and PNG encoding.
 
-1. High-resolution still capture
-2. Deterministic offline video export
-3. Independent export resolution and codec profiles
-4. Parameter-by-parameter visual/motion calibration
-5. Complete MIDI/OSC mapping editors
-6. Expanded routing, sequencing, automation, and project state
-7. Windows Spout and installer verification
+## Still export
 
-Use `TESTING.md` for the recording regression checklist and `UPGRADE-NOTES-09.md` for implementation details.
+The top bar contains:
+
+```text
+PNG NATIVE / 1080P / 4K / 8K / CUSTOM
+SMOOTH / CRISP
+FIT / CROP / STRETCH
+PNG
+EXPORT status
+```
+
+The export is generated from Huff's authoritative native output texture through a separate GPU pass. Export dimensions do not alter the live render size shown by `R:`.
+
+```text
+Live render graph
+      ↓
+Authoritative RGBA8 output
+      ├── native window
+      ├── Syphon / Spout
+      ├── recording
+      └── independent still scaling pass
+                ↓
+             PNG export
+```
+
+### What high resolution means here
+
+A 4K or 8K still is a high-resolution GPU resample of the completed current Huff image. It preserves the exact current live composition and temporal buffer state without rebuilding those systems. It does not yet re-run tile generation, flow, history, and feedback at an independent 8K working resolution.
+
+## Sidecar
+
+Every PNG also writes:
+
+```text
+<image-name>.huff-export.json
+```
+
+The sidecar records the source, transport position, render/export dimensions, export policy, parameter revision, and canonical parameter values.
+
+## Documentation
+
+- `UPGRADE-NOTES-10.md` — implementation details and scope
+- `TESTING.md` — runtime checklist
+- `MIGRATION-STATUS.md` — completed and remaining native systems
+- `VALIDATION.md` — static package checks
+
+## Next milestone
+
+The next structural milestone is a frame-driven deterministic video exporter. It should own decoding, render time, frame stepping, output resolution, and encoding rather than relying on the real-time recording clock.

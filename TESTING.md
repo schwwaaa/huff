@@ -1,4 +1,4 @@
-# Huff Native Milestone 09 test checklist
+# Huff Native Milestone 10 test checklist
 
 ## Build and launch
 
@@ -13,128 +13,89 @@ Confirm FFmpeg is available:
 ffmpeg -version
 ```
 
-## Basic video recording
+## Native-size still
 
-1. Load a video with audio.
-2. Select `REC 30` and `AUDIO AUTO`.
-3. Start recording and choose an MP4 destination.
-4. Run Glitch, Clusters, Scanlines, Luma, Flow, Smoosh, and Feedback.
-5. Record for at least 60 seconds.
-6. Stop and wait for `REC: OFF`.
-7. Open the file in QuickTime, VLC, or ffplay.
-8. Verify image orientation, color, duration, audio, and seeking.
+1. Load a moving video or start the camera.
+2. Create a recognizable state with Glitch, Feedback, Scanlines, Luma, or Flow.
+3. Select `PNG NATIVE`, `SMOOTH`, and `FIT`.
+4. Press `PNG` and choose a destination.
+5. Wait for `EXPORT: … ✓`.
+6. Open the PNG and confirm it matches the native output orientation, color, and brightness.
+7. Confirm a matching `.huff-export.json` file exists beside it.
 
-Expected:
+## Resolution profiles
 
-- The output is CFR 30 FPS.
-- The recording matches the native output, not the controls window.
-- Audio remains synchronized.
-- No incomplete hidden temporary files remain after successful muxing.
+Export the same state at:
 
-## 60 FPS recording
+- 1920×1080
+- 3840×2160
+- 7680×4320
+- a custom size such as 2048×2048
 
-Repeat at `REC 60` with 1280×720, then 1920×1080.
+Confirm the dimensions with Preview, Finder/Get Info, or:
 
-Watch the `REC:` tooltip:
+```bash
+ffprobe -v error -show_entries stream=width,height -of default=nw=1 exported.png
+```
 
-- `duplicatedFrames` may increase under load;
-- `videoSubmissionDrops` may increase if the encoder/readback is busy;
-- queue depth must remain bounded;
-- duration must continue advancing normally.
+## Aspect policies
 
-A duplicated frame is preferable to A/V drift or an unbounded backlog.
+Use a live render size whose aspect ratio differs from the export target.
 
-## Audio modes
+- `FIT`: complete image remains visible with black letterboxing.
+- `CROP`: target is filled and edge content is cropped.
+- `STRETCH`: target is filled and proportions change.
 
-### Video audio
+## Sampling
 
-1. Select `VIDEO AUDIO`.
-2. Record a file containing audio.
-3. Move the live volume slider during recording.
-4. Confirm the recorded level follows live volume.
-5. Set volume to zero and confirm the recording becomes silent.
+Use large pixel blocks or sharply defined scanlines.
 
-### Video without audio
+- `SMOOTH` should interpolate during scaling.
+- `CRISP` should retain nearest-neighbor edges.
 
-1. Load a video with no audio track.
-2. Select `AUDIO AUTO`.
-3. Record and confirm a valid silent MP4 is created.
-4. Select `VIDEO AUDIO` explicitly and confirm Huff reports that no recordable audio stream exists.
+## State preservation
 
-### Camera microphone
+During and after a 4K export, verify:
 
-1. Start the camera.
-2. Select `AUDIO AUTO` or `MIC`.
-3. Start recording.
-4. Grant microphone permission if macOS asks.
-5. Speak and confirm recorded microphone audio.
+- feedback continues from the same buffer;
+- temporal history is not cleared;
+- video transport continues;
+- audio continues;
+- Syphon remains at the live `R:` size;
+- Spout remains at the live `R:` size when available;
+- the native output window does not resize.
 
-### Silent
+## Minimized output
 
-Select `SILENT` and verify the MP4 has no audio stream.
+1. Minimize the native output window.
+2. Request a still from the controls window.
+3. Confirm the export completes.
+4. Restore the output and confirm the live state continued.
 
-## Transport and recovery
+## Recording exclusion
 
-While recording video audio:
+1. Start native recording.
+2. Attempt a PNG export.
+3. Confirm Huff rejects the request instead of competing for a large export readback.
+4. Stop and finalize recording.
+5. Start an 8K PNG export and immediately attempt to begin recording.
+6. Confirm recording is rejected until the export completes.
+7. Confirm PNG export and recording both work again afterward.
 
-1. Pause and resume.
-2. Seek.
-3. Change playback rate.
-4. Cross a loop boundary.
-5. Leave the decoder watchdog active during a long recording.
+## Bounded failure tests
 
-Expected:
+- Try custom width `8193`.
+- Try a custom size whose total exceeds 35 megapixels.
+- Start a second export while an 8K export is active.
 
-- Pauses produce held video plus silence.
-- The output file remains valid CFR.
-- Decoder recovery does not terminate recording.
+Each request should fail visibly without crashing or altering the live renderer.
 
-## Output coexistence
+## Metadata inspection
 
-1. Start Syphon at 30 FPS.
-2. Start recording at 30 FPS.
-3. Verify both outputs continue.
-4. Repeat with Spout later on Windows.
-5. Minimize the native output window and confirm recording continues.
+Open the `.huff-export.json` sidecar and confirm it contains:
 
-## Resolution protection
-
-1. Start a recording.
-2. Confirm Render Resolution Apply is disabled.
-3. Stop recording.
-4. Confirm Apply becomes available again.
-
-## Long-duration test
-
-Record for 20–30 minutes at 1080p30 with heavy feedback and temporal effects.
-
-Check:
-
-- memory does not grow continuously;
-- audio queue depth returns toward zero;
-- temporary files grow normally;
-- Stop finalizes successfully;
-- final duration matches the recording timer;
-- A/V drift is not perceptible at the end.
-
-## Application-close finalization
-
-1. Start a short recording.
-2. Close Huff without pressing Stop.
-3. Relaunch and inspect the chosen output.
-
-Huff should finalize before exiting. A slow encoder may delay application closure while FFmpeg finishes.
-
-## Failure reporting
-
-Include:
-
-- platform and GPU;
-- render resolution and recording FPS;
-- audio mode;
-- source file/container/codec;
-- `REC:` tooltip values;
-- `NATIVE:` tooltip values;
-- terminal output;
-- whether the final MP4 is missing, truncated, silent, drifting, upside down, or unplayable;
-- whether hidden `.huff-video.mp4` or `.huff-audio.wav` files remain beside the destination.
+- `engineBuild: HNW-10`
+- source path and position for file playback
+- render and export dimensions
+- sampling and fit mode
+- parameter revision and values

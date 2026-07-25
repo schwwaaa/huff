@@ -1,25 +1,33 @@
-# Apply Huff Native Milestone 09
+# Apply Huff Native Milestone 10
 
-This update is based on **Huff Native Milestone 08.1**.
+The full archive is the preferred upgrade path.
 
-Copy the changed-files package over the root of the 08.1 project while preserving its directory structure.
+For a changed-files application, copy the provided files over a committed Milestone 09 tree while preserving paths.
 
-Major changed paths:
+New files:
 
 ```text
-src/app.js
-src/index.html
+src-tauri/src/export.rs
+src-tauri/src/export.wgsl
+UPGRADE-NOTES-10.md
+```
+
+Major changed files:
+
+```text
 src-tauri/src/main.rs
 src-tauri/src/renderer.rs
-src-tauri/src/audio.rs
-src-tauri/src/video_audio.rs
-src-tauri/src/recording.rs
-package.json
-package-lock.json
+src/app.js
+src/index.html
 src-tauri/Cargo.toml
 src-tauri/Cargo.lock
-src-tauri/Info.plist
 src-tauri/tauri.conf.json
+package.json
+package-lock.json
+README.md
+TESTING.md
+MIGRATION-STATUS.md
+VALIDATION.md
 ```
 
 Run:
@@ -29,4 +37,4 @@ npm install
 npm run dev:metal
 ```
 
-FFmpeg must be available on `PATH`. Milestone 09 does not require a new Rust crate dependency.
+FFmpeg must remain available on `PATH`. No new Rust crate dependency was added.

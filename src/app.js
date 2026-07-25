@@ -14,6 +14,7 @@ const appState = {
   undo: [],
   toastTimer: 0,
   spoutAdaptersLoaded: false,
+  exportCompleted: 0,
 };
 
 function toast(message, error = false) {
@@ -191,7 +192,7 @@ function configureRegistryControls() {
     feedbackGroup.title = 'Native HDR feedback is active; final effect-order parity continues with later render-graph milestones.';
   }
   const glitchGroup = byId('corruptOn')?.closest('.group');
-  if (glitchGroup) glitchGroup.title = "Milestone 09 includes Huff's native render graph, Syphon/Spout output, and bounded CFR recording from the authoritative wgpu output.";
+  if (glitchGroup) glitchGroup.title = "Milestone 10 includes Huff's native render graph, Syphon/Spout, CFR recording, and independent high-resolution PNG still export.";
   const clusterGroup = byId('clusterTiles')?.closest('.group');
   if (clusterGroup) clusterGroup.title = 'Native cluster bodies are active: persistent centers, coherence, speed, steering, variance, pulse, inertia, breathing, bounce/wrap, bias, spread, and minimum spread.';
   const scanGroup = byId('clusters')?.closest('.group');
@@ -377,6 +378,55 @@ function wireRecording() {
       button.disabled = false;
     }
   });
+}
+
+function exportDimensionsFromPreset() {
+  const preset = byId('exportPreset')?.value || 'native';
+  const renderer = appState.info?.renderer || {};
+  if (preset === '1080p') return [1920, 1080];
+  if (preset === '4k') return [3840, 2160];
+  if (preset === '8k') return [7680, 4320];
+  if (preset === 'custom') {
+    return [
+      Math.max(1, Math.min(8192, Math.round(Number(byId('exportW')?.value || 1920)))),
+      Math.max(1, Math.min(8192, Math.round(Number(byId('exportH')?.value || 1080)))),
+    ];
+  }
+  return [Math.max(1, Number(renderer.width || 1)), Math.max(1, Number(renderer.height || 1))];
+}
+
+function syncExportDimensions(force = false) {
+  const preset = byId('exportPreset')?.value || 'native';
+  const custom = preset === 'custom';
+  const [width, height] = exportDimensionsFromPreset();
+  const widthInput = byId('exportW');
+  const heightInput = byId('exportH');
+  if (widthInput && (force || !custom || document.activeElement !== widthInput)) widthInput.value = String(width);
+  if (heightInput && (force || !custom || document.activeElement !== heightInput)) heightInput.value = String(height);
+  if (widthInput) widthInput.disabled = !custom;
+  if (heightInput) heightInput.disabled = !custom;
+}
+
+function wireExport() {
+  byId('exportPreset')?.addEventListener('change', () => syncExportDimensions(true));
+  byId('exportStillBtn')?.addEventListener('click', async () => {
+    const button = byId('exportStillBtn');
+    button.disabled = true;
+    const [width, height] = exportDimensionsFromPreset();
+    try {
+      const path = await call('export_still', {
+        width,
+        height,
+        sampling: byId('exportSampling')?.value || 'smooth',
+        fitMode: byId('exportFit')?.value || 'fit',
+      });
+      if (path) toast(`PNG capture queued · ${width}×${height} · ${basename(path)}`);
+      else button.disabled = false;
+    } catch (_) {
+      button.disabled = false;
+    }
+  });
+  syncExportDimensions(true);
 }
 
 function wireCamera() {
@@ -617,6 +667,7 @@ function displayInfo(info) {
   const syphon = info.syphon || {};
   const spout = info.spout || {};
   const recording = info.recording || {};
+  const exportInfo = info.export || {};
 
   setOptions(byId('cams'), info.cameraDevices || [], (item) => item.slot, (item) => item.name);
   setOptions(byId('midiPortSelect'), midi.ports || [], (item) => item, (item) => item);
@@ -666,6 +717,36 @@ Approx: ${((recording.estimatedBytes || 0) / 1048576).toFixed(1)} MiB`
   if (byId('resetBtn')) byId('resetBtn').disabled = recordingBusy;
   if (byId('presetLoadBtn')) byId('presetLoadBtn').disabled = recordingBusy;
   if (byId('presetImportBtn')) byId('presetImportBtn').disabled = recordingBusy;
+
+  const exportBusy = Boolean(exportInfo.active);
+  const exportPill = byId('exportPill');
+  if (exportPill) {
+    exportPill.classList.toggle('export-active', exportBusy);
+    exportPill.classList.toggle('export-complete', !exportBusy && exportInfo.phase === 'complete');
+    exportPill.textContent = exportBusy
+      ? `EXPORT: ${String(exportInfo.phase || 'active').toUpperCase()}`
+      : (exportInfo.phase === 'complete'
+        ? `EXPORT: ${exportInfo.width || 0}×${exportInfo.height || 0} ✓`
+        : (exportInfo.phase === 'error' ? 'EXPORT: ERROR' : 'EXPORT: READY'));
+    exportPill.title = exportInfo.lastError || `${exportInfo.path || 'Native PNG still export'}
+${exportInfo.width || 0}×${exportInfo.height || 0} from ${exportInfo.sourceWidth || 0}×${exportInfo.sourceHeight || 0}
+Sampling: ${exportInfo.sampling || 'smooth'} · Aspect: ${exportInfo.fitMode || 'fit'}
+Phase: ${exportInfo.phase || 'ready'} · ${(Number(exportInfo.durationSeconds || 0)).toFixed(2)} s · ${((exportInfo.bytesWritten || 0) / 1048576).toFixed(1)} MiB
+Metadata: ${exportInfo.metadataPath || 'written beside PNG'}`;
+  }
+  if (Number(exportInfo.completedExports || 0) > appState.exportCompleted) {
+    appState.exportCompleted = Number(exportInfo.completedExports || 0);
+    toast(`PNG export complete · ${basename(exportInfo.path)}`);
+  }
+  if (byId('exportStillBtn')) byId('exportStillBtn').disabled = exportBusy || recordingBusy || !exportInfo.ffmpegAvailable;
+  if (byId('exportPreset')) byId('exportPreset').disabled = exportBusy || recordingBusy;
+  if (byId('exportSampling')) byId('exportSampling').disabled = exportBusy || recordingBusy;
+  if (byId('exportFit')) byId('exportFit').disabled = exportBusy || recordingBusy;
+  syncExportDimensions();
+  const customExport = byId('exportPreset')?.value === 'custom';
+  if (byId('exportW')) byId('exportW').disabled = exportBusy || recordingBusy || !customExport;
+  if (byId('exportH')) byId('exportH').disabled = exportBusy || recordingBusy || !customExport;
+  if (byId('recordBtn')) byId('recordBtn').disabled = recordingBusy || exportBusy || !recording.ffmpegAvailable;
 
   const syphonButton = byId('syphonToggleBtn');
   if (syphonButton) {
@@ -776,6 +857,7 @@ async function boot() {
   configureRegistryControls();
   wireTransport();
   wireRecording();
+  wireExport();
   wireCamera();
   wireNativeActions();
   wirePresets();
@@ -784,7 +866,7 @@ async function boot() {
   await refreshParameterState();
   await poll();
   setInterval(poll, 250);
-  console.info('Huff Native wgpu Milestone 09 loaded', {
+  console.info('Huff Native wgpu Milestone 10 loaded', {
     parameters: appState.registry.length,
     implemented: appState.registry.filter((definition) => definition.implemented).length,
   });

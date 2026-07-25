@@ -425,6 +425,15 @@
             border-color: var(--term-yel) !important;
         }
         @keyframes recBlink { 50% { opacity: .55; } }
+        #exportPill.export-active {
+            color: var(--term-cyan) !important;
+            border-color: var(--term-cyan) !important;
+            animation: green-pulse 1.2s ease-in-out infinite;
+        }
+        #exportPill.export-complete {
+            color: var(--term-green) !important;
+            border-color: var(--term-green) !important;
+        }
 
         #status   { color: var(--term-dgreen); }
         #midiPill {
@@ -860,7 +869,7 @@
             <p>Huff is being migrated to a native Rust + wgpu media engine. The existing
             control surface is preserved while playback, timing, GPU rendering, and
             output move out of the WebView.</p>
-            <p><strong>Milestone 09:</strong> Huff now records the authoritative native wgpu output as CFR MP4, with synchronized video audio or microphone capture, bounded queues, and safe FFmpeg finalization. High-resolution/offline export and final parameter calibration remain.</p>
+            <p><strong>Milestone 10:</strong> Huff now exports the authoritative native wgpu image as PNG at native, 1080p, 4K, 8K, or custom size using an independent GPU scaling pass. Each still includes a reproducibility sidecar. Frame-driven offline video export and final parameter calibration remain.</p>
         </div>
     </div>
 
@@ -1092,6 +1101,27 @@
             <button id="recordBtn" class="btn-red" title="Start native MP4 recording">● Rec</button>
             <button id="recordStopBtn" disabled title="Stop and finalize recording">■ Stop</button>
             <span class="pill" id="recordPill" style="color:rgba(255,70,70,.75);border-color:rgba(255,70,70,.3)" title="Native recording status">REC: OFF</span>
+            <select id="exportPreset" title="Still export resolution" style="font-size:10px;padding:1px 2px">
+                <option value="native" selected>PNG NATIVE</option>
+                <option value="1080p">PNG 1080P</option>
+                <option value="4k">PNG 4K</option>
+                <option value="8k">PNG 8K</option>
+                <option value="custom">PNG CUSTOM</option>
+            </select>
+            <input id="exportW" type="number" min="1" max="8192" value="1920" title="Still export width" style="width:56px;font-size:10px;padding:1px 2px">
+            <span style="font-size:10px;color:#404040">×</span>
+            <input id="exportH" type="number" min="1" max="8192" value="1080" title="Still export height" style="width:56px;font-size:10px;padding:1px 2px">
+            <select id="exportSampling" title="GPU still scaling sampler" style="font-size:10px;padding:1px 2px">
+                <option value="smooth" selected>SMOOTH</option>
+                <option value="crisp">CRISP</option>
+            </select>
+            <select id="exportFit" title="Aspect-ratio policy" style="font-size:10px;padding:1px 2px">
+                <option value="fit" selected>FIT</option>
+                <option value="crop">CROP</option>
+                <option value="stretch">STRETCH</option>
+            </select>
+            <button id="exportStillBtn" title="Export the current authoritative wgpu image as PNG">▣ PNG</button>
+            <span class="pill" id="exportPill" style="color:rgba(0,200,220,.7);border-color:rgba(0,200,220,.25)" title="Native still export status">EXPORT: READY</span>
             <div class="topbar-sep"></div>
             <button id="camStartBtn">⬤ Cam</button>
             <button id="camStopBtn">✕ Cam</button>

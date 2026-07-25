@@ -7,6 +7,7 @@ extern crate objc;
 mod audio;
 mod audio_router;
 mod camera;
+mod export;
 mod gesture;
 mod history;
 mod midi;
@@ -24,6 +25,7 @@ mod video_audio;
 use audio::{AudioCommand, AudioHandle};
 use audio_router::{AudioRouterCommand, AudioRouterHandle};
 use camera::{CameraDevice, CameraHandle};
+use export::{ExportHandle, StillExportConfig, StillExportMetadata};
 use gesture::{GestureHandle, GesturePoint};
 use midi::{MidiCommand, MidiHandle};
 use osc::{OscCommand, OscHandle};
@@ -64,6 +66,7 @@ struct AppInfo {
     syphon: syphon::SyphonInfo,
     spout: spout::SpoutInfo,
     recording: recording::RecordingInfo,
+    export: export::ExportInfo,
     gesture: gesture::GestureInfo,
     parameter_revision: u64,
     native_milestone: String,
@@ -82,11 +85,12 @@ fn get_app_info(
     osc: tauri::State<'_, OscHandle>,
     gesture: tauri::State<'_, GestureHandle>,
     recording: tauri::State<'_, RecordingHandle>,
+    export: tauri::State<'_, ExportHandle>,
     parameters: tauri::State<'_, ParameterStore>,
     source: tauri::State<'_, SourceSelector>,
 ) -> AppInfo {
     AppInfo {
-        build: "HNW-09".into(),
+        build: "HNW-10".into(),
         renderer: renderer.info(),
         camera: camera.status(),
         camera_devices: camera.devices(),
@@ -101,9 +105,10 @@ fn get_app_info(
         syphon: syphon::info(),
         spout: spout::info(),
         recording: recording.info(),
+        export: export.info(),
         gesture: gesture.info(),
         parameter_revision: parameters.revision(),
-        native_milestone: "HNW-09".into(),
+        native_milestone: "HNW-10".into(),
         active_source: source.get().label().into(),
     }
 }
@@ -208,6 +213,7 @@ fn stop_spout_output(renderer: tauri::State<'_, RendererHandle>) {
 fn start_recording(
     renderer: tauri::State<'_, RendererHandle>,
     recording: tauri::State<'_, RecordingHandle>,
+    export: tauri::State<'_, ExportHandle>,
     source: tauri::State<'_, SourceSelector>,
     video_audio: tauri::State<'_, VideoAudioHandle>,
     microphone_audio: tauri::State<'_, AudioHandle>,
@@ -216,6 +222,9 @@ fn start_recording(
 ) -> Result<Option<String>, String> {
     if recording.info().active || recording.info().finalizing {
         return Err("a recording is already active or finalizing".into());
+    }
+    if export.info().active {
+        return Err("recording is disabled while a still export is active".into());
     }
     if !matches!(fps, 30 | 60) {
         return Err("recording FPS must be 30 or 60".into());
@@ -316,6 +325,83 @@ fn start_recording(
 #[tauri::command]
 fn stop_recording(recording: tauri::State<'_, RecordingHandle>) -> Result<(), String> {
     recording.stop()
+}
+
+
+#[tauri::command]
+fn export_still(
+    renderer: tauri::State<'_, RendererHandle>,
+    export: tauri::State<'_, ExportHandle>,
+    recording: tauri::State<'_, RecordingHandle>,
+    parameters: tauri::State<'_, ParameterStore>,
+    source: tauri::State<'_, SourceSelector>,
+    video: tauri::State<'_, VideoHandle>,
+    width: u32,
+    height: u32,
+    sampling: String,
+    fit_mode: String,
+) -> Result<Option<String>, String> {
+    if recording.info().active || recording.info().finalizing {
+        return Err("still export is disabled while recording or finalizing".into());
+    }
+    if export.info().active {
+        return Err("another still export is already active".into());
+    }
+    if !matches!(sampling.as_str(), "smooth" | "crisp") {
+        return Err("export sampling must be smooth or crisp".into());
+    }
+    if !matches!(fit_mode.as_str(), "fit" | "crop" | "stretch") {
+        return Err("export fit mode must be fit, crop, or stretch".into());
+    }
+
+    let selected = rfd::FileDialog::new()
+        .add_filter("PNG image", &["png"])
+        .set_file_name("huff-still.png")
+        .save_file();
+    let Some(mut path) = selected else {
+        return Ok(None);
+    };
+    if !path
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(|value| value.eq_ignore_ascii_case("png"))
+        .unwrap_or(false)
+    {
+        path.set_extension("png");
+    }
+
+    let render = renderer.info();
+    let video_info = video.status();
+    let snapshot = parameters.snapshot();
+    let config = StillExportConfig {
+        path: path.clone(),
+        width,
+        height,
+        source_width: render.width,
+        source_height: render.height,
+        sampling: sampling.clone(),
+        fit_mode: fit_mode.clone(),
+    };
+    let metadata = StillExportMetadata {
+        engine_build: "HNW-10".into(),
+        captured_unix_ms: StillExportMetadata::now_unix_ms(),
+        active_source: source.get().label().into(),
+        source_file: video_info.file_path,
+        source_position_seconds: video_info.position_seconds,
+        source_duration_seconds: video_info.duration_seconds,
+        source_playback_rate: video_info.playback_rate,
+        render_width: render.width,
+        render_height: render.height,
+        export_width: width,
+        export_height: height,
+        sampling,
+        fit_mode,
+        parameter_revision: snapshot.revision,
+        parameter_values: serde_json::to_value(snapshot.values)
+            .map_err(|error| format!("could not serialize parameter state: {error}"))?,
+    };
+    renderer.capture_still(config, metadata)?;
+    Ok(Some(path.display().to_string()))
 }
 
 #[tauri::command]
@@ -695,6 +781,7 @@ fn main() {
     tauri::Builder::default()
         .setup(|app| {
             let recording = recording::start().map_err(std::io::Error::other)?;
+            let export = export::start().map_err(std::io::Error::other)?;
             let recording_audio = recording.audio_tap();
             let camera = camera::start().map_err(std::io::Error::other)?;
             let video = video::start().map_err(std::io::Error::other)?;
@@ -735,6 +822,7 @@ fn main() {
                 },
                 parameters.clone(),
                 recording.clone(),
+                export.clone(),
             )
             .map_err(std::io::Error::other)?;
 
@@ -769,6 +857,7 @@ fn main() {
                 let close_midi = midi.clone();
                 let close_osc = osc.clone();
                 let close_recording = recording.clone();
+                let close_export = export.clone();
                 controls.on_window_event(move |event| match event {
                     tauri::WindowEvent::Focused(focused) => {
                         if *focused {
@@ -780,6 +869,7 @@ fn main() {
                             let _ = close_recording.stop();
                         }
                         close_recording.shutdown();
+                        close_export.shutdown();
                         close_renderer.send(RenderCommand::Shutdown);
                         close_camera.shutdown();
                         close_video.shutdown();
@@ -803,6 +893,7 @@ fn main() {
             app.manage(osc);
             app.manage(gesture);
             app.manage(recording);
+            app.manage(export);
             app.manage(parameters);
             app.manage(source);
             app.manage(renderer);
@@ -824,6 +915,7 @@ fn main() {
             stop_spout_output,
             start_recording,
             stop_recording,
+            export_still,
             focus_renderer,
             refresh_cameras,
             start_camera,

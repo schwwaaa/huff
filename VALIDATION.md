@@ -1,42 +1,63 @@
-# Huff Native Milestone 09 validation
+# Huff Native Milestone 10 validation
 
-The packaging environment does not include Cargo, rustc, Metal, DX12, or native Tauri runtime support. Rust compilation and real-time recording remain local validation requirements.
+The packaging environment does not include Cargo, rustc, a WGSL compiler, Metal, or DX12. Local Tauri compilation and real GPU export remain required before Milestone 10 is considered runtime-proven.
 
 ## Completed static checks
 
-- JavaScript passes `node --check`.
-- `package.json`, `package-lock.json`, and `tauri.conf.json` parse successfully.
-- HTML IDs are unique and all Milestone 09 recording controls are present.
-- Package, npm lockfile, Cargo manifest, Cargo lockfile project entry, and Tauri configuration are synchronized at `0.9.0`.
-- Tauri command registration includes native recording start and stop.
-- The recorder module is registered and managed as shared application state.
-- Video, microphone audio, renderer readback, and UI telemetry are wired to the recording state.
-- Video submission uses one replaceable latest-frame slot rather than an unbounded queue.
-- Audio submission uses a fixed-capacity channel with dropped-chunk telemetry.
-- The wgpu readback path remains fixed at three persistent buffers shared by Syphon, Spout, and recording.
-- Recording keeps the native renderer active while its presentation surface is minimized or temporarily unavailable.
-- Internal render dimensions are held stable while recording or finalizing, then restored to the selected render mode.
-- Active recording is finalized on application close.
-- Modified Rust and WGSL source passes delimiter and stale-reference audits.
+A 47-check source audit passed:
 
-## FFmpeg pipeline validation
+- `src/app.js` passes `node --check`.
+- `package.json`, `package-lock.json`, and `src-tauri/tauri.conf.json` parse successfully.
+- HTML IDs are unique.
+- All seven still-export controls are present.
+- Package, npm lockfile, Cargo manifest, Cargo lockfile project entry, and Tauri configuration are synchronized at `0.10.0`.
+- Rust and WGSL files pass comment/string-aware delimiter checks.
+- `mod export;`, managed export state, Tauri command registration, renderer command wiring, shader inclusion, and UI invocation are present.
+- The export shader uses bind groups `0` and `1` only.
+- Rust and WGSL `ExportUniforms` layouts agree at 32 bytes.
+- One pending request and one in-flight GPU capture bound the still-capture path.
+- Export dimensions are bounded by the adapter limit, an 8192-per-axis ceiling, and a 35-megapixel ceiling.
+- No Rust dependency was added relative to Milestone 09.
+- The UI completion counter is initialized and export/record actions are mutually disabled while active.
 
-A synthetic command-line test completed successfully in this environment:
+## FFmpeg PNG pipeline validation
 
-1. Generated raw RGBA frames were encoded as CFR H.264 MP4.
-2. Generated interleaved `f32le` audio was encoded as PCM WAV.
-3. Video and audio were muxed into an AAC MP4.
-4. `ffprobe` confirmed a readable video stream, audio stream, duration, and frame rate.
+A synthetic test used the same command family as `export.rs`:
 
-This validates the command family used by the recorder, but not Huff's Rust pipe ownership or live A/V timing.
+1. Generated a dense 64×32 RGBA frame.
+2. Piped it to FFmpeg as raw `rgba` video.
+3. Encoded one PNG frame with compression level 6.
+4. Used `ffprobe` to verify:
+   - codec: PNG
+   - dimensions: 64×32
+   - pixel format: RGBA
+
+This validates the encoder command and raw-frame format, but not Rust pipe ownership or GPU readback at runtime.
+
+## Architecture checks
+
+- Still capture samples Huff's authoritative RGBA8 output texture.
+- A separate export render target is allocated for the requested dimensions.
+- Fit, Crop, and Stretch happen in the dedicated export shader.
+- Smooth and Crisp use the existing linear and nearest samplers.
+- The export path does not resize live render targets, rebuild temporal history, or clear feedback.
+- GPU readback is asynchronous and the PNG encoder runs on a separate bounded worker.
+- A sidecar records source identity, transport state, live render size, export settings, parameter revision, and canonical parameter values.
 
 ## Required local validation
 
-- `cargo`/Tauri compilation on macOS and Windows.
-- 30 and 60 FPS recording from the real wgpu output.
-- Video-audio and microphone capture.
-- Pause, seek, playback-rate, loop, and decoder-recovery behavior.
-- Recording while Syphon or Spout is active.
-- Minimized/occluded-window recording.
-- Long-duration memory, drift, and finalization tests.
-- Packaged-app FFmpeg discovery and permissions.
+- `npm run dev:metal` compilation on macOS.
+- `npm run dev:dx12` compilation on Windows.
+- Native-size PNG export.
+- 1080p, 4K, and 8K PNG export.
+- Fit, Crop, and Stretch with mismatched aspect ratios.
+- Smooth versus Crisp comparison.
+- Export while the native output window is minimized.
+- Confirm history count, feedback state, video transport, and audio continue unchanged.
+- Confirm recording and export cannot start simultaneously.
+- Confirm PNG orientation, color, alpha behavior, and sidecar contents.
+- Confirm graceful errors for over-budget dimensions and unavailable FFmpeg.
+
+## Scope boundary
+
+Milestone 10 performs a high-quality GPU resample of the current authoritative Huff image. It does **not** independently re-run the complete effect graph at 4K or 8K. True frame-driven, high-resolution re-rendering belongs to the deterministic video-export milestone.
