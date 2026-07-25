@@ -5,9 +5,11 @@ use crate::{
     history::{GpuHistoryRing, HISTORY_FORMAT},
     midi::MidiSnapshot,
     osc::OscSnapshot,
+    output_frame::OutputFrame,
     parameters::{ParameterSnapshot, ParameterStore},
     source::{ActiveSource, SourceSelector},
     video::{SharedVideoFrame, VideoFrame},
+    spout, syphon,
 };
 use bytemuck::{Pod, Zeroable};
 use serde::Serialize;
@@ -16,7 +18,7 @@ use std::{
     env,
     sync::{
         atomic::{AtomicBool, Ordering},
-        mpsc::{sync_channel, Receiver, SyncSender, TryRecvError},
+        mpsc::{channel, sync_channel, Receiver, Sender, SyncSender, TryRecvError},
         Arc, RwLock,
     },
     thread,
@@ -28,6 +30,9 @@ const SIGNAL_COUNT: usize = 160;
 const MAX_GLITCH_INSTANCES: usize = 32_768;
 const MAX_SCAN_BANDS: usize = 128;
 const HDR_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
+const OUTPUT_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
+const OUTPUT_READBACK_SLOTS: usize = 3;
+const OUTPUT_BYTES_PER_PIXEL: u32 = 4;
 
 #[derive(Clone)]
 pub struct InputSources {
@@ -46,6 +51,16 @@ pub enum RenderCommand {
     ClearFeedback,
     RecoverSurface,
     FireFlowPulse,
+    StartSyphon {
+        fps: u32,
+        reply: SyncSender<Result<(), String>>,
+    },
+    StopSyphon,
+    StartSpout {
+        fps: u32,
+        reply: SyncSender<Result<(), String>>,
+    },
+    StopSpout,
     Shutdown,
 }
 
@@ -122,6 +137,11 @@ pub struct RendererInfo {
     pub active_source: String,
     pub surface_skips: u64,
     pub surface_recoveries: u64,
+    pub output_readbacks: u64,
+    pub output_readback_drops: u64,
+    pub output_map_errors: u64,
+    pub output_copy_ms: f64,
+    pub output_pending_slots: u32,
     pub mode: String,
     pub running: bool,
     pub last_error: String,
@@ -140,6 +160,40 @@ impl RendererHandle {
 
     pub fn info(&self) -> RendererInfo {
         self.info.read().expect("renderer info poisoned").clone()
+    }
+
+    pub fn start_syphon(&self, fps: u32) -> Result<(), String> {
+        let (reply_tx, reply_rx) = sync_channel(1);
+        self.tx
+            .send(RenderCommand::StartSyphon {
+                fps: fps.clamp(1, 60),
+                reply: reply_tx,
+            })
+            .map_err(|_| "renderer command channel is unavailable".to_string())?;
+        reply_rx
+            .recv_timeout(Duration::from_secs(4))
+            .map_err(|_| "timed out starting Syphon output".to_string())?
+    }
+
+    pub fn stop_syphon(&self) {
+        self.send(RenderCommand::StopSyphon);
+    }
+
+    pub fn start_spout(&self, fps: u32) -> Result<(), String> {
+        let (reply_tx, reply_rx) = sync_channel(1);
+        self.tx
+            .send(RenderCommand::StartSpout {
+                fps: fps.clamp(1, 60),
+                reply: reply_tx,
+            })
+            .map_err(|_| "renderer command channel is unavailable".to_string())?;
+        reply_rx
+            .recv_timeout(Duration::from_secs(4))
+            .map_err(|_| "timed out starting Spout output".to_string())?
+    }
+
+    pub fn stop_spout(&self) {
+        self.send(RenderCommand::StopSpout);
     }
 }
 
@@ -406,12 +460,233 @@ impl P5Noise {
     }
 }
 
+
 struct SourceTexture {
     texture: wgpu::Texture,
     view: wgpu::TextureView,
     width: u32,
     height: u32,
     sequence: u64,
+}
+
+const OUTPUT_TARGET_SYPHON: u8 = 0b01;
+const OUTPUT_TARGET_SPOUT: u8 = 0b10;
+
+enum ReadbackSlotState {
+    Idle,
+    Mapping {
+        generation: u64,
+        targets: u8,
+        width: u32,
+        height: u32,
+        padded_bytes_per_row: u32,
+        started: Instant,
+    },
+}
+
+struct ReadbackSlot {
+    buffer: wgpu::Buffer,
+    state: ReadbackSlotState,
+}
+
+struct OutputReadback {
+    slots: Vec<ReadbackSlot>,
+    completion_tx: Sender<(u64, usize, Result<(), String>)>,
+    completion_rx: Receiver<(u64, usize, Result<(), String>)>,
+    generation: u64,
+    next_slot: usize,
+    width: u32,
+    height: u32,
+    padded_bytes_per_row: u32,
+    readbacks: u64,
+    dropped: u64,
+    map_errors: u64,
+    last_copy_ms: f64,
+}
+
+impl OutputReadback {
+    fn new(device: &wgpu::Device, width: u32, height: u32) -> Self {
+        let (completion_tx, completion_rx) = channel();
+        let mut readback = Self {
+            slots: Vec::new(),
+            completion_tx,
+            completion_rx,
+            generation: 0,
+            next_slot: 0,
+            width: 0,
+            height: 0,
+            padded_bytes_per_row: 0,
+            readbacks: 0,
+            dropped: 0,
+            map_errors: 0,
+            last_copy_ms: 0.0,
+        };
+        readback.rebuild(device, width, height);
+        readback
+    }
+
+    fn rebuild(&mut self, device: &wgpu::Device, width: u32, height: u32) {
+        self.generation = self.generation.wrapping_add(1);
+        self.width = width.max(1);
+        self.height = height.max(1);
+        let dense_bytes_per_row = self.width.saturating_mul(OUTPUT_BYTES_PER_PIXEL);
+        self.padded_bytes_per_row = align_copy_bytes_per_row(dense_bytes_per_row);
+        let size = u64::from(self.padded_bytes_per_row)
+            .saturating_mul(u64::from(self.height));
+        self.slots = (0..OUTPUT_READBACK_SLOTS)
+            .map(|index| ReadbackSlot {
+                buffer: device.create_buffer(&wgpu::BufferDescriptor {
+                    label: Some(match index {
+                        0 => "huff native output readback A",
+                        1 => "huff native output readback B",
+                        _ => "huff native output readback C",
+                    }),
+                    size: size.max(4),
+                    usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+                    mapped_at_creation: false,
+                }),
+                state: ReadbackSlotState::Idle,
+            })
+            .collect();
+        self.next_slot = 0;
+    }
+
+    fn encode_copy(
+        &mut self,
+        encoder: &mut wgpu::CommandEncoder,
+        texture: &wgpu::Texture,
+        targets: u8,
+        started: Instant,
+    ) -> Option<usize> {
+        if targets == 0 || self.slots.is_empty() {
+            return None;
+        }
+        let slot_count = self.slots.len();
+        let mut selected = None;
+        for offset in 0..slot_count {
+            let index = (self.next_slot + offset) % slot_count;
+            if matches!(self.slots[index].state, ReadbackSlotState::Idle) {
+                selected = Some(index);
+                break;
+            }
+        }
+        let Some(index) = selected else {
+            self.dropped = self.dropped.wrapping_add(1);
+            return None;
+        };
+        encoder.copy_texture_to_buffer(
+            wgpu::TexelCopyTextureInfo {
+                texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::TexelCopyBufferInfo {
+                buffer: &self.slots[index].buffer,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(self.padded_bytes_per_row),
+                    rows_per_image: Some(self.height),
+                },
+            },
+            wgpu::Extent3d {
+                width: self.width,
+                height: self.height,
+                depth_or_array_layers: 1,
+            },
+        );
+        self.slots[index].state = ReadbackSlotState::Mapping {
+            generation: self.generation,
+            targets,
+            width: self.width,
+            height: self.height,
+            padded_bytes_per_row: self.padded_bytes_per_row,
+            started,
+        };
+        self.next_slot = (index + 1) % slot_count;
+        Some(index)
+    }
+
+    fn begin_mapping(&self, index: usize) {
+        let generation = self.generation;
+        let tx = self.completion_tx.clone();
+        self.slots[index]
+            .buffer
+            .slice(..)
+            .map_async(wgpu::MapMode::Read, move |result| {
+                let _ = tx.send((
+                    generation,
+                    index,
+                    result.map_err(|error| error.to_string()),
+                ));
+            });
+    }
+
+    fn process_completions(&mut self) {
+        while let Ok((generation, index, result)) = self.completion_rx.try_recv() {
+            if generation != self.generation || index >= self.slots.len() {
+                continue;
+            }
+            let state = std::mem::replace(
+                &mut self.slots[index].state,
+                ReadbackSlotState::Idle,
+            );
+            let ReadbackSlotState::Mapping {
+                generation: slot_generation,
+                targets,
+                width,
+                height,
+                padded_bytes_per_row,
+                started,
+            } = state
+            else {
+                continue;
+            };
+            if slot_generation != generation {
+                continue;
+            }
+            if let Err(error) = result {
+                self.map_errors = self.map_errors.wrapping_add(1);
+                eprintln!("[native-output] readback map failed: {error}");
+                continue;
+            }
+            let slice = self.slots[index].buffer.slice(..);
+            let mapped = slice.get_mapped_range();
+            let dense_bytes_per_row = width as usize * OUTPUT_BYTES_PER_PIXEL as usize;
+            let mut pixels = vec![0_u8; dense_bytes_per_row * height as usize];
+            for row in 0..height as usize {
+                let source_start = row * padded_bytes_per_row as usize;
+                let source_end = source_start + dense_bytes_per_row;
+                let destination_start = row * dense_bytes_per_row;
+                let destination_end = destination_start + dense_bytes_per_row;
+                pixels[destination_start..destination_end]
+                    .copy_from_slice(&mapped[source_start..source_end]);
+            }
+            drop(mapped);
+            self.slots[index].buffer.unmap();
+            self.last_copy_ms = started.elapsed().as_secs_f64() * 1000.0;
+            self.readbacks = self.readbacks.wrapping_add(1);
+            let frame = OutputFrame::new(width, height, pixels);
+            if targets & OUTPUT_TARGET_SYPHON != 0 {
+                syphon::submit(frame.clone());
+            }
+            if targets & OUTPUT_TARGET_SPOUT != 0 {
+                spout::submit(frame);
+            }
+        }
+    }
+
+    fn pending_slots(&self) -> u32 {
+        self.slots
+            .iter()
+            .filter(|slot| !matches!(slot.state, ReadbackSlotState::Idle))
+            .count() as u32
+    }
+}
+
+fn align_copy_bytes_per_row(value: u32) -> u32 {
+    let alignment = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+    value.div_ceil(alignment) * alignment
 }
 
 struct OffscreenTargets {
@@ -425,6 +700,9 @@ struct OffscreenTargets {
     glitch_layer_view: wgpu::TextureView,
     _scan_layer: wgpu::Texture,
     scan_layer_view: wgpu::TextureView,
+    output: wgpu::Texture,
+    output_view: wgpu::TextureView,
+    output_surface_bind: wgpu::BindGroup,
     feedback_bind_a_smooth: wgpu::BindGroup,
     feedback_bind_b_smooth: wgpu::BindGroup,
     feedback_bind_a_crisp: wgpu::BindGroup,
@@ -448,6 +726,7 @@ struct Renderer {
     composite_pipeline: wgpu::RenderPipeline,
     effect_prepare_pipeline: wgpu::RenderPipeline,
     feedback_pipeline: wgpu::RenderPipeline,
+    output_pipeline: wgpu::RenderPipeline,
     present_pipeline: wgpu::RenderPipeline,
     history_capture_pipeline: wgpu::RenderPipeline,
     glitch_pipeline: wgpu::RenderPipeline,
@@ -480,6 +759,13 @@ struct Renderer {
     glitch_history_bind_smooth: wgpu::BindGroup,
     glitch_history_bind_crisp: wgpu::BindGroup,
     history: GpuHistoryRing,
+    output_readback: OutputReadback,
+    syphon_enabled: bool,
+    syphon_fps: u32,
+    spout_enabled: bool,
+    spout_fps: u32,
+    last_syphon_capture: Instant,
+    last_spout_capture: Instant,
     effect_is_a: bool,
     effect_seeded: bool,
 
@@ -1005,12 +1291,20 @@ impl Renderer {
             "fs_feedback",
             HDR_FORMAT,
         );
+        let output_pipeline = create_pipeline(
+            &device,
+            &shader,
+            &present_pipeline_layout,
+            "huff native final output pipeline",
+            "fs_output",
+            OUTPUT_FORMAT,
+        );
         let present_pipeline = create_pipeline(
             &device,
             &shader,
             &present_pipeline_layout,
-            "huff native present pipeline",
-            "fs_present",
+            "huff native surface presentation pipeline",
+            "fs_surface",
             config.format,
         );
         let history_capture_pipeline = create_pipeline(
@@ -1113,6 +1407,7 @@ impl Renderer {
             "huff history capture source bind",
         );
 
+        let output_readback = OutputReadback::new(&device, render_width, render_height);
         let now = Instant::now();
         let mut renderer = Self {
             window,
@@ -1125,6 +1420,7 @@ impl Renderer {
             composite_pipeline,
             effect_prepare_pipeline,
             feedback_pipeline,
+            output_pipeline,
             present_pipeline,
             history_capture_pipeline,
             glitch_pipeline,
@@ -1156,7 +1452,14 @@ impl Renderer {
             history_capture_bind,
             glitch_history_bind_smooth,
             glitch_history_bind_crisp,
+            output_readback,
             history,
+            syphon_enabled: false,
+            syphon_fps: 30,
+            spout_enabled: false,
+            spout_fps: 30,
+            last_syphon_capture: now,
+            last_spout_capture: now,
             effect_is_a: false,
             effect_seeded: false,
             sources,
@@ -1390,6 +1693,11 @@ impl Renderer {
             active_source: self.sources.source.get().label().into(),
             surface_skips: self.surface_skips,
             surface_recoveries: self.surface_recoveries,
+            output_readbacks: self.output_readback.readbacks,
+            output_readback_drops: self.output_readback.dropped,
+            output_map_errors: self.output_readback.map_errors,
+            output_copy_ms: self.output_readback.last_copy_ms,
+            output_pending_slots: self.output_readback.pending_slots(),
             mode: "huff-native".into(),
             running: true,
             last_error: self.last_error.clone(),
@@ -1440,6 +1748,20 @@ impl Renderer {
             &self.sampler,
             "huff history capture source bind",
         );
+        self.output_readback
+            .rebuild(&self.device, self.render_width, self.render_height);
+        if self.syphon_enabled {
+            if let Err(error) = syphon::start(self.render_width, self.render_height, self.syphon_fps) {
+                self.syphon_enabled = false;
+                self.last_error = format!("Syphon restart after resize failed: {error}");
+            }
+        }
+        if self.spout_enabled {
+            if let Err(error) = spout::start(self.render_width, self.render_height, self.spout_fps) {
+                self.spout_enabled = false;
+                self.last_error = format!("Spout restart after resize failed: {error}");
+            }
+        }
         self.effect_is_a = false;
         self.effect_seeded = false;
     }
@@ -1726,7 +2048,27 @@ impl Renderer {
                     self.flow_pulse_until = Some(Instant::now() + Duration::from_millis(220));
                     self.flow_pulse_fires = self.flow_pulse_fires.wrapping_add(1);
                 }
-                Ok(RenderCommand::Shutdown) => return false,
+                Ok(RenderCommand::StartSyphon { fps, reply }) => {
+                    let result = self.start_syphon_output(fps);
+                    if let Err(error) = &result {
+                        self.last_error = error.clone();
+                    }
+                    let _ = reply.send(result);
+                }
+                Ok(RenderCommand::StopSyphon) => self.stop_syphon_output(),
+                Ok(RenderCommand::StartSpout { fps, reply }) => {
+                    let result = self.start_spout_output(fps);
+                    if let Err(error) = &result {
+                        self.last_error = error.clone();
+                    }
+                    let _ = reply.send(result);
+                }
+                Ok(RenderCommand::StopSpout) => self.stop_spout_output(),
+                Ok(RenderCommand::Shutdown) => {
+                    self.stop_syphon_output();
+                    self.stop_spout_output();
+                    return false;
+                },
                 Err(TryRecvError::Empty) => return true,
                 Err(TryRecvError::Disconnected) => return false,
             }
@@ -2650,7 +2992,65 @@ impl Renderer {
         }
     }
 
+    fn start_syphon_output(&mut self, fps: u32) -> Result<(), String> {
+        let fps = fps.clamp(1, 60);
+        syphon::start_worker();
+        syphon::start(self.render_width, self.render_height, fps)?;
+        self.syphon_enabled = true;
+        self.syphon_fps = fps;
+        self.last_syphon_capture = Instant::now()
+            .checked_sub(Duration::from_secs_f64(1.0 / fps as f64))
+            .unwrap_or_else(Instant::now);
+        Ok(())
+    }
+
+    fn stop_syphon_output(&mut self) {
+        self.syphon_enabled = false;
+        syphon::stop();
+    }
+
+    fn start_spout_output(&mut self, fps: u32) -> Result<(), String> {
+        let fps = fps.clamp(1, 60);
+        spout::start_worker();
+        spout::start(self.render_width, self.render_height, fps)?;
+        self.spout_enabled = true;
+        self.spout_fps = fps;
+        self.last_spout_capture = Instant::now()
+            .checked_sub(Duration::from_secs_f64(1.0 / fps as f64))
+            .unwrap_or_else(Instant::now);
+        Ok(())
+    }
+
+    fn stop_spout_output(&mut self) {
+        self.spout_enabled = false;
+        spout::stop();
+    }
+
+    fn output_capture_targets(&mut self, now: Instant) -> u8 {
+        let mut targets = 0_u8;
+        if self.syphon_enabled {
+            let interval = Duration::from_secs_f64(1.0 / self.syphon_fps.max(1) as f64);
+            if now.duration_since(self.last_syphon_capture) >= interval {
+                targets |= OUTPUT_TARGET_SYPHON;
+                self.last_syphon_capture = now;
+            }
+        }
+        if self.spout_enabled {
+            let interval = Duration::from_secs_f64(1.0 / self.spout_fps.max(1) as f64);
+            if now.duration_since(self.last_spout_capture) >= interval {
+                targets |= OUTPUT_TARGET_SPOUT;
+                self.last_spout_capture = now;
+            }
+        }
+        targets
+    }
+
     fn render(&mut self) -> Result<RenderOutcome, String> {
+        if let Err(error) = self.device.poll(wgpu::PollType::Poll) {
+            self.last_error = format!("native output GPU polling failed: {error}");
+        }
+        self.output_readback.process_completions();
+
         let now = Instant::now();
         let delta = now.duration_since(self.last_frame).as_secs_f64();
         self.last_frame = now;
@@ -2662,31 +3062,50 @@ impl Renderer {
         self.upload_video();
         self.upload_state(delta as f32);
 
-        let (frame, reconfigure) = match self.surface.get_current_texture() {
-            wgpu::CurrentSurfaceTexture::Success(frame) => (frame, false),
-            wgpu::CurrentSurfaceTexture::Suboptimal(frame) => (frame, true),
-            wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => {
-                self.surface_skips = self.surface_skips.wrapping_add(1);
-                if self.surface_skips % 120 == 0 {
-                    self.recover_surface(false)?;
+        let external_output_active = self.syphon_enabled || self.spout_enabled;
+        let (surface_frame, reconfigure) = if self.minimized {
+            (None, false)
+        } else {
+            match self.surface.get_current_texture() {
+                wgpu::CurrentSurfaceTexture::Success(frame) => (Some(frame), false),
+                wgpu::CurrentSurfaceTexture::Suboptimal(frame) => (Some(frame), true),
+                wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => {
+                    self.surface_skips = self.surface_skips.wrapping_add(1);
+                    if self.surface_skips % 120 == 0 {
+                        self.recover_surface(false)?;
+                    }
+                    if external_output_active {
+                        (None, false)
+                    } else {
+                        return Ok(RenderOutcome::SurfaceUnavailable);
+                    }
                 }
-                return Ok(RenderOutcome::SurfaceUnavailable);
-            }
-            wgpu::CurrentSurfaceTexture::Outdated => {
-                self.recover_surface(false)?;
-                return Ok(RenderOutcome::Recovered);
-            }
-            wgpu::CurrentSurfaceTexture::Lost => {
-                self.recover_surface(true)?;
-                return Ok(RenderOutcome::Recovered);
-            }
-            wgpu::CurrentSurfaceTexture::Validation => {
-                return Err("surface validation error".into())
+                wgpu::CurrentSurfaceTexture::Outdated => {
+                    self.recover_surface(false)?;
+                    if external_output_active {
+                        (None, false)
+                    } else {
+                        return Ok(RenderOutcome::Recovered);
+                    }
+                }
+                wgpu::CurrentSurfaceTexture::Lost => {
+                    self.recover_surface(true)?;
+                    if external_output_active {
+                        (None, false)
+                    } else {
+                        return Ok(RenderOutcome::Recovered);
+                    }
+                }
+                wgpu::CurrentSurfaceTexture::Validation => {
+                    return Err("surface validation error".into())
+                }
             }
         };
-        let surface_view = frame
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
+        let surface_view = surface_frame.as_ref().map(|frame| {
+            frame
+                .texture
+                .create_view(&wgpu::TextureViewDescriptor::default())
+        });
         let mut encoder =
             self.device
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -3104,19 +3523,45 @@ impl Renderer {
         };
         begin_fullscreen_pass(
             &mut encoder,
-            "huff presentation pass",
-            &surface_view,
-            &self.present_pipeline,
+            "huff authoritative native output pass",
+            &self.targets.output_view,
+            &self.output_pipeline,
             &self.global_bind,
             3,
             present_bind,
             wgpu::Color::BLACK,
         );
 
+        let output_targets = self.output_capture_targets(now);
+        let readback_slot = self.output_readback.encode_copy(
+            &mut encoder,
+            &self.targets.output,
+            output_targets,
+            now,
+        );
+
+        if let Some(surface_view) = surface_view.as_ref() {
+            begin_fullscreen_pass(
+                &mut encoder,
+                "huff surface presentation pass",
+                surface_view,
+                &self.present_pipeline,
+                &self.global_bind,
+                3,
+                &self.targets.output_surface_bind,
+                wgpu::Color::BLACK,
+            );
+        }
+
         self.queue.submit([encoder.finish()]);
-        frame.present();
-        if reconfigure {
-            self.surface.configure(&self.device, &self.config);
+        if let Some(index) = readback_slot {
+            self.output_readback.begin_mapping(index);
+        }
+        if let Some(frame) = surface_frame {
+            frame.present();
+            if reconfigure {
+                self.surface.configure(&self.device, &self.config);
+            }
         }
         self.frame_count = self.frame_count.wrapping_add(1);
         self.surface_skips = 0;
@@ -3153,7 +3598,7 @@ impl Renderer {
             if !self.handle_commands(&rx) {
                 break;
             }
-            if self.minimized {
+            if self.minimized && !self.syphon_enabled && !self.spout_enabled {
                 self.apply_parameter_state(false);
                 *info.write().expect("renderer info poisoned") = self.info();
                 thread::sleep(target_frame);
@@ -3172,6 +3617,8 @@ impl Renderer {
                 thread::sleep(target_frame - elapsed);
             }
         }
+        self.stop_syphon_output();
+        self.stop_spout_output();
         alive.store(false, Ordering::Relaxed);
     }
 }
@@ -3468,6 +3915,32 @@ fn create_hdr_texture(device: &wgpu::Device, label: &str, width: u32, height: u3
     (texture, view)
 }
 
+fn create_output_texture(
+    device: &wgpu::Device,
+    label: &str,
+    width: u32,
+    height: u32,
+) -> (wgpu::Texture, wgpu::TextureView) {
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some(label),
+        size: wgpu::Extent3d {
+            width: width.max(1),
+            height: height.max(1),
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: OUTPUT_FORMAT,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING
+            | wgpu::TextureUsages::RENDER_ATTACHMENT
+            | wgpu::TextureUsages::COPY_SRC,
+        view_formats: &[],
+    });
+    let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+    (texture, view)
+}
+
 fn create_targets(
     device: &wgpu::Device,
     width: u32,
@@ -3485,6 +3958,8 @@ fn create_targets(
     let (feedback_b, feedback_b_view) = create_hdr_texture(device, "huff native feedback B", width, height);
     let (glitch_layer, glitch_layer_view) = create_hdr_texture(device, "huff native isolated glitch layer", width, height);
     let (scan_layer, scan_layer_view) = create_hdr_texture(device, "huff native isolated scan layer", width, height);
+    let (output, output_view) =
+        create_output_texture(device, "huff native authoritative output", width, height);
 
     let create_feedback_bind = |
         label: &str,
@@ -3572,6 +4047,24 @@ fn create_targets(
             wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::TextureView(&composite_view) },
         ],
     });
+    let output_surface_bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("authoritative output surface bind"),
+        layout: present_layout,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::TextureView(&output_view),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: wgpu::BindingResource::Sampler(sampler),
+            },
+            wgpu::BindGroupEntry {
+                binding: 2,
+                resource: wgpu::BindingResource::TextureView(&composite_view),
+            },
+        ],
+    });
 
     OffscreenTargets {
         _composite: composite, composite_view,
@@ -3579,6 +4072,9 @@ fn create_targets(
         _feedback_b: feedback_b, feedback_b_view,
         _glitch_layer: glitch_layer, glitch_layer_view,
         _scan_layer: scan_layer, scan_layer_view,
+        output,
+        output_view,
+        output_surface_bind,
         feedback_bind_a_smooth,
         feedback_bind_b_smooth,
         feedback_bind_a_crisp,

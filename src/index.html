@@ -844,13 +844,13 @@
             <button id="aboutClose">×</button>
             <div class="a-icon"></div>
             <h1 style="font-family:'VT323',monospace;font-weight:normal;letter-spacing:.14em">huff</h1>
-            <div class="build">native engine · milestone 03 · 2026</div>
+            <div class="build">native engine · milestone 08 · 2026</div>
             <p>Huff is being migrated to a native Rust + wgpu media engine. The existing
             control surface is preserved while playback, timing, GPU rendering, and
             output move out of the WebView.</p>
-            <p><strong>Milestone 03:</strong> native GPU temporal history, bounded texture-array storage,
-            configurable capture resolution/rate/sampling, and the first history-depth compositor.
-            Unported controls remain visible and are clearly marked.</p>
+            <p><strong>Milestone 08:</strong> the native media and effect pipeline now publishes its
+            authoritative render-resolution output directly to Syphon on macOS and Spout on Windows
+            through bounded latest-frame bridges. Recording, export, and final parameter calibration remain.</p>
         </div>
     </div>
 
@@ -916,10 +916,10 @@
 
         <div class="syph-row">
           <span class="syph-label">Resolution</span>
-          <input type="number" id="syphW" value="1280" min="64" max="3840" step="1" style="width:64px">
+          <input type="number" id="syphW" value="1280" min="64" max="3840" step="1" readonly style="width:64px">
           <span style="color:rgba(255,255,255,.3);font-size:11px">×</span>
-          <input type="number" id="syphH" value="720"  min="64" max="2160" step="1" style="width:64px">
-          <span style="color:rgba(255,255,255,.25);font-size:10px">(match your canvas window)</span>
+          <input type="number" id="syphH" value="720"  min="64" max="2160" step="1" readonly style="width:64px">
+          <span style="color:rgba(255,255,255,.25);font-size:10px">(follows the current R: native render size)</span>
         </div>
 
         <div class="syph-row">
@@ -942,8 +942,8 @@
           <strong style="color:rgba(255,255,255,.35)">Syphon.framework is bundled</strong> — no install required.<br>
           The framework ships inside this project at <code>src-tauri/frameworks/Syphon.framework</code>
           and is embedded in the <code>.app</code> at build time.<br><br>
-          The canvas will appear as <strong style="color:rgba(180,100,255,.6)">"huff"</strong> in any Syphon client.<br>
-          Connect from Resolume, VDMX, MadMapper, CoGe, or Millumin — it will appear immediately once started.
+          Huff reads the authoritative native wgpu output through a bounded triple-buffer bridge, then publishes it through a persistent Metal texture.<br>
+          The source appears as <strong style="color:rgba(180,100,255,.6)">"huff"</strong> in Syphon clients such as Resolume, VDMX, MadMapper, CoGe, and Millumin.
         </div>
       </div>
     </div>
@@ -959,10 +959,10 @@
 
         <div class="spout-row">
           <span class="spout-label">Resolution</span>
-          <input type="number" id="spoutW" value="1280" min="64" max="3840" step="1" style="width:64px">
+          <input type="number" id="spoutW" value="1280" min="64" max="3840" step="1" readonly style="width:64px">
           <span style="color:rgba(255,255,255,.3);font-size:11px">×</span>
-          <input type="number" id="spoutH" value="720"  min="64" max="2160" step="1" style="width:64px">
-          <span style="color:rgba(255,255,255,.25);font-size:10px">(match your canvas window)</span>
+          <input type="number" id="spoutH" value="720"  min="64" max="2160" step="1" readonly style="width:64px">
+          <span style="color:rgba(255,255,255,.25);font-size:10px">(follows the current R: native render size)</span>
         </div>
 
         <div class="spout-row">
@@ -982,9 +982,8 @@
         </div>
 
         <div style="margin-top:18px;font-size:10px;color:rgba(255,255,255,.2);line-height:1.9;border-top:1px solid rgba(255,255,255,.06);padding-top:14px">
-          <strong style="color:rgba(255,255,255,.35)">Windows only.</strong> Spout uses shared GPU memory — zero latency, no network.<br>
-          The canvas will appear as <strong style="color:rgba(0,200,220,.6)">"huff"</strong> in any Spout receiver.<br>
-          Connect from Resolume Avenue, MadMapper, Spout for OBS, or any Spout-enabled app.
+          <strong style="color:rgba(255,255,255,.35)">Windows only.</strong> Huff reads the authoritative native wgpu result through a bounded triple-buffer bridge and uploads the newest complete RGBA frame to SpoutDX.<br>
+          The source appears as <strong style="color:rgba(0,200,220,.6)">"huff"</strong> in Resolume Avenue, MadMapper, Spout for OBS, and other Spout receivers.
         </div>
       </div>
     </div>

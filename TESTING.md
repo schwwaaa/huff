@@ -1,107 +1,96 @@
-# Huff Native Milestone 07.1 test checklist
+# Huff Native Milestone 08 test checklist
 
-Run:
+## Run on macOS
 
 ```bash
 npm install
 npm run dev:metal
 ```
 
-Use a moving video, let GPU history fill, then test the sections below.
+Use a moving video and a recognizable effect state.
 
 ## Baseline regression
 
-- Video and camera still switch exclusively.
-- Video audio, transport, seeking, rate, and looping still work.
-- Glitch, clusters, scanlines, Layer Priority, and feedback behave as in Milestone 06.
-- Feedback does not brighten uncontrollably.
-- Clear and Global Reset still clear the persistent buffer and history.
+- Video playback and audio remain synchronized.
+- Camera and file video still switch exclusively.
+- Decoder watchdog recovery remains available.
+- Glitch, clusters, scanlines, Smoosh, Luma Key, Global Mix, Flow, and feedback still work.
+- Clear and Global Reset still clear the native buffers.
+- The output window still follows Match Window and fixed render modes correctly.
 
-## Smoosh
+## Authoritative output
 
-1. Enable Glitch and Scanlines.
-2. Enable Smoosh.
-3. Confirm Layer Priority no longer changes the combined result while Smoosh is active.
-4. Move Amount from 0 to 1.
-5. Toggle Invert and confirm base/over roles swap.
-6. Test Screen, Multiply, Difference, Overlay, Hue, and Luminosity.
-7. Disable Smoosh and confirm normal Layer Priority resumes.
+1. Set `R:` to 1280×720 and press Apply.
+2. Verify the native output window shows the expected image with correct aspect ratio.
+3. Resize the native output window.
+4. Confirm the image letterboxes/crops correctly without changing `R:`.
+5. Hover `NATIVE:` and confirm the readback counters remain at zero while Syphon/Spout are off.
 
-## Luma Key
+## Syphon test · macOS
 
-1. Enable Glitch with obvious historical tiles.
-2. Enable Luma Key and raise Mix.
-3. Sweep A/B from 0 to 1.
-4. Confirm clean source replaces effect regions according to source luminance.
-5. Toggle Invert.
-6. Repeat with Smoosh enabled and with Scanlines on top.
+1. Open the Syphon modal.
+2. Set 30 FPS and press Start.
+3. Open a Syphon receiver and select **huff**.
+4. Confirm output dimensions match `R:`.
+5. Confirm orientation is correct.
+6. Compare the native output window and Syphon image for brightness, color, luma-key behavior, and feedback.
+7. Minimize or cover the native output window and confirm Syphon continues.
+8. Increase to 60 FPS and inspect:
+   - published frames;
+   - replaced frames;
+   - frame age;
+   - upload time;
+   - readback busy drops.
+9. Stop and restart Syphon repeatedly.
+10. Change `R:` while Syphon is active and verify it restarts at the new dimensions or reports a clear error.
+11. Build the `.app` and confirm `Syphon.framework` is present under `Contents/Frameworks` and publishing works outside `tauri dev`.
 
-## Global Mix
+## Spout test · Windows
 
-1. Enable Global Mix with Mix around 0.5.
-2. Test Screen, Multiply, Difference, and Normal.
-3. Compare Before FB and After FB with visible feedback motion.
-4. Enable Flow and compare After Flow against Final.
-5. Disable Flow while Position is After Flow; confirm the clean source falls back to the final tail rather than disappearing.
+1. Install the normal MSVC/CMake prerequisites.
+2. Run `npm install` and `npm run dev:dx12`.
+3. Confirm the Spout bridge compiles and `spout_bridge.dll` is beside the development executable.
+4. Open the Spout modal, choose 30 FPS, and press Start.
+5. Select **huff** in a Spout receiver.
+6. Confirm dimensions, orientation, colors, and frame continuity.
+7. Test 60 FPS and inspect replaced/readback-drop counts.
+8. Minimize the native output window and confirm Spout continues.
+9. Change render resolution while Spout is active.
+10. Build an installer and verify the DLL is included beside the packaged executable.
 
-## Flow
+## Simultaneous-output bridge test
 
-1. Enable Flow at Strength 6, Scale 80, Speed 1, Target Final.
-2. Confirm Speed 0 freezes the field.
-3. Test low and high Scale values.
-4. Sweep Implode through negative, zero, and positive values.
-5. Test positive and negative Swirl.
-6. Increase Turbulence and Spread separately.
-7. Increase Carry and confirm displacement accumulation remains bounded.
-8. Set Pulse depth after history has filled.
-9. With Trigger off, confirm pulse history is continuous.
-10. With Trigger on, confirm pulse history is only used after pressing Fire.
+On a platform/build where both publishers can be exercised or mocked:
 
-## Flow target routing
+- Confirm one completed readback is shared rather than duplicated.
+- Confirm each output can use a different FPS schedule.
+- Stop one output and verify the other continues.
+- Confirm no unbounded memory growth during a 30-minute run.
 
-- Target Glitch: glitch should be warped and scanlines should remain crisp on top.
-- Target Scan: scanlines should be warped and glitch should remain crisp on top.
-- Target Final: the completed chain should be warped.
-- Enable Smoosh and confirm Flow behaves as Final regardless of the selected target.
+## Stress test
 
-## Diagnostics
+1. Use 1920×1080 render resolution.
+2. Enable a heavy Glitch + Clusters + Scanlines + Flow + Feedback state.
+3. Start the native output at 60 FPS.
+4. Run for at least 30 minutes.
+5. Continue changing parameters and switching sources.
+6. Verify:
+   - controls remain responsive;
+   - audio/video continue;
+   - decoder recoveries still work if needed;
+   - readback pending slots never exceed 3;
+   - busy drops may rise under load but latency does not accumulate;
+   - memory does not grow continuously;
+   - Stop releases the external publisher.
 
-Hover the `NATIVE:` status pill and confirm it reports:
+## Failure reporting
 
-- Smoosh status and blend
-- Luma Key status
-- Global Mix status and position
-- Flow status, target, strength, and pulse-fire count
+For a failure, capture:
 
-Report compile/WGSL validation failures separately from visual parameter-tuning differences.
-
-
-## 07.1 lockup regression test
-
-1. Load a moving video and allow history to fill.
-2. Enable Glitch and Feedback.
-3. Enable Luma Key and set a visible threshold/mix.
-4. Enable Scanlines after Luma Key.
-5. Leave the combination running for at least five minutes.
-6. Toggle Scanlines off/on repeatedly and move Angle, Focus, Shift, Drift, and Opacity.
-7. Repeat with Layer Priority set to Scan Top and Glitch Top.
-8. Confirm video, audio, controls, and the native output remain responsive.
-
-If a lock still occurs, preserve the terminal output and note whether the controls window, native output, audio, or only parameter updates stopped.
-
-
-## Milestone 07.2 decoder-stall test
-
-1. Load the same long video used during the reported freeze.
-2. Recreate a heavy render state with Glitch, Feedback, Luma Key, Scanlines, and optional Smoosh/Global Mix.
-3. Leave playback running for at least 20 minutes while interacting with parameters.
-4. Hover `NATIVE:` and watch:
-   - Video decode FPS
-   - Video stalls and recoveries
-   - Audio buffered milliseconds
-   - Audio stalls and recoveries
-5. Confirm that if either decoder stalls, playback resumes automatically within several seconds.
-6. Confirm that feedback remains interactive during recovery and temporal glitching resumes when new frames arrive.
-7. Confirm that Play/Pause/Seek/Rate still work after an automatic recovery.
-
-The correction passes only if a decoder problem self-recovers instead of requiring an application restart.
+- terminal output;
+- platform and GPU;
+- backend (`metal`, `vulkan`, or `dx12`);
+- render resolution and output FPS;
+- `NATIVE:` tooltip diagnostics;
+- Syphon/Spout modal status;
+- whether the native window, external receiver, audio, or decoder stopped independently.

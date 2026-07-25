@@ -498,8 +498,42 @@ fn fs_flow(input: VertexOutput) -> @location(0) vec4<f32> {
     return textureSample(previous_effect, effect_sampler, source_uv);
 }
 
+fn compose_final_color(uv: vec2<f32>) -> vec3<f32> {
+    let clean = textureSample(clean_source, final_sampler, uv).rgb;
+    let any_effect = u.history_controls.x > 0.5
+        || u.controls0.y > 0.0
+        || u.effect_state.y > 0.5
+        || u.smoosh_state.x > 0.5
+        || u.luma_state.x > 0.5
+        || u.global_mix_state.x > 0.5
+        || u.flow_state0.x > 0.5;
+    var color = clean;
+    if (any_effect) {
+        let background = background_color(u.source_state.z);
+        var base_layer = background;
+        if (u.source_state.w > 0.5 && source_available_for_selection()) {
+            base_layer = mix(background, clean, clamp(u.controls0.x, 0.0, 1.0));
+        }
+        // Effect targets are premultiplied through ALPHA_BLENDING and decay.
+        let effect = textureSample(final_effect, final_sampler, uv);
+        color = effect.rgb + base_layer * (1.0 - clamp(effect.a, 0.0, 1.0));
+    }
+    color = color * max(u.controls1.x, 0.0);
+    color = (color - vec3<f32>(0.5)) * max(u.controls1.y, 0.0) + vec3<f32>(0.5);
+    return max(color, vec3<f32>(0.0));
+}
+
+// Authoritative render-resolution output. Syphon, Spout, recording and export
+// consume this texture, so external output is independent of window dimensions.
 @fragment
-fn fs_present(input: VertexOutput) -> @location(0) vec4<f32> {
+fn fs_output(input: VertexOutput) -> @location(0) vec4<f32> {
+    return vec4<f32>(compose_final_color(input.uv), 1.0);
+}
+
+// Window presentation only. The authoritative RGBA8 output is sampled and
+// letterboxed to the current native surface without changing external output.
+@fragment
+fn fs_surface(input: VertexOutput) -> @location(0) vec4<f32> {
     let render_size = max(u.resolution_time.xy, vec2<f32>(1.0));
     let surface_size = max(u.controls1.zw, vec2<f32>(1.0));
     let render_aspect = render_size.x / render_size.y;
@@ -516,22 +550,5 @@ fn fs_present(input: VertexOutput) -> @location(0) vec4<f32> {
     if (any(uv < vec2<f32>(0.0)) || any(uv > vec2<f32>(1.0))) {
         return vec4<f32>(0.0, 0.0, 0.0, 1.0);
     }
-
-    let clean = textureSample(clean_source, final_sampler, uv).rgb;
-    let any_effect = u.history_controls.x > 0.5 || u.controls0.y > 0.0 || u.effect_state.y > 0.5 || u.smoosh_state.x > 0.5 || u.luma_state.x > 0.5 || u.global_mix_state.x > 0.5 || u.flow_state0.x > 0.5;
-    var color = clean;
-    if (any_effect) {
-        let background = background_color(u.source_state.z);
-        var base_layer = background;
-        if (u.source_state.w > 0.5 && source_available_for_selection()) {
-            base_layer = mix(background, clean, clamp(u.controls0.x, 0.0, 1.0));
-        }
-        // Effect targets are premultiplied through ALPHA_BLENDING and decay.
-        let effect = textureSample(final_effect, final_sampler, uv);
-        color = effect.rgb + base_layer * (1.0 - clamp(effect.a, 0.0, 1.0));
-    }
-
-    color = color * max(u.controls1.x, 0.0);
-    color = (color - vec3<f32>(0.5)) * max(u.controls1.y, 0.0) + vec3<f32>(0.5);
-    return vec4<f32>(max(color, vec3<f32>(0.0)), 1.0);
+    return vec4<f32>(textureSample(final_effect, final_sampler, uv).rgb, 1.0);
 }

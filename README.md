@@ -1,126 +1,110 @@
-# Huff Native wgpu · Milestone 07.1
+# Huff Native wgpu · Milestone 08
 
-Milestone 07.1 stabilizes the Milestone 07 render graph and retains the completed core native layers: **Smoosh, Luma Key, Global Mix, and Flow**. It is built directly on the working Milestone 06 flying-frame-buffer, GPU history, glitch, clusters, scanlines, layer priority, and feedback systems.
+Milestone 08 adds **native Syphon and Spout output** to the working Milestone 07.2 engine. Huff now renders one authoritative, fixed-resolution RGBA output texture and uses that same result for the native window and external video outputs.
 
-The control interface remains HTML/CSS. Media decoding, temporal history, procedural effect state, compositing, feedback, and presentation are native Rust + wgpu.
-
-## Milestone 07.2 stability
-
-Native FFmpeg video and audio pipes are now supervised through bounded reader channels. A decoder that remains alive but stops producing bytes is terminated and restarted near the current media position instead of leaving Huff permanently frozen. Hover the `NATIVE:` status pill to inspect decoder stalls and watchdog recoveries.
-
-## Native render graph
+The HTML/CSS interface remains the control surface. Video/audio decoding, camera input, GPU history, Huff's flying-frame-buffer effects, compositing, feedback, presentation, and external output are native Rust + wgpu.
+ 
+## Native output architecture
 
 ```text
-Native video or camera frame
+Native video or camera
         ↓
-Clean GPU temporal-history ring
+GPU temporal history
         ↓
-Persistent flying frame buffer
+Huff native effect graph
         ↓
-Glitch + Scanline layers
-        ├── normal Layer Priority ordering
-        ├── Smoosh blend ordering
-        └── Flow target routing
-        ↓
-Luma Key
-        ↓
-Global Mix: BEFORE FB
-        ↓
-Non-additive feedback transform
-        ↓
-Global Mix: AFTER FB
-        ↓
-Final Flow when selected
-        ↓
-Global Mix: AFTER FLOW / FINAL
-        ↓
-Optional clean base + brightness / contrast
-        ↓
-Metal / Vulkan / DX12 output
+Authoritative RGBA8 output texture at R: resolution
+        ├── Native output window (letterboxed independently)
+        ├── Syphon on macOS
+        └── Spout on Windows
 ```
 
-## Smoosh now active
+The external outputs do not depend on the size or visibility of the native output window. If Syphon or Spout is active, Huff continues rendering the authoritative output while the presentation surface is minimized or temporarily unavailable.
 
-- On
-- Blend mode
-- Amount
-- Invert
+## Bounded GPU readback bridge
 
-Smoosh isolates the glitch and scanline draws, then combines them over the persistent flying buffer. Invert swaps which layer is the base and which is blended over it. Smoosh supersedes Layer Priority while enabled, matching original Huff's routing behavior.
+The first native Syphon/Spout implementation uses a controlled GPU-to-CPU bridge:
 
-The 16 original blend choices are represented in WGSL: Screen, Add, Lighten, Dodge, Multiply, Darken, Burn, Overlay, Soft Light, Hard Light, Difference, Exclusion, Hue, Saturation, Color, and Luminosity.
+- Three persistent wgpu staging buffers
+- Asynchronous `map_async` completion
+- Nonblocking device polling
+- Output-specific FPS limits
+- Busy-frame dropping instead of queue growth
+- One reference-counted RGBA frame shared between Syphon and Spout
+- Latest-frame worker queues for both outputs
 
-## Luma Key now active
+This is not claimed to be zero-copy. It is a bounded and measurable bridge designed to preserve responsiveness and prevent output latency from accumulating.
 
-- On
-- A/B threshold
-- Mix
-- Invert
+## Syphon
 
-The clean source luminance determines where clean video is laid back over the persistent effect buffer. The key remains immediately after the glitch stage, including when Smoosh is active.
+On macOS, Huff:
 
-## Global Mix now active
+1. Reads the authoritative RGBA output.
+2. Uploads it into one persistent shared Metal texture.
+3. Publishes that texture through `SyphonMetalServer` as **huff**.
 
-- On
-- Blend mode
-- Mix
-- Position
+`Syphon.framework` is included under `src-tauri/frameworks` and configured for application bundling.
 
-Positions follow the original pipeline:
+## Spout
 
-- **Before FB** — clean source enters the feedback recursion.
-- **After FB** — feedback processes the dirty result; clean source is added afterward.
-- **After Flow** — clean source is inserted wherever the Flow stage is routed.
-- **Final** — clean source is added at the absolute tail.
+On Windows, Huff:
 
-## Flow now active
+1. Reads the same authoritative RGBA output.
+2. Sends the newest complete frame to the bundled SpoutDX bridge.
+3. Publishes a D3D11 shared texture as **huff**.
 
-- On
-- Strength
-- Scale
-- Speed
-- Pulse depth
-- Pulse trigger and Fire button
-- Implode / Explode
-- Swirl
-- Turbulence
-- Spread
-- Carry
-- Target: Final / Glitch / Scan
+The C++ bridge and Spout SDK are included under `src-tauri/native`. The build script compiles the bridge and places its DLL beside the development executable. Installer/runtime packaging still requires Windows verification.
 
-Flow target routing preserves the original shared-buffer rule:
+## Output controls
 
-- **Glitch** — glitch is warped, scanlines remain crisp on top.
-- **Scan** — scanlines are warped, glitch remains crisp on top.
-- **Final** — the completed effect chain is warped at the tail.
+The existing Syphon and Spout modals are now functional:
 
-Smoosh forces Flow to Final because the isolated blend owns the glitch/scan ordering.
+- Start / Stop
+- Output FPS
+- Current render dimensions
+- Published frames
+- Replaced pending frames
+- Upload time
+- Frame age
+- Error state
 
-### Current Carry implementation
+Output dimensions follow Huff's current internal `R:` render size. Change Render Resolution first, press Apply, then start the output. If the render resolution changes while an output is active, Huff rebuilds the bridge and attempts to restart it at the new dimensions.
 
-Flow Carry is active, but this milestone uses a bounded GPU steady-state approximation rather than the original CPU per-cell accumulator. It provides increasing accumulated displacement without unbounded growth. Exact Carry motion parity can be refined during the dedicated parameter/parity pass.
+Hover `NATIVE:` for shared readback diagnostics:
 
-## Retained behavior
+- Completed readbacks
+- Busy-slot drops
+- Mapping errors
+- Readback latency
+- Pending staging slots
 
-- Native FFmpeg video and audio
-- Exclusive camera/video source ownership
-- GPU temporal history
-- Corrected p5-compatible flying glitch engine
-- Persistent native cluster bodies
-- Native scanline bands and layer ordering
-- Destination-out-style persistence decay
-- Non-additive feedback transform
+## Retained systems
+
+- Native FFmpeg video and audio with decoder watchdog recovery
+- Exclusive video/camera source ownership
+- GPU temporal texture-array history
+- Corrected p5-compatible flying-frame-buffer behavior
+- Glitch and smear instances
+- Persistent cluster physics
+- Scanline compositor and layer priority
+- Smoosh
+- Luma Key
+- Global Mix
+- Flow and pulse routing
+- Non-additive feedback
 - Independent render and history resolutions
-- Native presets, MIDI, OSC, and diagnostics foundations
+- Native presets, undo, MIDI, OSC, and diagnostics foundations
 
-## Pending major systems
+## Remaining major work
 
-- Direct Syphon and Spout output from the native render result
-- Native recording and export
-- Final parameter-by-parameter visual calibration
-- Additional routing/automation expansion
+1. Native recording with synchronized audio
+2. High-resolution still and offline export
+3. Parameter-by-parameter calibration against original Huff
+4. Complete MIDI/OSC mapping editors
+5. Expanded routing, automation, and project-state support
+6. Optional lower-copy platform-specific texture interop research
 
-## Run
+## Run on macOS
 
 ```bash
 npm install
@@ -133,11 +117,10 @@ Automatic backend selection:
 npm run dev
 ```
 
-Use `TESTING.md` for the runtime checklist. This milestone prioritizes completing the native pipeline; fine parameter calibration is intentionally deferred unless a control is structurally incorrect or nonfunctional.
+## Build
 
+```bash
+npm run build
+```
 
-## 07.1 Metal stability correction
-
-Scanlines now use a dedicated group-2 bind layout containing only the clean composite texture and its sampler. Earlier builds reused the full feedback bind group for scanlines. After a ping-pong stage such as Luma Key, that bind group could also contain the texture currently used as the render attachment. Even though the scan shader did not intentionally sample that feedback texture, binding it during the pass created an avoidable read/write alias risk on Metal.
-
-The visible scanline behavior is unchanged. This correction only isolates resources used by the scan pass.
+Use `TESTING.md` for the runtime checklist. Rust compilation, Syphon reception, Windows Spout compilation, and packaged runtime behavior must be verified on the target machines.

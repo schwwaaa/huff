@@ -1,5 +1,9 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+#[cfg(target_os = "macos")]
+#[macro_use]
+extern crate objc;
+
 mod audio;
 mod audio_router;
 mod camera;
@@ -7,9 +11,12 @@ mod gesture;
 mod history;
 mod midi;
 mod osc;
+mod output_frame;
 mod parameters;
 mod renderer;
 mod source;
+mod spout;
+mod syphon;
 mod video;
 mod video_audio;
 
@@ -52,6 +59,8 @@ struct AppInfo {
     audio: AudioSystemInfo,
     midi: midi::MidiInfo,
     osc: osc::OscInfo,
+    syphon: syphon::SyphonInfo,
+    spout: spout::SpoutInfo,
     gesture: gesture::GestureInfo,
     parameter_revision: u64,
     native_milestone: String,
@@ -73,7 +82,7 @@ fn get_app_info(
     source: tauri::State<'_, SourceSelector>,
 ) -> AppInfo {
     AppInfo {
-        build: "HNW-07.2".into(),
+        build: "HNW-08".into(),
         renderer: renderer.info(),
         camera: camera.status(),
         camera_devices: camera.devices(),
@@ -85,9 +94,11 @@ fn get_app_info(
         },
         midi: midi.info(),
         osc: osc.info(),
+        syphon: syphon::info(),
+        spout: spout::info(),
         gesture: gesture.info(),
         parameter_revision: parameters.revision(),
-        native_milestone: "HNW-07.2".into(),
+        native_milestone: "HNW-08".into(),
         active_source: source.get().label().into(),
     }
 }
@@ -136,6 +147,50 @@ fn clear_native_buffers(renderer: tauri::State<'_, RendererHandle>) {
 #[tauri::command]
 fn fire_flow_pulse(renderer: tauri::State<'_, RendererHandle>) {
     renderer.send(RenderCommand::FireFlowPulse);
+}
+
+#[tauri::command]
+fn start_syphon_output(
+    renderer: tauri::State<'_, RendererHandle>,
+    width: u32,
+    height: u32,
+    fps: u32,
+) -> Result<(), String> {
+    let info = renderer.info();
+    if width != info.width || height != info.height {
+        return Err(format!(
+            "Native Syphon output follows the internal render size. Set Syphon to {}×{} or change R: first.",
+            info.width, info.height
+        ));
+    }
+    renderer.start_syphon(fps)
+}
+
+#[tauri::command]
+fn stop_syphon_output(renderer: tauri::State<'_, RendererHandle>) {
+    renderer.stop_syphon();
+}
+
+#[tauri::command]
+fn start_spout_output(
+    renderer: tauri::State<'_, RendererHandle>,
+    width: u32,
+    height: u32,
+    fps: u32,
+) -> Result<(), String> {
+    let info = renderer.info();
+    if width != info.width || height != info.height {
+        return Err(format!(
+            "Native Spout output follows the internal render size. Set Spout to {}×{} or change R: first.",
+            info.width, info.height
+        ));
+    }
+    renderer.start_spout(fps)
+}
+
+#[tauri::command]
+fn stop_spout_output(renderer: tauri::State<'_, RendererHandle>) {
+    renderer.stop_spout();
 }
 
 #[tauri::command]
@@ -628,6 +683,10 @@ fn main() {
             reset_parameters,
             clear_native_buffers,
             fire_flow_pulse,
+            start_syphon_output,
+            stop_syphon_output,
+            start_spout_output,
+            stop_spout_output,
             focus_renderer,
             refresh_cameras,
             start_camera,

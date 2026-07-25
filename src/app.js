@@ -190,7 +190,7 @@ function configureRegistryControls() {
     feedbackGroup.title = 'Native HDR feedback is active; final effect-order parity continues with later render-graph milestones.';
   }
   const glitchGroup = byId('corruptOn')?.closest('.group');
-  if (glitchGroup) glitchGroup.title = "Milestone 07.2 includes Huff's flying buffer, clusters, scanlines, luma key, Smoosh, Global Mix, and Flow. Scanlines use an isolated clean-source binding for Metal stability.";
+  if (glitchGroup) glitchGroup.title = "Milestone 08 includes Huff's native render graph plus direct Syphon and Spout publishing from the authoritative wgpu output. External outputs use a bounded three-slot readback bridge and latest-frame workers.";
   const clusterGroup = byId('clusterTiles')?.closest('.group');
   if (clusterGroup) clusterGroup.title = 'Native cluster bodies are active: persistent centers, coherence, speed, steering, variance, pulse, inertia, breathing, bounce/wrap, bias, spread, and minimum spread.';
   const scanGroup = byId('clusters')?.closest('.group');
@@ -391,16 +391,52 @@ function wireNativeActions() {
   byId('historySampling')?.addEventListener('change', () => { byId('historyPreset').value = 'custom'; });
   byId('historyApplyBtn')?.addEventListener('click', () => applyHistorySettings().catch(() => {}));
 
-  // Output integrations are deliberately not faked. They return in a later native milestone.
-  for (const id of ['syphonToggleBtn', 'spoutToggleBtn']) {
-    const button = byId(id);
-    if (!button) continue;
-    button.disabled = true;
-    button.classList.add('native-pending');
-    button.title = 'Native wgpu texture sharing is scheduled after renderer parity';
-  }
-  if (byId('syphonStatus')) byId('syphonStatus').textContent = 'Native wgpu texture sharing pending.';
-  if (byId('spoutStatus')) byId('spoutStatus').textContent = 'Native wgpu texture sharing pending.';
+  byId('syphonToggleBtn')?.addEventListener('click', async () => {
+    const current = appState.info?.syphon || {};
+    try {
+      if (current.active) {
+        await call('stop_syphon_output');
+        toast('Syphon output stopped');
+      } else {
+        const renderer = appState.info?.renderer || {};
+        const width = Number(renderer.width || byId('syphW')?.value || 1280);
+        const height = Number(renderer.height || byId('syphH')?.value || 720);
+        byId('syphW').value = String(width);
+        byId('syphH').value = String(height);
+        await call('start_syphon_output', {
+          width,
+          height,
+          fps: Number(byId('syphFps')?.value || 30),
+        });
+        toast(`Syphon started · ${width}×${height}`);
+      }
+    } catch (error) {
+      toast(String(error), true);
+    }
+  });
+  byId('spoutToggleBtn')?.addEventListener('click', async () => {
+    const current = appState.info?.spout || {};
+    try {
+      if (current.active) {
+        await call('stop_spout_output');
+        toast('Spout output stopped');
+      } else {
+        const renderer = appState.info?.renderer || {};
+        const width = Number(renderer.width || byId('spoutW')?.value || 1280);
+        const height = Number(renderer.height || byId('spoutH')?.value || 720);
+        byId('spoutW').value = String(width);
+        byId('spoutH').value = String(height);
+        await call('start_spout_output', {
+          width,
+          height,
+          fps: Number(byId('spoutFps')?.value || 30),
+        });
+        toast(`Spout started · ${width}×${height}`);
+      }
+    } catch (error) {
+      toast(String(error), true);
+    }
+  });
 }
 
 function presetStorage() {
@@ -521,6 +557,8 @@ function displayInfo(info) {
   const videoAudio = info.audio?.video || {};
   const midi = info.midi || {};
   const osc = info.osc || {};
+  const syphon = info.syphon || {};
+  const spout = info.spout || {};
 
   setOptions(byId('cams'), info.cameraDevices || [], (item) => item.slot, (item) => item.name);
   setOptions(byId('midiPortSelect'), midi.ports || [], (item) => item, (item) => item);
@@ -533,12 +571,60 @@ function displayInfo(info) {
 
   const stateText = video.playing ? 'PLAY' : (loaded ? 'PAUSE' : 'IDLE');
   byId('status').textContent = `NATIVE: ${stateText} · ${(renderer.fps || 0).toFixed(0)} fps`;
-  byId('status').title = `${renderer.backend || 'GPU'} · ${renderer.adapter || ''}\nSource: ${info.activeSource || renderer.activeSource || 'automatic'}\nRender ${renderer.width || 0}×${renderer.height || 0}\nSurface ${renderer.surfaceWidth || 0}×${renderer.surfaceHeight || 0}\nGlitch: ${renderer.glitchBaseTiles || 0} tiles · ${renderer.glitchInstances || 0}/${renderer.glitchInstanceCapacity || 0} instances · ${(renderer.glitchGenerationMs || 0).toFixed(2)} ms\nScanlines: ${renderer.scanlinesEnabled ? 'on' : 'off'} · ${renderer.scanBandCount || 0} bands · ${(renderer.scanGenerationMs || 0).toFixed(2)} ms · angle ${(renderer.scanAngle || 0).toFixed(1)}° · layer ${renderer.layerPriority || 'scan'}\nSmoosh: ${renderer.smooshEnabled ? renderer.smooshBlend : 'off'} · Luma: ${renderer.lumaKeyEnabled ? 'on' : 'off'}\nGlobal Mix: ${renderer.globalMixEnabled ? renderer.globalMixPosition : 'off'} · Flow: ${renderer.flowEnabled ? `${renderer.flowTarget} @ ${Number(renderer.flowStrength || 0).toFixed(1)}` : 'off'} · fires ${renderer.flowPulseFires || 0}\nClusters: ${renderer.clusterTilesEnabled ? 'on' : 'off'} · ${renderer.clusterCentersActive || 0} centers · ${renderer.clusterBiasTiles || 0} biased tiles · ${renderer.clusterRerolledOffsets || 0} rerolls · ${renderer.clusterPulses || 0} pulses\nGlitch drops: ${renderer.glitchDroppedInstances || 0}\nVideo decode: ${(video.decodeFps || 0).toFixed(1)} fps · stalls ${video.decoderStalls || 0} · recoveries ${video.watchdogRestarts || 0}\nAudio decode: ${(videoAudio.bufferedMs || 0).toFixed(0)} ms buffered · stalls ${videoAudio.decoderStalls || 0} · recoveries ${videoAudio.watchdogRestarts || 0}\nSurface skips: ${renderer.surfaceSkips || 0} · recoveries: ${renderer.surfaceRecoveries || 0}\nClick to focus output`;
+  byId('status').title = `${renderer.backend || 'GPU'} · ${renderer.adapter || ''}\nSource: ${info.activeSource || renderer.activeSource || 'automatic'}\nRender ${renderer.width || 0}×${renderer.height || 0}\nSurface ${renderer.surfaceWidth || 0}×${renderer.surfaceHeight || 0}\nGlitch: ${renderer.glitchBaseTiles || 0} tiles · ${renderer.glitchInstances || 0}/${renderer.glitchInstanceCapacity || 0} instances · ${(renderer.glitchGenerationMs || 0).toFixed(2)} ms\nScanlines: ${renderer.scanlinesEnabled ? 'on' : 'off'} · ${renderer.scanBandCount || 0} bands · ${(renderer.scanGenerationMs || 0).toFixed(2)} ms · angle ${(renderer.scanAngle || 0).toFixed(1)}° · layer ${renderer.layerPriority || 'scan'}\nSmoosh: ${renderer.smooshEnabled ? renderer.smooshBlend : 'off'} · Luma: ${renderer.lumaKeyEnabled ? 'on' : 'off'}\nGlobal Mix: ${renderer.globalMixEnabled ? renderer.globalMixPosition : 'off'} · Flow: ${renderer.flowEnabled ? `${renderer.flowTarget} @ ${Number(renderer.flowStrength || 0).toFixed(1)}` : 'off'} · fires ${renderer.flowPulseFires || 0}\nClusters: ${renderer.clusterTilesEnabled ? 'on' : 'off'} · ${renderer.clusterCentersActive || 0} centers · ${renderer.clusterBiasTiles || 0} biased tiles · ${renderer.clusterRerolledOffsets || 0} rerolls · ${renderer.clusterPulses || 0} pulses\nGlitch drops: ${renderer.glitchDroppedInstances || 0}\nVideo decode: ${(video.decodeFps || 0).toFixed(1)} fps · stalls ${video.decoderStalls || 0} · recoveries ${video.watchdogRestarts || 0}\nAudio decode: ${(videoAudio.bufferedMs || 0).toFixed(0)} ms buffered · stalls ${videoAudio.decoderStalls || 0} · recoveries ${videoAudio.watchdogRestarts || 0}\nSurface skips: ${renderer.surfaceSkips || 0} · recoveries: ${renderer.surfaceRecoveries || 0}\nNative output readback: ${renderer.outputReadbacks || 0} frames · ${renderer.outputReadbackDrops || 0} busy drops · ${renderer.outputMapErrors || 0} map errors · ${(renderer.outputCopyMs || 0).toFixed(2)} ms · ${renderer.outputPendingSlots || 0} pending\nClick to focus output`;
 
   byId('midiPill').textContent = midi.connected ? `MIDI: ${midi.connectedPort}` : 'MIDI: OFF';
   byId('oscPill').textContent = osc.listening ? `OSC :${osc.port}` : 'OSC: OFF';
-  byId('syphonPill').textContent = 'SYPHON: PENDING';
-  byId('spoutPill').textContent = 'SPOUT: PENDING';
+  byId('syphonPill').textContent = syphon.active
+    ? `SYPHON: ${syphon.publishedFrames || 0}`
+    : (syphon.available ? 'SYPHON: OFF' : 'SYPHON: N/A');
+  byId('spoutPill').textContent = spout.active
+    ? `SPOUT: ${spout.publishedFrames || 0}`
+    : (spout.available ? 'SPOUT: OFF' : 'SPOUT: N/A');
+
+  const syphonButton = byId('syphonToggleBtn');
+  if (syphonButton) {
+    syphonButton.disabled = !syphon.available;
+    syphonButton.textContent = syphon.active ? '■ Stop' : '▶ Start';
+    syphonButton.classList.toggle('active', Boolean(syphon.active));
+  }
+  const spoutButton = byId('spoutToggleBtn');
+  if (spoutButton) {
+    spoutButton.disabled = !spout.available;
+    spoutButton.textContent = spout.active ? '■ Stop' : '▶ Start';
+    spoutButton.classList.toggle('active', Boolean(spout.active));
+  }
+
+  const renderWidth = Number(renderer.width || 0);
+  const renderHeight = Number(renderer.height || 0);
+  for (const [widthId, heightId, active] of [
+    ['syphW', 'syphH', syphon.active],
+    ['spoutW', 'spoutH', spout.active],
+  ]) {
+    const widthInput = byId(widthId);
+    const heightInput = byId(heightId);
+    if (!active && document.activeElement !== widthInput && renderWidth) widthInput.value = String(renderWidth);
+    if (!active && document.activeElement !== heightInput && renderHeight) heightInput.value = String(renderHeight);
+  }
+
+  if (byId('syphonStatus')) {
+    byId('syphonStatus').textContent = syphon.active
+      ? `Active · ${syphon.width}×${syphon.height} @ ${syphon.fps} fps · ${syphon.publishedFrames || 0} published · ${syphon.replacedFrames || 0} replaced · ${Number(syphon.lastUploadUs || 0)} µs upload`
+      : (syphon.lastError || (syphon.available ? 'Not started — native output follows the current R: render size.' : 'Unavailable on this platform.'));
+    byId('syphonStatus').className = syphon.active ? 'active' : (syphon.lastError && syphon.available ? 'error' : '');
+  }
+  if (byId('spoutStatus')) {
+    byId('spoutStatus').textContent = spout.active
+      ? `Active · ${spout.width}×${spout.height} @ ${spout.fps} fps · ${spout.publishedFrames || 0} sent · ${spout.replacedFrames || 0} replaced · ${Number(spout.lastUploadUs || 0)} µs upload`
+      : (spout.lastError || (spout.available ? 'Not started — native output follows the current R: render size.' : 'Unavailable on this platform.'));
+    byId('spoutStatus').className = spout.active ? 'active' : (spout.lastError && spout.available ? 'error' : '');
+  }
+  if (byId('syphonFrameCount')) byId('syphonFrameCount').textContent = syphon.active
+    ? `${syphon.receivedFrames || 0} readbacks · ${Number(syphon.lastFrameAgeMs || 0).toFixed(1)} ms age`
+    : '';
+  if (byId('spoutFrameCount')) byId('spoutFrameCount').textContent = spout.active
+    ? `${spout.receivedFrames || 0} readbacks · ${Number(spout.lastFrameAgeMs || 0).toFixed(1)} ms age`
+    : '';
 
   if (byId('midiBridgeStatus')) byId('midiBridgeStatus').textContent = midi.connected
     ? `${midi.connectedPort} · ${(midi.messagesPerSecond || 0).toFixed(1)} msg/s`
@@ -608,7 +694,7 @@ async function boot() {
   await refreshParameterState();
   await poll();
   setInterval(poll, 250);
-  console.info('Huff Native wgpu Milestone 07.2 loaded', {
+  console.info('Huff Native wgpu Milestone 08 loaded', {
     parameters: appState.registry.length,
     implemented: appState.registry.filter((definition) => definition.implemented).length,
   });

@@ -1,31 +1,59 @@
-# Milestone 07.2 static validation
+# Milestone 08 static validation
 
-The packaging environment does not include Cargo, rustc, rustfmt, or a WGSL compiler. Native compilation and Metal/Vulkan/DX12 runtime validation must occur on the development machine.
+The packaging environment does not include Cargo, rustc, rustfmt, a WGSL compiler, macOS Metal/Syphon runtime access, or a Windows MSVC/Spout runtime. Native compilation and receiver testing must occur on the target development machines.
 
-Static checks completed:
+## Checks completed
 
 - `src/app.js` passes `node --check`.
-- All project JSON files parse successfully.
-- Package, Cargo, Tauri, npm lockfile, and Cargo lockfile project versions are synchronized at `0.7.2`.
-- Modified Rust files have balanced braces, parentheses, and brackets after comment/string-aware structural scanning.
-- `VideoStatus` and `VideoAudioInfo` defaults initialize all newly exposed recovery counters.
-- Long-running video playback no longer performs a blocking pipe read in the playback worker; reads are isolated in `huff-video-pipe-reader`.
-- Long-running audio playback no longer performs a blocking pipe read in the decoder worker; reads are isolated in `huff-audio-pipe-reader`.
-- Video and audio reader channels are bounded.
-- Full video-frame buffers and audio chunk buffers are returned through bounded recycle channels.
-- Decoder workers use three-second liveness timeouts.
-- Stalled child processes are killed and waited before restart.
-- Video restart resumes from the last confirmed native position.
-- Audio restart estimates source position from samples actually consumed by the CPAL output callback and the active playback rate.
-- Unexpected early video EOF is recoverable when the reported file duration has not been reached.
-- Existing WGSL shaders and render pipelines are unchanged from Milestone 07.1.
-- The controls UI exposes decoder stall and watchdog-restart diagnostics without altering parameter mappings.
+- All JSON files parse successfully.
+- The HTML control document has no duplicate IDs.
+- Package, npm lockfile, Cargo manifest, Cargo lockfile project entry, and Tauri configuration are synchronized at `0.8.0`.
+- The Cargo lockfile includes the required `cmake 0.1.54` package entry.
+- Modified Rust and build-script files pass comment/string-aware delimiter-balance checks.
+- WGSL uses bind groups `0–3` only.
+- WGSL defines `fs_output` and `fs_surface`; the previous direct `fs_present` entry is absent.
+- The authoritative output texture is renderable, sampleable, and `COPY_SRC` capable.
+- The wgpu readback bridge has exactly three fixed staging slots.
+- Readback mappings are asynchronous and completed through nonblocking device polling.
+- Busy readback slots cause frame drops rather than queue allocation.
+- Completed output pixel memory is shared between Syphon and Spout through `Arc<[u8]>`.
+- Syphon and Spout each use a one-frame latest-value worker boundary.
+- Syphon reuses one persistent Metal texture at the active dimensions.
+- Start commands validate output dimensions against the current internal render resolution.
+- Render-resolution rebuilding recreates readback resources and attempts to restart active outputs.
+- External output rendering can continue without an available presentation surface.
+- Tauri command registration includes Syphon and Spout start/stop commands.
+- The controls UI exposes start/stop, FPS, status, published/replaced counts, upload time, frame age, and shared readback diagnostics.
+- `Syphon.framework` is present in the project and referenced by the Tauri macOS bundle configuration.
+- The Spout CMake bridge, C++ source, and Spout SDK sources are present.
+- Temporary `.bak` source files were removed from the deliverable.
+- Shell scripts pass `bash -n` where applicable.
 
-Runtime validation still required:
+## Runtime validation still required
 
-- Rust compilation.
-- Long-duration playback with the reported source file.
-- Automatic recovery after a real or induced FFmpeg pipe stall.
-- Audio/video synchronization after recovery.
-- Play, Pause, Seek, Rate, Loop, Camera switching, and file replacement after recovery.
-- Confirmation that visual effects and GPU performance remain unchanged.
+### macOS
+
+- Rust and WGSL compilation with wgpu 29.0.4.
+- `npm run dev:metal` regression testing.
+- Syphon framework loading in development.
+- Reception in a Syphon client.
+- Correct orientation and color handling.
+- Long-duration 30/60 FPS operation.
+- `.app` bundle framework placement and runtime loading.
+
+### Windows
+
+- MSVC/CMake compilation of the Spout bridge.
+- Import-library and DLL linking.
+- D3D11 Spout sender initialization.
+- Reception in a Spout client.
+- Runtime DLL placement during development.
+- DLL inclusion in the packaged application/installer.
+
+### Cross-platform
+
+- No regression in video/audio decoder watchdog behavior.
+- No regression in effects, feedback, source switching, presets, MIDI, or OSC.
+- Stable memory over long output sessions.
+- Readback pending count remains bounded at three.
+- Busy drops increase instead of latency when output cannot keep up.
