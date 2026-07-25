@@ -1,112 +1,140 @@
-# Huff Native Milestone 08.1 test checklist
+# Huff Native Milestone 09 test checklist
 
-## Regression baseline
+## Build and launch
 
-1. Run video and camera sources.
-2. Confirm transport, feedback, temporal history, glitch, clusters, scanlines, Smoosh, luma key, Global Mix, and Flow still work.
-3. Confirm Syphon still works on macOS.
-4. With external outputs off, hover `NATIVE:` and confirm native-output readback counters remain idle.
-
-## Windows build
-
-Prerequisites:
-
-- Windows 10 or 11
-- Visual Studio 2022 with **Desktop development with C++**
-- CMake available to Cargo
-- Rust MSVC target
-- Node/npm
-- FFmpeg on PATH
-
-Run:
-
-```powershell
+```bash
 npm install
-npm run dev:dx12
+npm run dev:metal
 ```
 
-Expected build behavior:
+Confirm FFmpeg is available:
 
-- CMake builds `spout_bridge.lib`.
-- Cargo links the bridge statically.
-- No `spout_bridge.dll` is required beside the executable.
-- The controls and native renderer windows open.
-
-## Spout adapter enumeration
-
-1. Open the Spout modal.
-2. Confirm the adapter dropdown contains `Automatic / Windows default`.
-3. Press Refresh.
-4. Confirm the installed DXGI adapters appear by index and name.
-5. On a single-GPU system, Automatic should normally be sufficient.
-6. On a multi-GPU system, identify the adapter used by the receiver application.
-
-## Basic sender test
-
-1. Load a moving video and create a recognizable Huff effect state.
-2. Set Spout to 30 FPS.
-3. Choose the receiver GPU adapter.
-4. Press Start.
-5. The status may briefly show **Armed — waiting for first frame**.
-6. Open Resolume, MadMapper, Spout for OBS, or another receiver.
-7. Select `huff` or the resolved incremented Huff sender name.
-8. Verify:
-   - correct orientation;
-   - correct red/blue channels;
-   - alpha is opaque and stable;
-   - brightness matches the native Huff output;
-   - feedback and temporal effects update continuously.
-
-## Lifecycle tests
-
-1. Stop and restart Spout five times.
-2. Change the internal `R:` resolution while Spout is active.
-3. Confirm the sender restarts at the new dimensions on the same adapter.
-4. Minimize the native output window and confirm Spout continues.
-5. Cover or background both Huff windows and confirm the sender continues.
-6. Close Huff while Spout is active and confirm the sender disappears from the receiver.
-7. Relaunch Huff and confirm the sender can be created again.
-
-## Performance tests
-
-Test 1280×720 and 1920×1080 at 30 and 60 FPS.
-
-Watch the Spout diagnostics for:
-
-- `publishedFrames` increasing;
-- bounded `replacedFrames` under load;
-- no persistent `rejectedFrames` growth;
-- low frame age;
-- stable D3D sender FPS;
-- no readback map-error growth.
-
-A rising replacement count under GPU/CPU load is preferable to building latency.
-
-## Multi-GPU failure test
-
-1. Deliberately choose the wrong adapter.
-2. Note whether the receiver cannot see or open the sender.
-3. Stop Spout.
-4. Select the receiver's adapter.
-5. Restart and confirm reception.
-
-## Release build
-
-```powershell
-npm run build
+```bash
+ffmpeg -version
 ```
 
-Test both the unpacked release executable and the generated installer. Confirm that Spout works on a clean Windows account without manually copying a Huff bridge DLL.
+## Basic video recording
 
-## Report with any failure
+1. Load a video with audio.
+2. Select `REC 30` and `AUDIO AUTO`.
+3. Start recording and choose an MP4 destination.
+4. Run Glitch, Clusters, Scanlines, Luma, Flow, Smoosh, and Feedback.
+5. Record for at least 60 seconds.
+6. Stop and wait for `REC: OFF`.
+7. Open the file in QuickTime, VLC, or ffplay.
+8. Verify image orientation, color, duration, audio, and seeking.
+
+Expected:
+
+- The output is CFR 30 FPS.
+- The recording matches the native output, not the controls window.
+- Audio remains synchronized.
+- No incomplete hidden temporary files remain after successful muxing.
+
+## 60 FPS recording
+
+Repeat at `REC 60` with 1280×720, then 1920×1080.
+
+Watch the `REC:` tooltip:
+
+- `duplicatedFrames` may increase under load;
+- `videoSubmissionDrops` may increase if the encoder/readback is busy;
+- queue depth must remain bounded;
+- duration must continue advancing normally.
+
+A duplicated frame is preferable to A/V drift or an unbounded backlog.
+
+## Audio modes
+
+### Video audio
+
+1. Select `VIDEO AUDIO`.
+2. Record a file containing audio.
+3. Move the live volume slider during recording.
+4. Confirm the recorded level follows live volume.
+5. Set volume to zero and confirm the recording becomes silent.
+
+### Video without audio
+
+1. Load a video with no audio track.
+2. Select `AUDIO AUTO`.
+3. Record and confirm a valid silent MP4 is created.
+4. Select `VIDEO AUDIO` explicitly and confirm Huff reports that no recordable audio stream exists.
+
+### Camera microphone
+
+1. Start the camera.
+2. Select `AUDIO AUTO` or `MIC`.
+3. Start recording.
+4. Grant microphone permission if macOS asks.
+5. Speak and confirm recorded microphone audio.
+
+### Silent
+
+Select `SILENT` and verify the MP4 has no audio stream.
+
+## Transport and recovery
+
+While recording video audio:
+
+1. Pause and resume.
+2. Seek.
+3. Change playback rate.
+4. Cross a loop boundary.
+5. Leave the decoder watchdog active during a long recording.
+
+Expected:
+
+- Pauses produce held video plus silence.
+- The output file remains valid CFR.
+- Decoder recovery does not terminate recording.
+
+## Output coexistence
+
+1. Start Syphon at 30 FPS.
+2. Start recording at 30 FPS.
+3. Verify both outputs continue.
+4. Repeat with Spout later on Windows.
+5. Minimize the native output window and confirm recording continues.
+
+## Resolution protection
+
+1. Start a recording.
+2. Confirm Render Resolution Apply is disabled.
+3. Stop recording.
+4. Confirm Apply becomes available again.
+
+## Long-duration test
+
+Record for 20–30 minutes at 1080p30 with heavy feedback and temporal effects.
+
+Check:
+
+- memory does not grow continuously;
+- audio queue depth returns toward zero;
+- temporary files grow normally;
+- Stop finalizes successfully;
+- final duration matches the recording timer;
+- A/V drift is not perceptible at the end.
+
+## Application-close finalization
+
+1. Start a short recording.
+2. Close Huff without pressing Stop.
+3. Relaunch and inspect the chosen output.
+
+Huff should finalize before exiting. A slow encoder may delay application closure while FFmpeg finishes.
+
+## Failure reporting
 
 Include:
 
-- Windows version;
-- GPU model(s);
-- selected adapter index/name;
-- receiver application and version;
-- render resolution and FPS cap;
-- complete Cargo/CMake/linker output;
-- Spout modal status and counters;
-- whether the sender appears but is black, incorrectly colored, upside down, frozen, or absent.
+- platform and GPU;
+- render resolution and recording FPS;
+- audio mode;
+- source file/container/codec;
+- `REC:` tooltip values;
+- `NATIVE:` tooltip values;
+- terminal output;
+- whether the final MP4 is missing, truncated, silent, drifting, upside down, or unplayable;
+- whether hidden `.huff-video.mp4` or `.huff-audio.wav` files remain beside the destination.

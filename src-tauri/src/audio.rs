@@ -1,3 +1,4 @@
+use crate::recording::{RecordingAudioSource, RecordingAudioTap};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use rustfft::{num_complex::Complex32, FftPlanner};
 use serde::Serialize;
@@ -372,7 +373,7 @@ impl Analyzer {
     }
 }
 
-pub fn start() -> Result<AudioHandle, String> {
+pub fn start(recording_audio: RecordingAudioTap) -> Result<AudioHandle, String> {
     let (tx, rx) = sync_channel(128);
     let info = Arc::new(RwLock::new(AudioInfo::default()));
     let snapshot = Arc::new(RwLock::new(AudioSnapshot::default()));
@@ -381,7 +382,7 @@ pub fn start() -> Result<AudioHandle, String> {
 
     thread::Builder::new()
         .name("huff-audio-analysis".into())
-        .spawn(move || audio_thread(rx, thread_info, thread_snapshot))
+        .spawn(move || audio_thread(rx, thread_info, thread_snapshot, recording_audio))
         .map_err(|error| format!("could not start audio thread: {error}"))?;
 
     Ok(AudioHandle { tx, info, snapshot })
@@ -417,41 +418,87 @@ fn find_device(host: &cpal::Host, selected_name: &str) -> Option<cpal::Device> {
     host.default_input_device()
 }
 
-fn callback_mono_f32(data: &[f32], channels: usize, tx: &SyncSender<Vec<f32>>, counters: &CallbackCounters) {
+fn callback_mono_f32(
+    data: &[f32],
+    channels: usize,
+    sample_rate: u32,
+    tx: &SyncSender<Vec<f32>>,
+    counters: &CallbackCounters,
+    recording_audio: &RecordingAudioTap,
+) {
     publish_mono(
-        data.chunks(channels).map(|frame| frame.iter().copied().sum::<f32>() / channels as f32),
+        data.chunks(channels)
+            .map(|frame| frame.iter().copied().sum::<f32>() / channels as f32),
+        sample_rate,
         tx,
         counters,
+        recording_audio,
     );
 }
 
-fn callback_mono_i16(data: &[i16], channels: usize, tx: &SyncSender<Vec<f32>>, counters: &CallbackCounters) {
+fn callback_mono_i16(
+    data: &[i16],
+    channels: usize,
+    sample_rate: u32,
+    tx: &SyncSender<Vec<f32>>,
+    counters: &CallbackCounters,
+    recording_audio: &RecordingAudioTap,
+) {
     publish_mono(
         data.chunks(channels).map(|frame| {
-            frame.iter().map(|sample| *sample as f32 / i16::MAX as f32).sum::<f32>()
+            frame
+                .iter()
+                .map(|sample| *sample as f32 / i16::MAX as f32)
+                .sum::<f32>()
                 / channels as f32
         }),
+        sample_rate,
         tx,
         counters,
+        recording_audio,
     );
 }
 
-fn callback_mono_u16(data: &[u16], channels: usize, tx: &SyncSender<Vec<f32>>, counters: &CallbackCounters) {
+fn callback_mono_u16(
+    data: &[u16],
+    channels: usize,
+    sample_rate: u32,
+    tx: &SyncSender<Vec<f32>>,
+    counters: &CallbackCounters,
+    recording_audio: &RecordingAudioTap,
+) {
     publish_mono(
         data.chunks(channels).map(|frame| {
-            frame.iter().map(|sample| (*sample as f32 - 32768.0) / 32768.0).sum::<f32>()
+            frame
+                .iter()
+                .map(|sample| (*sample as f32 - 32768.0) / 32768.0)
+                .sum::<f32>()
                 / channels as f32
         }),
+        sample_rate,
         tx,
         counters,
+        recording_audio,
     );
 }
 
-fn publish_mono<I>(samples: I, tx: &SyncSender<Vec<f32>>, counters: &CallbackCounters)
+fn publish_mono<I>(
+    samples: I,
+    sample_rate: u32,
+    tx: &SyncSender<Vec<f32>>,
+    counters: &CallbackCounters,
+    recording_audio: &RecordingAudioTap,
+)
 where
     I: Iterator<Item = f32>,
 {
     let chunk = samples.collect::<Vec<_>>();
+    recording_audio.submit(
+        RecordingAudioSource::Microphone,
+        sample_rate,
+        1,
+        &chunk,
+    );
     counters.callbacks.fetch_add(1, Ordering::Relaxed);
     counters
         .samples
@@ -470,6 +517,7 @@ fn open_stream(
     sample_tx: SyncSender<Vec<f32>>,
     counters: Arc<CallbackCounters>,
     info: Arc<RwLock<AudioInfo>>,
+    recording_audio: RecordingAudioTap,
 ) -> Result<(cpal::Stream, u32), String> {
     let device = find_device(host, selected_name).ok_or_else(|| "no audio input device is available".to_string())?;
     let device_name = device.name().unwrap_or_else(|_| "Unknown input device".into());
@@ -497,9 +545,10 @@ fn open_stream(
             let callback_counters = Arc::clone(&counters);
             let error_info = Arc::clone(&info);
             let error_counters = Arc::clone(&counters);
+            let recording_audio = recording_audio.clone();
             device.build_input_stream(
                 &stream_config,
-                move |data: &[f32], _| callback_mono_f32(data, channel_count, &tx, &callback_counters),
+                move |data: &[f32], _| callback_mono_f32(data, channel_count, sample_rate, &tx, &callback_counters, &recording_audio),
                 move |error: cpal::StreamError| {
                     error_counters.stream_errors.fetch_add(1, Ordering::Relaxed);
                     let mut state = error_info.write().expect("audio info poisoned");
@@ -513,9 +562,10 @@ fn open_stream(
             let callback_counters = Arc::clone(&counters);
             let error_info = Arc::clone(&info);
             let error_counters = Arc::clone(&counters);
+            let recording_audio = recording_audio.clone();
             device.build_input_stream(
                 &stream_config,
-                move |data: &[i16], _| callback_mono_i16(data, channel_count, &tx, &callback_counters),
+                move |data: &[i16], _| callback_mono_i16(data, channel_count, sample_rate, &tx, &callback_counters, &recording_audio),
                 move |error: cpal::StreamError| {
                     error_counters.stream_errors.fetch_add(1, Ordering::Relaxed);
                     let mut state = error_info.write().expect("audio info poisoned");
@@ -529,9 +579,10 @@ fn open_stream(
             let callback_counters = Arc::clone(&counters);
             let error_info = Arc::clone(&info);
             let error_counters = Arc::clone(&counters);
+            let recording_audio = recording_audio.clone();
             device.build_input_stream(
                 &stream_config,
-                move |data: &[u16], _| callback_mono_u16(data, channel_count, &tx, &callback_counters),
+                move |data: &[u16], _| callback_mono_u16(data, channel_count, sample_rate, &tx, &callback_counters, &recording_audio),
                 move |error: cpal::StreamError| {
                     error_counters.stream_errors.fetch_add(1, Ordering::Relaxed);
                     let mut state = error_info.write().expect("audio info poisoned");
@@ -554,6 +605,7 @@ fn audio_thread(
     command_rx: Receiver<AudioCommand>,
     info: Arc<RwLock<AudioInfo>>,
     snapshot: Arc<RwLock<AudioSnapshot>>,
+    recording_audio: RecordingAudioTap,
 ) {
     let host = cpal::default_host();
     let host_name = format!("{:?}", host.id());
@@ -603,6 +655,7 @@ fn audio_thread(
                             sample_tx.clone(),
                             Arc::clone(&counters),
                             Arc::clone(&info),
+                            recording_audio.clone(),
                         ) {
                             Ok((next_stream, sample_rate)) => {
                                 analyzer.sample_rate = sample_rate;
@@ -626,6 +679,7 @@ fn audio_thread(
                             sample_tx.clone(),
                             Arc::clone(&counters),
                             Arc::clone(&info),
+                            recording_audio.clone(),
                         ) {
                             Ok((next_stream, sample_rate)) => {
                                 analyzer.sample_rate = sample_rate;

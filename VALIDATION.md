@@ -1,36 +1,42 @@
-# Milestone 08.1 static validation
+# Huff Native Milestone 09 validation
 
-The packaging environment does not include Cargo/rustc or a Windows SDK/MSVC runtime. Native Windows compilation and receiver testing remain local validation requirements.
+The packaging environment does not include Cargo, rustc, Metal, DX12, or native Tauri runtime support. Rust compilation and real-time recording remain local validation requirements.
 
 ## Completed static checks
 
-- Package, npm lockfile, Cargo manifest, Cargo lockfile project entry, and Tauri configuration are synchronized at `0.8.1`.
-- JavaScript syntax passes `node --check`.
-- JSON files parse successfully.
-- Tauri command registration includes Spout start, stop, and adapter enumeration.
-- Rust renderer commands carry the selected adapter index through to the Spout worker.
-- The Spout worker owns all bridge calls on one thread.
-- Frame submission retains a single latest pending frame.
-- The bridge validates dimensions, row pitch, D3D11 device, and D3D11 context.
-- The bridge exports sender metadata and detailed error text.
-- CMake builds one static bridge from the bundled SpoutDX/SpoutGL sources using the dynamic MSVC runtime (`/MD`).
-- `build.rs` links the static bridge and the Windows libraries listed by the bundled Spout SDK.
-- No `spout_bridge.dll` copy or Tauri resource dependency remains.
-- The UI includes adapter enumeration, adapter persistence, initialization state, resolved sender name, sender FPS, and frame diagnostics.
-- macOS/non-Windows stubs preserve cross-platform compilation boundaries.
+- JavaScript passes `node --check`.
+- `package.json`, `package-lock.json`, and `tauri.conf.json` parse successfully.
+- HTML IDs are unique and all Milestone 09 recording controls are present.
+- Package, npm lockfile, Cargo manifest, Cargo lockfile project entry, and Tauri configuration are synchronized at `0.9.0`.
+- Tauri command registration includes native recording start and stop.
+- The recorder module is registered and managed as shared application state.
+- Video, microphone audio, renderer readback, and UI telemetry are wired to the recording state.
+- Video submission uses one replaceable latest-frame slot rather than an unbounded queue.
+- Audio submission uses a fixed-capacity channel with dropped-chunk telemetry.
+- The wgpu readback path remains fixed at three persistent buffers shared by Syphon, Spout, and recording.
+- Recording keeps the native renderer active while its presentation surface is minimized or temporarily unavailable.
+- Internal render dimensions are held stable while recording or finalizing, then restored to the selected render mode.
+- Active recording is finalized on application close.
+- Modified Rust and WGSL source passes delimiter and stale-reference audits.
 
-## Still requires Windows validation
+## FFmpeg pipeline validation
 
-- MSVC compilation and static-library linkage.
-- DXGI adapter enumeration on real hardware.
-- Spout sender registration and frame publication.
-- Color and orientation in receivers.
-- Integrated/discrete GPU interoperability.
-- 30/60 FPS behavior at 720p and 1080p.
-- Release, MSI, and NSIS packaged behavior.
+A synthetic command-line test completed successfully in this environment:
 
-## Tooling checks completed here
+1. Generated raw RGBA frames were encoded as CFR H.264 MP4.
+2. Generated interleaved `f32le` audio was encoded as PCM WAV.
+3. Video and audio were muxed into an AAC MP4.
+4. `ffprobe` confirmed a readable video stream, audio stream, duration, and frame rate.
 
-- CMake 3.31 successfully configured the static bridge project against the bundled Spout SDK.
-- JavaScript syntax and all project JSON files passed local parsing.
-- Modified Rust/C++ source passed delimiter, command-wiring, UI-ID, and stale-DLL-reference audits.
+This validates the command family used by the recorder, but not Huff's Rust pipe ownership or live A/V timing.
+
+## Required local validation
+
+- `cargo`/Tauri compilation on macOS and Windows.
+- 30 and 60 FPS recording from the real wgpu output.
+- Video-audio and microphone capture.
+- Pause, seek, playback-rate, loop, and decoder-recovery behavior.
+- Recording while Syphon or Spout is active.
+- Minimized/occluded-window recording.
+- Long-duration memory, drift, and finalization tests.
+- Packaged-app FFmpeg discovery and permissions.

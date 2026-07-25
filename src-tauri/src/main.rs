@@ -13,6 +13,7 @@ mod midi;
 mod osc;
 mod output_frame;
 mod parameters;
+mod recording;
 mod renderer;
 mod source;
 mod spout;
@@ -27,6 +28,7 @@ use gesture::{GestureHandle, GesturePoint};
 use midi::{MidiCommand, MidiHandle};
 use osc::{OscCommand, OscHandle};
 use parameters::{ParameterDefinition, ParameterSnapshot, ParameterStore};
+use recording::{RecordingAudioSource, RecordingHandle, RecordingStartConfig};
 use renderer::{RenderCommand, RendererHandle};
 use source::{ActiveSource, SourceSelector};
 use rosc::{encoder, OscMessage, OscPacket, OscType};
@@ -61,6 +63,7 @@ struct AppInfo {
     osc: osc::OscInfo,
     syphon: syphon::SyphonInfo,
     spout: spout::SpoutInfo,
+    recording: recording::RecordingInfo,
     gesture: gesture::GestureInfo,
     parameter_revision: u64,
     native_milestone: String,
@@ -78,11 +81,12 @@ fn get_app_info(
     midi: tauri::State<'_, MidiHandle>,
     osc: tauri::State<'_, OscHandle>,
     gesture: tauri::State<'_, GestureHandle>,
+    recording: tauri::State<'_, RecordingHandle>,
     parameters: tauri::State<'_, ParameterStore>,
     source: tauri::State<'_, SourceSelector>,
 ) -> AppInfo {
     AppInfo {
-        build: "HNW-08.1".into(),
+        build: "HNW-09".into(),
         renderer: renderer.info(),
         camera: camera.status(),
         camera_devices: camera.devices(),
@@ -96,9 +100,10 @@ fn get_app_info(
         osc: osc.info(),
         syphon: syphon::info(),
         spout: spout::info(),
+        recording: recording.info(),
         gesture: gesture.info(),
         parameter_revision: parameters.revision(),
-        native_milestone: "HNW-08.1".into(),
+        native_milestone: "HNW-09".into(),
         active_source: source.get().label().into(),
     }
 }
@@ -197,6 +202,120 @@ fn list_spout_adapters() -> Result<Vec<spout::SpoutAdapter>, String> {
 #[tauri::command]
 fn stop_spout_output(renderer: tauri::State<'_, RendererHandle>) {
     renderer.stop_spout();
+}
+
+#[tauri::command]
+fn start_recording(
+    renderer: tauri::State<'_, RendererHandle>,
+    recording: tauri::State<'_, RecordingHandle>,
+    source: tauri::State<'_, SourceSelector>,
+    video_audio: tauri::State<'_, VideoAudioHandle>,
+    microphone_audio: tauri::State<'_, AudioHandle>,
+    fps: u32,
+    audio_mode: String,
+) -> Result<Option<String>, String> {
+    if recording.info().active || recording.info().finalizing {
+        return Err("a recording is already active or finalizing".into());
+    }
+    if !matches!(fps, 30 | 60) {
+        return Err("recording FPS must be 30 or 60".into());
+    }
+    if !matches!(audio_mode.as_str(), "auto" | "video" | "microphone" | "none") {
+        return Err("recording audio mode must be auto, video, microphone, or none".into());
+    }
+
+    let selected = rfd::FileDialog::new()
+        .add_filter("MPEG-4 video", &["mp4"])
+        .set_file_name("huff-recording.mp4")
+        .save_file();
+    let Some(mut path) = selected else {
+        return Ok(None);
+    };
+    if !path
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(|value| value.eq_ignore_ascii_case("mp4"))
+        .unwrap_or(false)
+    {
+        path.set_extension("mp4");
+    }
+
+    let active_source = source.get();
+    let video_info = video_audio.info();
+    let mut mic_info = microphone_audio.info();
+    let requested_audio = match audio_mode.as_str() {
+        "video" => Some(RecordingAudioSource::Video),
+        "microphone" => Some(RecordingAudioSource::Microphone),
+        "none" => None,
+        _ => match active_source {
+            ActiveSource::Video if video_info.has_audio => Some(RecordingAudioSource::Video),
+            ActiveSource::Camera => Some(RecordingAudioSource::Microphone),
+            _ => None,
+        },
+    };
+
+    let (audio_source, audio_sample_rate, audio_channels) = match requested_audio {
+        Some(RecordingAudioSource::Video) => {
+            if !video_info.has_audio
+                || video_info.output_sample_rate == 0
+                || video_info.output_channels == 0
+            {
+                if audio_mode == "video" {
+                    return Err("the loaded video has no recordable audio stream".into());
+                }
+                (None, 0, 0)
+            } else {
+                (
+                    Some(RecordingAudioSource::Video),
+                    video_info.output_sample_rate,
+                    video_info.output_channels,
+                )
+            }
+        }
+        Some(RecordingAudioSource::Microphone) => {
+            if !mic_info.running || mic_info.sample_rate == 0 {
+                microphone_audio.send(AudioCommand::Start);
+                for _ in 0..200 {
+                    std::thread::sleep(std::time::Duration::from_millis(50));
+                    mic_info = microphone_audio.info();
+                    if mic_info.running && mic_info.sample_rate > 0 {
+                        break;
+                    }
+                }
+            }
+            if !mic_info.running || mic_info.sample_rate == 0 {
+                if audio_mode == "microphone" {
+                    return Err(mic_info
+                        .last_error
+                        .clone()
+                        .is_empty()
+                        .then_some("microphone capture could not be started".to_string())
+                        .unwrap_or_else(|| mic_info.last_error.clone()));
+                }
+                (None, 0, 0)
+            } else {
+                (Some(RecordingAudioSource::Microphone), mic_info.sample_rate, 1)
+            }
+        }
+        None => (None, 0, 0),
+    };
+
+    let render = renderer.info();
+    recording.start(RecordingStartConfig {
+        path: path.clone(),
+        width: render.width,
+        height: render.height,
+        fps,
+        audio_source,
+        audio_sample_rate,
+        audio_channels,
+    })?;
+    Ok(Some(path.display().to_string()))
+}
+
+#[tauri::command]
+fn stop_recording(recording: tauri::State<'_, RecordingHandle>) -> Result<(), String> {
+    recording.stop()
 }
 
 #[tauri::command]
@@ -575,10 +694,12 @@ fn toggle_renderer_fullscreen(app: tauri::AppHandle) -> Result<bool, String> {
 fn main() {
     tauri::Builder::default()
         .setup(|app| {
+            let recording = recording::start().map_err(std::io::Error::other)?;
+            let recording_audio = recording.audio_tap();
             let camera = camera::start().map_err(std::io::Error::other)?;
             let video = video::start().map_err(std::io::Error::other)?;
-            let microphone_audio = audio::start().map_err(std::io::Error::other)?;
-            let video_audio = video_audio::start().map_err(std::io::Error::other)?;
+            let microphone_audio = audio::start(recording_audio.clone()).map_err(std::io::Error::other)?;
+            let video_audio = video_audio::start(recording_audio).map_err(std::io::Error::other)?;
             let audio_router = audio_router::start(
                 microphone_audio.snapshot(),
                 video_audio.snapshot(),
@@ -613,6 +734,7 @@ fn main() {
                     source: source.clone(),
                 },
                 parameters.clone(),
+                recording.clone(),
             )
             .map_err(std::io::Error::other)?;
 
@@ -646,6 +768,7 @@ fn main() {
                 let close_audio_router = audio_router.clone();
                 let close_midi = midi.clone();
                 let close_osc = osc.clone();
+                let close_recording = recording.clone();
                 controls.on_window_event(move |event| match event {
                     tauri::WindowEvent::Focused(focused) => {
                         if *focused {
@@ -653,6 +776,10 @@ fn main() {
                         }
                     }
                     tauri::WindowEvent::CloseRequested { .. } => {
+                        if close_recording.info().active || close_recording.info().finalizing {
+                            let _ = close_recording.stop();
+                        }
+                        close_recording.shutdown();
                         close_renderer.send(RenderCommand::Shutdown);
                         close_camera.shutdown();
                         close_video.shutdown();
@@ -675,6 +802,7 @@ fn main() {
             app.manage(midi);
             app.manage(osc);
             app.manage(gesture);
+            app.manage(recording);
             app.manage(parameters);
             app.manage(source);
             app.manage(renderer);
@@ -694,6 +822,8 @@ fn main() {
             start_spout_output,
             list_spout_adapters,
             stop_spout_output,
+            start_recording,
+            stop_recording,
             focus_renderer,
             refresh_cameras,
             start_camera,

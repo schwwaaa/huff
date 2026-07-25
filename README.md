@@ -1,110 +1,79 @@
-# Huff Native wgpu · Milestone 08.1
+# Huff Native wgpu · Milestone 09
 
-Milestone 08.1 completes **native Syphon and Spout output** on top of the working Milestone 07.2 engine. Huff now renders one authoritative, fixed-resolution RGBA output texture and uses that same result for the native window and external video outputs.
+Milestone 09 adds **native synchronized MP4 recording** to the working Milestone 08.1 engine.
 
-The HTML/CSS interface remains the control surface. Video/audio decoding, camera input, GPU history, Huff's flying-frame-buffer effects, compositing, feedback, presentation, and external output are native Rust + wgpu.
-
-## Native output architecture
+Huff now has a complete live native path from media input through GPU effects to presentation, Syphon/Spout, and recording:
 
 ```text
-Native video or camera
+Native video / camera + native audio
         ↓
 GPU temporal history
         ↓
-Huff native effect graph
+Huff flying-frame-buffer render graph
         ↓
 Authoritative RGBA8 output texture at R: resolution
-        ├── Native output window (letterboxed independently)
+        ├── Native output window
         ├── Syphon on macOS
-        └── Spout on Windows
+        ├── Spout on Windows
+        └── CFR MP4 recorder
 ```
 
-The external outputs do not depend on the size or visibility of the native output window. If Syphon or Spout is active, Huff continues rendering the authoritative output while the presentation surface is minimized or temporarily unavailable.
+The HTML/CSS interface remains the control surface. Decoding, timing, history, effects, feedback, output, and recording are native Rust + wgpu systems.
 
-## Bounded GPU readback bridge
+## Native recorder
 
-The first native Syphon/Spout implementation uses a controlled GPU-to-CPU bridge:
+The recorder consumes the same authoritative image used by native presentation and external outputs. It does not record the WebView or the visible window.
 
-- Three persistent wgpu staging buffers
-- Asynchronous `map_async` completion
-- Nonblocking device polling
-- Output-specific FPS limits
-- Busy-frame dropping instead of queue growth
-- One reference-counted RGBA frame shared between Syphon and Spout
-- Latest-frame worker queues for both outputs
+Features:
 
-This is not claimed to be zero-copy. It is a bounded and measurable bridge designed to preserve responsiveness and prevent output latency from accumulating.
+- 30 or 60 FPS constant-frame-rate recording
+- Current internal `R:` render resolution
+- Video-audio capture
+- Microphone capture for camera use
+- Silent recording
+- Automatic source selection
+- MP4/H.264/AAC output
+- Bounded latest-frame transport
+- Timestamp-aligned audio chunks
+- Frame duplication when the renderer or encoder is late
+- Silence insertion for missing audio regions
+- Safe finalization on Stop or application close
+- Recording while Syphon or Spout is active
+- Recording while the native presentation window is minimized
 
-## Syphon
+## Recording controls
 
-On macOS, Huff:
+Use the controls in the top bar:
 
-1. Reads the authoritative RGBA output.
-2. Uploads it into one persistent shared Metal texture.
-3. Publishes that texture through `SyphonMetalServer` as **huff**.
+1. Select `REC 30` or `REC 60`.
+2. Select `AUDIO AUTO`, `VIDEO AUDIO`, `MIC`, or `SILENT`.
+3. Press **Rec** and choose an MP4 destination.
+4. Press **Stop** to finalize and mux the file.
 
-`Syphon.framework` is included under `src-tauri/frameworks` and configured for application bundling.
+`AUDIO AUTO` uses video audio for the file source and microphone audio for the camera source. When microphone capture is selected, Huff starts the current default microphone automatically.
 
-## Spout
+Hover the `REC:` pill for:
 
-On Windows, Huff:
+- Recording path
+- Resolution and CFR
+- Audio source and format
+- Encoded and duplicated video frames
+- Skipped, rejected, and replaced submissions
+- Audio samples and dropped chunks
+- Current audio queue depth
+- Approximate temporary-file size
 
-1. Reads the same authoritative RGBA output.
-2. Sends the newest complete frame to the bundled SpoutDX bridge.
-3. Publishes a D3D11 shared texture as **huff**.
+## Bounded output behavior
 
-The C++ bridge and Spout SDK are included under `src-tauri/native`. On Windows, the build script compiles one static bridge library and links it directly into Huff. There is no project-specific runtime DLL to copy or package.
+The recorder shares Huff's three persistent asynchronous wgpu readback buffers with Syphon and Spout. A busy readback is dropped rather than queued. The recording worker stores only the latest complete pending frame and uses CFR duplication to keep time stable.
 
-The Spout modal enumerates DirectX adapters. On multi-GPU systems, choose the same adapter used by the receiving application before starting the sender.
+This means heavy effects can reduce unique captured frames without causing memory growth or continuously increasing output latency.
 
-## Output controls
+## Requirements
 
-The existing Syphon and Spout modals are now functional:
-
-- Start / Stop
-- Output FPS
-- Current render dimensions
-- Published frames
-- Replaced pending frames
-- Upload time
-- Frame age
-- Error state
-
-Output dimensions follow Huff's current internal `R:` render size. Change Render Resolution first, press Apply, then start the output. If the render resolution changes while an output is active, Huff rebuilds the bridge and attempts to restart it at the new dimensions.
-
-Hover `NATIVE:` for shared readback diagnostics:
-
-- Completed readbacks
-- Busy-slot drops
-- Mapping errors
-- Readback latency
-- Pending staging slots
-
-## Retained systems
-
-- Native FFmpeg video and audio with decoder watchdog recovery
-- Exclusive video/camera source ownership
-- GPU temporal texture-array history
-- Corrected p5-compatible flying-frame-buffer behavior
-- Glitch and smear instances
-- Persistent cluster physics
-- Scanline compositor and layer priority
-- Smoosh
-- Luma Key
-- Global Mix
-- Flow and pulse routing
-- Non-additive feedback
-- Independent render and history resolutions
-- Native presets, undo, MIDI, OSC, and diagnostics foundations
-
-## Remaining major work
-
-1. Native recording with synchronized audio
-2. High-resolution still and offline export
-3. Parameter-by-parameter calibration against original Huff
-4. Complete MIDI/OSC mapping editors
-5. Expanded routing, automation, and project-state support
-6. Optional lower-copy platform-specific texture interop research
+- FFmpeg available on `PATH`
+- macOS: Metal backend recommended
+- Windows: DX12 backend recommended
 
 ## Run on macOS
 
@@ -125,4 +94,14 @@ npm run dev
 npm run build
 ```
 
-Use `TESTING.md` for the runtime checklist. Windows MSVC compilation, receiver interoperability, multi-GPU selection, and packaged runtime behavior must still be verified on a Windows machine.
+## Major remaining work
+
+1. High-resolution still capture
+2. Deterministic offline video export
+3. Independent export resolution and codec profiles
+4. Parameter-by-parameter visual/motion calibration
+5. Complete MIDI/OSC mapping editors
+6. Expanded routing, sequencing, automation, and project state
+7. Windows Spout and installer verification
+
+Use `TESTING.md` for the recording regression checklist and `UPGRADE-NOTES-09.md` for implementation details.

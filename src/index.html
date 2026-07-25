@@ -414,6 +414,18 @@
             color: var(--term-green); white-space: nowrap; flex-shrink: 0;
             letter-spacing: .04em;
         }
+        #recordPill.recording-active {
+            color: #fff !important;
+            background: #a00000 !important;
+            border-color: #ff5555 !important;
+            animation: recBlink .9s step-end infinite;
+        }
+        #recordPill.recording-finalizing {
+            color: var(--term-yel) !important;
+            border-color: var(--term-yel) !important;
+        }
+        @keyframes recBlink { 50% { opacity: .55; } }
+
         #status   { color: var(--term-dgreen); }
         #midiPill {
             color: var(--term-mag);
@@ -844,13 +856,11 @@
             <button id="aboutClose">×</button>
             <div class="a-icon"></div>
             <h1 style="font-family:'VT323',monospace;font-weight:normal;letter-spacing:.14em">huff</h1>
-            <div class="build">native engine · milestone 08 · 2026</div>
+            <div class="build">native engine · milestone 09 · 2026</div>
             <p>Huff is being migrated to a native Rust + wgpu media engine. The existing
             control surface is preserved while playback, timing, GPU rendering, and
             output move out of the WebView.</p>
-            <p><strong>Milestone 08.1:</strong> the native media and effect pipeline now publishes its
-            authoritative render-resolution output directly to Syphon on macOS and Spout on Windows
-            through bounded latest-frame bridges. Recording, export, and final parameter calibration remain.</p>
+            <p><strong>Milestone 09:</strong> Huff now records the authoritative native wgpu output as CFR MP4, with synchronized video audio or microphone capture, bounded queues, and safe FFmpeg finalization. High-resolution/offline export and final parameter calibration remain.</p>
         </div>
     </div>
 
@@ -1069,6 +1079,19 @@
             <button id="refreshBtn" disabled>↻ Refresh</button>
             <button id="resetBtn" title="Reset all parameters to defaults">↺ Reset</button>
             <button id="clearBufBtn" title="Wipe frame ring and buffers instantly">⬛ Clear</button>
+            <select id="recordFps" title="Constant recording frame rate" style="font-size:10px;padding:1px 2px">
+                <option value="30" selected>REC 30</option>
+                <option value="60">REC 60</option>
+            </select>
+            <select id="recordAudio" title="Recording audio source" style="font-size:10px;padding:1px 2px">
+                <option value="auto" selected>AUDIO AUTO</option>
+                <option value="video">VIDEO AUDIO</option>
+                <option value="microphone">MIC</option>
+                <option value="none">SILENT</option>
+            </select>
+            <button id="recordBtn" class="btn-red" title="Start native MP4 recording">● Rec</button>
+            <button id="recordStopBtn" disabled title="Stop and finalize recording">■ Stop</button>
+            <span class="pill" id="recordPill" style="color:rgba(255,70,70,.75);border-color:rgba(255,70,70,.3)" title="Native recording status">REC: OFF</span>
             <div class="topbar-sep"></div>
             <button id="camStartBtn">⬤ Cam</button>
             <button id="camStopBtn">✕ Cam</button>

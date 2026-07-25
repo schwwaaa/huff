@@ -191,7 +191,7 @@ function configureRegistryControls() {
     feedbackGroup.title = 'Native HDR feedback is active; final effect-order parity continues with later render-graph milestones.';
   }
   const glitchGroup = byId('corruptOn')?.closest('.group');
-  if (glitchGroup) glitchGroup.title = "Milestone 08.1 includes Huff's native render graph plus hardened direct Syphon and Spout publishing from the authoritative wgpu output. External outputs use a bounded three-slot readback bridge and latest-frame workers.";
+  if (glitchGroup) glitchGroup.title = "Milestone 09 includes Huff's native render graph, Syphon/Spout output, and bounded CFR recording from the authoritative wgpu output.";
   const clusterGroup = byId('clusterTiles')?.closest('.group');
   if (clusterGroup) clusterGroup.title = 'Native cluster bodies are active: persistent centers, coherence, speed, steering, variance, pulse, inertia, breathing, bounce/wrap, bias, spread, and minimum spread.';
   const scanGroup = byId('clusters')?.closest('.group');
@@ -350,6 +350,33 @@ function wireTransport() {
     await call('seek_video', { seconds: Number(seek.value) / 1000 * duration });
   });
   seek?.addEventListener('pointerup', () => { appState.timelineDragging = false; });
+}
+
+function wireRecording() {
+  byId('recordBtn')?.addEventListener('click', async () => {
+    const button = byId('recordBtn');
+    button.disabled = true;
+    try {
+      const path = await call('start_recording', {
+        fps: Number(byId('recordFps')?.value || 30),
+        audioMode: byId('recordAudio')?.value || 'auto',
+      });
+      if (path) toast(`Recording started · ${basename(path)}`);
+    } catch (_) {
+      button.disabled = false;
+    }
+  });
+  byId('recordStopBtn')?.addEventListener('click', async () => {
+    const button = byId('recordStopBtn');
+    button.disabled = true;
+    toast('Finalizing recording…');
+    try {
+      await call('stop_recording');
+      toast('Recording finalized');
+    } catch (_) {
+      button.disabled = false;
+    }
+  });
 }
 
 function wireCamera() {
@@ -589,6 +616,7 @@ function displayInfo(info) {
   const osc = info.osc || {};
   const syphon = info.syphon || {};
   const spout = info.spout || {};
+  const recording = info.recording || {};
 
   setOptions(byId('cams'), info.cameraDevices || [], (item) => item.slot, (item) => item.name);
   setOptions(byId('midiPortSelect'), midi.ports || [], (item) => item, (item) => item);
@@ -611,6 +639,33 @@ function displayInfo(info) {
   byId('spoutPill').textContent = spout.active
     ? (spout.initialized ? `SPOUT: ${spout.publishedFrames || 0}` : 'SPOUT: ARMING')
     : (spout.available ? 'SPOUT: OFF' : 'SPOUT: N/A');
+
+  const recordingBusy = Boolean(recording.active || recording.finalizing);
+  const recordPill = byId('recordPill');
+  if (recordPill) {
+    recordPill.classList.toggle('recording-active', Boolean(recording.active));
+    recordPill.classList.toggle('recording-finalizing', Boolean(recording.finalizing));
+    recordPill.textContent = recording.active
+      ? `REC: ${formatTime(recording.durationSeconds || 0)} · ${recording.fps || 0}`
+      : (recording.finalizing ? 'REC: FINALIZING' : 'REC: OFF');
+    recordPill.title = recording.active
+      ? `${recording.path || ''}
+${recording.width || 0}×${recording.height || 0} @ ${recording.fps || 0} CFR
+Audio: ${recording.audioSource || 'none'} ${recording.audioSampleRate || 0} Hz · ${recording.audioChannels || 0} ch
+Video: ${recording.videoFrames || 0} encoded · ${recording.duplicatedFrames || 0} duplicated · ${recording.skippedFrames || 0} skipped · ${recording.rejectedFrames || 0} rejected
+Submission drops: ${recording.videoSubmissionDrops || 0}
+Audio: ${recording.audioSamples || 0} samples · ${recording.audioDroppedChunks || 0} dropped chunks · ${recording.audioQueueDepth || 0} queued
+Approx: ${((recording.estimatedBytes || 0) / 1048576).toFixed(1)} MiB`
+      : (recording.lastError || (recording.ffmpegAvailable ? 'Native MP4 recording ready' : 'FFmpeg unavailable'));
+  }
+  if (byId('recordBtn')) byId('recordBtn').disabled = recordingBusy || !recording.ffmpegAvailable;
+  if (byId('recordStopBtn')) byId('recordStopBtn').disabled = !recording.active;
+  if (byId('recordFps')) byId('recordFps').disabled = recordingBusy;
+  if (byId('recordAudio')) byId('recordAudio').disabled = recordingBusy;
+  if (byId('renderApplyBtn')) byId('renderApplyBtn').disabled = recordingBusy;
+  if (byId('resetBtn')) byId('resetBtn').disabled = recordingBusy;
+  if (byId('presetLoadBtn')) byId('presetLoadBtn').disabled = recordingBusy;
+  if (byId('presetImportBtn')) byId('presetImportBtn').disabled = recordingBusy;
 
   const syphonButton = byId('syphonToggleBtn');
   if (syphonButton) {
@@ -720,6 +775,7 @@ async function boot() {
   appState.byId = new Map(appState.registry.map((definition) => [definition.id, definition]));
   configureRegistryControls();
   wireTransport();
+  wireRecording();
   wireCamera();
   wireNativeActions();
   wirePresets();
@@ -728,7 +784,7 @@ async function boot() {
   await refreshParameterState();
   await poll();
   setInterval(poll, 250);
-  console.info('Huff Native wgpu Milestone 08.1 loaded', {
+  console.info('Huff Native wgpu Milestone 09 loaded', {
     parameters: appState.registry.length,
     implemented: appState.registry.filter((definition) => definition.implemented).length,
   });

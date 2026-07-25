@@ -1,4 +1,7 @@
-use crate::audio::{Analyzer, AudioSnapshot};
+use crate::{
+    audio::{Analyzer, AudioSnapshot},
+    recording::{RecordingAudioSource, RecordingAudioTap},
+};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use serde::Serialize;
 use serde_json::Value;
@@ -171,7 +174,7 @@ impl PlaybackShared {
     }
 }
 
-pub fn start() -> Result<VideoAudioHandle, String> {
+pub fn start(recording_audio: RecordingAudioTap) -> Result<VideoAudioHandle, String> {
     let (tx, rx) = sync_channel(128);
     let info = Arc::new(RwLock::new(VideoAudioInfo::default()));
     let snapshot = Arc::new(RwLock::new(AudioSnapshot::default()));
@@ -180,7 +183,7 @@ pub fn start() -> Result<VideoAudioHandle, String> {
 
     thread::Builder::new()
         .name("huff-video-audio".into())
-        .spawn(move || video_audio_thread(rx, thread_info, thread_snapshot))
+        .spawn(move || video_audio_thread(rx, thread_info, thread_snapshot, recording_audio))
         .map_err(|error| format!("could not start video audio thread: {error}"))?;
 
     Ok(VideoAudioHandle { tx, info, snapshot })
@@ -190,6 +193,7 @@ fn video_audio_thread(
     command_rx: Receiver<VideoAudioCommand>,
     info: Arc<RwLock<VideoAudioInfo>>,
     snapshot: Arc<RwLock<AudioSnapshot>>,
+    recording_audio: RecordingAudioTap,
 ) {
     initialize_ffmpeg_status(&info);
 
@@ -241,6 +245,7 @@ fn video_audio_thread(
         Arc::clone(&shared),
         analysis_tx,
         Arc::clone(&info),
+        recording_audio,
     ) {
         Ok(stream) => stream,
         Err(error) => {
@@ -484,6 +489,7 @@ fn build_output_stream(
     shared: Arc<PlaybackShared>,
     analysis_tx: SyncSender<Vec<f32>>,
     info: Arc<RwLock<VideoAudioInfo>>,
+    recording_audio: RecordingAudioTap,
 ) -> Result<cpal::Stream, String> {
     let channels = config.channels.max(1) as usize;
     let error_info = Arc::clone(&info);
@@ -496,11 +502,23 @@ fn build_output_stream(
         cpal::SampleFormat::F32 => {
             let shared = Arc::clone(&shared);
             let mut mono_chunk = Vec::with_capacity(ANALYSIS_CHUNK_FRAMES * 2);
+            let mut recording_chunk = Vec::new();
+            let recording_audio = recording_audio.clone();
+            let sample_rate = config.sample_rate.0;
             device
                 .build_output_stream(
                     config,
                     move |data: &mut [f32], _| {
-                        render_output_f32(data, channels, &shared, &analysis_tx, &mut mono_chunk)
+                        render_output_f32(
+                            data,
+                            channels,
+                            sample_rate,
+                            &shared,
+                            &analysis_tx,
+                            &mut mono_chunk,
+                            &mut recording_chunk,
+                            &recording_audio,
+                        )
                     },
                     error_callback,
                     None,
@@ -510,11 +528,23 @@ fn build_output_stream(
         cpal::SampleFormat::I16 => {
             let shared = Arc::clone(&shared);
             let mut mono_chunk = Vec::with_capacity(ANALYSIS_CHUNK_FRAMES * 2);
+            let mut recording_chunk = Vec::new();
+            let recording_audio = recording_audio.clone();
+            let sample_rate = config.sample_rate.0;
             device
                 .build_output_stream(
                     config,
                     move |data: &mut [i16], _| {
-                        render_output_i16(data, channels, &shared, &analysis_tx, &mut mono_chunk)
+                        render_output_i16(
+                            data,
+                            channels,
+                            sample_rate,
+                            &shared,
+                            &analysis_tx,
+                            &mut mono_chunk,
+                            &mut recording_chunk,
+                            &recording_audio,
+                        )
                     },
                     error_callback,
                     None,
@@ -524,11 +554,23 @@ fn build_output_stream(
         cpal::SampleFormat::U16 => {
             let shared = Arc::clone(&shared);
             let mut mono_chunk = Vec::with_capacity(ANALYSIS_CHUNK_FRAMES * 2);
+            let mut recording_chunk = Vec::new();
+            let recording_audio = recording_audio.clone();
+            let sample_rate = config.sample_rate.0;
             device
                 .build_output_stream(
                     config,
                     move |data: &mut [u16], _| {
-                        render_output_u16(data, channels, &shared, &analysis_tx, &mut mono_chunk)
+                        render_output_u16(
+                            data,
+                            channels,
+                            sample_rate,
+                            &shared,
+                            &analysis_tx,
+                            &mut mono_chunk,
+                            &mut recording_chunk,
+                            &recording_audio,
+                        )
                     },
                     error_callback,
                     None,
@@ -542,9 +584,12 @@ fn build_output_stream(
 fn render_frames<F>(
     output_len: usize,
     channels: usize,
+    sample_rate: u32,
     shared: &PlaybackShared,
     analysis_tx: &SyncSender<Vec<f32>>,
     mono_chunk: &mut Vec<f32>,
+    recording_chunk: &mut Vec<f32>,
+    recording_audio: &RecordingAudioTap,
     mut write_sample: F,
 ) where
     F: FnMut(usize, f32),
@@ -552,9 +597,23 @@ fn render_frames<F>(
     let playing = shared.playing.load(Ordering::Acquire);
     let audible = shared.preview_enabled.load(Ordering::Acquire);
     let volume = f32::from_bits(shared.volume_bits.load(Ordering::Acquire));
+    let record_audio = recording_audio.accepts(RecordingAudioSource::Video);
+    recording_chunk.clear();
+    if record_audio {
+        recording_chunk.reserve(output_len);
+    }
     if !playing {
         for index in 0..output_len {
             write_sample(index, 0.0);
+            if record_audio { recording_chunk.push(0.0); }
+        }
+        if record_audio {
+            recording_audio.submit(
+                RecordingAudioSource::Video,
+                sample_rate,
+                channels as u16,
+                recording_chunk,
+            );
         }
         return;
     }
@@ -574,7 +633,9 @@ fn render_frames<F>(
                     0.0
                 };
                 mono += sample;
-                write_sample(output_offset + channel, if audible { sample * volume } else { 0.0 });
+                let output_sample = if audible { sample * volume } else { 0.0 };
+                write_sample(output_offset + channel, output_sample);
+                if record_audio { recording_chunk.push(output_sample); }
             }
             if !complete {
                 underflow_frames += 1;
@@ -583,10 +644,12 @@ fn render_frames<F>(
         }
         for index in frame_count * channels..output_len {
             write_sample(index, 0.0);
+            if record_audio { recording_chunk.push(0.0); }
         }
     } else {
         for index in 0..output_len {
             write_sample(index, 0.0);
+            if record_audio { recording_chunk.push(0.0); }
         }
         underflow_frames = (output_len / channels) as u64;
     }
@@ -603,6 +666,15 @@ fn render_frames<F>(
         .played_samples
         .fetch_add((complete_frames * channels) as u64, Ordering::Relaxed);
 
+    if record_audio {
+        recording_audio.submit(
+            RecordingAudioSource::Video,
+            sample_rate,
+            channels as u16,
+            recording_chunk,
+        );
+    }
+
     if mono_chunk.len() >= ANALYSIS_CHUNK_FRAMES {
         let mut next = Vec::with_capacity(ANALYSIS_CHUNK_FRAMES * 2);
         std::mem::swap(mono_chunk, &mut next);
@@ -618,16 +690,22 @@ fn render_frames<F>(
 fn render_output_f32(
     data: &mut [f32],
     channels: usize,
+    sample_rate: u32,
     shared: &PlaybackShared,
     analysis_tx: &SyncSender<Vec<f32>>,
     mono_chunk: &mut Vec<f32>,
+    recording_chunk: &mut Vec<f32>,
+    recording_audio: &RecordingAudioTap,
 ) {
     render_frames(
         data.len(),
         channels,
+        sample_rate,
         shared,
         analysis_tx,
         mono_chunk,
+        recording_chunk,
+        recording_audio,
         |index, sample| data[index] = sample,
     );
 }
@@ -635,16 +713,22 @@ fn render_output_f32(
 fn render_output_i16(
     data: &mut [i16],
     channels: usize,
+    sample_rate: u32,
     shared: &PlaybackShared,
     analysis_tx: &SyncSender<Vec<f32>>,
     mono_chunk: &mut Vec<f32>,
+    recording_chunk: &mut Vec<f32>,
+    recording_audio: &RecordingAudioTap,
 ) {
     render_frames(
         data.len(),
         channels,
+        sample_rate,
         shared,
         analysis_tx,
         mono_chunk,
+        recording_chunk,
+        recording_audio,
         |index, sample| {
             data[index] = (sample.clamp(-1.0, 1.0) * i16::MAX as f32) as i16;
         },
@@ -654,16 +738,22 @@ fn render_output_i16(
 fn render_output_u16(
     data: &mut [u16],
     channels: usize,
+    sample_rate: u32,
     shared: &PlaybackShared,
     analysis_tx: &SyncSender<Vec<f32>>,
     mono_chunk: &mut Vec<f32>,
+    recording_chunk: &mut Vec<f32>,
+    recording_audio: &RecordingAudioTap,
 ) {
     render_frames(
         data.len(),
         channels,
+        sample_rate,
         shared,
         analysis_tx,
         mono_chunk,
+        recording_chunk,
+        recording_audio,
         |index, sample| {
             data[index] = ((sample.clamp(-1.0, 1.0) * 0.5 + 0.5) * u16::MAX as f32) as u16;
         },

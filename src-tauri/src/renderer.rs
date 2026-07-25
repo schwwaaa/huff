@@ -7,6 +7,7 @@ use crate::{
     osc::OscSnapshot,
     output_frame::OutputFrame,
     parameters::{ParameterSnapshot, ParameterStore},
+    recording::RecordingHandle,
     source::{ActiveSource, SourceSelector},
     video::{SharedVideoFrame, VideoFrame},
     spout, syphon,
@@ -203,10 +204,11 @@ pub fn start(
     window: tauri::Window,
     sources: InputSources,
     parameters: ParameterStore,
+    recording: RecordingHandle,
 ) -> Result<RendererHandle, String> {
     let (tx, rx) = sync_channel(128);
     let alive = Arc::new(AtomicBool::new(true));
-    let mut renderer = pollster::block_on(Renderer::new(window, sources, parameters))?;
+    let mut renderer = pollster::block_on(Renderer::new(window, sources, parameters, recording))?;
     let info = Arc::new(RwLock::new(renderer.info()));
     let thread_info = Arc::clone(&info);
     let thread_alive = Arc::clone(&alive);
@@ -473,6 +475,7 @@ struct SourceTexture {
 
 const OUTPUT_TARGET_SYPHON: u8 = 0b01;
 const OUTPUT_TARGET_SPOUT: u8 = 0b10;
+const OUTPUT_TARGET_RECORDING: u8 = 0b100;
 
 enum ReadbackSlotState {
     Idle,
@@ -624,7 +627,7 @@ impl OutputReadback {
             });
     }
 
-    fn process_completions(&mut self) {
+    fn process_completions(&mut self, recording: &RecordingHandle) {
         while let Ok((generation, index, result)) = self.completion_rx.try_recv() {
             if generation != self.generation || index >= self.slots.len() {
                 continue;
@@ -673,7 +676,10 @@ impl OutputReadback {
                 syphon::submit(frame.clone());
             }
             if targets & OUTPUT_TARGET_SPOUT != 0 {
-                spout::submit(frame);
+                spout::submit(frame.clone());
+            }
+            if targets & OUTPUT_TARGET_RECORDING != 0 {
+                recording.submit_video(frame);
             }
         }
     }
@@ -762,12 +768,15 @@ struct Renderer {
     glitch_history_bind_crisp: wgpu::BindGroup,
     history: GpuHistoryRing,
     output_readback: OutputReadback,
+    recording: RecordingHandle,
     syphon_enabled: bool,
     syphon_fps: u32,
     spout_enabled: bool,
     spout_fps: u32,
     last_syphon_capture: Instant,
     last_spout_capture: Instant,
+    last_record_capture: Instant,
+    recording_was_busy: bool,
     effect_is_a: bool,
     effect_seeded: bool,
 
@@ -930,6 +939,7 @@ impl Renderer {
         window: tauri::Window,
         sources: InputSources,
         parameters: ParameterStore,
+        recording: RecordingHandle,
     ) -> Result<Self, String> {
         let size = window.inner_size().map_err(|error| error.to_string())?;
         let surface_width = size.width.max(1);
@@ -1456,12 +1466,15 @@ impl Renderer {
             glitch_history_bind_crisp,
             output_readback,
             history,
+            recording,
             syphon_enabled: false,
             syphon_fps: 30,
             spout_enabled: false,
             spout_fps: 30,
             last_syphon_capture: now,
             last_spout_capture: now,
+            last_record_capture: now,
+            recording_was_busy: false,
             effect_is_a: false,
             effect_seeded: false,
             sources,
@@ -1716,7 +1729,8 @@ impl Renderer {
         self.config.width = self.surface_width;
         self.config.height = self.surface_height;
         self.surface.configure(&self.device, &self.config);
-        if self.render_mode == "match" {
+        let recording = self.recording.info();
+        if self.render_mode == "match" && !recording.active && !recording.finalizing {
             self.apply_parameter_state(true);
         }
     }
@@ -1983,7 +1997,11 @@ impl Renderer {
         }
 
         self.render_mode = snapshot.text("render.resolution_mode", "match").to_string();
-        let desired = match self.render_mode.as_str() {
+        let recording = self.recording.info();
+        let desired = if recording.active || recording.finalizing {
+            (self.render_width, self.render_height)
+        } else {
+            match self.render_mode.as_str() {
             "640x360" => (640, 360),
             "960x540" => (960, 540),
             "1280x720" => (1280, 720),
@@ -1998,7 +2016,8 @@ impl Renderer {
                     .round()
                     .clamp(160.0, 2160.0) as u32,
             ),
-            _ => (self.surface_width, self.surface_height),
+                _ => (self.surface_width, self.surface_height),
+            }
         };
         self.rebuild_targets(desired.0, desired.1);
 
@@ -3059,6 +3078,14 @@ impl Renderer {
                 self.last_spout_capture = now;
             }
         }
+        let recording = self.recording.info();
+        if recording.active {
+            let interval = Duration::from_secs_f64(1.0 / recording.fps.max(1) as f64);
+            if now.duration_since(self.last_record_capture) >= interval {
+                targets |= OUTPUT_TARGET_RECORDING;
+                self.last_record_capture = now;
+            }
+        }
         targets
     }
 
@@ -3066,7 +3093,16 @@ impl Renderer {
         if let Err(error) = self.device.poll(wgpu::PollType::Poll) {
             self.last_error = format!("native output GPU polling failed: {error}");
         }
-        self.output_readback.process_completions();
+        self.output_readback.process_completions(&self.recording);
+
+        let recording = self.recording.info();
+        let recording_busy = recording.active || recording.finalizing;
+        if self.recording_was_busy && !recording_busy {
+            self.recording_was_busy = false;
+            self.apply_parameter_state(true);
+        } else {
+            self.recording_was_busy = recording_busy;
+        }
 
         let now = Instant::now();
         let delta = now.duration_since(self.last_frame).as_secs_f64();
@@ -3079,7 +3115,9 @@ impl Renderer {
         self.upload_video();
         self.upload_state(delta as f32);
 
-        let external_output_active = self.syphon_enabled || self.spout_enabled;
+        let external_output_active = self.syphon_enabled
+            || self.spout_enabled
+            || self.recording.info().active;
         let (surface_frame, reconfigure) = if self.minimized {
             (None, false)
         } else {
@@ -3615,7 +3653,11 @@ impl Renderer {
             if !self.handle_commands(&rx) {
                 break;
             }
-            if self.minimized && !self.syphon_enabled && !self.spout_enabled {
+            if self.minimized
+                && !self.syphon_enabled
+                && !self.spout_enabled
+                && !self.recording.info().active
+            {
                 self.apply_parameter_state(false);
                 *info.write().expect("renderer info poisoned") = self.info();
                 thread::sleep(target_frame);

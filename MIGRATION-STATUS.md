@@ -1,4 +1,4 @@
-# Huff native migration status · Milestone 08.1
+# Huff native migration status · Milestone 09
 
 ## Proven native foundation
 
@@ -17,44 +17,50 @@
 - Persistent flying-frame-buffer model
 - Historical glitch tiles and smear instances
 - Persistent cluster physics and biased placement
-- Scanline bands
-- Layer Priority
-- Smoosh
-- Luma Key
-- Global Mix
-- Flow, pulse, and target routing
+- Scanline bands and Layer Priority
+- Smoosh, Luma Key, Global Mix, Flow, and pulse routing
 - Non-additive feedback transform
 - Clean base, background, brightness, and contrast
 
-## Native output completed in Milestones 08–08.1
+## Native live output completed
 
 - Authoritative render-resolution RGBA8 output texture
 - Native-window presentation separated from output resolution
 - Bounded triple-buffer wgpu readback bridge
-- Shared latest-frame delivery to external outputs
 - Persistent Metal texture Syphon publisher on macOS
-- SpoutDX publisher on Windows
-- Static Spout bridge linked into the executable
+- Statically linked SpoutDX publisher on Windows
 - DirectX adapter enumeration and selection
-- Single-thread SpoutDX lifecycle ownership
-- Output FPS limiting, busy-frame dropping, and diagnostics
-- External output continues when the presentation surface is unavailable
+- External output while presentation is unavailable
+
+## Native recording completed in Milestone 09
+
+- 30/60 FPS CFR recording
+- Native MP4 save dialog and safe finalization
+- H.264 with compatible fallback
+- AAC audio muxing
+- Video-audio, microphone, automatic, and silent modes
+- Timestamped audio alignment with silence padding and overlap trimming
+- Latest-frame recording slot instead of an unbounded frame queue
+- Duplicate-frame CFR recovery under renderer/encoder load
+- Recording diagnostics and estimated temporary size
+- Recording while Syphon/Spout are active
+- Recording while the presentation window is minimized
 
 ## Remaining product systems
 
-1. Native video recording with synchronized audio
-2. High-resolution still export
-3. Offline deterministic video rendering
+1. High-resolution still export
+2. Offline deterministic video rendering
+3. Independent export resolution and codec profiles
 4. Parameter-by-parameter visual and motion calibration
 5. MIDI and OSC map import/edit workflows
-6. Expanded automation and project-state support
-7. Windows MSVC, receiver, multi-GPU, MSI, and NSIS verification for the statically linked Spout path
-8. Optional direct platform-texture sharing research after the stable bridge is proven
+6. Expanded automation, sequencing, routing, and project-state support
+7. Windows MSVC, Spout receiver, multi-GPU, MSI, and NSIS verification
+8. Optional lower-copy platform-specific texture interop research
 
 ## Current principle
 
-The major live rendering pipeline is now native. Future work should distinguish between:
+The live application pipeline is native. The remaining work should stay separated into:
 
-- **structural/product systems** such as recording and export;
-- **runtime defects** that block reliable use;
-- **parameter parity and artistic tuning**, which should happen in a dedicated pass without destabilizing the pipeline.
+- structural product systems such as export and sequencing;
+- runtime defects that block reliability;
+- artistic parameter parity and calibration.

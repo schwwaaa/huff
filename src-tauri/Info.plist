@@ -5,6 +5,6 @@
   <key>NSCameraUsageDescription</key>
   <string>Huff uses the selected camera as a native GPU texture source for live visual experiments.</string>
   <key>NSMicrophoneUsageDescription</key>
-  <string>Huff uses the selected audio input for real-time FFT and envelope analysis.</string>
+  <string>Huff uses the selected audio input for real-time FFT analysis and optional native camera recording.</string>
 </dict>
 </plist>
