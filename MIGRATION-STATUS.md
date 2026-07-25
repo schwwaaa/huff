@@ -1,56 +1,43 @@
-# Huff Native Migration Status
+# Huff native migration status
 
-## Proven and retained
+## Proven foundation
 
-- Native FFmpeg video and audio
-- Native camera capture and explicit source ownership
-- Native wgpu output and surface recovery
-- Existing Huff HTML control surface
-- Canonical Rust parameter registry and presets
-- Independent render resolution
-- Native GPU temporal-history ring
-- Persistent HDR flying frame buffer and non-additive feedback
-- Native historical glitch tile renderer
-- Native cluster-biased placement and cluster physics
-- Native scanline band compositor and layer priority
-- MIDI and OSC foundations
+- Native FFmpeg video decoding
+- Native audio playback and transport
+- Native camera input
+- Metal / Vulkan / DX12 wgpu output
+- Exclusive camera/video source ownership
+- HTML Huff control surface commanding canonical Rust state
+- Native presets, undo, MIDI, OSC, and diagnostics foundations
 
-## Milestone 06 — Current
+## Native renderer completed through Milestone 07
 
-- Original scanline band generator translated to Rust
-- Independent scanline noise phases
-- Angle and continuous spin
-- Band count/radius, focus, shift, skew, drift, placement, zoom, speed, gap, and alpha
-- Content, Pattern, and Both zoom modes
-- Glitch Top / Scan Top binary ordering
-- Neutral per-frame interleave
-- Pulse timed ordering
-- Persistent-buffer integration before feedback
-- Scan diagnostics
+- Independent render and GPU-history resolutions
+- GPU temporal texture-array history
+- Corrected persistent flying-frame-buffer model
+- Historical glitch tiles and smear instances
+- Persistent cluster physics and biased placement
+- Native scanline-band compositor
+- Layer Priority: Scan, Glitch, Neutral, Pulse
+- Smoosh blend compositor
+- Luma Key
+- Global Mix with four insertion positions
+- Flow warp, pulse, target routing, and bounded Carry behavior
+- Non-additive feedback translation, scale, and rotation
+- Clean base, background, brightness, and contrast
 
-## Milestone 07 — Remaining render graph
+## Remaining product systems
 
-- Smoosh blend modes and inversion
-- Luma key
-- Global mix positions and blend modes
-- Flow warp, carry, pulse, and target routing
-- Exact effect pass ordering and visual comparison
+1. Direct native Syphon output from the authoritative GPU result
+2. Direct native Spout output from the authoritative GPU result
+3. Native recording with synchronized audio
+4. High-resolution still/offline export
+5. Parameter-by-parameter visual and motion calibration against original Huff
+6. Expanded automation and project-state support
 
-## Milestone 08 — Control ecosystem
+## Current principle
 
-- Canonical MIDI mapping editor
-- Canonical OSC mapping editor
-- Existing mapping-file migration
-- Complete preset compatibility
-- Automation/project format
+The native feature pipeline is now broadly complete. Remaining work should preserve this architecture while separating:
 
-## Milestone 09 — Native outputs
-
-- Direct wgpu-to-Syphon
-- Direct wgpu-to-Spout
-- Native recording and audio muxing
-- High-resolution and offline export
-
-## Completion condition
-
-The original renderer can be retired only after representative Huff presets produce acceptable native matches and playback, camera, mappings, outputs, recording, and packaging pass on macOS and Windows.
+- structural defects or missing behavior, which block progression;
+- parameter calibration and subtle visual parity, which can be handled in a dedicated pass.

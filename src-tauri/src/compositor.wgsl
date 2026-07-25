@@ -13,6 +13,12 @@ struct Uniforms {
     effect_state: vec4<f32>,
     scan_transform: vec4<f32>,
     scan_dimensions: vec4<f32>,
+    smoosh_state: vec4<f32>,
+    luma_state: vec4<f32>,
+    global_mix_state: vec4<f32>,
+    flow_state0: vec4<f32>,
+    flow_state1: vec4<f32>,
+    flow_state2: vec4<f32>,
 };
 
 struct GesturePoint {
@@ -59,6 +65,12 @@ struct ScanBand {
 @group(2) @binding(4) var temporal_history_sampler: sampler;
 @group(2) @binding(5) var glitch_history: texture_2d_array<f32>;
 @group(2) @binding(6) var glitch_history_sampler: sampler;
+
+// Isolated layer resources used only by the Smoosh pass.
+@group(2) @binding(7) var smoosh_previous: texture_2d<f32>;
+@group(2) @binding(8) var smoosh_glitch_layer: texture_2d<f32>;
+@group(2) @binding(9) var smoosh_scan_layer: texture_2d<f32>;
+@group(2) @binding(10) var smoosh_sampler: sampler;
 
 @group(3) @binding(0) var final_effect: texture_2d<f32>;
 @group(3) @binding(1) var final_sampler: sampler;
@@ -256,7 +268,7 @@ fn fs_scan(input: ScanVertexOutput) -> @location(0) vec4<f32> {
 // out persistence fades the existing premultiplied RGBA buffer very slightly.
 @fragment
 fn fs_effect_prepare(input: VertexOutput) -> @location(0) vec4<f32> {
-    let any_effect = u.history_controls.x > 0.5 || u.controls0.y > 0.0 || u.effect_state.y > 0.5;
+    let any_effect = u.history_controls.x > 0.5 || u.controls0.y > 0.0 || u.effect_state.y > 0.5 || u.smoosh_state.x > 0.5 || u.luma_state.x > 0.5 || u.global_mix_state.x > 0.5 || u.flow_state0.x > 0.5;
     if (u.effect_state.x < 0.5 || !any_effect) {
         return textureSample(clean_composite, effect_sampler, input.uv);
     }
@@ -296,6 +308,196 @@ fn fs_feedback(input: VertexOutput) -> @location(0) vec4<f32> {
     return current_buffer * clamp(u.controls0.y, 0.0, 1.0);
 }
 
+
+
+fn safe_unpremultiply(value: vec4<f32>) -> vec3<f32> {
+    if (value.a <= 0.00001) {
+        return vec3<f32>(0.0);
+    }
+    return value.rgb / value.a;
+}
+
+fn color_luma(value: vec3<f32>) -> f32 {
+    return dot(value, vec3<f32>(0.299, 0.587, 0.114));
+}
+
+fn color_sat(value: vec3<f32>) -> f32 {
+    return max(value.r, max(value.g, value.b)) - min(value.r, min(value.g, value.b));
+}
+
+fn clip_color(value_in: vec3<f32>) -> vec3<f32> {
+    var value = value_in;
+    let lum = color_luma(value);
+    let min_value = min(value.r, min(value.g, value.b));
+    let max_value = max(value.r, max(value.g, value.b));
+    if (min_value < 0.0) {
+        value = vec3<f32>(lum) + (value - vec3<f32>(lum)) * (lum / max(lum - min_value, 0.00001));
+    }
+    if (max_value > 1.0) {
+        value = vec3<f32>(lum) + (value - vec3<f32>(lum)) * ((1.0 - lum) / max(max_value - lum, 0.00001));
+    }
+    return clamp(value, vec3<f32>(0.0), vec3<f32>(1.0));
+}
+
+fn set_luma(value: vec3<f32>, target_luma: f32) -> vec3<f32> {
+    return clip_color(value + vec3<f32>(target_luma - color_luma(value)));
+}
+
+fn set_saturation(value: vec3<f32>, target_sat: f32) -> vec3<f32> {
+    let min_value = min(value.r, min(value.g, value.b));
+    let max_value = max(value.r, max(value.g, value.b));
+    if (max_value - min_value <= 0.00001) {
+        return vec3<f32>(0.0);
+    }
+    return (value - vec3<f32>(min_value)) * (target_sat / (max_value - min_value));
+}
+
+fn soft_light_channel(base: f32, source: f32) -> f32 {
+    if (source <= 0.5) {
+        return base - (1.0 - 2.0 * source) * base * (1.0 - base);
+    }
+    let d = select(sqrt(max(base, 0.0)), ((16.0 * base - 12.0) * base + 4.0) * base, base <= 0.25);
+    return base + (2.0 * source - 1.0) * (d - base);
+}
+
+fn blend_rgb(base: vec3<f32>, source: vec3<f32>, mode_value: f32) -> vec3<f32> {
+    let mode = u32(mode_value + 0.5);
+    if (mode == 0u) { return 1.0 - (1.0 - base) * (1.0 - source); } // screen
+    if (mode == 1u) { return min(base + source, vec3<f32>(1.0)); } // lighter
+    if (mode == 2u) { return max(base, source); }
+    if (mode == 3u) { return min(base / max(vec3<f32>(1.0) - source, vec3<f32>(0.0001)), vec3<f32>(1.0)); }
+    if (mode == 4u) { return base * source; }
+    if (mode == 5u) { return min(base, source); }
+    if (mode == 6u) { return 1.0 - min((1.0 - base) / max(source, vec3<f32>(0.0001)), vec3<f32>(1.0)); }
+    if (mode == 7u) {
+        return select(1.0 - 2.0 * (1.0 - base) * (1.0 - source), 2.0 * base * source, base <= vec3<f32>(0.5));
+    }
+    if (mode == 8u) {
+        return vec3<f32>(
+            soft_light_channel(base.r, source.r),
+            soft_light_channel(base.g, source.g),
+            soft_light_channel(base.b, source.b)
+        );
+    }
+    if (mode == 9u) {
+        return select(1.0 - 2.0 * (1.0 - base) * (1.0 - source), 2.0 * base * source, source <= vec3<f32>(0.5));
+    }
+    if (mode == 10u) { return abs(base - source); }
+    if (mode == 11u) { return base + source - 2.0 * base * source; }
+    if (mode == 12u) { return set_luma(set_saturation(source, color_sat(base)), color_luma(base)); }
+    if (mode == 13u) { return set_luma(set_saturation(base, color_sat(source)), color_luma(base)); }
+    if (mode == 14u) { return set_luma(source, color_luma(base)); }
+    if (mode == 15u) { return set_luma(base, color_luma(source)); }
+    return source; // source-over / normal
+}
+
+fn source_over(destination: vec4<f32>, source_rgb: vec3<f32>, source_alpha: f32) -> vec4<f32> {
+    let alpha_value = clamp(source_alpha, 0.0, 1.0);
+    return vec4<f32>(source_rgb * alpha_value + destination.rgb * (1.0 - alpha_value), alpha_value + destination.a * (1.0 - alpha_value));
+}
+
+@fragment
+fn fs_smoosh(input: VertexOutput) -> @location(0) vec4<f32> {
+    let previous = textureSample(smoosh_previous, smoosh_sampler, input.uv);
+    let glitch_layer_value = textureSample(smoosh_glitch_layer, smoosh_sampler, input.uv);
+    let scan_layer_value = textureSample(smoosh_scan_layer, smoosh_sampler, input.uv);
+    let invert_layers = u.smoosh_state.z > 0.5;
+    var base_layer = glitch_layer_value;
+    var over_layer = scan_layer_value;
+    if (invert_layers) {
+        base_layer = scan_layer_value;
+        over_layer = glitch_layer_value;
+    }
+
+    var destination = source_over(previous, safe_unpremultiply(base_layer), base_layer.a);
+    let over_alpha = over_layer.a * clamp(u.smoosh_state.y, 0.0, 1.0);
+    let destination_straight = safe_unpremultiply(destination);
+    let over_straight = safe_unpremultiply(over_layer);
+    let blended = blend_rgb(destination_straight, over_straight, u.smoosh_state.w);
+    destination = source_over(destination, blended, over_alpha);
+    return destination;
+}
+
+@fragment
+fn fs_luma_key(input: VertexOutput) -> @location(0) vec4<f32> {
+    let effect_value = textureSample(previous_effect, effect_sampler, input.uv);
+    if (u.luma_state.x < 0.5 || u.luma_state.z <= 0.0) {
+        return effect_value;
+    }
+    let clean_value = textureSample(clean_composite, effect_sampler, input.uv);
+    let threshold_start = 1.0 - clamp(u.luma_state.y, 0.0, 1.0);
+    var reveal = smoothstep(threshold_start, threshold_start + 64.0 / 255.0, color_luma(clean_value.rgb));
+    if (u.luma_state.w > 0.5) {
+        reveal = 1.0 - reveal;
+    }
+    let clean_alpha = (1.0 - reveal) * clamp(u.luma_state.z, 0.0, 1.0);
+    return source_over(effect_value, clean_value.rgb, clean_alpha);
+}
+
+@fragment
+fn fs_global_mix(input: VertexOutput) -> @location(0) vec4<f32> {
+    let effect_value = textureSample(previous_effect, effect_sampler, input.uv);
+    if (u.global_mix_state.x < 0.5 || u.global_mix_state.y <= 0.0) {
+        return effect_value;
+    }
+    let clean_value = textureSample(clean_composite, effect_sampler, input.uv);
+    let base_straight = safe_unpremultiply(effect_value);
+    let blended = blend_rgb(base_straight, clean_value.rgb, u.global_mix_state.z);
+    return source_over(effect_value, blended, clamp(u.global_mix_state.y, 0.0, 1.0));
+}
+
+fn hash21(value: vec2<f32>) -> f32 {
+    let point = fract(value * vec2<f32>(123.34, 456.21));
+    return fract((point.x + point.y) * (point.x + point.y + 45.32));
+}
+
+fn value_noise(value: vec2<f32>) -> f32 {
+    let cell = floor(value);
+    let fraction = fract(value);
+    let curve = fraction * fraction * (3.0 - 2.0 * fraction);
+    let a = hash21(cell);
+    let b = hash21(cell + vec2<f32>(1.0, 0.0));
+    let c = hash21(cell + vec2<f32>(0.0, 1.0));
+    let d = hash21(cell + vec2<f32>(1.0, 1.0));
+    return mix(mix(a, b, curve.x), mix(c, d, curve.x), curve.y);
+}
+
+@fragment
+fn fs_flow(input: VertexOutput) -> @location(0) vec4<f32> {
+    let render_size = max(u.resolution_time.xy, vec2<f32>(1.0));
+    let cell_size = max(u.flow_state0.z, 8.0);
+    let pixel_position = input.uv * render_size;
+    let cell_center = floor(pixel_position / cell_size) * cell_size + vec2<f32>(cell_size * 0.5);
+    let normalized_center = cell_center / render_size * 2.0;
+    let spread_frequency = 0.9 * max(u.flow_state2.x, 0.05);
+    let flow_time = u.flow_state2.w * 0.005 * pow(max(u.flow_state0.w, 0.0), 1.6);
+    var angle_value = value_noise(vec2<f32>(normalized_center.x * spread_frequency + flow_time, normalized_center.y * spread_frequency)) * 12.5663706;
+    if (u.flow_state1.w > 0.0) {
+        let second_angle = value_noise(vec2<f32>(normalized_center.x * spread_frequency * 4.0 + flow_time * 1.3 + 100.0, normalized_center.y * spread_frequency * 4.0 + flow_time * 0.9)) * 12.5663706;
+        angle_value = mix(angle_value, second_angle, clamp(u.flow_state1.w * 0.5, 0.0, 0.5));
+    }
+    var displacement = vec2<f32>(cos(angle_value), sin(angle_value)) * u.flow_state0.y;
+    let center_vector = render_size * 0.5 - cell_center;
+    let center_length = max(length(center_vector), 1.0);
+    displacement += center_vector / center_length * u.flow_state0.y * u.flow_state1.y;
+    if (u.flow_state1.z != 0.0) {
+        let radial_angle = atan2(cell_center.y - render_size.y * 0.5, cell_center.x - render_size.x * 0.5) * u.flow_state1.z;
+        let cosine = cos(radial_angle);
+        let sine = sin(radial_angle);
+        displacement = vec2<f32>(displacement.x * cosine - displacement.y * sine, displacement.x * sine + displacement.y * cosine);
+    }
+    // Approximate the original leaky field integration without a CPU readback.
+    // CARRY=0 is identical to one-pass displacement; higher values approach the
+    // same accumulated steady-state magnitude while remaining bounded.
+    let carry_gain = min(1.0 / max(1.0 - min(u.flow_state2.y * 0.96, 0.94), 0.06), 16.0);
+    displacement *= carry_gain;
+    let source_uv = clamp((pixel_position + displacement) / render_size, vec2<f32>(0.0), vec2<f32>(1.0));
+    if (u.flow_state1.x >= 0.0) {
+        return textureSample(temporal_history, temporal_history_sampler, source_uv, i32(round(u.flow_state1.x)));
+    }
+    return textureSample(previous_effect, effect_sampler, source_uv);
+}
+
 @fragment
 fn fs_present(input: VertexOutput) -> @location(0) vec4<f32> {
     let render_size = max(u.resolution_time.xy, vec2<f32>(1.0));
@@ -316,7 +518,7 @@ fn fs_present(input: VertexOutput) -> @location(0) vec4<f32> {
     }
 
     let clean = textureSample(clean_source, final_sampler, uv).rgb;
-    let any_effect = u.history_controls.x > 0.5 || u.controls0.y > 0.0 || u.effect_state.y > 0.5;
+    let any_effect = u.history_controls.x > 0.5 || u.controls0.y > 0.0 || u.effect_state.y > 0.5 || u.smoosh_state.x > 0.5 || u.luma_state.x > 0.5 || u.global_mix_state.x > 0.5 || u.flow_state0.x > 0.5;
     var color = clean;
     if (any_effect) {
         let background = background_color(u.source_state.z);

@@ -1,74 +1,107 @@
-# Huff Native Milestone 06 test checklist
+# Huff Native Milestone 07.1 test checklist
 
-First confirm Milestone 05 playback, history, glitch, cluster, and feedback behavior still works. Then test Scanlines with moving video and a populated history ring.
+Run:
 
-## Build and regression
+```bash
+npm install
+npm run dev:metal
+```
 
-- [ ] Application compiles without Rust, WGSL, or wgpu validation errors
-- [ ] Video/audio and camera switching remain stable
-- [ ] Glitch and cluster behavior remain unchanged from Milestone 05
-- [ ] Feedback remains non-additive and does not blow out brightness
-- [ ] Clear and Global Reset clear feedback/history and reset scan phases
+Use a moving video, let GPU history fill, then test the sections below.
 
-## Scanline activation
+## Baseline regression
 
-- [ ] Scanline controls are enabled rather than marked pending
-- [ ] ON displays clean-source bands inside the persistent effect buffer
-- [ ] OFF removes new bands without breaking glitch/feedback
-- [ ] Count changes the number of bands
-- [ ] Radius changes band thickness
-- [ ] Alpha changes only scanline opacity
+- Video and camera still switch exclusively.
+- Video audio, transport, seeking, rate, and looping still work.
+- Glitch, clusters, scanlines, Layer Priority, and feedback behave as in Milestone 06.
+- Feedback does not brighten uncontrollably.
+- Clear and Global Reset still clear the persistent buffer and history.
 
-## Motion and placement
+## Smoosh
 
-- [ ] Speed 0 freezes band drift while glitch speed remains independent
-- [ ] Speed increases scanline drift without changing glitch motion
-- [ ] Angle 0 is horizontal
-- [ ] +90 and -90 are vertical in opposite orientations
-- [ ] Spin Right advances continuously
-- [ ] Spin Left advances continuously in the opposite direction
-- [ ] Right wins when both spin toggles are enabled
-- [ ] With spin off, the manual angle slider is authoritative
-- [ ] Place X/Y shifts the complete field in screen space
+1. Enable Glitch and Scanlines.
+2. Enable Smoosh.
+3. Confirm Layer Priority no longer changes the combined result while Smoosh is active.
+4. Move Amount from 0 to 1.
+5. Toggle Invert and confirm base/over roles swap.
+6. Test Screen, Multiply, Difference, Overlay, Hue, and Luminosity.
+7. Disable Smoosh and confirm normal Layer Priority resumes.
 
-## Shape
+## Luma Key
 
-- [ ] Gap 0 produces touching/evenly packed bands
-- [ ] Increasing Gap spreads the comb apart
-- [ ] Drift 0 preserves a regular comb
-- [ ] Drift adds local wander without destroying Gap spacing
-- [ ] Focus 0.5 is neutral
-- [ ] Focus below/above 0.5 pulls bands toward opposite regions
-- [ ] Shift changes sampled displacement across the band
-- [ ] Skew changes displacement progressively across the band field
+1. Enable Glitch with obvious historical tiles.
+2. Enable Luma Key and raise Mix.
+3. Sweep A/B from 0 to 1.
+4. Confirm clean source replaces effect regions according to source luminance.
+5. Toggle Invert.
+6. Repeat with Smoosh enabled and with Scanlines on top.
 
-## Zoom
+## Global Mix
 
-- [ ] Content zoom magnifies video inside stationary bands
-- [ ] Pattern zoom scales the whole band field around the center
-- [ ] Both applies both behaviors
-- [ ] Rotated bands cover the corners rather than only the center strip
-- [ ] Out-of-bounds source regions are clipped, not smeared from edge pixels
+1. Enable Global Mix with Mix around 0.5.
+2. Test Screen, Multiply, Difference, and Normal.
+3. Compare Before FB and After FB with visible feedback motion.
+4. Enable Flow and compare After Flow against Final.
+5. Disable Flow while Position is After Flow; confirm the clean source falls back to the final tail rather than disappearing.
 
-## Layer priority
+## Flow
 
-Test with Glitch and Scanlines both enabled:
+1. Enable Flow at Strength 6, Scale 80, Speed 1, Target Final.
+2. Confirm Speed 0 freezes the field.
+3. Test low and high Scale values.
+4. Sweep Implode through negative, zero, and positive values.
+5. Test positive and negative Swirl.
+6. Increase Turbulence and Spread separately.
+7. Increase Carry and confirm displacement accumulation remains bounded.
+8. Set Pulse depth after history has filled.
+9. With Trigger off, confirm pulse history is continuous.
+10. With Trigger on, confirm pulse history is only used after pressing Fire.
 
-- [ ] Scan Top paints scanlines last
-- [ ] Glitch Top paints glitch tiles last
-- [ ] Neutral alternates order every frame
-- [ ] Pulse alternates order at Pulse Speed
-- [ ] Layer Priority does not change glitch or scanline opacity
-- [ ] Feedback transforms the already ordered combined buffer
+## Flow target routing
+
+- Target Glitch: glitch should be warped and scanlines should remain crisp on top.
+- Target Scan: scanlines should be warped and glitch should remain crisp on top.
+- Target Final: the completed chain should be warped.
+- Enable Smoosh and confirm Flow behaves as Final regardless of the selected target.
 
 ## Diagnostics
 
-Hover `NATIVE:` or `H:`:
+Hover the `NATIVE:` status pill and confirm it reports:
 
-- [ ] Scanline on/off is reported
-- [ ] Band count matches the generated band count
-- [ ] Effective spin angle updates
-- [ ] Layer Priority is reported
-- [ ] Scan generation time remains small and stable
+- Smoosh status and blend
+- Luma Key status
+- Global Mix status and position
+- Flow status, target, strength, and pulse-fire count
 
-Parameter-calibration differences can be recorded for the later parity-fix pass. Report validation errors, black output, pipeline resets, layer-order inversions, or large behavioral differences immediately.
+Report compile/WGSL validation failures separately from visual parameter-tuning differences.
+
+
+## 07.1 lockup regression test
+
+1. Load a moving video and allow history to fill.
+2. Enable Glitch and Feedback.
+3. Enable Luma Key and set a visible threshold/mix.
+4. Enable Scanlines after Luma Key.
+5. Leave the combination running for at least five minutes.
+6. Toggle Scanlines off/on repeatedly and move Angle, Focus, Shift, Drift, and Opacity.
+7. Repeat with Layer Priority set to Scan Top and Glitch Top.
+8. Confirm video, audio, controls, and the native output remain responsive.
+
+If a lock still occurs, preserve the terminal output and note whether the controls window, native output, audio, or only parameter updates stopped.
+
+
+## Milestone 07.2 decoder-stall test
+
+1. Load the same long video used during the reported freeze.
+2. Recreate a heavy render state with Glitch, Feedback, Luma Key, Scanlines, and optional Smoosh/Global Mix.
+3. Leave playback running for at least 20 minutes while interacting with parameters.
+4. Hover `NATIVE:` and watch:
+   - Video decode FPS
+   - Video stalls and recoveries
+   - Audio buffered milliseconds
+   - Audio stalls and recoveries
+5. Confirm that if either decoder stalls, playback resumes automatically within several seconds.
+6. Confirm that feedback remains interactive during recovery and temporal glitching resumes when new frames arrive.
+7. Confirm that Play/Pause/Seek/Rate still work after an automatic recovery.
+
+The correction passes only if a decoder problem self-recovers instead of requiring an application restart.

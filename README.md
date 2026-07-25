@@ -1,10 +1,14 @@
-# Huff Native wgpu · Milestone 06
+# Huff Native wgpu · Milestone 07.1
 
-Milestone 06 ports Huff's native **scanline-band compositor and layer-priority system** while preserving the corrected flying-frame-buffer, GPU history, glitch, and cluster behavior from Milestones 04.1–05.
+Milestone 07.1 stabilizes the Milestone 07 render graph and retains the completed core native layers: **Smoosh, Luma Key, Global Mix, and Flow**. It is built directly on the working Milestone 06 flying-frame-buffer, GPU history, glitch, clusters, scanlines, layer priority, and feedback systems.
 
-The control interface remains HTML/CSS. Video, audio, camera, temporal history, glitch/cluster generation, scanline generation, feedback, and rendering are native Rust + wgpu.
+The control interface remains HTML/CSS. Media decoding, temporal history, procedural effect state, compositing, feedback, and presentation are native Rust + wgpu.
 
-## Native render model
+## Milestone 07.2 stability
+
+Native FFmpeg video and audio pipes are now supervised through bounded reader channels. A decoder that remains alive but stops producing bytes is terminated and restarted near the current media position instead of leaving Huff permanently frozen. Hover the `NATIVE:` status pill to inspect decoder stalls and watchdog recoveries.
+
+## Native render graph
 
 ```text
 Native video or camera frame
@@ -13,82 +17,108 @@ Clean GPU temporal-history ring
         ↓
 Persistent flying frame buffer
         ↓
-Glitch tiles and scanline bands
-        ├── GLITCH TOP
-        ├── SCAN TOP
-        ├── NEUTRAL frame interleave
-        └── PULSE timed layer swap
+Glitch + Scanline layers
+        ├── normal Layer Priority ordering
+        ├── Smoosh blend ordering
+        └── Flow target routing
         ↓
-Non-additive FB X / Y / Z / rotation
+Luma Key
         ↓
-Optional clean base underneath
+Global Mix: BEFORE FB
         ↓
-Brightness / contrast
+Non-additive feedback transform
+        ↓
+Global Mix: AFTER FB
+        ↓
+Final Flow when selected
+        ↓
+Global Mix: AFTER FLOW / FINAL
+        ↓
+Optional clean base + brightness / contrast
         ↓
 Metal / Vulkan / DX12 output
 ```
 
-## Scanline controls now active
+## Smoosh now active
 
 - On
-- Angle
-- Spin Left / Spin Right
-- Spin Speed
-- Band Count
-- Band Radius
-- Focus
-- Shift
-- Skew
-- Drift
-- Place X / Y
-- Zoom
-- Zoom Mode: Content / Pattern / Both
+- Blend mode
+- Amount
+- Invert
+
+Smoosh isolates the glitch and scanline draws, then combines them over the persistent flying buffer. Invert swaps which layer is the base and which is blended over it. Smoosh supersedes Layer Priority while enabled, matching original Huff's routing behavior.
+
+The 16 original blend choices are represented in WGSL: Screen, Add, Lighten, Dodge, Multiply, Darken, Burn, Overlay, Soft Light, Hard Light, Difference, Exclusion, Hue, Saturation, Color, and Luminosity.
+
+## Luma Key now active
+
+- On
+- A/B threshold
+- Mix
+- Invert
+
+The clean source luminance determines where clean video is laid back over the persistent effect buffer. The key remains immediately after the glitch stage, including when Smoosh is active.
+
+## Global Mix now active
+
+- On
+- Blend mode
+- Mix
+- Position
+
+Positions follow the original pipeline:
+
+- **Before FB** — clean source enters the feedback recursion.
+- **After FB** — feedback processes the dirty result; clean source is added afterward.
+- **After Flow** — clean source is inserted wherever the Flow stage is routed.
+- **Final** — clean source is added at the absolute tail.
+
+## Flow now active
+
+- On
+- Strength
+- Scale
 - Speed
-- Gap
-- Alpha
+- Pulse depth
+- Pulse trigger and Fire button
+- Implode / Explode
+- Swirl
+- Turbulence
+- Spread
+- Carry
+- Target: Final / Glitch / Scan
 
-The implementation follows the original Canvas2D behavior:
+Flow target routing preserves the original shared-buffer rule:
 
-- Scan phase advances independently from glitch speed.
-- Right spin wins when both spin toggles are enabled.
-- Spin begins from the current manual angle without jumping.
-- Rotated-band coverage uses the full projected canvas span.
-- Gap defines the even comb spacing.
-- Drift wanders bands relative to their own thickness rather than scattering them across the entire frame.
-- Focus pulls the comb toward the selected region.
-- Pattern Zoom transforms the band field; Content Zoom magnifies the sampled video within each band.
-- Source regions outside the clean frame are clipped rather than edge-clamped.
+- **Glitch** — glitch is warped, scanlines remain crisp on top.
+- **Scan** — scanlines are warped, glitch remains crisp on top.
+- **Final** — the completed effect chain is warped at the tail.
 
-## Layer Priority now active
+Smoosh forces Flow to Final because the isolated blend owns the glitch/scan ordering.
 
-- Scan Top
-- Glitch Top
-- Neutral
-- Pulse
-- Pulse Speed
+### Current Carry implementation
 
-As in original Huff, glitch and scanlines draw into the same persistent effect buffer. Layer Priority chooses paint order; it does not change either layer's opacity.
+Flow Carry is active, but this milestone uses a bounded GPU steady-state approximation rather than the original CPU per-cell accumulator. It provides increasing accumulated displacement without unbounded growth. Exact Carry motion parity can be refined during the dedicated parameter/parity pass.
 
 ## Retained behavior
 
 - Native FFmpeg video and audio
-- Native camera and exclusive source ownership
+- Exclusive camera/video source ownership
 - GPU temporal history
-- Corrected p5-compatible glitch engine
-- Persistent cluster bodies and cluster-biased placement
-- Destination-out persistence
-- Non-additive flying frame-buffer feedback
-- Independent render/history resolution
-- Base/background, brightness, contrast, presets, MIDI, and OSC foundations
+- Corrected p5-compatible flying glitch engine
+- Persistent native cluster bodies
+- Native scanline bands and layer ordering
+- Destination-out-style persistence decay
+- Non-additive feedback transform
+- Independent render and history resolutions
+- Native presets, MIDI, OSC, and diagnostics foundations
 
-## Pending
+## Pending major systems
 
-- Smoosh
-- Luma key
-- Global mix positions and blend modes
-- Flow warp, carry, pulse, and target routing
-- Direct Syphon and Spout texture output
-- Recording and export
+- Direct Syphon and Spout output from the native render result
+- Native recording and export
+- Final parameter-by-parameter visual calibration
+- Additional routing/automation expansion
 
 ## Run
 
@@ -103,4 +133,11 @@ Automatic backend selection:
 npm run dev
 ```
 
-Use `TESTING.md` for the Milestone 06 runtime checklist. Fine parameter calibration can remain for the planned dedicated parity pass; major pipeline/order differences should be reported immediately.
+Use `TESTING.md` for the runtime checklist. This milestone prioritizes completing the native pipeline; fine parameter calibration is intentionally deferred unless a control is structurally incorrect or nonfunctional.
+
+
+## 07.1 Metal stability correction
+
+Scanlines now use a dedicated group-2 bind layout containing only the clean composite texture and its sampler. Earlier builds reused the full feedback bind group for scanlines. After a ping-pong stage such as Luma Key, that bind group could also contain the texture currently used as the render attachment. Even though the scan shader did not intentionally sample that feedback texture, binding it during the pass created an avoidable read/write alias risk on Metal.
+
+The visible scanline behavior is unchanged. This correction only isolates resources used by the scan pass.

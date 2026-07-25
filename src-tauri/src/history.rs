@@ -112,6 +112,13 @@ impl GpuHistoryRing {
         &self.layer_views[index.min(self.capacity - 1) as usize]
     }
 
+    pub fn layer_from_end(&self, offset: u32) -> Option<u32> {
+        if self.count == 0 || offset >= self.count {
+            return None;
+        }
+        Some((self.write_index + self.capacity - 1 - offset) % self.capacity)
+    }
+
     pub fn reserve_capture(
         &mut self,
         source_sequence: u64,

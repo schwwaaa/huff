@@ -3,7 +3,7 @@ use serde_json::Value;
 use std::{
     io::Read,
     path::{Path, PathBuf},
-    process::{Child, Command, Stdio},
+    process::{Child, ChildStdout, Command, Stdio},
     sync::{
         atomic::{AtomicU64, Ordering},
         mpsc::{sync_channel, Receiver, RecvTimeoutError, SyncSender},
@@ -23,6 +23,15 @@ pub struct VideoFrame {
 }
 
 pub type SharedVideoFrame = Arc<RwLock<Option<Arc<VideoFrame>>>>;
+
+const VIDEO_PIPE_STALL_TIMEOUT: Duration = Duration::from_secs(3);
+const VIDEO_PIPE_QUEUE: usize = 3;
+
+enum VideoPipeEvent {
+    Frame(Vec<u8>),
+    Eof,
+    Error(String),
+}
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -48,6 +57,8 @@ pub struct VideoStatus {
     pub decode_ms: f64,
     pub delivered_frames: u64,
     pub decoder_restarts: u64,
+    pub decoder_stalls: u64,
+    pub watchdog_restarts: u64,
     pub last_error: String,
 }
 
@@ -75,6 +86,8 @@ impl Default for VideoStatus {
             decode_ms: 0.0,
             delivered_frames: 0,
             decoder_restarts: 0,
+            decoder_stalls: 0,
+            watchdog_restarts: 0,
             last_error: String::new(),
         }
     }
@@ -345,18 +358,19 @@ fn playback_worker(
             Ok(child) => child,
             Err(error) => { set_error(&status, error); return; }
         };
-        let Some(mut stdout) = child.stdout.take() else {
+        let Some(stdout) = child.stdout.take() else {
             set_error(&status, "FFmpeg did not expose a video output pipe".into());
             let _ = child.kill();
             return;
         };
 
+        let (pipe_rx, recycle_tx) = start_video_pipe_reader(stdout, frame_len);
         let mut local_frames = 0u64;
-        let mut bytes = vec![0u8; frame_len];
         let mut metric_frames = 0u64;
         let mut metric_started = Instant::now();
         let mut next_deadline = Instant::now();
         let mut decode_ema = 0.0f64;
+        let mut restart_after_stall = false;
         let mut reached_eof = false;
 
         loop {
@@ -365,19 +379,51 @@ fn playback_worker(
                 let _ = child.wait();
                 return;
             }
+
             let decode_started = Instant::now();
-            match stdout.read_exact(&mut bytes) {
-                Ok(()) => {}
-                Err(_) => { reached_eof = true; break; }
-            }
+            let event = match pipe_rx.recv_timeout(VIDEO_PIPE_STALL_TIMEOUT) {
+                Ok(event) => event,
+                Err(RecvTimeoutError::Timeout) => {
+                    restart_after_stall = true;
+                    if let Ok(mut shared) = status.write() {
+                        shared.decoder_stalls = shared.decoder_stalls.wrapping_add(1);
+                        shared.last_error = "video decoder pipe stalled; restarting at the current position".into();
+                    }
+                    break;
+                }
+                Err(RecvTimeoutError::Disconnected) => {
+                    reached_eof = true;
+                    break;
+                }
+            };
+
+            let bytes = match event {
+                VideoPipeEvent::Frame(bytes) => bytes,
+                VideoPipeEvent::Eof => {
+                    reached_eof = true;
+                    break;
+                }
+                VideoPipeEvent::Error(error) => {
+                    if let Ok(mut shared) = status.write() {
+                        shared.last_error = error;
+                    }
+                    restart_after_stall = true;
+                    break;
+                }
+            };
+
             let decode_ms = decode_started.elapsed().as_secs_f64() * 1000.0;
             decode_ema = if decode_ema == 0.0 { decode_ms } else { decode_ema * 0.9 + decode_ms * 0.1 };
 
             local_frames += 1;
             metric_frames += 1;
             let position = start_seconds + local_frames as f64 / metadata.fps.max(1.0);
-            bytes = publish_frame(&latest, &status, &metadata, bytes, position);
-            if let Ok(mut shared) = status.write() { shared.decode_ms = decode_ema; }
+            let recycled = publish_frame(&latest, &status, &metadata, bytes, position);
+            let _ = recycle_tx.try_send(recycled);
+            if let Ok(mut shared) = status.write() {
+                shared.decode_ms = decode_ema;
+                shared.last_error.clear();
+            }
 
             let rate = status.read().ok().map(|s| s.playback_rate).unwrap_or(1.0).max(0.1);
             next_deadline = next_deadline + Duration::from_secs_f64((1.0 / metadata.fps.max(1.0)) / rate);
@@ -398,7 +444,36 @@ fn playback_worker(
         let _ = child.kill();
         let _ = child.wait();
         if generation.load(Ordering::Acquire) != generation_id { return; }
+
+        if restart_after_stall {
+            start_seconds = status
+                .read()
+                .ok()
+                .map(|shared| shared.position_seconds)
+                .unwrap_or(start_seconds)
+                .clamp(0.0, metadata.duration.max(0.0));
+            if let Ok(mut shared) = status.write() {
+                shared.watchdog_restarts = shared.watchdog_restarts.wrapping_add(1);
+                shared.playing = true;
+                shared.ended = false;
+            }
+            thread::sleep(Duration::from_millis(40));
+            continue;
+        }
+
         let looping = status.read().ok().map(|s| s.looping).unwrap_or(false);
+        let position = status.read().ok().map(|s| s.position_seconds).unwrap_or(0.0);
+        let unexpectedly_early = metadata.duration > 0.0 && position + 0.5 < metadata.duration;
+        if reached_eof && unexpectedly_early {
+            start_seconds = position.clamp(0.0, metadata.duration);
+            if let Ok(mut shared) = status.write() {
+                shared.decoder_stalls = shared.decoder_stalls.wrapping_add(1);
+                shared.watchdog_restarts = shared.watchdog_restarts.wrapping_add(1);
+                shared.last_error = "video decoder ended before the media duration; restarting".into();
+            }
+            thread::sleep(Duration::from_millis(40));
+            continue;
+        }
         if reached_eof && looping {
             start_seconds = 0.0;
             if let Ok(mut shared) = status.write() { shared.position_seconds = 0.0; shared.ended = false; }
@@ -411,6 +486,45 @@ fn playback_worker(
         }
         return;
     }
+}
+
+fn start_video_pipe_reader(
+    mut stdout: ChildStdout,
+    frame_len: usize,
+) -> (Receiver<VideoPipeEvent>, SyncSender<Vec<u8>>) {
+    let (event_tx, event_rx) = sync_channel::<VideoPipeEvent>(VIDEO_PIPE_QUEUE);
+    let (recycle_tx, recycle_rx) = sync_channel::<Vec<u8>>(VIDEO_PIPE_QUEUE + 1);
+    thread::Builder::new()
+        .name("huff-video-pipe-reader".into())
+        .spawn(move || {
+            let mut bytes = vec![0u8; frame_len];
+            loop {
+                match stdout.read_exact(&mut bytes) {
+                    Ok(()) => {
+                        if event_tx.send(VideoPipeEvent::Frame(bytes)).is_err() {
+                            return;
+                        }
+                        bytes = recycle_rx
+                            .recv_timeout(Duration::from_millis(250))
+                            .ok()
+                            .filter(|buffer| buffer.len() == frame_len)
+                            .unwrap_or_else(|| vec![0u8; frame_len]);
+                    }
+                    Err(error) if error.kind() == std::io::ErrorKind::UnexpectedEof => {
+                        let _ = event_tx.send(VideoPipeEvent::Eof);
+                        return;
+                    }
+                    Err(error) => {
+                        let _ = event_tx.send(VideoPipeEvent::Error(format!(
+                            "video decoder pipe read failed: {error}"
+                        )));
+                        return;
+                    }
+                }
+            }
+        })
+        .ok();
+    (event_rx, recycle_tx)
 }
 
 fn spawn_ffmpeg(metadata: &VideoMetadata, seconds: f64, single_frame: bool, mode: &str) -> Result<Child, String> {

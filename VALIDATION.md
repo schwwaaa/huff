@@ -1,19 +1,31 @@
-# Milestone 06 static validation
+# Milestone 07.2 static validation
 
-The packaging environment does not include Cargo or rustc. The following static checks were completed:
+The packaging environment does not include Cargo, rustc, rustfmt, or a WGSL compiler. Native compilation and Metal/Vulkan/DX12 runtime validation must occur on the development machine.
 
-- JavaScript syntax passed with `node --check`
-- All JSON files parsed
-- Rust/WGSL/JavaScript delimiter balance passed
-- Rust and WGSL `Uniforms` fields match in name and order
-- `Renderer` fields are all initialized
-- `RendererInfo` fields are all emitted
-- No shader bind-group index exceeds 3
-- Global uniform visibility includes vertex and fragment stages
-- Scan storage binding exists in Rust layout, bind group, and WGSL
-- Scan pipeline layout binds groups 0 and 2 only
-- Scan instance CPU/WGSL structures both contain three `vec4` values
-- All 20 Layer Priority and Scanline registry entries are marked implemented for Milestone 06
-- Package, Cargo, Tauri, and lockfile versions are synchronized at 0.6.0
+Static checks completed:
 
-Local compilation and Metal runtime testing remain required.
+- `src/app.js` passes `node --check`.
+- All project JSON files parse successfully.
+- Package, Cargo, Tauri, npm lockfile, and Cargo lockfile project versions are synchronized at `0.7.2`.
+- Modified Rust files have balanced braces, parentheses, and brackets after comment/string-aware structural scanning.
+- `VideoStatus` and `VideoAudioInfo` defaults initialize all newly exposed recovery counters.
+- Long-running video playback no longer performs a blocking pipe read in the playback worker; reads are isolated in `huff-video-pipe-reader`.
+- Long-running audio playback no longer performs a blocking pipe read in the decoder worker; reads are isolated in `huff-audio-pipe-reader`.
+- Video and audio reader channels are bounded.
+- Full video-frame buffers and audio chunk buffers are returned through bounded recycle channels.
+- Decoder workers use three-second liveness timeouts.
+- Stalled child processes are killed and waited before restart.
+- Video restart resumes from the last confirmed native position.
+- Audio restart estimates source position from samples actually consumed by the CPAL output callback and the active playback rate.
+- Unexpected early video EOF is recoverable when the reported file duration has not been reached.
+- Existing WGSL shaders and render pipelines are unchanged from Milestone 07.1.
+- The controls UI exposes decoder stall and watchdog-restart diagnostics without altering parameter mappings.
+
+Runtime validation still required:
+
+- Rust compilation.
+- Long-duration playback with the reported source file.
+- Automatic recovery after a real or induced FFmpeg pipe stall.
+- Audio/video synchronization after recovery.
+- Play, Pause, Seek, Rate, Loop, Camera switching, and file replacement after recovery.
+- Confirmation that visual effects and GPU performance remain unchanged.

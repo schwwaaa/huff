@@ -73,7 +73,7 @@ fn get_app_info(
     source: tauri::State<'_, SourceSelector>,
 ) -> AppInfo {
     AppInfo {
-        build: "HNW-04".into(),
+        build: "HNW-07.2".into(),
         renderer: renderer.info(),
         camera: camera.status(),
         camera_devices: camera.devices(),
@@ -87,7 +87,7 @@ fn get_app_info(
         osc: osc.info(),
         gesture: gesture.info(),
         parameter_revision: parameters.revision(),
-        native_milestone: "HNW-04".into(),
+        native_milestone: "HNW-07.2".into(),
         active_source: source.get().label().into(),
     }
 }
@@ -131,6 +131,11 @@ fn reset_parameters(
 #[tauri::command]
 fn clear_native_buffers(renderer: tauri::State<'_, RendererHandle>) {
     renderer.send(RenderCommand::ClearFeedback);
+}
+
+#[tauri::command]
+fn fire_flow_pulse(renderer: tauri::State<'_, RendererHandle>) {
+    renderer.send(RenderCommand::FireFlowPulse);
 }
 
 #[tauri::command]
@@ -622,6 +627,7 @@ fn main() {
             set_parameter_batch,
             reset_parameters,
             clear_native_buffers,
+            fire_flow_pulse,
             focus_renderer,
             refresh_cameras,
             start_camera,

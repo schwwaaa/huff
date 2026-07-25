@@ -6,7 +6,7 @@ use std::{
     collections::VecDeque,
     io::Read,
     path::{Path, PathBuf},
-    process::{Child, Command, Stdio},
+    process::{Child, ChildStdout, Command, Stdio},
     sync::{
         atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering},
         mpsc::{sync_channel, Receiver, RecvTimeoutError, SyncSender, TrySendError},
@@ -19,6 +19,14 @@ use std::{
 const ANALYSIS_CHUNK_FRAMES: usize = 1024;
 const DECODE_CHUNK_FRAMES: usize = 1024;
 const BUFFER_SECONDS: usize = 2;
+const AUDIO_PIPE_STALL_TIMEOUT: Duration = Duration::from_secs(3);
+const AUDIO_PIPE_QUEUE: usize = 4;
+
+enum AudioPipeEvent {
+    Chunk(Vec<u8>),
+    Eof,
+    Error(String),
+}
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -39,6 +47,9 @@ pub struct VideoAudioInfo {
     pub output_sample_rate: u32,
     pub output_channels: u16,
     pub decoded_samples: u64,
+    pub played_samples: u64,
+    pub decoder_stalls: u64,
+    pub watchdog_restarts: u64,
     pub dropped_analysis_chunks: u64,
     pub output_underflows: u64,
     pub buffered_ms: f64,
@@ -72,6 +83,9 @@ impl Default for VideoAudioInfo {
             output_sample_rate: 0,
             output_channels: 0,
             decoded_samples: 0,
+            played_samples: 0,
+            decoder_stalls: 0,
+            watchdog_restarts: 0,
             dropped_analysis_chunks: 0,
             output_underflows: 0,
             buffered_ms: 0.0,
@@ -135,6 +149,7 @@ impl VideoAudioHandle {
 #[derive(Default)]
 struct PlaybackCounters {
     decoded_samples: AtomicU64,
+    played_samples: AtomicU64,
     dropped_analysis_chunks: AtomicU64,
     output_underflows: AtomicU64,
 }
@@ -255,6 +270,7 @@ fn video_audio_thread(
                     shared.generation.fetch_add(1, Ordering::AcqRel);
                     shared.clear();
                     shared.counters.decoded_samples.store(0, Ordering::Relaxed);
+                    shared.counters.played_samples.store(0, Ordering::Relaxed);
                     shared.counters.dropped_analysis_chunks.store(0, Ordering::Relaxed);
                     shared.counters.output_underflows.store(0, Ordering::Relaxed);
                     *snapshot.write().expect("video audio snapshot poisoned") = AudioSnapshot::default();
@@ -305,6 +321,7 @@ fn video_audio_thread(
                     if let Some(current) = metadata.clone() {
                         shared.generation.fetch_add(1, Ordering::AcqRel);
                         shared.clear();
+                        shared.counters.played_samples.store(0, Ordering::Relaxed);
                         shared.playing.store(true, Ordering::Release);
                         info.write().expect("video audio info poisoned").playing = true;
                         launch_decoder(
@@ -334,6 +351,7 @@ fn video_audio_thread(
                 Ok(VideoAudioCommand::Seek { seconds, playing }) => {
                     shared.generation.fetch_add(1, Ordering::AcqRel);
                     shared.clear();
+                    shared.counters.played_samples.store(0, Ordering::Relaxed);
                     shared.playing.store(playing, Ordering::Release);
                     info.write().expect("video audio info poisoned").playing = playing;
                     if playing {
@@ -355,6 +373,7 @@ fn video_audio_thread(
                     rate = next_rate.clamp(0.25, 4.0);
                     shared.generation.fetch_add(1, Ordering::AcqRel);
                     shared.clear();
+                    shared.counters.played_samples.store(0, Ordering::Relaxed);
                     shared.playing.store(playing, Ordering::Release);
                     if playing {
                         if let Some(current) = metadata.clone() {
@@ -426,6 +445,7 @@ fn video_audio_thread(
                 * 1000.0;
             let mut state = info.write().expect("video audio info poisoned");
             state.decoded_samples = shared.counters.decoded_samples.load(Ordering::Relaxed);
+            state.played_samples = shared.counters.played_samples.load(Ordering::Relaxed);
             state.dropped_analysis_chunks = shared
                 .counters
                 .dropped_analysis_chunks
@@ -577,6 +597,11 @@ fn render_frames<F>(
             .output_underflows
             .fetch_add(underflow_frames, Ordering::Relaxed);
     }
+    let complete_frames = (output_len / channels).saturating_sub(underflow_frames as usize);
+    shared
+        .counters
+        .played_samples
+        .fetch_add((complete_frames * channels) as u64, Ordering::Relaxed);
 
     if mono_chunk.len() >= ANALYSIS_CHUNK_FRAMES {
         let mut next = Vec::with_capacity(ANALYSIS_CHUNK_FRAMES * 2);
@@ -711,13 +736,14 @@ fn decoder_worker(
                 return;
             }
         };
-        let Some(mut stdout) = child.stdout.take() else {
+        let Some(stdout) = child.stdout.take() else {
             set_error(&info, "FFmpeg did not expose an audio output pipe".into());
             let _ = child.kill();
             return;
         };
 
-        let mut buffer = vec![0u8; bytes_per_chunk];
+        let (pipe_rx, recycle_tx) = start_audio_pipe_reader(stdout, bytes_per_chunk);
+        let mut restart_after_stall = false;
         let mut reached_eof = false;
         loop {
             if shared.generation.load(Ordering::Acquire) != generation_id {
@@ -733,24 +759,51 @@ fn decoder_worker(
                 continue;
             }
 
-            match stdout.read_exact(&mut buffer) {
-                Ok(()) => {}
-                Err(_) => {
+            let event = match pipe_rx.recv_timeout(AUDIO_PIPE_STALL_TIMEOUT) {
+                Ok(event) => event,
+                Err(RecvTimeoutError::Timeout) => {
+                    restart_after_stall = true;
+                    if let Ok(mut state) = info.write() {
+                        state.decoder_stalls = state.decoder_stalls.wrapping_add(1);
+                        state.last_error = "audio decoder pipe stalled; restarting at the current position".into();
+                    }
+                    break;
+                }
+                Err(RecvTimeoutError::Disconnected) => {
                     reached_eof = true;
                     break;
                 }
-            }
+            };
+
+            let buffer = match event {
+                AudioPipeEvent::Chunk(buffer) => buffer,
+                AudioPipeEvent::Eof => {
+                    reached_eof = true;
+                    break;
+                }
+                AudioPipeEvent::Error(error) => {
+                    restart_after_stall = true;
+                    if let Ok(mut state) = info.write() {
+                        state.last_error = error;
+                    }
+                    break;
+                }
+            };
 
             let mut decoded = Vec::with_capacity(buffer.len() / 4);
             for bytes in buffer.chunks_exact(4) {
                 decoded.push(f32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]));
             }
+            let _ = recycle_tx.try_send(buffer);
             shared
                 .counters
                 .decoded_samples
                 .fetch_add(decoded.len() as u64, Ordering::Relaxed);
             if let Ok(mut ring) = shared.ring.lock() {
                 ring.extend(decoded);
+            }
+            if let Ok(mut state) = info.write() {
+                state.last_error.clear();
             }
         }
 
@@ -759,8 +812,26 @@ fn decoder_worker(
         if shared.generation.load(Ordering::Acquire) != generation_id {
             return;
         }
+
+        if restart_after_stall {
+            let played_samples = shared.counters.played_samples.swap(0, Ordering::AcqRel);
+            let played_seconds = played_samples as f64
+                / output_channels.max(1) as f64
+                / output_rate.max(1) as f64
+                * rate;
+            start_seconds = (start_seconds + played_seconds).max(0.0);
+            shared.clear();
+            if let Ok(mut state) = info.write() {
+                state.watchdog_restarts = state.watchdog_restarts.wrapping_add(1);
+                state.playing = true;
+            }
+            thread::sleep(Duration::from_millis(40));
+            continue;
+        }
+
         if reached_eof && looping {
             start_seconds = 0.0;
+            shared.counters.played_samples.store(0, Ordering::Relaxed);
             shared.clear();
             continue;
         }
@@ -768,6 +839,45 @@ fn decoder_worker(
         info.write().expect("video audio info poisoned").playing = false;
         return;
     }
+}
+
+fn start_audio_pipe_reader(
+    mut stdout: ChildStdout,
+    chunk_len: usize,
+) -> (Receiver<AudioPipeEvent>, SyncSender<Vec<u8>>) {
+    let (event_tx, event_rx) = sync_channel::<AudioPipeEvent>(AUDIO_PIPE_QUEUE);
+    let (recycle_tx, recycle_rx) = sync_channel::<Vec<u8>>(AUDIO_PIPE_QUEUE + 1);
+    thread::Builder::new()
+        .name("huff-audio-pipe-reader".into())
+        .spawn(move || {
+            let mut buffer = vec![0u8; chunk_len];
+            loop {
+                match stdout.read_exact(&mut buffer) {
+                    Ok(()) => {
+                        if event_tx.send(AudioPipeEvent::Chunk(buffer)).is_err() {
+                            return;
+                        }
+                        buffer = recycle_rx
+                            .recv_timeout(Duration::from_millis(250))
+                            .ok()
+                            .filter(|candidate| candidate.len() == chunk_len)
+                            .unwrap_or_else(|| vec![0u8; chunk_len]);
+                    }
+                    Err(error) if error.kind() == std::io::ErrorKind::UnexpectedEof => {
+                        let _ = event_tx.send(AudioPipeEvent::Eof);
+                        return;
+                    }
+                    Err(error) => {
+                        let _ = event_tx.send(AudioPipeEvent::Error(format!(
+                            "audio decoder pipe read failed: {error}"
+                        )));
+                        return;
+                    }
+                }
+            }
+        })
+        .ok();
+    (event_rx, recycle_tx)
 }
 
 fn spawn_ffmpeg_audio(

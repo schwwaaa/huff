@@ -45,6 +45,7 @@ pub enum RenderCommand {
     Resize(u32, u32),
     ClearFeedback,
     RecoverSurface,
+    FireFlowPulse,
     Shutdown,
 }
 
@@ -103,6 +104,15 @@ pub struct RendererInfo {
     pub scan_generation_ms: f64,
     pub scan_angle: f32,
     pub layer_priority: String,
+    pub smoosh_enabled: bool,
+    pub smoosh_blend: String,
+    pub luma_key_enabled: bool,
+    pub global_mix_enabled: bool,
+    pub global_mix_position: String,
+    pub flow_enabled: bool,
+    pub flow_target: String,
+    pub flow_strength: f32,
+    pub flow_pulse_fires: u64,
     pub cluster_tiles_enabled: bool,
     pub cluster_centers_active: u32,
     pub cluster_bias_tiles: u32,
@@ -168,6 +178,12 @@ struct Uniforms {
     effect_state: [f32; 4],
     scan_transform: [f32; 4],
     scan_dimensions: [f32; 4],
+    smoosh_state: [f32; 4],
+    luma_state: [f32; 4],
+    global_mix_state: [f32; 4],
+    flow_state0: [f32; 4],
+    flow_state1: [f32; 4],
+    flow_state2: [f32; 4],
 }
 
 #[repr(C)]
@@ -405,12 +421,19 @@ struct OffscreenTargets {
     feedback_a_view: wgpu::TextureView,
     _feedback_b: wgpu::Texture,
     feedback_b_view: wgpu::TextureView,
+    _glitch_layer: wgpu::Texture,
+    glitch_layer_view: wgpu::TextureView,
+    _scan_layer: wgpu::Texture,
+    scan_layer_view: wgpu::TextureView,
     feedback_bind_a_smooth: wgpu::BindGroup,
     feedback_bind_b_smooth: wgpu::BindGroup,
     feedback_bind_a_crisp: wgpu::BindGroup,
     feedback_bind_b_crisp: wgpu::BindGroup,
     present_bind_a: wgpu::BindGroup,
     present_bind_b: wgpu::BindGroup,
+    smoosh_bind_a: wgpu::BindGroup,
+    smoosh_bind_b: wgpu::BindGroup,
+    scan_bind: wgpu::BindGroup,
 }
 
 struct Renderer {
@@ -429,6 +452,10 @@ struct Renderer {
     history_capture_pipeline: wgpu::RenderPipeline,
     glitch_pipeline: wgpu::RenderPipeline,
     scan_pipeline: wgpu::RenderPipeline,
+    smoosh_pipeline: wgpu::RenderPipeline,
+    luma_pipeline: wgpu::RenderPipeline,
+    global_mix_pipeline: wgpu::RenderPipeline,
+    flow_pipeline: wgpu::RenderPipeline,
     uniform_buffer: wgpu::Buffer,
     gesture_buffer: wgpu::Buffer,
     signals_buffer: wgpu::Buffer,
@@ -439,7 +466,9 @@ struct Renderer {
     global_bind: wgpu::BindGroup,
     source_layout: wgpu::BindGroupLayout,
     feedback_layout: wgpu::BindGroupLayout,
+    scan_layout: wgpu::BindGroupLayout,
     glitch_history_layout: wgpu::BindGroupLayout,
+    smoosh_layout: wgpu::BindGroupLayout,
     present_layout: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
     crisp_sampler: wgpu::Sampler,
@@ -524,6 +553,32 @@ struct Renderer {
     scan_effective_angle: f32,
     scan_band_count: u32,
     scan_generation_ms: f64,
+    smoosh_enabled: bool,
+    smoosh_blend: String,
+    smoosh_amount: f32,
+    smoosh_invert: bool,
+    luma_key_enabled: bool,
+    luma_key_threshold: f32,
+    luma_key_mix: f32,
+    luma_key_invert: bool,
+    global_mix_enabled: bool,
+    global_mix_blend: String,
+    global_mix_amount: f32,
+    global_mix_position: String,
+    flow_enabled: bool,
+    flow_strength: f32,
+    flow_scale: f32,
+    flow_speed: f32,
+    flow_pulse: u32,
+    flow_pulse_triggered: bool,
+    flow_implode: f32,
+    flow_swirl: f32,
+    flow_turbulence: f32,
+    flow_spread: f32,
+    flow_carry: f32,
+    flow_target: String,
+    flow_pulse_until: Option<Instant>,
+    flow_pulse_fires: u64,
     cluster_tiles_enabled: bool,
     cluster_center_count: u32,
     cluster_spread: f32,
@@ -651,6 +706,12 @@ impl Renderer {
             effect_state: [0.0; 4],
             scan_transform: [0.0; 4],
             scan_dimensions: [0.0; 4],
+            smoosh_state: [0.0; 4],
+            luma_state: [0.0; 4],
+            global_mix_state: [0.0; 4],
+            flow_state0: [0.0; 4],
+            flow_state1: [-1.0, 0.0, 0.0, 0.0],
+            flow_state2: [1.0, 0.0, 0.0, 0.0],
         };
         let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("huff native uniform buffer"),
@@ -787,10 +848,30 @@ impl Renderer {
                     sampler_layout_entry(4),
                 ],
             });
+        // Scanlines only sample the clean composite. Keep them on a dedicated
+        // bind group so no persistent feedback texture is simultaneously bound
+        // while that same texture is used as the active render attachment.
+        // This avoids a Metal read/write alias hazard when Luma Key toggles the
+        // ping-pong target immediately before the scanline pass.
+        let scan_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("huff native scanline source layout"),
+                entries: &[texture_layout_entry(0), sampler_layout_entry(2)],
+            });
         let glitch_history_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: Some("huff native glitch history layout"),
                 entries: &[history_texture_layout_entry(5), sampler_layout_entry(6)],
+            });
+        let smoosh_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("huff native smoosh layer layout"),
+                entries: &[
+                    texture_layout_entry(7),
+                    texture_layout_entry(8),
+                    texture_layout_entry(9),
+                    sampler_layout_entry(10),
+                ],
             });
         let present_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -890,7 +971,13 @@ impl Renderer {
         let scan_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("huff native scanline pipeline layout"),
-                bind_group_layouts: &[Some(&global_layout), None, Some(&feedback_layout)],
+                bind_group_layouts: &[Some(&global_layout), None, Some(&scan_layout)],
+                immediate_size: 0,
+            });
+        let smoosh_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("huff native smoosh pipeline layout"),
+                bind_group_layouts: &[Some(&global_layout), None, Some(&smoosh_layout)],
                 immediate_size: 0,
             });
 
@@ -946,6 +1033,38 @@ impl Renderer {
             &scan_pipeline_layout,
             HDR_FORMAT,
         );
+        let smoosh_pipeline = create_pipeline(
+            &device,
+            &shader,
+            &smoosh_pipeline_layout,
+            "huff native smoosh pipeline",
+            "fs_smoosh",
+            HDR_FORMAT,
+        );
+        let luma_pipeline = create_pipeline(
+            &device,
+            &shader,
+            &feedback_pipeline_layout,
+            "huff native luma key pipeline",
+            "fs_luma_key",
+            HDR_FORMAT,
+        );
+        let global_mix_pipeline = create_pipeline(
+            &device,
+            &shader,
+            &feedback_pipeline_layout,
+            "huff native global mix pipeline",
+            "fs_global_mix",
+            HDR_FORMAT,
+        );
+        let flow_pipeline = create_pipeline(
+            &device,
+            &shader,
+            &feedback_pipeline_layout,
+            "huff native flow warp pipeline",
+            "fs_flow",
+            HDR_FORMAT,
+        );
         let history_capacity = GpuHistoryRing::capacity_for(
             render_width,
             render_height,
@@ -978,6 +1097,8 @@ impl Renderer {
             render_width,
             render_height,
             &feedback_layout,
+            &scan_layout,
+            &smoosh_layout,
             &present_layout,
             &sampler,
             &crisp_sampler,
@@ -1008,6 +1129,10 @@ impl Renderer {
             history_capture_pipeline,
             glitch_pipeline,
             scan_pipeline,
+            smoosh_pipeline,
+            luma_pipeline,
+            global_mix_pipeline,
+            flow_pipeline,
             uniform_buffer,
             gesture_buffer,
             signals_buffer,
@@ -1018,7 +1143,9 @@ impl Renderer {
             global_bind,
             source_layout,
             feedback_layout,
+            scan_layout,
             glitch_history_layout,
+            smoosh_layout,
             present_layout,
             sampler,
             crisp_sampler,
@@ -1100,6 +1227,32 @@ impl Renderer {
             scan_effective_angle: 0.0,
             scan_band_count: 0,
             scan_generation_ms: 0.0,
+            smoosh_enabled: false,
+            smoosh_blend: "screen".into(),
+            smoosh_amount: 1.0,
+            smoosh_invert: false,
+            luma_key_enabled: false,
+            luma_key_threshold: 0.5,
+            luma_key_mix: 0.0,
+            luma_key_invert: false,
+            global_mix_enabled: false,
+            global_mix_blend: "screen".into(),
+            global_mix_amount: 0.0,
+            global_mix_position: "after".into(),
+            flow_enabled: false,
+            flow_strength: 6.0,
+            flow_scale: 80.0,
+            flow_speed: 1.0,
+            flow_pulse: 0,
+            flow_pulse_triggered: false,
+            flow_implode: 0.0,
+            flow_swirl: 0.0,
+            flow_turbulence: 0.0,
+            flow_spread: 1.0,
+            flow_carry: 0.0,
+            flow_target: "final".into(),
+            flow_pulse_until: None,
+            flow_pulse_fires: 0,
             cluster_tiles_enabled: false,
             cluster_center_count: 3,
             cluster_spread: 80.0,
@@ -1219,6 +1372,15 @@ impl Renderer {
             scan_generation_ms: self.scan_generation_ms,
             scan_angle: self.scan_effective_angle,
             layer_priority: self.layer_priority.clone(),
+            smoosh_enabled: self.smoosh_enabled,
+            smoosh_blend: self.smoosh_blend.clone(),
+            luma_key_enabled: self.luma_key_enabled,
+            global_mix_enabled: self.global_mix_enabled,
+            global_mix_position: self.global_mix_position.clone(),
+            flow_enabled: self.flow_enabled && self.flow_strength > 0.0,
+            flow_target: self.flow_target.clone(),
+            flow_strength: self.flow_strength,
+            flow_pulse_fires: self.flow_pulse_fires,
             cluster_tiles_enabled: self.cluster_tiles_enabled,
             cluster_centers_active: self.cluster_physics.len() as u32,
             cluster_bias_tiles: self.cluster_bias_tiles,
@@ -1263,6 +1425,8 @@ impl Renderer {
             width,
             height,
             &self.feedback_layout,
+            &self.scan_layout,
+            &self.smoosh_layout,
             &self.present_layout,
             &self.sampler,
             &self.crisp_sampler,
@@ -1294,6 +1458,8 @@ impl Renderer {
             self.render_width,
             self.render_height,
             &self.feedback_layout,
+            &self.scan_layout,
+            &self.smoosh_layout,
             &self.present_layout,
             &self.sampler,
             &self.crisp_sampler,
@@ -1318,6 +1484,7 @@ impl Renderer {
         self.scan_spin_angle = f64::from(self.scan_angle_manual);
         self.scan_bands_cpu.clear();
         self.scan_band_count = 0;
+        self.flow_pulse_until = None;
         self.reset_cluster_physics();
         self.effect_is_a = false;
         self.effect_seeded = false;
@@ -1363,6 +1530,8 @@ impl Renderer {
             self.render_width,
             self.render_height,
             &self.feedback_layout,
+            &self.scan_layout,
+            &self.smoosh_layout,
             &self.present_layout,
             &self.sampler,
             &self.crisp_sampler,
@@ -1439,6 +1608,30 @@ impl Renderer {
         self.scan_speed = snapshot.number("scanlines.scan_speed", 1.0).clamp(0.0, 5.0) as f32;
         self.scan_gap = snapshot.number("scanlines.scan_gap", 0.0).clamp(0.0, 200.0) as f32;
         self.scan_alpha = snapshot.number("scanlines.scan_alpha", 0.86).clamp(0.0, 1.0) as f32;
+        self.smoosh_enabled = snapshot.bool_value("smoosh.smoosh_on", false);
+        self.smoosh_blend = snapshot.text("smoosh.smoosh_blend", "screen").to_string();
+        self.smoosh_amount = snapshot.number("smoosh.smoosh_amt", 1.0).clamp(0.0, 1.0) as f32;
+        self.smoosh_invert = snapshot.bool_value("smoosh.smoosh_invert", false);
+        self.luma_key_enabled = snapshot.bool_value("luma.luma_key_on", false);
+        self.luma_key_threshold = snapshot.number("luma.luma_key_ab", 0.5).clamp(0.0, 1.0) as f32;
+        self.luma_key_mix = snapshot.number("luma.luma_key_mix", 0.0).clamp(0.0, 1.0) as f32;
+        self.luma_key_invert = snapshot.bool_value("luma.luma_key_invert", false);
+        self.global_mix_enabled = snapshot.bool_value("global_mix.global_mix_on", false);
+        self.global_mix_blend = snapshot.text("global_mix.global_mix_blend", "screen").to_string();
+        self.global_mix_amount = snapshot.number("global_mix.global_mix_amt", 0.0).clamp(0.0, 1.0) as f32;
+        self.global_mix_position = snapshot.text("global_mix.global_mix_pos", "after").to_string();
+        self.flow_enabled = snapshot.bool_value("flow.flow_on", false);
+        self.flow_strength = snapshot.number("flow.flow_strength", 6.0).clamp(0.0, 20.0) as f32;
+        self.flow_scale = snapshot.number("flow.flow_scale", 80.0).clamp(40.0, 200.0) as f32;
+        self.flow_speed = snapshot.number("flow.flow_speed", 1.0).clamp(0.0, 6.0) as f32;
+        self.flow_pulse = snapshot.number("flow.flow_pulse", 0.0).round().clamp(0.0, 200.0) as u32;
+        self.flow_pulse_triggered = snapshot.bool_value("flow.flow_pulse_trig", false);
+        self.flow_implode = snapshot.number("flow.flow_impl", 0.0).clamp(-5.0, 5.0) as f32;
+        self.flow_swirl = snapshot.number("flow.flow_swirl", 0.0).clamp(-2.0, 2.0) as f32;
+        self.flow_turbulence = snapshot.number("flow.flow_turb", 0.0).clamp(0.0, 1.0) as f32;
+        self.flow_spread = snapshot.number("flow.flow_spread", 1.0).clamp(0.25, 4.0) as f32;
+        self.flow_carry = snapshot.number("flow.flow_carry", 0.0).clamp(0.0, 2.0) as f32;
+        self.flow_target = snapshot.text("flow.flow_target", "final").to_string();
         self.cluster_tiles_enabled = snapshot.bool_value("clusters.cluster_tiles", false);
         self.cluster_center_count = snapshot.number("clusters.clu_centers", 3.0).round().clamp(1.0, 20.0) as u32;
         self.cluster_spread = snapshot.number("clusters.clu_spread", 80.0).clamp(1.0, 300.0) as f32;
@@ -1528,6 +1721,10 @@ impl Renderer {
                     if let Err(error) = self.recover_surface(false) {
                         self.last_error = error;
                     }
+                }
+                Ok(RenderCommand::FireFlowPulse) => {
+                    self.flow_pulse_until = Some(Instant::now() + Duration::from_millis(220));
+                    self.flow_pulse_fires = self.flow_pulse_fires.wrapping_add(1);
                 }
                 Ok(RenderCommand::Shutdown) => return false,
                 Err(TryRecvError::Empty) => return true,
@@ -1689,6 +1886,8 @@ impl Renderer {
                 self.render_width,
                 self.render_height,
                 &self.feedback_layout,
+                &self.scan_layout,
+                &self.smoosh_layout,
                 &self.present_layout,
                 &self.sampler,
                 &self.crisp_sampler,
@@ -1775,6 +1974,59 @@ impl Renderer {
             if self.scanlines_enabled { 1.0 } else { 0.0 },
             0.0,
             0.0,
+        ];
+        self.uniforms.smoosh_state = [
+            if self.smoosh_enabled { 1.0 } else { 0.0 },
+            self.smoosh_amount,
+            if self.smoosh_invert { 1.0 } else { 0.0 },
+            blend_mode_code(&self.smoosh_blend),
+        ];
+        self.uniforms.luma_state = [
+            if self.luma_key_enabled { 1.0 } else { 0.0 },
+            self.luma_key_threshold,
+            self.luma_key_mix,
+            if self.luma_key_invert { 1.0 } else { 0.0 },
+        ];
+        self.uniforms.global_mix_state = [
+            if self.global_mix_enabled { 1.0 } else { 0.0 },
+            self.global_mix_amount,
+            blend_mode_code(&self.global_mix_blend),
+            global_mix_position_code(&self.global_mix_position),
+        ];
+        let now = Instant::now();
+        let fire_active = self
+            .flow_pulse_until
+            .map(|until| now <= until)
+            .unwrap_or(false);
+        if self.flow_pulse_until.map(|until| now > until).unwrap_or(false) {
+            self.flow_pulse_until = None;
+        }
+        let pulse_active = !self.flow_pulse_triggered || fire_active;
+        let pulse_layer = if pulse_active && self.flow_pulse > 0 {
+            self.history
+                .layer_from_end(self.flow_pulse)
+                .map(|layer| layer as f32)
+                .unwrap_or(-1.0)
+        } else {
+            -1.0
+        };
+        self.uniforms.flow_state0 = [
+            if self.flow_enabled && self.flow_strength > 0.0 { 1.0 } else { 0.0 },
+            self.flow_strength,
+            self.flow_scale,
+            self.flow_speed,
+        ];
+        self.uniforms.flow_state1 = [
+            pulse_layer,
+            self.flow_implode,
+            self.flow_swirl,
+            self.flow_turbulence,
+        ];
+        self.uniforms.flow_state2 = [
+            self.flow_spread,
+            self.flow_carry,
+            flow_target_code(&self.flow_target),
+            self.frame_count as f32,
         ];
         self.update_scan_bands();
 
@@ -2479,12 +2731,11 @@ impl Renderer {
         self.update_glitch_tiles(delta as f32, source_sequence);
         let use_crisp_history = self.history_sampling == "crisp";
 
-        // gBuf parity: one persistent effect buffer is carried from frame to
-        // frame. First copy/fade the previous buffer into the alternate target,
-        // then stamp historical tiles into it. The clean source is not injected
-        // into this recursion every frame.
+        // gBuf parity: carry one persistent effect buffer forward, then place
+        // glitch/scan/luma/flow/global-mix stages in the same semantic order as
+        // the original Canvas2D engine.
         let previous_is_a = self.effect_is_a;
-        let (work_view, work_bind) = if previous_is_a {
+        let (prepare_view, prepare_bind) = if previous_is_a {
             (
                 &self.targets.feedback_b_view,
                 if use_crisp_history {
@@ -2506,103 +2757,347 @@ impl Renderer {
         begin_feedback_pass(
             &mut encoder,
             "huff persistent buffer prepare pass",
-            work_view,
+            prepare_view,
             &self.effect_prepare_pipeline,
             &self.global_bind,
-            work_bind,
+            prepare_bind,
         );
+        let mut current_is_a = !previous_is_a;
 
         let glitch_history_bind = if use_crisp_history {
             &self.glitch_history_bind_crisp
         } else {
             &self.glitch_history_bind_smooth
         };
-        let glitch_on_top = self.glitch_should_be_on_top();
-        if glitch_on_top {
+        let flow_active = self.flow_enabled && self.flow_strength > 0.0;
+        let flow_route = if flow_active && !self.smoosh_enabled {
+            self.flow_target.as_str()
+        } else {
+            "final"
+        };
+        let mut flow_done = false;
+
+        if self.smoosh_enabled {
+            clear_texture_target(
+                &mut encoder,
+                "clear isolated glitch layer",
+                &self.targets.glitch_layer_view,
+            );
+            clear_texture_target(
+                &mut encoder,
+                "clear isolated scan layer",
+                &self.targets.scan_layer_view,
+            );
+            if self.glitch_instance_count > 0 {
+                begin_glitch_pass(
+                    &mut encoder,
+                    &self.targets.glitch_layer_view,
+                    &self.glitch_pipeline,
+                    &self.global_bind,
+                    glitch_history_bind,
+                    self.glitch_instance_count,
+                );
+            }
             if self.scan_band_count > 0 {
                 begin_scan_pass(
                     &mut encoder,
-                    work_view,
+                    &self.targets.scan_layer_view,
                     &self.scan_pipeline,
                     &self.global_bind,
-                    work_bind,
+                    &self.targets.scan_bind,
                     self.scan_band_count,
+                );
+            }
+            current_is_a = begin_smoosh_stage(
+                &mut encoder,
+                &self.smoosh_pipeline,
+                &self.global_bind,
+                &self.targets,
+                current_is_a,
+            );
+            if self.luma_key_enabled && self.luma_key_mix > 0.0 {
+                current_is_a = begin_ping_pong_stage(
+                    &mut encoder,
+                    "huff native luma key pass",
+                    &self.luma_pipeline,
+                    &self.global_bind,
+                    &self.targets,
+                    current_is_a,
+                    use_crisp_history,
+                );
+            }
+        } else if flow_route == "glitch" {
+            if self.glitch_instance_count > 0 {
+                begin_glitch_pass(
+                    &mut encoder,
+                    effect_view(&self.targets, current_is_a),
+                    &self.glitch_pipeline,
+                    &self.global_bind,
+                    glitch_history_bind,
+                    self.glitch_instance_count,
+                );
+            }
+            current_is_a = begin_ping_pong_stage(
+                &mut encoder,
+                "huff native flow warp after glitch",
+                &self.flow_pipeline,
+                &self.global_bind,
+                &self.targets,
+                current_is_a,
+                use_crisp_history,
+            );
+            flow_done = true;
+            if self.global_mix_enabled
+                && self.global_mix_amount > 0.0
+                && self.global_mix_position == "afterflow"
+            {
+                current_is_a = begin_ping_pong_stage(
+                    &mut encoder,
+                    "huff native global mix after flow",
+                    &self.global_mix_pipeline,
+                    &self.global_bind,
+                    &self.targets,
+                    current_is_a,
+                    use_crisp_history,
+                );
+            }
+            if self.luma_key_enabled && self.luma_key_mix > 0.0 {
+                current_is_a = begin_ping_pong_stage(
+                    &mut encoder,
+                    "huff native luma key pass",
+                    &self.luma_pipeline,
+                    &self.global_bind,
+                    &self.targets,
+                    current_is_a,
+                    use_crisp_history,
+                );
+            }
+            if self.scan_band_count > 0 {
+                begin_scan_pass(
+                    &mut encoder,
+                    effect_view(&self.targets, current_is_a),
+                    &self.scan_pipeline,
+                    &self.global_bind,
+                    &self.targets.scan_bind,
+                    self.scan_band_count,
+                );
+            }
+        } else if flow_route == "scan" {
+            if self.scan_band_count > 0 {
+                begin_scan_pass(
+                    &mut encoder,
+                    effect_view(&self.targets, current_is_a),
+                    &self.scan_pipeline,
+                    &self.global_bind,
+                    &self.targets.scan_bind,
+                    self.scan_band_count,
+                );
+            }
+            current_is_a = begin_ping_pong_stage(
+                &mut encoder,
+                "huff native flow warp after scan",
+                &self.flow_pipeline,
+                &self.global_bind,
+                &self.targets,
+                current_is_a,
+                use_crisp_history,
+            );
+            flow_done = true;
+            if self.global_mix_enabled
+                && self.global_mix_amount > 0.0
+                && self.global_mix_position == "afterflow"
+            {
+                current_is_a = begin_ping_pong_stage(
+                    &mut encoder,
+                    "huff native global mix after flow",
+                    &self.global_mix_pipeline,
+                    &self.global_bind,
+                    &self.targets,
+                    current_is_a,
+                    use_crisp_history,
                 );
             }
             if self.glitch_instance_count > 0 {
                 begin_glitch_pass(
                     &mut encoder,
-                    work_view,
+                    effect_view(&self.targets, current_is_a),
                     &self.glitch_pipeline,
                     &self.global_bind,
                     glitch_history_bind,
                     self.glitch_instance_count,
+                );
+            }
+            if self.luma_key_enabled && self.luma_key_mix > 0.0 {
+                current_is_a = begin_ping_pong_stage(
+                    &mut encoder,
+                    "huff native luma key pass",
+                    &self.luma_pipeline,
+                    &self.global_bind,
+                    &self.targets,
+                    current_is_a,
+                    use_crisp_history,
                 );
             }
         } else {
-            if self.glitch_instance_count > 0 {
-                begin_glitch_pass(
-                    &mut encoder,
-                    work_view,
-                    &self.glitch_pipeline,
-                    &self.global_bind,
-                    glitch_history_bind,
-                    self.glitch_instance_count,
-                );
+            let glitch_on_top = self.glitch_should_be_on_top();
+            if glitch_on_top {
+                if self.scan_band_count > 0 {
+                    begin_scan_pass(
+                        &mut encoder,
+                        effect_view(&self.targets, current_is_a),
+                        &self.scan_pipeline,
+                        &self.global_bind,
+                        &self.targets.scan_bind,
+                        self.scan_band_count,
+                    );
+                }
+                if self.glitch_instance_count > 0 {
+                    begin_glitch_pass(
+                        &mut encoder,
+                        effect_view(&self.targets, current_is_a),
+                        &self.glitch_pipeline,
+                        &self.global_bind,
+                        glitch_history_bind,
+                        self.glitch_instance_count,
+                    );
+                }
+                if self.luma_key_enabled && self.luma_key_mix > 0.0 {
+                    current_is_a = begin_ping_pong_stage(
+                        &mut encoder,
+                        "huff native luma key pass",
+                        &self.luma_pipeline,
+                        &self.global_bind,
+                        &self.targets,
+                        current_is_a,
+                        use_crisp_history,
+                    );
+                }
+            } else {
+                if self.glitch_instance_count > 0 {
+                    begin_glitch_pass(
+                        &mut encoder,
+                        effect_view(&self.targets, current_is_a),
+                        &self.glitch_pipeline,
+                        &self.global_bind,
+                        glitch_history_bind,
+                        self.glitch_instance_count,
+                    );
+                }
+                if self.luma_key_enabled && self.luma_key_mix > 0.0 {
+                    current_is_a = begin_ping_pong_stage(
+                        &mut encoder,
+                        "huff native luma key pass",
+                        &self.luma_pipeline,
+                        &self.global_bind,
+                        &self.targets,
+                        current_is_a,
+                        use_crisp_history,
+                    );
+                }
+                if self.scan_band_count > 0 {
+                    begin_scan_pass(
+                        &mut encoder,
+                        effect_view(&self.targets, current_is_a),
+                        &self.scan_pipeline,
+                        &self.global_bind,
+                        &self.targets.scan_bind,
+                        self.scan_band_count,
+                    );
+                }
             }
-            if self.scan_band_count > 0 {
-                begin_scan_pass(
+        }
+
+        if self.global_mix_enabled
+            && self.global_mix_amount > 0.0
+            && self.global_mix_position == "before"
+        {
+            current_is_a = begin_ping_pong_stage(
+                &mut encoder,
+                "huff native global mix before feedback",
+                &self.global_mix_pipeline,
+                &self.global_bind,
+                &self.targets,
+                current_is_a,
+                use_crisp_history,
+            );
+        }
+
+        if self.feedback > 0.0 {
+            current_is_a = begin_ping_pong_stage(
+                &mut encoder,
+                "huff flying frame-buffer transform pass",
+                &self.feedback_pipeline,
+                &self.global_bind,
+                &self.targets,
+                current_is_a,
+                use_crisp_history,
+            );
+        }
+
+        if self.global_mix_enabled
+            && self.global_mix_amount > 0.0
+            && self.global_mix_position == "after"
+        {
+            current_is_a = begin_ping_pong_stage(
+                &mut encoder,
+                "huff native global mix after feedback",
+                &self.global_mix_pipeline,
+                &self.global_bind,
+                &self.targets,
+                current_is_a,
+                use_crisp_history,
+            );
+        }
+
+        if flow_active && !flow_done {
+            current_is_a = begin_ping_pong_stage(
+                &mut encoder,
+                "huff native final flow warp",
+                &self.flow_pipeline,
+                &self.global_bind,
+                &self.targets,
+                current_is_a,
+                use_crisp_history,
+            );
+            flow_done = true;
+            if self.global_mix_enabled
+                && self.global_mix_amount > 0.0
+                && self.global_mix_position == "afterflow"
+            {
+                current_is_a = begin_ping_pong_stage(
                     &mut encoder,
-                    work_view,
-                    &self.scan_pipeline,
+                    "huff native global mix after flow",
+                    &self.global_mix_pipeline,
                     &self.global_bind,
-                    work_bind,
-                    self.scan_band_count,
+                    &self.targets,
+                    current_is_a,
+                    use_crisp_history,
                 );
             }
         }
 
-        let mut final_is_a = !previous_is_a;
-        if self.feedback > 0.0 {
-            // Original Huff snapshots the just-assembled gBuf, clears the target,
-            // and draws the snapshot once with transform + globalAlpha. It is not
-            // additive source + previous history, which caused Milestone 04's
-            // brightness blowout.
-            let (feedback_view, feedback_bind) = if final_is_a {
-                (
-                    &self.targets.feedback_b_view,
-                    if use_crisp_history {
-                        &self.targets.feedback_bind_b_crisp
-                    } else {
-                        &self.targets.feedback_bind_b_smooth
-                    },
-                )
-            } else {
-                (
-                    &self.targets.feedback_a_view,
-                    if use_crisp_history {
-                        &self.targets.feedback_bind_a_crisp
-                    } else {
-                        &self.targets.feedback_bind_a_smooth
-                    },
-                )
-            };
-            begin_feedback_pass(
+        if self.global_mix_enabled
+            && self.global_mix_amount > 0.0
+            && (self.global_mix_position == "final"
+                || (self.global_mix_position == "afterflow" && !flow_done))
+        {
+            current_is_a = begin_ping_pong_stage(
                 &mut encoder,
-                "huff flying frame-buffer transform pass",
-                feedback_view,
-                &self.feedback_pipeline,
+                "huff native final global mix",
+                &self.global_mix_pipeline,
                 &self.global_bind,
-                feedback_bind,
+                &self.targets,
+                current_is_a,
+                use_crisp_history,
             );
-            final_is_a = previous_is_a;
         }
-        self.effect_is_a = final_is_a;
+
+        self.effect_is_a = current_is_a;
         if source_sequence > 0 {
             self.effect_seeded = true;
         }
 
-        let present_bind = if final_is_a {
+        let present_bind = if current_is_a {
             &self.targets.present_bind_a
         } else {
             &self.targets.present_bind_b
@@ -2678,6 +3173,46 @@ impl Renderer {
             }
         }
         alive.store(false, Ordering::Relaxed);
+    }
+}
+
+fn blend_mode_code(value: &str) -> f32 {
+    match value {
+        "screen" => 0.0,
+        "lighter" => 1.0,
+        "lighten" => 2.0,
+        "color-dodge" => 3.0,
+        "multiply" => 4.0,
+        "darken" => 5.0,
+        "color-burn" => 6.0,
+        "overlay" => 7.0,
+        "soft-light" => 8.0,
+        "hard-light" => 9.0,
+        "difference" => 10.0,
+        "exclusion" => 11.0,
+        "hue" => 12.0,
+        "saturation" => 13.0,
+        "color" => 14.0,
+        "luminosity" => 15.0,
+        _ => 16.0,
+    }
+}
+
+fn global_mix_position_code(value: &str) -> f32 {
+    match value {
+        "before" => 0.0,
+        "after" => 1.0,
+        "afterflow" => 2.0,
+        "final" => 3.0,
+        _ => 1.0,
+    }
+}
+
+fn flow_target_code(value: &str) -> f32 {
+    match value {
+        "glitch" => 1.0,
+        "scan" => 2.0,
+        _ => 0.0,
     }
 }
 
@@ -2938,6 +3473,8 @@ fn create_targets(
     width: u32,
     height: u32,
     feedback_layout: &wgpu::BindGroupLayout,
+    scan_layout: &wgpu::BindGroupLayout,
+    smoosh_layout: &wgpu::BindGroupLayout,
     present_layout: &wgpu::BindGroupLayout,
     sampler: &wgpu::Sampler,
     crisp_sampler: &wgpu::Sampler,
@@ -2946,6 +3483,8 @@ fn create_targets(
     let (composite, composite_view) = create_hdr_texture(device, "huff native composite target", width, height);
     let (feedback_a, feedback_a_view) = create_hdr_texture(device, "huff native feedback A", width, height);
     let (feedback_b, feedback_b_view) = create_hdr_texture(device, "huff native feedback B", width, height);
+    let (glitch_layer, glitch_layer_view) = create_hdr_texture(device, "huff native isolated glitch layer", width, height);
+    let (scan_layer, scan_layer_view) = create_hdr_texture(device, "huff native isolated scan layer", width, height);
 
     let create_feedback_bind = |
         label: &str,
@@ -2987,6 +3526,36 @@ fn create_targets(
         create_feedback_bind("feedback bind A crisp history", &feedback_b_view, crisp_sampler);
     let feedback_bind_b_crisp =
         create_feedback_bind("feedback bind B crisp history", &feedback_a_view, crisp_sampler);
+
+    let scan_bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("huff native scanline clean-source bind"),
+        layout: scan_layout,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::TextureView(&composite_view),
+            },
+            wgpu::BindGroupEntry {
+                binding: 2,
+                resource: wgpu::BindingResource::Sampler(sampler),
+            },
+        ],
+    });
+
+    let create_smoosh_bind = |label: &str, previous_effect: &wgpu::TextureView| {
+        device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some(label),
+            layout: smoosh_layout,
+            entries: &[
+                wgpu::BindGroupEntry { binding: 7, resource: wgpu::BindingResource::TextureView(previous_effect) },
+                wgpu::BindGroupEntry { binding: 8, resource: wgpu::BindingResource::TextureView(&glitch_layer_view) },
+                wgpu::BindGroupEntry { binding: 9, resource: wgpu::BindingResource::TextureView(&scan_layer_view) },
+                wgpu::BindGroupEntry { binding: 10, resource: wgpu::BindingResource::Sampler(sampler) },
+            ],
+        })
+    };
+    let smoosh_bind_a = create_smoosh_bind("smoosh bind reading A", &feedback_a_view);
+    let smoosh_bind_b = create_smoosh_bind("smoosh bind reading B", &feedback_b_view);
     let present_bind_a = device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: Some("present bind A"), layout: present_layout,
         entries: &[
@@ -3008,13 +3577,92 @@ fn create_targets(
         _composite: composite, composite_view,
         _feedback_a: feedback_a, feedback_a_view,
         _feedback_b: feedback_b, feedback_b_view,
+        _glitch_layer: glitch_layer, glitch_layer_view,
+        _scan_layer: scan_layer, scan_layer_view,
         feedback_bind_a_smooth,
         feedback_bind_b_smooth,
         feedback_bind_a_crisp,
         feedback_bind_b_crisp,
         present_bind_a,
         present_bind_b,
+        smoosh_bind_a,
+        smoosh_bind_b,
+        scan_bind,
     }
+}
+
+fn clear_texture_target(
+    encoder: &mut wgpu::CommandEncoder,
+    label: &str,
+    view: &wgpu::TextureView,
+) {
+    let _pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        label: Some(label),
+        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+            view,
+            resolve_target: None,
+            depth_slice: None,
+            ops: wgpu::Operations {
+                load: wgpu::LoadOp::Clear(wgpu::Color { r: 0.0, g: 0.0, b: 0.0, a: 0.0 }),
+                store: wgpu::StoreOp::Store,
+            },
+        })],
+        depth_stencil_attachment: None,
+        timestamp_writes: None,
+        occlusion_query_set: None,
+        multiview_mask: None,
+    });
+}
+
+fn effect_view(targets: &OffscreenTargets, is_a: bool) -> &wgpu::TextureView {
+    if is_a { &targets.feedback_a_view } else { &targets.feedback_b_view }
+}
+
+fn begin_ping_pong_stage(
+    encoder: &mut wgpu::CommandEncoder,
+    label: &str,
+    pipeline: &wgpu::RenderPipeline,
+    global_bind: &wgpu::BindGroup,
+    targets: &OffscreenTargets,
+    input_is_a: bool,
+    crisp_history: bool,
+) -> bool {
+    let (output_view, input_bind) = if input_is_a {
+        (
+            &targets.feedback_b_view,
+            if crisp_history { &targets.feedback_bind_b_crisp } else { &targets.feedback_bind_b_smooth },
+        )
+    } else {
+        (
+            &targets.feedback_a_view,
+            if crisp_history { &targets.feedback_bind_a_crisp } else { &targets.feedback_bind_a_smooth },
+        )
+    };
+    begin_feedback_pass(encoder, label, output_view, pipeline, global_bind, input_bind);
+    !input_is_a
+}
+
+fn begin_smoosh_stage(
+    encoder: &mut wgpu::CommandEncoder,
+    pipeline: &wgpu::RenderPipeline,
+    global_bind: &wgpu::BindGroup,
+    targets: &OffscreenTargets,
+    input_is_a: bool,
+) -> bool {
+    let (output_view, input_bind) = if input_is_a {
+        (&targets.feedback_b_view, &targets.smoosh_bind_a)
+    } else {
+        (&targets.feedback_a_view, &targets.smoosh_bind_b)
+    };
+    begin_feedback_pass(
+        encoder,
+        "huff native smoosh blend pass",
+        output_view,
+        pipeline,
+        global_bind,
+        input_bind,
+    );
+    !input_is_a
 }
 
 fn begin_texture_pass(
@@ -3082,7 +3730,7 @@ fn begin_scan_pass(
     view: &wgpu::TextureView,
     pipeline: &wgpu::RenderPipeline,
     global_bind: &wgpu::BindGroup,
-    feedback_bind: &wgpu::BindGroup,
+    scan_bind: &wgpu::BindGroup,
     instance_count: u32,
 ) {
     let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -3103,7 +3751,7 @@ fn begin_scan_pass(
     });
     pass.set_pipeline(pipeline);
     pass.set_bind_group(0, global_bind, &[]);
-    pass.set_bind_group(2, feedback_bind, &[]);
+    pass.set_bind_group(2, scan_bind, &[]);
     pass.draw(0..6, 0..instance_count);
 }
 

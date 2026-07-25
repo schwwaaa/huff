@@ -190,13 +190,21 @@ function configureRegistryControls() {
     feedbackGroup.title = 'Native HDR feedback is active; final effect-order parity continues with later render-graph milestones.';
   }
   const glitchGroup = byId('corruptOn')?.closest('.group');
-  if (glitchGroup) glitchGroup.title = "Milestone 05 keeps Huff's corrected flying frame buffer and adds the original persistent cluster-body placement model.";
+  if (glitchGroup) glitchGroup.title = "Milestone 07.2 includes Huff's flying buffer, clusters, scanlines, luma key, Smoosh, Global Mix, and Flow. Scanlines use an isolated clean-source binding for Metal stability.";
   const clusterGroup = byId('clusterTiles')?.closest('.group');
   if (clusterGroup) clusterGroup.title = 'Native cluster bodies are active: persistent centers, coherence, speed, steering, variance, pulse, inertia, breathing, bounce/wrap, bias, spread, and minimum spread.';
   const scanGroup = byId('clusters')?.closest('.group');
-  if (scanGroup) scanGroup.title = 'Milestone 06 ports Huff scanline bands: angle/spin, count, radius, focus, shift, skew, drift, placement, pattern/content zoom, speed, gap, and alpha.';
+  if (scanGroup) scanGroup.title = 'Native scanline bands remain active from Milestone 06.';
   const layerGroup = byId('layerPriority')?.closest('.group');
-  if (layerGroup) layerGroup.title = 'Native paint ordering between the glitch and scanline layers. Neutral alternates every frame; Pulse alternates at the selected rate.';
+  if (layerGroup) layerGroup.title = 'Native paint ordering between glitch and scanlines. Flow TARGET overrides this order while targeting GLITCH or SCAN; Smoosh supersedes it while enabled.';
+  const smooshGroup = byId('smooshOn')?.closest('.group');
+  if (smooshGroup) smooshGroup.title = 'Native Smoosh isolates glitch and scanline layers, then blends them with the selected Canvas-style blend mode.';
+  const lumaGroup = byId('lumaKeyOn')?.closest('.group');
+  if (lumaGroup) lumaGroup.title = 'Native luma key overlays clean source regions onto the persistent effect buffer based on source luminance.';
+  const globalMixGroup = byId('globalMixOn')?.closest('.group');
+  if (globalMixGroup) globalMixGroup.title = 'Native clean-source mix with selectable blend mode and BEFORE FB / AFTER FB / AFTER FLOW / FINAL placement.';
+  const flowGroup = byId('flowOn')?.closest('.group');
+  if (flowGroup) flowGroup.title = 'Native cell-quantized flow warp with target routing, historical pulse source, pull, swirl, turbulence, spread, and bounded carry.';
 }
 
 function updateConditionalInputs() {
@@ -345,6 +353,9 @@ function wireNativeActions() {
   });
   byId('clearBufBtn')?.addEventListener('click', () => {
     call('clear_native_buffers').then(() => toast('Native feedback + GPU history cleared')).catch(() => {});
+  });
+  byId('flowPulseFire')?.addEventListener('click', () => {
+    call('fire_flow_pulse').then(() => toast('Flow pulse fired')).catch(() => {});
   });
   byId('resetMotionBtn')?.addEventListener('click', async () => {
     const values = {
@@ -522,7 +533,7 @@ function displayInfo(info) {
 
   const stateText = video.playing ? 'PLAY' : (loaded ? 'PAUSE' : 'IDLE');
   byId('status').textContent = `NATIVE: ${stateText} · ${(renderer.fps || 0).toFixed(0)} fps`;
-  byId('status').title = `${renderer.backend || 'GPU'} · ${renderer.adapter || ''}\nSource: ${info.activeSource || renderer.activeSource || 'automatic'}\nRender ${renderer.width || 0}×${renderer.height || 0}\nSurface ${renderer.surfaceWidth || 0}×${renderer.surfaceHeight || 0}\nGlitch: ${renderer.glitchBaseTiles || 0} tiles · ${renderer.glitchInstances || 0}/${renderer.glitchInstanceCapacity || 0} instances · ${(renderer.glitchGenerationMs || 0).toFixed(2)} ms\nScanlines: ${renderer.scanlinesEnabled ? 'on' : 'off'} · ${renderer.scanBandCount || 0} bands · ${(renderer.scanGenerationMs || 0).toFixed(2)} ms · angle ${(renderer.scanAngle || 0).toFixed(1)}° · layer ${renderer.layerPriority || 'scan'}\nClusters: ${renderer.clusterTilesEnabled ? 'on' : 'off'} · ${renderer.clusterCentersActive || 0} centers · ${renderer.clusterBiasTiles || 0} biased tiles · ${renderer.clusterRerolledOffsets || 0} rerolls · ${renderer.clusterPulses || 0} pulses\nGlitch drops: ${renderer.glitchDroppedInstances || 0}\nSurface skips: ${renderer.surfaceSkips || 0} · recoveries: ${renderer.surfaceRecoveries || 0}\nClick to focus output`;
+  byId('status').title = `${renderer.backend || 'GPU'} · ${renderer.adapter || ''}\nSource: ${info.activeSource || renderer.activeSource || 'automatic'}\nRender ${renderer.width || 0}×${renderer.height || 0}\nSurface ${renderer.surfaceWidth || 0}×${renderer.surfaceHeight || 0}\nGlitch: ${renderer.glitchBaseTiles || 0} tiles · ${renderer.glitchInstances || 0}/${renderer.glitchInstanceCapacity || 0} instances · ${(renderer.glitchGenerationMs || 0).toFixed(2)} ms\nScanlines: ${renderer.scanlinesEnabled ? 'on' : 'off'} · ${renderer.scanBandCount || 0} bands · ${(renderer.scanGenerationMs || 0).toFixed(2)} ms · angle ${(renderer.scanAngle || 0).toFixed(1)}° · layer ${renderer.layerPriority || 'scan'}\nSmoosh: ${renderer.smooshEnabled ? renderer.smooshBlend : 'off'} · Luma: ${renderer.lumaKeyEnabled ? 'on' : 'off'}\nGlobal Mix: ${renderer.globalMixEnabled ? renderer.globalMixPosition : 'off'} · Flow: ${renderer.flowEnabled ? `${renderer.flowTarget} @ ${Number(renderer.flowStrength || 0).toFixed(1)}` : 'off'} · fires ${renderer.flowPulseFires || 0}\nClusters: ${renderer.clusterTilesEnabled ? 'on' : 'off'} · ${renderer.clusterCentersActive || 0} centers · ${renderer.clusterBiasTiles || 0} biased tiles · ${renderer.clusterRerolledOffsets || 0} rerolls · ${renderer.clusterPulses || 0} pulses\nGlitch drops: ${renderer.glitchDroppedInstances || 0}\nVideo decode: ${(video.decodeFps || 0).toFixed(1)} fps · stalls ${video.decoderStalls || 0} · recoveries ${video.watchdogRestarts || 0}\nAudio decode: ${(videoAudio.bufferedMs || 0).toFixed(0)} ms buffered · stalls ${videoAudio.decoderStalls || 0} · recoveries ${videoAudio.watchdogRestarts || 0}\nSurface skips: ${renderer.surfaceSkips || 0} · recoveries: ${renderer.surfaceRecoveries || 0}\nClick to focus output`;
 
   byId('midiPill').textContent = midi.connected ? `MIDI: ${midi.connectedPort}` : 'MIDI: OFF';
   byId('oscPill').textContent = osc.listening ? `OSC :${osc.port}` : 'OSC: OFF';
@@ -553,7 +564,7 @@ function displayInfo(info) {
   byId('dim').textContent = `R: ${renderer.width || 0}×${renderer.height || 0}`;
   byId('dim').title = `Internal native render size\nSurface: ${renderer.surfaceWidth || 0}×${renderer.surfaceHeight || 0}\nMode: ${renderer.renderMode || 'match'}`;
   byId('historyDim').textContent = `H: ${renderer.historyWidth || 0}×${renderer.historyHeight || 0}`;
-  byId('historyDim').title = `${renderer.historyStatus || 'configured'}\nCapture: ${renderer.historyCaptureRate || 'every'}\nSampling: ${renderer.historySampling || 'smooth'}\nGlitch tiles: ${renderer.glitchBaseTiles || 0} · instances: ${renderer.glitchInstances || 0}\nClusters: ${renderer.clusterTilesEnabled ? 'on' : 'off'} · ${renderer.clusterCentersActive || 0} centers · ${renderer.clusterBiasTiles || 0} biased\nScanlines: ${renderer.scanlinesEnabled ? 'on' : 'off'} · ${renderer.scanBandCount || 0} bands`;
+  byId('historyDim').title = `${renderer.historyStatus || 'configured'}\nCapture: ${renderer.historyCaptureRate || 'every'}\nSampling: ${renderer.historySampling || 'smooth'}\nGlitch tiles: ${renderer.glitchBaseTiles || 0} · instances: ${renderer.glitchInstances || 0}\nClusters: ${renderer.clusterTilesEnabled ? 'on' : 'off'} · ${renderer.clusterCentersActive || 0} centers · ${renderer.clusterBiasTiles || 0} biased\nScanlines: ${renderer.scanlinesEnabled ? 'on' : 'off'} · ${renderer.scanBandCount || 0} bands\nSmoosh: ${renderer.smooshEnabled ? renderer.smooshBlend : 'off'} · Luma: ${renderer.lumaKeyEnabled ? 'on' : 'off'}\nGlobal Mix: ${renderer.globalMixEnabled ? renderer.globalMixPosition : 'off'} · Flow: ${renderer.flowEnabled ? renderer.flowTarget : 'off'}`;
 
   if (camera.streaming) byId('camStartBtn').textContent = `⬤ ${camera.captureFps?.toFixed?.(0) || ''}fps`;
   else byId('camStartBtn').textContent = '⬤ Cam';
@@ -597,7 +608,7 @@ async function boot() {
   await refreshParameterState();
   await poll();
   setInterval(poll, 250);
-  console.info('Huff Native wgpu Milestone 06 loaded', {
+  console.info('Huff Native wgpu Milestone 07.2 loaded', {
     parameters: appState.registry.length,
     implemented: appState.registry.filter((definition) => definition.implemented).length,
   });
