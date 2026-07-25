@@ -13,6 +13,7 @@ const appState = {
   syncing: false,
   undo: [],
   toastTimer: 0,
+  spoutAdaptersLoaded: false,
 };
 
 function toast(message, error = false) {
@@ -190,7 +191,7 @@ function configureRegistryControls() {
     feedbackGroup.title = 'Native HDR feedback is active; final effect-order parity continues with later render-graph milestones.';
   }
   const glitchGroup = byId('corruptOn')?.closest('.group');
-  if (glitchGroup) glitchGroup.title = "Milestone 08 includes Huff's native render graph plus direct Syphon and Spout publishing from the authoritative wgpu output. External outputs use a bounded three-slot readback bridge and latest-frame workers.";
+  if (glitchGroup) glitchGroup.title = "Milestone 08.1 includes Huff's native render graph plus hardened direct Syphon and Spout publishing from the authoritative wgpu output. External outputs use a bounded three-slot readback bridge and latest-frame workers.";
   const clusterGroup = byId('clusterTiles')?.closest('.group');
   if (clusterGroup) clusterGroup.title = 'Native cluster bodies are active: persistent centers, coherence, speed, steering, variance, pulse, inertia, breathing, bounce/wrap, bias, spread, and minimum spread.';
   const scanGroup = byId('clusters')?.closest('.group');
@@ -254,6 +255,26 @@ async function applyHistorySettings() {
   toast('GPU temporal history applied · ring cleared if its allocation changed');
 }
 
+
+async function loadSpoutAdapters(force = false) {
+  const select = byId('spoutAdapter');
+  if (!select || !appState.info?.spout?.available) return;
+  if (appState.spoutAdaptersLoaded && !force) return;
+  const previous = select.value || localStorage.getItem('huffSpoutAdapter') || '-1';
+  select.disabled = true;
+  try {
+    const adapters = await call('list_spout_adapters');
+    select.replaceChildren(new Option('Automatic / Windows default', '-1'));
+    for (const adapter of adapters) {
+      select.append(new Option(`${adapter.index}: ${adapter.name}`, String(adapter.index)));
+    }
+    select.value = [...select.options].some((option) => option.value === previous) ? previous : '-1';
+    appState.spoutAdaptersLoaded = true;
+  } finally {
+    select.disabled = Boolean(appState.info?.spout?.active);
+  }
+}
+
 function wireGroupsAndModals() {
   for (const label of document.querySelectorAll('.group-label')) {
     label.addEventListener('click', () => label.closest('.group')?.classList.toggle('collapsed'));
@@ -277,6 +298,13 @@ function wireGroupsAndModals() {
       if (event.target === overlay) overlay.classList.remove('open');
     });
   }
+  for (const id of ['spoutBtn', 'spoutPill']) {
+    byId(id)?.addEventListener('click', () => loadSpoutAdapters().catch(() => {}));
+  }
+  byId('spoutAdapterRefresh')?.addEventListener('click', () => loadSpoutAdapters(true).catch(() => {}));
+  byId('spoutAdapter')?.addEventListener('change', (event) => {
+    localStorage.setItem('huffSpoutAdapter', event.target.value);
+  });
   window.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') document.querySelectorAll('[id$="Overlay"].open').forEach((element) => element.classList.remove('open'));
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
@@ -426,10 +454,12 @@ function wireNativeActions() {
         const height = Number(renderer.height || byId('spoutH')?.value || 720);
         byId('spoutW').value = String(width);
         byId('spoutH').value = String(height);
+        await loadSpoutAdapters().catch(() => {});
         await call('start_spout_output', {
           width,
           height,
           fps: Number(byId('spoutFps')?.value || 30),
+          adapterIndex: Number(byId('spoutAdapter')?.value ?? -1),
         });
         toast(`Spout started · ${width}×${height}`);
       }
@@ -579,7 +609,7 @@ function displayInfo(info) {
     ? `SYPHON: ${syphon.publishedFrames || 0}`
     : (syphon.available ? 'SYPHON: OFF' : 'SYPHON: N/A');
   byId('spoutPill').textContent = spout.active
-    ? `SPOUT: ${spout.publishedFrames || 0}`
+    ? (spout.initialized ? `SPOUT: ${spout.publishedFrames || 0}` : 'SPOUT: ARMING')
     : (spout.available ? 'SPOUT: OFF' : 'SPOUT: N/A');
 
   const syphonButton = byId('syphonToggleBtn');
@@ -594,6 +624,10 @@ function displayInfo(info) {
     spoutButton.textContent = spout.active ? '■ Stop' : '▶ Start';
     spoutButton.classList.toggle('active', Boolean(spout.active));
   }
+  if (byId('spoutAdapter')) {
+    byId('spoutAdapter').disabled = !spout.available || Boolean(spout.active);
+  }
+  if (byId('spoutAdapterRefresh')) byId('spoutAdapterRefresh').disabled = !spout.available || Boolean(spout.active);
 
   const renderWidth = Number(renderer.width || 0);
   const renderHeight = Number(renderer.height || 0);
@@ -615,15 +649,15 @@ function displayInfo(info) {
   }
   if (byId('spoutStatus')) {
     byId('spoutStatus').textContent = spout.active
-      ? `Active · ${spout.width}×${spout.height} @ ${spout.fps} fps · ${spout.publishedFrames || 0} sent · ${spout.replacedFrames || 0} replaced · ${Number(spout.lastUploadUs || 0)} µs upload`
-      : (spout.lastError || (spout.available ? 'Not started — native output follows the current R: render size.' : 'Unavailable on this platform.'));
+      ? `${spout.initialized ? 'Active' : 'Armed — waiting for first frame'} · ${spout.senderName || 'huff'} · ${spout.width}×${spout.height} @ ${spout.fps} fps cap · ${spout.publishedFrames || 0} sent · ${spout.replacedFrames || 0} replaced · ${Number(spout.lastUploadUs || 0)} µs upload`
+      : (spout.lastError || (spout.available ? 'Not started — choose the receiver GPU adapter, then start native Spout output.' : 'Unavailable on this platform.'));
     byId('spoutStatus').className = spout.active ? 'active' : (spout.lastError && spout.available ? 'error' : '');
   }
   if (byId('syphonFrameCount')) byId('syphonFrameCount').textContent = syphon.active
     ? `${syphon.receivedFrames || 0} readbacks · ${Number(syphon.lastFrameAgeMs || 0).toFixed(1)} ms age`
     : '';
   if (byId('spoutFrameCount')) byId('spoutFrameCount').textContent = spout.active
-    ? `${spout.receivedFrames || 0} readbacks · ${Number(spout.lastFrameAgeMs || 0).toFixed(1)} ms age`
+    ? `${spout.receivedFrames || 0} readbacks · ${Number(spout.lastFrameAgeMs || 0).toFixed(1)} ms age · DX ${(spout.senderFps || 0).toFixed(1)} fps · adapter ${spout.adapterIndex ?? -1}${spout.adapterName ? ` (${spout.adapterName})` : ''}`
     : '';
 
   if (byId('midiBridgeStatus')) byId('midiBridgeStatus').textContent = midi.connected
@@ -694,7 +728,7 @@ async function boot() {
   await refreshParameterState();
   await poll();
   setInterval(poll, 250);
-  console.info('Huff Native wgpu Milestone 08 loaded', {
+  console.info('Huff Native wgpu Milestone 08.1 loaded', {
     parameters: appState.registry.length,
     implemented: appState.registry.filter((definition) => definition.implemented).length,
   });

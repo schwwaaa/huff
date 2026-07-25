@@ -1,9 +1,9 @@
-# Huff Native wgpu · Milestone 08
+# Huff Native wgpu · Milestone 08.1
 
-Milestone 08 adds **native Syphon and Spout output** to the working Milestone 07.2 engine. Huff now renders one authoritative, fixed-resolution RGBA output texture and uses that same result for the native window and external video outputs.
+Milestone 08.1 completes **native Syphon and Spout output** on top of the working Milestone 07.2 engine. Huff now renders one authoritative, fixed-resolution RGBA output texture and uses that same result for the native window and external video outputs.
 
 The HTML/CSS interface remains the control surface. Video/audio decoding, camera input, GPU history, Huff's flying-frame-buffer effects, compositing, feedback, presentation, and external output are native Rust + wgpu.
- 
+
 ## Native output architecture
 
 ```text
@@ -53,7 +53,9 @@ On Windows, Huff:
 2. Sends the newest complete frame to the bundled SpoutDX bridge.
 3. Publishes a D3D11 shared texture as **huff**.
 
-The C++ bridge and Spout SDK are included under `src-tauri/native`. The build script compiles the bridge and places its DLL beside the development executable. Installer/runtime packaging still requires Windows verification.
+The C++ bridge and Spout SDK are included under `src-tauri/native`. On Windows, the build script compiles one static bridge library and links it directly into Huff. There is no project-specific runtime DLL to copy or package.
+
+The Spout modal enumerates DirectX adapters. On multi-GPU systems, choose the same adapter used by the receiving application before starting the sender.
 
 ## Output controls
 
@@ -123,4 +125,4 @@ npm run dev
 npm run build
 ```
 
-Use `TESTING.md` for the runtime checklist. Rust compilation, Syphon reception, Windows Spout compilation, and packaged runtime behavior must be verified on the target machines.
+Use `TESTING.md` for the runtime checklist. Windows MSVC compilation, receiver interoperability, multi-GPU selection, and packaged runtime behavior must still be verified on a Windows machine.

@@ -82,7 +82,7 @@ fn get_app_info(
     source: tauri::State<'_, SourceSelector>,
 ) -> AppInfo {
     AppInfo {
-        build: "HNW-08".into(),
+        build: "HNW-08.1".into(),
         renderer: renderer.info(),
         camera: camera.status(),
         camera_devices: camera.devices(),
@@ -98,7 +98,7 @@ fn get_app_info(
         spout: spout::info(),
         gesture: gesture.info(),
         parameter_revision: parameters.revision(),
-        native_milestone: "HNW-08".into(),
+        native_milestone: "HNW-08.1".into(),
         active_source: source.get().label().into(),
     }
 }
@@ -177,6 +177,7 @@ fn start_spout_output(
     width: u32,
     height: u32,
     fps: u32,
+    adapter_index: i32,
 ) -> Result<(), String> {
     let info = renderer.info();
     if width != info.width || height != info.height {
@@ -185,7 +186,12 @@ fn start_spout_output(
             info.width, info.height
         ));
     }
-    renderer.start_spout(fps)
+    renderer.start_spout(fps, adapter_index)
+}
+
+#[tauri::command]
+fn list_spout_adapters() -> Result<Vec<spout::SpoutAdapter>, String> {
+    spout::adapters()
 }
 
 #[tauri::command]
@@ -686,6 +692,7 @@ fn main() {
             start_syphon_output,
             stop_syphon_output,
             start_spout_output,
+            list_spout_adapters,
             stop_spout_output,
             focus_renderer,
             refresh_cameras,

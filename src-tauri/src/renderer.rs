@@ -58,6 +58,7 @@ pub enum RenderCommand {
     StopSyphon,
     StartSpout {
         fps: u32,
+        adapter_index: i32,
         reply: SyncSender<Result<(), String>>,
     },
     StopSpout,
@@ -179,11 +180,12 @@ impl RendererHandle {
         self.send(RenderCommand::StopSyphon);
     }
 
-    pub fn start_spout(&self, fps: u32) -> Result<(), String> {
+    pub fn start_spout(&self, fps: u32, adapter_index: i32) -> Result<(), String> {
         let (reply_tx, reply_rx) = sync_channel(1);
         self.tx
             .send(RenderCommand::StartSpout {
                 fps: fps.clamp(1, 60),
+                adapter_index,
                 reply: reply_tx,
             })
             .map_err(|_| "renderer command channel is unavailable".to_string())?;
@@ -1757,7 +1759,13 @@ impl Renderer {
             }
         }
         if self.spout_enabled {
-            if let Err(error) = spout::start(self.render_width, self.render_height, self.spout_fps) {
+            let adapter_index = spout::info().adapter_index;
+            if let Err(error) = spout::start(
+                self.render_width,
+                self.render_height,
+                self.spout_fps,
+                adapter_index,
+            ) {
                 self.spout_enabled = false;
                 self.last_error = format!("Spout restart after resize failed: {error}");
             }
@@ -2056,8 +2064,12 @@ impl Renderer {
                     let _ = reply.send(result);
                 }
                 Ok(RenderCommand::StopSyphon) => self.stop_syphon_output(),
-                Ok(RenderCommand::StartSpout { fps, reply }) => {
-                    let result = self.start_spout_output(fps);
+                Ok(RenderCommand::StartSpout {
+                    fps,
+                    adapter_index,
+                    reply,
+                }) => {
+                    let result = self.start_spout_output(fps, adapter_index);
                     if let Err(error) = &result {
                         self.last_error = error.clone();
                     }
@@ -3009,10 +3021,15 @@ impl Renderer {
         syphon::stop();
     }
 
-    fn start_spout_output(&mut self, fps: u32) -> Result<(), String> {
+    fn start_spout_output(&mut self, fps: u32, adapter_index: i32) -> Result<(), String> {
         let fps = fps.clamp(1, 60);
         spout::start_worker();
-        spout::start(self.render_width, self.render_height, fps)?;
+        spout::start(
+            self.render_width,
+            self.render_height,
+            fps,
+            adapter_index,
+        )?;
         self.spout_enabled = true;
         self.spout_fps = fps;
         self.last_spout_capture = Instant::now()

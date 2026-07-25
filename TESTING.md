@@ -1,96 +1,112 @@
-# Huff Native Milestone 08 test checklist
+# Huff Native Milestone 08.1 test checklist
 
-## Run on macOS
+## Regression baseline
 
-```bash
+1. Run video and camera sources.
+2. Confirm transport, feedback, temporal history, glitch, clusters, scanlines, Smoosh, luma key, Global Mix, and Flow still work.
+3. Confirm Syphon still works on macOS.
+4. With external outputs off, hover `NATIVE:` and confirm native-output readback counters remain idle.
+
+## Windows build
+
+Prerequisites:
+
+- Windows 10 or 11
+- Visual Studio 2022 with **Desktop development with C++**
+- CMake available to Cargo
+- Rust MSVC target
+- Node/npm
+- FFmpeg on PATH
+
+Run:
+
+```powershell
 npm install
-npm run dev:metal
+npm run dev:dx12
 ```
 
-Use a moving video and a recognizable effect state.
+Expected build behavior:
 
-## Baseline regression
+- CMake builds `spout_bridge.lib`.
+- Cargo links the bridge statically.
+- No `spout_bridge.dll` is required beside the executable.
+- The controls and native renderer windows open.
 
-- Video playback and audio remain synchronized.
-- Camera and file video still switch exclusively.
-- Decoder watchdog recovery remains available.
-- Glitch, clusters, scanlines, Smoosh, Luma Key, Global Mix, Flow, and feedback still work.
-- Clear and Global Reset still clear the native buffers.
-- The output window still follows Match Window and fixed render modes correctly.
+## Spout adapter enumeration
 
-## Authoritative output
+1. Open the Spout modal.
+2. Confirm the adapter dropdown contains `Automatic / Windows default`.
+3. Press Refresh.
+4. Confirm the installed DXGI adapters appear by index and name.
+5. On a single-GPU system, Automatic should normally be sufficient.
+6. On a multi-GPU system, identify the adapter used by the receiver application.
 
-1. Set `R:` to 1280×720 and press Apply.
-2. Verify the native output window shows the expected image with correct aspect ratio.
-3. Resize the native output window.
-4. Confirm the image letterboxes/crops correctly without changing `R:`.
-5. Hover `NATIVE:` and confirm the readback counters remain at zero while Syphon/Spout are off.
+## Basic sender test
 
-## Syphon test · macOS
+1. Load a moving video and create a recognizable Huff effect state.
+2. Set Spout to 30 FPS.
+3. Choose the receiver GPU adapter.
+4. Press Start.
+5. The status may briefly show **Armed — waiting for first frame**.
+6. Open Resolume, MadMapper, Spout for OBS, or another receiver.
+7. Select `huff` or the resolved incremented Huff sender name.
+8. Verify:
+   - correct orientation;
+   - correct red/blue channels;
+   - alpha is opaque and stable;
+   - brightness matches the native Huff output;
+   - feedback and temporal effects update continuously.
 
-1. Open the Syphon modal.
-2. Set 30 FPS and press Start.
-3. Open a Syphon receiver and select **huff**.
-4. Confirm output dimensions match `R:`.
-5. Confirm orientation is correct.
-6. Compare the native output window and Syphon image for brightness, color, luma-key behavior, and feedback.
-7. Minimize or cover the native output window and confirm Syphon continues.
-8. Increase to 60 FPS and inspect:
-   - published frames;
-   - replaced frames;
-   - frame age;
-   - upload time;
-   - readback busy drops.
-9. Stop and restart Syphon repeatedly.
-10. Change `R:` while Syphon is active and verify it restarts at the new dimensions or reports a clear error.
-11. Build the `.app` and confirm `Syphon.framework` is present under `Contents/Frameworks` and publishing works outside `tauri dev`.
+## Lifecycle tests
 
-## Spout test · Windows
+1. Stop and restart Spout five times.
+2. Change the internal `R:` resolution while Spout is active.
+3. Confirm the sender restarts at the new dimensions on the same adapter.
+4. Minimize the native output window and confirm Spout continues.
+5. Cover or background both Huff windows and confirm the sender continues.
+6. Close Huff while Spout is active and confirm the sender disappears from the receiver.
+7. Relaunch Huff and confirm the sender can be created again.
 
-1. Install the normal MSVC/CMake prerequisites.
-2. Run `npm install` and `npm run dev:dx12`.
-3. Confirm the Spout bridge compiles and `spout_bridge.dll` is beside the development executable.
-4. Open the Spout modal, choose 30 FPS, and press Start.
-5. Select **huff** in a Spout receiver.
-6. Confirm dimensions, orientation, colors, and frame continuity.
-7. Test 60 FPS and inspect replaced/readback-drop counts.
-8. Minimize the native output window and confirm Spout continues.
-9. Change render resolution while Spout is active.
-10. Build an installer and verify the DLL is included beside the packaged executable.
+## Performance tests
 
-## Simultaneous-output bridge test
+Test 1280×720 and 1920×1080 at 30 and 60 FPS.
 
-On a platform/build where both publishers can be exercised or mocked:
+Watch the Spout diagnostics for:
 
-- Confirm one completed readback is shared rather than duplicated.
-- Confirm each output can use a different FPS schedule.
-- Stop one output and verify the other continues.
-- Confirm no unbounded memory growth during a 30-minute run.
+- `publishedFrames` increasing;
+- bounded `replacedFrames` under load;
+- no persistent `rejectedFrames` growth;
+- low frame age;
+- stable D3D sender FPS;
+- no readback map-error growth.
 
-## Stress test
+A rising replacement count under GPU/CPU load is preferable to building latency.
 
-1. Use 1920×1080 render resolution.
-2. Enable a heavy Glitch + Clusters + Scanlines + Flow + Feedback state.
-3. Start the native output at 60 FPS.
-4. Run for at least 30 minutes.
-5. Continue changing parameters and switching sources.
-6. Verify:
-   - controls remain responsive;
-   - audio/video continue;
-   - decoder recoveries still work if needed;
-   - readback pending slots never exceed 3;
-   - busy drops may rise under load but latency does not accumulate;
-   - memory does not grow continuously;
-   - Stop releases the external publisher.
+## Multi-GPU failure test
 
-## Failure reporting
+1. Deliberately choose the wrong adapter.
+2. Note whether the receiver cannot see or open the sender.
+3. Stop Spout.
+4. Select the receiver's adapter.
+5. Restart and confirm reception.
 
-For a failure, capture:
+## Release build
 
-- terminal output;
-- platform and GPU;
-- backend (`metal`, `vulkan`, or `dx12`);
-- render resolution and output FPS;
-- `NATIVE:` tooltip diagnostics;
-- Syphon/Spout modal status;
-- whether the native window, external receiver, audio, or decoder stopped independently.
+```powershell
+npm run build
+```
+
+Test both the unpacked release executable and the generated installer. Confirm that Spout works on a clean Windows account without manually copying a Huff bridge DLL.
+
+## Report with any failure
+
+Include:
+
+- Windows version;
+- GPU model(s);
+- selected adapter index/name;
+- receiver application and version;
+- render resolution and FPS cap;
+- complete Cargo/CMake/linker output;
+- Spout modal status and counters;
+- whether the sender appears but is black, incorrectly colored, upside down, frozen, or absent.

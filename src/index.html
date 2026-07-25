@@ -848,7 +848,7 @@
             <p>Huff is being migrated to a native Rust + wgpu media engine. The existing
             control surface is preserved while playback, timing, GPU rendering, and
             output move out of the WebView.</p>
-            <p><strong>Milestone 08:</strong> the native media and effect pipeline now publishes its
+            <p><strong>Milestone 08.1:</strong> the native media and effect pipeline now publishes its
             authoritative render-resolution output directly to Syphon on macOS and Spout on Windows
             through bounded latest-frame bridges. Recording, export, and final parameter calibration remain.</p>
         </div>
@@ -966,6 +966,14 @@
         </div>
 
         <div class="spout-row">
+          <span class="spout-label">GPU adapter</span>
+          <select id="spoutAdapter" style="min-width:300px">
+            <option value="-1">Automatic / Windows default</option>
+          </select>
+          <button id="spoutAdapterRefresh" class="btn-dim" type="button" style="font-size:10px;padding:3px 8px">↻ Refresh</button>
+        </div>
+
+        <div class="spout-row">
           <span class="spout-label">FPS cap</span>
           <select id="spoutFps">
             <option value="60">60</option>
@@ -982,8 +990,9 @@
         </div>
 
         <div style="margin-top:18px;font-size:10px;color:rgba(255,255,255,.2);line-height:1.9;border-top:1px solid rgba(255,255,255,.06);padding-top:14px">
-          <strong style="color:rgba(255,255,255,.35)">Windows only.</strong> Huff reads the authoritative native wgpu result through a bounded triple-buffer bridge and uploads the newest complete RGBA frame to SpoutDX.<br>
-          The source appears as <strong style="color:rgba(0,200,220,.6)">"huff"</strong> in Resolume Avenue, MadMapper, Spout for OBS, and other Spout receivers.
+          <strong style="color:rgba(255,255,255,.35)">Windows only.</strong> Huff reads the authoritative native wgpu result through a bounded triple-buffer bridge and uploads the newest complete RGBA frame to a D3D11 Spout sender.<br>
+          Select the same GPU adapter used by the receiving application on multi-GPU systems. The source appears as <strong style="color:rgba(0,200,220,.6)">"huff"</strong> in Resolume Avenue, MadMapper, Spout for OBS, and other Spout receivers.<br>
+          The Spout bridge is linked directly into Huff; no additional project DLL is required.
         </div>
       </div>
     </div>

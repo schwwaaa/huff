@@ -1,4 +1,4 @@
-# Huff native migration status · Milestone 08
+# Huff native migration status · Milestone 08.1
 
 ## Proven native foundation
 
@@ -26,7 +26,7 @@
 - Non-additive feedback transform
 - Clean base, background, brightness, and contrast
 
-## Native output completed in Milestone 08
+## Native output completed in Milestones 08–08.1
 
 - Authoritative render-resolution RGBA8 output texture
 - Native-window presentation separated from output resolution
@@ -34,6 +34,9 @@
 - Shared latest-frame delivery to external outputs
 - Persistent Metal texture Syphon publisher on macOS
 - SpoutDX publisher on Windows
+- Static Spout bridge linked into the executable
+- DirectX adapter enumeration and selection
+- Single-thread SpoutDX lifecycle ownership
 - Output FPS limiting, busy-frame dropping, and diagnostics
 - External output continues when the presentation surface is unavailable
 
@@ -45,7 +48,7 @@
 4. Parameter-by-parameter visual and motion calibration
 5. MIDI and OSC map import/edit workflows
 6. Expanded automation and project-state support
-7. Packaged Windows verification for the Spout bridge DLL
+7. Windows MSVC, receiver, multi-GPU, MSI, and NSIS verification for the statically linked Spout path
 8. Optional direct platform-texture sharing research after the stable bridge is proven
 
 ## Current principle
