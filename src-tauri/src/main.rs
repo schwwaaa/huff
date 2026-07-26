@@ -29,7 +29,12 @@ use camera::{CameraDevice, CameraHandle};
 use export::{ExportHandle, StillExportConfig, StillExportMetadata};
 use gesture::{GestureHandle, GesturePoint};
 use midi::{MidiCommand, MidiHandle};
-use offline_export::{OfflineExportConfig, OfflineExportHandle, OfflineExportMetadata};
+use offline_export::{
+    profile_codec, profile_container, profile_extension, profile_label,
+    profile_pixel_format, profile_requires_even_dimensions, profile_supports_alpha,
+    validate_profile_support, OfflineExportConfig, OfflineExportHandle, OfflineExportMetadata,
+    PROFILE_PNG_SEQUENCE,
+};
 use osc::{OscCommand, OscHandle};
 use parameters::{ParameterDefinition, ParameterSnapshot, ParameterStore};
 use recording::{RecordingAudioSource, RecordingHandle, RecordingStartConfig};
@@ -94,7 +99,7 @@ fn get_app_info(
     source: tauri::State<'_, SourceSelector>,
 ) -> AppInfo {
     AppInfo {
-        build: "HNW-11".into(),
+        build: "HNW-12".into(),
         renderer: renderer.info(),
         camera: camera.status(),
         camera_devices: camera.devices(),
@@ -113,7 +118,7 @@ fn get_app_info(
         offline_export: offline_export.info(),
         gesture: gesture.info(),
         parameter_revision: parameters.revision(),
-        native_milestone: "HNW-11".into(),
+        native_milestone: "HNW-12".into(),
         active_source: source.get().label().into(),
     }
 }
@@ -396,7 +401,7 @@ fn export_still(
         fit_mode: fit_mode.clone(),
     };
     let metadata = StillExportMetadata {
-        engine_build: "HNW-11".into(),
+        engine_build: "HNW-12".into(),
         captured_unix_ms: StillExportMetadata::now_unix_ms(),
         active_source: source.get().label().into(),
         source_file: video_info.file_path,
@@ -435,6 +440,8 @@ fn start_offline_export(
     sampling: String,
     fit_mode: String,
     audio_mode: String,
+    profile: String,
+    preserve_alpha: bool,
 ) -> Result<Option<String>, String> {
     if recording.info().active || recording.info().finalizing {
         return Err("deterministic export is disabled while recording or finalizing".into());
@@ -463,11 +470,18 @@ fn start_offline_export(
     if !matches!(audio_mode.as_str(), "source" | "none") {
         return Err("deterministic export audio mode must be source or none".into());
     }
+    validate_profile_support(&profile, preserve_alpha)?;
+    if preserve_alpha && !profile_supports_alpha(&profile) {
+        return Err(format!("{} does not support alpha output", profile_label(&profile)));
+    }
     if width == 0 || height == 0 || width > 8192 || height > 8192 {
         return Err("deterministic export dimensions must be between 1 and 8192 pixels per axis".into());
     }
-    if width % 2 != 0 || height % 2 != 0 {
-        return Err("deterministic MP4 dimensions must be even for broad H.264 compatibility".into());
+    if profile_requires_even_dimensions(&profile) && (width % 2 != 0 || height % 2 != 0) {
+        return Err(format!(
+            "{} dimensions must be even",
+            profile_label(&profile)
+        ));
     }
     if u64::from(width).saturating_mul(u64::from(height)) > 35_000_000 {
         return Err("deterministic export exceeds the bounded 35 megapixel limit".into());
@@ -497,20 +511,35 @@ fn start_offline_export(
         }
     }
 
-    let selected = rfd::FileDialog::new()
-        .add_filter("MPEG-4 video", &["mp4"])
-        .set_file_name("huff-offline-export.mp4")
-        .save_file();
+    let extension = profile_extension(&profile)?;
+    let mut dialog = rfd::FileDialog::new();
+    dialog = match profile.as_str() {
+        "prores_hq" | "prores_4444" => dialog
+            .add_filter("QuickTime movie", &["mov"])
+            .set_file_name("huff-offline-export.mov"),
+        "ffv1" => dialog
+            .add_filter("Matroska video", &["mkv"])
+            .set_file_name("huff-offline-export.mkv"),
+        PROFILE_PNG_SEQUENCE => dialog.set_file_name("huff-png-sequence"),
+        _ => dialog
+            .add_filter("MPEG-4 video", &["mp4"])
+            .set_file_name("huff-offline-export.mp4"),
+    };
+    let selected = dialog.save_file();
     let Some(mut path) = selected else {
         return Ok(None);
     };
-    if !path
-        .extension()
-        .and_then(|value| value.to_str())
-        .map(|value| value.eq_ignore_ascii_case("mp4"))
-        .unwrap_or(false)
+    if profile != PROFILE_PNG_SEQUENCE
+        && !path
+            .extension()
+            .and_then(|value| value.to_str())
+            .map(|value| value.eq_ignore_ascii_case(extension))
+            .unwrap_or(false)
     {
-        path.set_extension("mp4");
+        path.set_extension(extension);
+    }
+    if profile == PROFILE_PNG_SEQUENCE && path.exists() {
+        return Err("PNG sequence destination already exists; choose a new folder name".into());
     }
 
     let render = renderer.info();
@@ -540,9 +569,11 @@ fn start_offline_export(
         audio_volume: audio_info.volume,
         sampling: sampling.clone(),
         fit_mode: fit_mode.clone(),
+        profile: profile.clone(),
+        preserve_alpha,
     };
     let metadata = OfflineExportMetadata {
-        engine_build: "HNW-11".into(),
+        engine_build: "HNW-12".into(),
         created_unix_ms: OfflineExportMetadata::now_unix_ms(),
         source_file: video_info.file_path.clone(),
         source_codec: video_info.codec,
@@ -563,6 +594,29 @@ fn start_offline_export(
         parameter_values: serde_json::to_value(snapshot.values.clone())
             .map_err(|error| format!("could not serialize deterministic export state: {error}"))?,
         deterministic_seed,
+        export_profile: profile.clone(),
+        export_profile_label: profile_label(&profile).into(),
+        output_kind: if profile == PROFILE_PNG_SEQUENCE {
+            "image_sequence".into()
+        } else {
+            "video".into()
+        },
+        container: profile_container(&profile)?.into(),
+        video_codec: profile_codec(&profile)?,
+        pixel_format: profile_pixel_format(&profile, preserve_alpha)?.into(),
+        preserve_alpha,
+        frame_pattern: if profile == PROFILE_PNG_SEQUENCE {
+            path.join("frame_%06d.png").display().to_string()
+        } else {
+            String::new()
+        },
+        audio_artifact: if include_audio && profile == PROFILE_PNG_SEQUENCE {
+            path.join("audio.wav").display().to_string()
+        } else if include_audio {
+            path.display().to_string()
+        } else {
+            String::new()
+        },
     };
     renderer.start_offline_export(config, metadata, snapshot)?;
     Ok(Some(path.display().to_string()))

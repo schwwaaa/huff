@@ -1066,7 +1066,7 @@ impl OfflineFrameCapture {
                     "stretch" => 2.0,
                     _ => 0.0,
                 },
-                0.0,
+                if config.preserve_alpha { 1.0 } else { 0.0 },
                 0.0,
                 0.0,
             ],
@@ -2861,7 +2861,7 @@ impl Renderer {
 
     fn fail_active_offline_export(&mut self, error: String) {
         if let Some(session) = self.offline_session.take() {
-            session.cancel();
+            session.fail(&error);
         }
         self.offline_export.fail(error.clone());
         self.restore_after_offline_export();
@@ -2874,7 +2874,11 @@ impl Renderer {
         };
         let started = session.started;
         self.offline_export.set_phase(if session.config.include_audio {
-            "muxing"
+            if session.config.is_image_sequence() {
+                "audio"
+            } else {
+                "muxing"
+            }
         } else {
             "finalizing"
         });

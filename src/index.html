@@ -883,11 +883,11 @@
             <button id="aboutClose">×</button>
             <div class="a-icon"></div>
             <h1 style="font-family:'VT323',monospace;font-weight:normal;letter-spacing:.14em">huff</h1>
-            <div class="build">native engine · milestone 09 · 2026</div>
+            <div class="build">native engine · milestone 12 · 2026</div>
             <p>Huff is being migrated to a native Rust + wgpu media engine. The existing
             control surface is preserved while playback, timing, GPU rendering, and
             output move out of the WebView.</p>
-            <p><strong>Milestone 11:</strong> Huff now includes a frame-driven deterministic MP4 exporter. It decodes a selected source interval at an exact 24/30/60 FPS timeline, advances the native effect simulation one fixed step per frame, freezes parameter and control input state, and muxes source audio after rendering.</p>
+            <p><strong>Milestone 12:</strong> Huff's deterministic exporter now supports H.264, ProRes 422 HQ, ProRes 4444, FFV1, and PNG image sequences. Alpha-capable profiles preserve the native render alpha channel, and every job writes a durable export manifest alongside its reproducibility metadata.</p>
         </div>
     </div>
 
@@ -1159,7 +1159,17 @@
         </div>
 
         <div class="offline-export-row">
-            <label>OFFLINE MP4</label>
+            <label>OFFLINE EXPORT</label>
+            <select id="offlineProfile" title="Production export profile" style="font-size:10px;padding:1px 2px">
+                <option value="h264" selected>H.264 MP4</option>
+                <option value="prores_hq">PRORES 422 HQ</option>
+                <option value="prores_4444">PRORES 4444</option>
+                <option value="ffv1">FFV1 LOSSLESS</option>
+                <option value="png_sequence">PNG SEQUENCE</option>
+            </select>
+            <label title="Preserve native render alpha when supported" style="display:inline-flex;align-items:center;gap:3px">
+                <input id="offlineAlpha" type="checkbox"> ALPHA
+            </label>
             <select id="offlineFps" title="Deterministic timeline frame rate" style="font-size:10px;padding:1px 2px">
                 <option value="24">24 FPS</option>
                 <option value="30" selected>30 FPS</option>
@@ -1196,9 +1206,9 @@
                 <option value="source" selected>SOURCE AUDIO</option>
                 <option value="none">SILENT</option>
             </select>
-            <button id="offlineExportBtn" class="btn-red" title="Render a frame-driven deterministic MP4">▶ Export MP4</button>
+            <button id="offlineExportBtn" class="btn-red" title="Render a frame-driven deterministic production export">▶ Export</button>
             <button id="offlineCancelBtn" disabled title="Cancel the deterministic export">■ Cancel</button>
-            <span class="pill" id="offlineExportPill" style="color:rgba(0,200,220,.7);border-color:rgba(0,200,220,.25)" title="Deterministic video export status">OFFLINE: READY</span>
+            <span class="pill" id="offlineExportPill" style="color:rgba(0,200,220,.7);border-color:rgba(0,200,220,.25)" title="Deterministic production export status">OFFLINE: READY</span>
         </div>
 
         <!-- seek / time row -->

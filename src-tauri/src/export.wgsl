@@ -37,6 +37,7 @@ fn fs_export(input: VertexOutput) -> @location(0) vec4<f32> {
     let target_size = max(e.target_size, vec2<f32>(1.0));
     let source_aspect = source_size.x / source_size.y;
     let target_aspect = target_size.x / target_size.y;
+    let preserve_alpha = e.fit_mode.y > 0.5;
     var uv = input.uv;
 
     // 0 = fit/letterbox, 1 = crop/fill, 2 = stretch.
@@ -49,6 +50,9 @@ fn fs_export(input: VertexOutput) -> @location(0) vec4<f32> {
             uv.y = (uv.y - 0.5) / visible_height + 0.5;
         }
         if (any(uv < vec2<f32>(0.0)) || any(uv > vec2<f32>(1.0))) {
+            if (preserve_alpha) {
+                return vec4<f32>(0.0, 0.0, 0.0, 0.0);
+            }
             return vec4<f32>(0.0, 0.0, 0.0, 1.0);
         }
     } else if (e.fit_mode.x < 1.5) {
@@ -61,5 +65,9 @@ fn fs_export(input: VertexOutput) -> @location(0) vec4<f32> {
         }
     }
 
-    return vec4<f32>(textureSample(export_source, export_sampler, uv).rgb, 1.0);
+    let sampled = textureSample(export_source, export_sampler, uv);
+    if (preserve_alpha) {
+        return sampled;
+    }
+    return vec4<f32>(sampled.rgb, 1.0);
 }

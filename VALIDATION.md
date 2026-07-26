@@ -1,80 +1,107 @@
-# Huff Native Milestone 11 validation
+# Huff Native Milestone 12 validation
 
-The packaging environment does not include Cargo, rustc, rustfmt, a standalone WGSL compiler, Metal, or DX12. Local Tauri compilation and real GPU export are therefore still required before Milestone 11 is considered runtime-proven.
+The packaging environment did not provide Cargo, rustc, rustfmt, a standalone WGSL compiler, Metal, or DX12. Local Rust compilation and real GPU export remain required before Milestone 12 is considered runtime-proven.
 
 ## Passed static checks
 
 - `src/app.js` passes `node --check`.
 - `package.json`, `package-lock.json`, and `src-tauri/tauri.conf.json` parse as JSON.
-- Package, npm lockfile, Cargo manifest, Cargo lockfile project entry, and Tauri configuration are synchronized at `0.11.0`.
-- `HNW-11` is reported by application info, PNG sidecars, and deterministic-export sidecars.
-- All 286 HTML IDs are unique.
+- Package, npm lockfile, Cargo manifest, Cargo lockfile project entry, and Tauri configuration are synchronized at `0.12.0`.
+- `HNW-12` is reported by application info, PNG still sidecars, and deterministic-export metadata.
+- All HTML IDs are unique.
 - Every JavaScript `byId()` reference resolves to an existing HTML ID.
 - Every JavaScript Tauri command name is present in the Rust command surface.
-- The new `offline_export` module is declared in the crate root.
-- `OfflineExportHandle` is managed by Tauri and included in application status.
-- Start and cancel commands are registered in the invoke handler.
-- Renderer start wiring includes the offline handle plus native video and video-audio control handles.
-- Recording and PNG commands reject deterministic-export overlap.
-- Renderer-side still capture also rejects a deterministic-export race.
-- Source render selection is forced to the private offline video frame while the session is active.
-- Canonical parameters are frozen from the same snapshot written to the sidecar.
-- MIDI, OSC, audio-analysis, and gesture snapshots are frozen for the session.
-- The fixed simulation clock replaces wall time for shader time, cluster motion, scan motion, and temporal-history capture.
-- History capture uses deterministic seconds with an epsilon at exact frame-rate boundaries.
-- Procedural frame count, p5 noise phases, cluster physics, history, and feedback are reset at export start.
-- Clear, Flow Fire, and target-affecting resize operations are ignored or deferred during export.
-- Deferred output-window dimensions are applied after returning to live mode.
-- Offline rendering bypasses real-time sleep pacing.
-- Minimized/occluded output does not prevent offscreen export rendering.
-- Syphon, Spout, recording, and live-output readback targets are excluded from the offline frame copy.
-- The decoder queue is bounded to three source frames.
-- The GPU readback uses one persistent texture, buffer, and CPU pixel allocation.
-- Each export step performs one decoder receive, one native render, one GPU readback, and one encoder write.
-- Export dimensions are bounded to 8192 pixels per axis and 35 megapixels.
-- MP4 dimensions are required/normalized to even values for H.264 compatibility.
-- Export FPS is restricted to 24, 30, or 60.
-- Duration is bounded to 0.1–3600 seconds.
-- Non-looping exports are checked against remaining playback-rate-adjusted source duration.
-- The decoder has a ten-second liveness timeout.
-- Decoder/encoder startup failures terminate already-created child processes.
-- Cancel terminates child processes and removes temporary files.
-- Existing destination files remain untouched until a successful final replacement.
-- Audio muxing writes to a separate temporary file before replacing the destination.
-- Source audio uses playback-rate-aware `atempo`, volume, silence padding, AAC encoding, and exact duration trimming.
-- Sidecar naming and metadata fields are present.
 - Modified Rust files pass a lexical delimiter/string/comment balance audit.
 - No new Rust crate dependency was introduced.
 
-## FFmpeg pipeline test
+## Profile and UI wiring checks
 
-A synthetic 320×180, 30 FPS H.264/AAC source was generated locally. The intended Milestone 11 command sequence was then exercised at 1.5× playback rate:
+- The command accepts `profile` and `preserveAlpha`.
+- H.264, ProRes HQ, ProRes 4444, FFV1, and PNG-sequence values map to native profile validation.
+- File extensions are selected natively as `.mp4`, `.mov`, or `.mkv`; PNG sequence uses a destination directory name.
+- Alpha is available only for ProRes 4444, FFV1, and PNG sequences.
+- H.264 and ProRes HQ enforce even dimensions.
+- The status surface reports profile, output kind, alpha, frame pattern, metadata path, manifest path, audio behavior, progress, and output size.
 
-1. FFmpeg produced a fixed 24 FPS raw source-frame stream.
-2. Forty-eight frames were encoded to a temporary H.264 MP4.
-3. Source audio was trimmed, retimed with `atempo=1.5`, padded/trimmed to two seconds, encoded to AAC, and muxed through a temporary final file.
-4. `ffprobe` reported:
+## Transaction and lifecycle checks
+
+- Video outputs encode to hidden temporary files before destination replacement.
+- Audio muxing writes to a second temporary file before final replacement.
+- PNG frames encode to a hidden temporary directory.
+- PNG sequence audio is written inside that temporary directory before final rename.
+- Existing PNG-sequence destinations are rejected instead of deleted or merged.
+- Cancel and renderer failure use distinct manifest terminal states.
+- Running manifests are written after decoder and encoder startup.
+- Complete manifests list output artifacts and rendered frame totals.
+- PNG sequences receive both adjacent and internal manifest copies.
+- Reproducibility metadata remains separate from the job-lifecycle manifest.
+
+## Alpha-path checks
+
+- The export uniform carries an explicit alpha-preservation flag.
+- Still export leaves that flag disabled and keeps prior opaque behavior.
+- Alpha-capable deterministic profiles preserve sampled render alpha.
+- FIT bars are transparent only when alpha preservation is enabled.
+- Opaque profiles force alpha to one before encoding.
+
+## FFmpeg profile tests
+
+A synthetic three-frame 64×64 RGBA stream was encoded through the exact profile argument families used by Milestone 12.
+
+Observed probe results:
 
 ```text
-avg_frame_rate=24/1
-nb_read_frames=48
-video duration=2.000000
-audio duration=2.000000
+H.264 MP4
+codec_name=h264
+pix_fmt=yuv420p
+nb_frames=3
+
+ProRes 422 HQ
+codec_name=prores
+pix_fmt=yuv422p10le
+nb_frames=3
+
+ProRes 4444 alpha
+codec_name=prores
+pix_fmt=yuva444p12le
+nb_frames=3
+
+FFV1 alpha
+codec_name=ffv1
+pix_fmt=bgra
+
+PNG sequence alpha
+frame_000000.png
+frame_000001.png
+frame_000002.png
 ```
 
-The test also confirmed that a request extending beyond a non-looping source naturally produces fewer frames at FFmpeg level, matching the need for the preflight duration rejection implemented in Rust.
+The ProRes decoder reporting `yuva444p12le` is expected behavior for the produced 4444 stream even though the encoder input pixel format is requested as `yuva444p10le`.
+
+## Audio-profile tests
+
+A synthetic H.264/AAC source was muxed using each profile's audio policy.
+
+Observed:
+
+```text
+H.264 MP4: AAC audio
+ProRes MOV: pcm_s24le audio
+FFV1 MKV: FLAC audio
+PNG sequence: separate pcm_s24le WAV
+```
+
+All test outputs probed successfully.
 
 ## Scope not runtime-validated here
 
-- Rust type checking and borrow checking
-- wgpu pipeline creation on Metal, Vulkan, or DX12
-- repeated mapping of the persistent export readback buffer
-- exact source-frame output for VFR, rotated, or unusual-codec files
-- long-duration encoder backpressure behavior
-- 4K and 8K memory/performance on the target GPU
-- audio synchronization with unusual source timestamp offsets
-- cancel behavior during an operating-system-level FFmpeg stall
-- restoration of the live decoder/audio source on the target machine
+- Rust type and borrow checking
+- Tauri command deserialization on target machines
+- wgpu export-shader pipeline creation on Metal, Vulkan, and DX12
+- actual alpha values produced by Huff's full compositor under user presets
+- long-duration encoder backpressure
+- 4K/8K ProRes and FFV1 disk throughput
+- cancellation during operating-system-level FFmpeg stalls
 - Windows MSVC and packaged-app behavior
 
 ## Required local validation
@@ -86,4 +113,4 @@ npm install
 npm run dev:metal
 ```
 
-Then follow `TESTING.md`, starting with a short native-size 30 FPS file export before testing 4K/8K, looping, playback-rate changes, cancellation, and minimized-window operation.
+Follow `TESTING.md`, beginning with short native-size H.264 and PNG-sequence jobs before testing ProRes, FFV1, alpha, 4K/8K, cancellation, and unusual source files.
