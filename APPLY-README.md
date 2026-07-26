@@ -1,15 +1,14 @@
-# Apply Huff Native Milestone 10
+# Apply Huff Native Milestone 11
 
-The full archive is the preferred upgrade path.
+The complete archive is the preferred upgrade path.
 
-For a changed-files application, copy the provided files over a committed Milestone 09 tree while preserving paths.
+For a changed-files application, copy the provided files over a committed Milestone 10 tree while preserving paths.
 
 New files:
 
 ```text
-src-tauri/src/export.rs
-src-tauri/src/export.wgsl
-UPGRADE-NOTES-10.md
+src-tauri/src/offline_export.rs
+UPGRADE-NOTES-11.md
 ```
 
 Major changed files:
@@ -17,6 +16,7 @@ Major changed files:
 ```text
 src-tauri/src/main.rs
 src-tauri/src/renderer.rs
+src-tauri/src/history.rs
 src/app.js
 src/index.html
 src-tauri/Cargo.toml

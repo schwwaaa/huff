@@ -157,11 +157,19 @@
         /* ═══════════════════════════════════════════════
            TRANSPORT ROW — seek bar + time display
         ═══════════════════════════════════════════════ */
-        .transport-row {
+        .transport-row,
+        .offline-export-row {
             display: flex; align-items: center; gap: 5px;
             padding: 2px 5px 3px;
             background: var(--win-bg);
             border-bottom: 1px solid var(--win-mid);
+        }
+        .offline-export-row { flex-wrap: wrap; }
+        .offline-export-row label {
+            font-family: 'VT323', monospace;
+            font-size: 11px;
+            color: var(--term-dgreen);
+            letter-spacing: .06em;
         }
         #seekBar {
             -webkit-appearance: none; appearance: none;
@@ -431,6 +439,16 @@
             animation: green-pulse 1.2s ease-in-out infinite;
         }
         #exportPill.export-complete {
+            color: var(--term-green) !important;
+            border-color: var(--term-green) !important;
+        }
+        #offlineExportPill.offline-active {
+            color: #fff !important;
+            background: #004b62 !important;
+            border-color: var(--term-cyan) !important;
+            animation: green-pulse 1s ease-in-out infinite;
+        }
+        #offlineExportPill.offline-complete {
             color: var(--term-green) !important;
             border-color: var(--term-green) !important;
         }
@@ -869,7 +887,7 @@
             <p>Huff is being migrated to a native Rust + wgpu media engine. The existing
             control surface is preserved while playback, timing, GPU rendering, and
             output move out of the WebView.</p>
-            <p><strong>Milestone 10:</strong> Huff now exports the authoritative native wgpu image as PNG at native, 1080p, 4K, 8K, or custom size using an independent GPU scaling pass. Each still includes a reproducibility sidecar. Frame-driven offline video export and final parameter calibration remain.</p>
+            <p><strong>Milestone 11:</strong> Huff now includes a frame-driven deterministic MP4 exporter. It decodes a selected source interval at an exact 24/30/60 FPS timeline, advances the native effect simulation one fixed step per frame, freezes parameter and control input state, and muxes source audio after rendering.</p>
         </div>
     </div>
 
@@ -1138,6 +1156,49 @@
             <button id="syphonBtn" class="btn-dim">SYPHON</button>
             <button id="spoutBtn"  class="btn-dim">SPOUT</button>
             <button id="aboutBtn" class="btn-red">ABOUT</button>
+        </div>
+
+        <div class="offline-export-row">
+            <label>OFFLINE MP4</label>
+            <select id="offlineFps" title="Deterministic timeline frame rate" style="font-size:10px;padding:1px 2px">
+                <option value="24">24 FPS</option>
+                <option value="30" selected>30 FPS</option>
+                <option value="60">60 FPS</option>
+            </select>
+            <select id="offlineStartMode" title="Export timeline start" style="font-size:10px;padding:1px 2px">
+                <option value="current" selected>START CURRENT</option>
+                <option value="zero">START ZERO</option>
+                <option value="custom">START CUSTOM</option>
+            </select>
+            <input id="offlineStartSeconds" type="number" min="0" step="0.001" value="0" title="Custom source start in seconds" style="width:68px;font-size:10px;padding:1px 2px">
+            <label>DUR</label>
+            <input id="offlineDuration" type="number" min="0.1" max="3600" step="0.1" value="10" title="Output duration in seconds" style="width:60px;font-size:10px;padding:1px 2px">
+            <select id="offlinePreset" title="Deterministic export resolution" style="font-size:10px;padding:1px 2px">
+                <option value="native" selected>NATIVE</option>
+                <option value="1080p">1080P</option>
+                <option value="4k">4K</option>
+                <option value="8k">8K</option>
+                <option value="custom">CUSTOM</option>
+            </select>
+            <input id="offlineW" type="number" min="1" max="8192" value="1920" title="Offline export width" style="width:56px;font-size:10px;padding:1px 2px">
+            <span style="font-size:10px;color:#404040">×</span>
+            <input id="offlineH" type="number" min="1" max="8192" value="1080" title="Offline export height" style="width:56px;font-size:10px;padding:1px 2px">
+            <select id="offlineSampling" title="Offline export scaling sampler" style="font-size:10px;padding:1px 2px">
+                <option value="smooth" selected>SMOOTH</option>
+                <option value="crisp">CRISP</option>
+            </select>
+            <select id="offlineFit" title="Offline export aspect policy" style="font-size:10px;padding:1px 2px">
+                <option value="fit" selected>FIT</option>
+                <option value="crop">CROP</option>
+                <option value="stretch">STRETCH</option>
+            </select>
+            <select id="offlineAudio" title="Offline export audio source" style="font-size:10px;padding:1px 2px">
+                <option value="source" selected>SOURCE AUDIO</option>
+                <option value="none">SILENT</option>
+            </select>
+            <button id="offlineExportBtn" class="btn-red" title="Render a frame-driven deterministic MP4">▶ Export MP4</button>
+            <button id="offlineCancelBtn" disabled title="Cancel the deterministic export">■ Cancel</button>
+            <span class="pill" id="offlineExportPill" style="color:rgba(0,200,220,.7);border-color:rgba(0,200,220,.25)" title="Deterministic video export status">OFFLINE: READY</span>
         </div>
 
         <!-- seek / time row -->

@@ -1,16 +1,17 @@
-# Huff Native wgpu · Milestone 10
+# Huff Native wgpu · Milestone 11
 
-Milestone 10 adds **independent high-resolution PNG still export** to the native Huff engine.
+Milestone 11 adds **frame-driven deterministic MP4 export** to the native Huff engine.
 
 The application now includes:
 
-- native FFmpeg video and audio playback;
+- native FFmpeg video and synchronized audio playback;
 - native camera capture;
 - wgpu temporal history, flying feedback, glitch, clusters, scanlines, Smoosh, Luma Key, Global Mix, and Flow;
 - Syphon output on macOS;
 - SpoutDX output path on Windows;
-- synchronized 30/60 FPS MP4 recording;
-- native, 1080p, 4K, 8K, and custom PNG still export.
+- synchronized 30/60 FPS live MP4 recording;
+- native, 1080p, 4K, 8K, and custom PNG still export;
+- fixed-timestep 24/30/60 FPS offline MP4 export.
 
 ## Run
 
@@ -31,55 +32,75 @@ Windows DX12:
 npm run dev:dx12
 ```
 
-FFmpeg must be available on `PATH` for file decoding, recording, and PNG encoding.
+FFmpeg must be available on `PATH` for file decoding, audio, recording, still encoding, and offline export.
 
-## Still export
+## Deterministic offline export
 
-The top bar contains:
+The control bar includes:
 
 ```text
-PNG NATIVE / 1080P / 4K / 8K / CUSTOM
+24 / 30 / 60 FPS
+START CURRENT / ZERO / CUSTOM
+DURATION
+NATIVE / 1080P / 4K / 8K / CUSTOM
 SMOOTH / CRISP
 FIT / CROP / STRETCH
-PNG
-EXPORT status
+SOURCE AUDIO / SILENT
+EXPORT MP4 / CANCEL
 ```
 
-The export is generated from Huff's authoritative native output texture through a separate GPU pass. Export dimensions do not alter the live render size shown by `R:`.
+Unlike live recording, the exporter owns its timeline:
 
 ```text
-Live render graph
-      ↓
-Authoritative RGBA8 output
-      ├── native window
-      ├── Syphon / Spout
-      ├── recording
-      └── independent still scaling pass
-                ↓
-             PNG export
+private exact-frame decoder
+        ↓
+one source frame
+        ↓
+one fixed native simulation step
+        ↓
+one completed Huff output frame
+        ↓
+one CFR encoder frame
 ```
 
-### What high resolution means here
+The export may run slower than real time, but it renders the requested frame count without relying on wall-clock presentation timing. MP4 dimensions are normalized to even values for broad H.264 compatibility.
 
-A 4K or 8K still is a high-resolution GPU resample of the completed current Huff image. It preserves the exact current live composition and temporal buffer state without rebuilding those systems. It does not yet re-run tile generation, flow, history, and feedback at an independent 8K working resolution.
+At the start of the export, Huff freezes canonical parameters and control-input snapshots, resets its temporal/procedural state, and uses the selected source interval, seed, playback rate, frame rate, and duration for the entire render.
 
 ## Sidecar
 
-Every PNG also writes:
+Every MP4 also writes:
 
 ```text
-<image-name>.huff-export.json
+<video-name>.mp4.huff-offline.json
 ```
 
-The sidecar records the source, transport position, render/export dimensions, export policy, parameter revision, and canonical parameter values.
+The sidecar records:
+
+- Huff engine build;
+- source path, codec, source duration, and playback rate;
+- export start, duration, FPS, resolution, sampling, and fit policy;
+- source audio and looping policy;
+- canonical parameter revision and values;
+- deterministic source seed.
+
+## Important live-state behavior
+
+The exporter pauses the live file source and restores its prior position and play/pause state afterward. Temporal history and feedback pixel contents are cleared to establish a reproducible initial export condition; they are not checkpointed and restored.
+
+Syphon and Spout hold the last live frame during export and resume afterward. Recording and PNG export cannot run at the same time as deterministic export.
+
+## Resolution meaning
+
+1080p, 4K, and 8K offline outputs currently resample Huff's completed internal render using a GPU pass. They do not yet rerun the complete history/effect graph at an independently larger working resolution.
 
 ## Documentation
 
-- `UPGRADE-NOTES-10.md` — implementation details and scope
-- `TESTING.md` — runtime checklist
-- `MIGRATION-STATUS.md` — completed and remaining native systems
-- `VALIDATION.md` — static package checks
+- `UPGRADE-NOTES-11.md` — design, lifecycle, and scope
+- `TESTING.md` — local runtime checklist
+- `MIGRATION-STATUS.md` — completed and remaining systems
+- `VALIDATION.md` — static and FFmpeg pipeline checks
 
 ## Next milestone
 
-The next structural milestone is a frame-driven deterministic video exporter. It should own decoding, render time, frame stepping, output resolution, and encoding rather than relying on the real-time recording clock.
+The next structural milestone is **production export profiles and image sequences**: PNG sequences, ProRes/FFV1 options, alpha-capable output where supported, and export-job manifests. Parameter calibration remains a later dedicated pass, as planned.

@@ -5,12 +5,16 @@ use crate::{
     gesture::{GestureSnapshot, MAX_POINTS},
     history::{GpuHistoryRing, HISTORY_FORMAT},
     midi::MidiSnapshot,
+    offline_export::{
+        OfflineExportConfig, OfflineExportHandle, OfflineExportMetadata, OfflineExportSession,
+    },
     osc::OscSnapshot,
     output_frame::OutputFrame,
     parameters::{ParameterSnapshot, ParameterStore},
     recording::RecordingHandle,
     source::{ActiveSource, SourceSelector},
-    video::{SharedVideoFrame, VideoFrame},
+    video::{SharedVideoFrame, VideoFrame, VideoHandle},
+    video_audio::{VideoAudioCommand, VideoAudioHandle},
     spout, syphon,
 };
 use bytemuck::{Pod, Zeroable};
@@ -45,6 +49,8 @@ pub struct InputSources {
     pub osc: Arc<RwLock<OscSnapshot>>,
     pub gesture: Arc<RwLock<GestureSnapshot>>,
     pub source: SourceSelector,
+    pub video_control: VideoHandle,
+    pub video_audio_control: VideoAudioHandle,
 }
 
 #[derive(Debug, Clone)]
@@ -58,6 +64,13 @@ pub enum RenderCommand {
         metadata: StillExportMetadata,
         reply: SyncSender<Result<(), String>>,
     },
+    StartOfflineExport {
+        config: OfflineExportConfig,
+        metadata: OfflineExportMetadata,
+        parameter_snapshot: ParameterSnapshot,
+        reply: SyncSender<Result<(), String>>,
+    },
+    CancelOfflineExport,
     StartSyphon {
         fps: u32,
         reply: SyncSender<Result<(), String>>,
@@ -188,6 +201,26 @@ impl RendererHandle {
             .map_err(|_| "timed out queuing still export".to_string())?
     }
 
+    pub fn start_offline_export(
+        &self,
+        config: OfflineExportConfig,
+        metadata: OfflineExportMetadata,
+        parameter_snapshot: ParameterSnapshot,
+    ) -> Result<(), String> {
+        let (reply_tx, reply_rx) = sync_channel(1);
+        self.tx
+            .send(RenderCommand::StartOfflineExport {
+                config,
+                metadata,
+                parameter_snapshot,
+                reply: reply_tx,
+            })
+            .map_err(|_| "renderer command channel is unavailable".to_string())?;
+        reply_rx
+            .recv_timeout(Duration::from_secs(60))
+            .map_err(|_| "timed out starting deterministic export".to_string())?
+    }
+
     pub fn start_syphon(&self, fps: u32) -> Result<(), String> {
         let (reply_tx, reply_rx) = sync_channel(1);
         self.tx
@@ -230,10 +263,18 @@ pub fn start(
     parameters: ParameterStore,
     recording: RecordingHandle,
     export: ExportHandle,
+    offline_export: OfflineExportHandle,
 ) -> Result<RendererHandle, String> {
     let (tx, rx) = sync_channel(128);
     let alive = Arc::new(AtomicBool::new(true));
-    let mut renderer = pollster::block_on(Renderer::new(window, sources, parameters, recording, export))?;
+    let mut renderer = pollster::block_on(Renderer::new(
+        window,
+        sources,
+        parameters,
+        recording,
+        export,
+        offline_export,
+    ))?;
     let info = Arc::new(RwLock::new(renderer.info()));
     let thread_info = Arc::clone(&info);
     let thread_alive = Arc::clone(&alive);
@@ -988,6 +1029,203 @@ impl StillCapture {
     }
 }
 
+struct OfflineFrameCapture {
+    width: u32,
+    height: u32,
+    padded_bytes_per_row: u32,
+    texture: wgpu::Texture,
+    view: wgpu::TextureView,
+    buffer: wgpu::Buffer,
+    pixels: Vec<u8>,
+    _uniform_buffer: wgpu::Buffer,
+    uniform_bind: wgpu::BindGroup,
+    source_bind: wgpu::BindGroup,
+}
+
+impl OfflineFrameCapture {
+    #[allow(clippy::too_many_arguments)]
+    fn new(
+        device: &wgpu::Device,
+        uniform_layout: &wgpu::BindGroupLayout,
+        source_layout: &wgpu::BindGroupLayout,
+        smooth_sampler: &wgpu::Sampler,
+        crisp_sampler: &wgpu::Sampler,
+        source_view: &wgpu::TextureView,
+        config: &OfflineExportConfig,
+        source_width: u32,
+        source_height: u32,
+    ) -> Self {
+        let width = config.output_width.max(1);
+        let height = config.output_height.max(1);
+        let uniforms = ExportUniforms {
+            source_size: [source_width.max(1) as f32, source_height.max(1) as f32],
+            target_size: [width as f32, height as f32],
+            fit_mode: [
+                match config.fit_mode.as_str() {
+                    "crop" => 1.0,
+                    "stretch" => 2.0,
+                    _ => 0.0,
+                },
+                0.0,
+                0.0,
+                0.0,
+            ],
+        };
+        let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("huff deterministic export uniforms"),
+            contents: bytemuck::bytes_of(&uniforms),
+            usage: wgpu::BufferUsages::UNIFORM,
+        });
+        let uniform_bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("huff deterministic export uniform bind"),
+            layout: uniform_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: uniform_buffer.as_entire_binding(),
+            }],
+        });
+        let sampler = if config.sampling == "crisp" {
+            crisp_sampler
+        } else {
+            smooth_sampler
+        };
+        let source_bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("huff deterministic export source bind"),
+            layout: source_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(source_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(sampler),
+                },
+            ],
+        });
+        let (texture, view) = create_output_texture(
+            device,
+            "huff deterministic export target",
+            width,
+            height,
+        );
+        let dense_bytes_per_row = width.saturating_mul(OUTPUT_BYTES_PER_PIXEL);
+        let padded_bytes_per_row = align_copy_bytes_per_row(dense_bytes_per_row);
+        let buffer_size = u64::from(padded_bytes_per_row).saturating_mul(u64::from(height));
+        let buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("huff deterministic export readback"),
+            size: buffer_size.max(4),
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+        Self {
+            width,
+            height,
+            padded_bytes_per_row,
+            texture,
+            view,
+            buffer,
+            pixels: vec![0_u8; width as usize * height as usize * OUTPUT_BYTES_PER_PIXEL as usize],
+            _uniform_buffer: uniform_buffer,
+            uniform_bind,
+            source_bind,
+        }
+    }
+
+    fn encode(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        pipeline: &wgpu::RenderPipeline,
+    ) {
+        {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("huff deterministic export scaling pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &self.view,
+                    resolve_target: None,
+                    depth_slice: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            pass.set_pipeline(pipeline);
+            pass.set_bind_group(0, &self.uniform_bind, &[]);
+            pass.set_bind_group(1, &self.source_bind, &[]);
+            pass.draw(0..3, 0..1);
+        }
+        encoder.copy_texture_to_buffer(
+            wgpu::TexelCopyTextureInfo {
+                texture: &self.texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::TexelCopyBufferInfo {
+                buffer: &self.buffer,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(self.padded_bytes_per_row),
+                    rows_per_image: Some(self.height),
+                },
+            },
+            wgpu::Extent3d {
+                width: self.width,
+                height: self.height,
+                depth_or_array_layers: 1,
+            },
+        );
+    }
+
+    fn read(&mut self, device: &wgpu::Device) -> Result<(), String> {
+        let slice = self.buffer.slice(..);
+        let (tx, rx) = channel();
+        slice.map_async(wgpu::MapMode::Read, move |result| {
+            let _ = tx.send(result.map_err(|error| error.to_string()));
+        });
+        let started = Instant::now();
+        loop {
+            if let Err(error) = device.poll(wgpu::PollType::Poll) {
+                return Err(format!("deterministic export GPU polling failed: {error}"));
+            }
+            match rx.try_recv() {
+                Ok(Ok(())) => break,
+                Ok(Err(error)) => {
+                    return Err(format!("deterministic export GPU readback failed: {error}"))
+                }
+                Err(TryRecvError::Disconnected) => {
+                    return Err("deterministic export GPU callback disconnected".into())
+                }
+                Err(TryRecvError::Empty) => {
+                    if started.elapsed() > Duration::from_secs(30) {
+                        return Err("deterministic export GPU readback timed out".into());
+                    }
+                    thread::sleep(Duration::from_millis(1));
+                }
+            }
+        }
+        let mapped = slice.get_mapped_range();
+        let dense_bytes_per_row = self.width as usize * OUTPUT_BYTES_PER_PIXEL as usize;
+        for row in 0..self.height as usize {
+            let source_start = row * self.padded_bytes_per_row as usize;
+            let source_end = source_start + dense_bytes_per_row;
+            let destination_start = row * dense_bytes_per_row;
+            let destination_end = destination_start + dense_bytes_per_row;
+            self.pixels[destination_start..destination_end]
+                .copy_from_slice(&mapped[source_start..source_end]);
+        }
+        drop(mapped);
+        drop(slice);
+        self.buffer.unmap();
+        Ok(())
+    }
+}
+
 fn align_copy_bytes_per_row(value: u32) -> u32 {
     let alignment = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
     value.div_ceil(alignment) * alignment
@@ -1016,6 +1254,19 @@ struct OffscreenTargets {
     smoosh_bind_a: wgpu::BindGroup,
     smoosh_bind_b: wgpu::BindGroup,
     scan_bind: wgpu::BindGroup,
+}
+
+#[derive(Clone)]
+struct FrozenInputState {
+    audio: AudioSnapshot,
+    midi: MidiSnapshot,
+    osc: OscSnapshot,
+    gesture: GestureSnapshot,
+}
+
+struct OfflinePlaybackRestore {
+    position_seconds: f64,
+    was_playing: bool,
 }
 
 struct Renderer {
@@ -1070,6 +1321,13 @@ struct Renderer {
     still_capture: StillCapture,
     recording: RecordingHandle,
     export: ExportHandle,
+    offline_export: OfflineExportHandle,
+    offline_session: Option<OfflineExportSession>,
+    offline_capture: Option<OfflineFrameCapture>,
+    offline_inputs: Option<FrozenInputState>,
+    offline_restore: Option<OfflinePlaybackRestore>,
+    offline_source_sequence: u64,
+    deferred_surface_size: Option<(u32, u32)>,
     syphon_enabled: bool,
     syphon_fps: u32,
     spout_enabled: bool,
@@ -1213,6 +1471,7 @@ struct Renderer {
     surface_recoveries: u64,
     started: Instant,
     last_frame: Instant,
+    simulation_seconds: f64,
     frame_count: u64,
     measured_fps: f64,
     measured_frame_time_ms: f64,
@@ -1242,6 +1501,7 @@ impl Renderer {
         parameters: ParameterStore,
         recording: RecordingHandle,
         export: ExportHandle,
+        offline_export: OfflineExportHandle,
     ) -> Result<Self, String> {
         let size = window.inner_size().map_err(|error| error.to_string())?;
         let surface_width = size.width.max(1);
@@ -1811,6 +2071,13 @@ impl Renderer {
             history,
             recording,
             export,
+            offline_export,
+            offline_session: None,
+            offline_capture: None,
+            offline_inputs: None,
+            offline_restore: None,
+            offline_source_sequence: 0,
+            deferred_surface_size: None,
             syphon_enabled: false,
             syphon_fps: 30,
             spout_enabled: false,
@@ -1950,6 +2217,7 @@ impl Renderer {
             surface_recoveries: 0,
             started: now,
             last_frame: now,
+            simulation_seconds: 0.0,
             frame_count: 0,
             measured_fps: 0.0,
             measured_frame_time_ms: 0.0,
@@ -2242,8 +2510,12 @@ impl Renderer {
         if !force && revision == self.parameter_snapshot.revision {
             return;
         }
-        self.parameter_snapshot = self.parameters.snapshot();
-        let snapshot = self.parameter_snapshot.clone();
+        let snapshot = self.parameters.snapshot();
+        self.apply_parameter_snapshot(snapshot);
+    }
+
+    fn apply_parameter_snapshot(&mut self, snapshot: ParameterSnapshot) {
+        self.parameter_snapshot = snapshot.clone();
 
         self.base_enabled = snapshot.bool_value("source.base_enabled", true);
         self.base_mix = snapshot.number("source.base_mix", 1.0).clamp(0.0, 1.0) as f32;
@@ -2405,19 +2677,245 @@ impl Renderer {
         self.rebuild_history_if_needed(self.history_width, self.history_height, capacity);
     }
 
+    fn begin_offline_export(
+        &mut self,
+        config: OfflineExportConfig,
+        metadata: OfflineExportMetadata,
+        parameter_snapshot: ParameterSnapshot,
+    ) -> Result<(), String> {
+        if self.offline_session.is_some() || self.offline_export.info().active {
+            return Err("another deterministic export is already active".into());
+        }
+        if self.recording.info().active || self.recording.info().finalizing {
+            return Err("deterministic export cannot start while recording".into());
+        }
+        if self.export.info().active || self.still_capture.busy() {
+            return Err("deterministic export cannot start while a PNG export is active".into());
+        }
+        let max_dimension = self.device.limits().max_texture_dimension_2d.min(8192);
+        if config.output_width > max_dimension || config.output_height > max_dimension {
+            return Err(format!(
+                "deterministic export exceeds the supported {}×{} maximum",
+                max_dimension, max_dimension
+            ));
+        }
+        self.offline_export.begin(&config)?;
+        let session = match OfflineExportSession::start(config.clone(), metadata) {
+            Ok(session) => session,
+            Err(error) => {
+                self.offline_export.fail(error.clone());
+                return Err(error);
+            }
+        };
+
+        let video_status = self.sources.video_control.status();
+        self.offline_restore = Some(OfflinePlaybackRestore {
+            position_seconds: video_status.position_seconds,
+            was_playing: video_status.playing,
+        });
+        self.sources.video_audio_control.send(VideoAudioCommand::Pause);
+        self.sources.video_control.pause();
+
+        self.apply_parameter_snapshot(parameter_snapshot);
+        self.offline_inputs = Some(FrozenInputState {
+            audio: self
+                .sources
+                .audio
+                .read()
+                .expect("audio snapshot poisoned")
+                .clone(),
+            midi: self
+                .sources
+                .midi
+                .read()
+                .expect("MIDI snapshot poisoned")
+                .clone(),
+            osc: self
+                .sources
+                .osc
+                .read()
+                .expect("OSC snapshot poisoned")
+                .clone(),
+            gesture: self
+                .sources
+                .gesture
+                .read()
+                .expect("gesture snapshot poisoned")
+                .clone(),
+        });
+        self.clear_feedback();
+        self.simulation_seconds = 0.0;
+        self.frame_count = 0;
+        self.offline_source_sequence = 0;
+        self.last_history_source = ActiveSource::Video;
+        if self.video_texture.width != config.source_width
+            || self.video_texture.height != config.source_height
+        {
+            self.video_texture = create_empty_source_texture(
+                &self.device,
+                "offline deterministic video texture",
+                config.source_width,
+                config.source_height,
+            );
+            self.rebuild_source_bind();
+        }
+        self.offline_capture = Some(OfflineFrameCapture::new(
+            &self.device,
+            &self.export_uniform_layout,
+            &self.export_source_layout,
+            &self.sampler,
+            &self.crisp_sampler,
+            &self.targets.output_view,
+            &config,
+            self.render_width,
+            self.render_height,
+        ));
+        self.offline_session = Some(session);
+        self.offline_export.set_phase("rendering");
+        Ok(())
+    }
+
+    fn upload_offline_video(
+        &mut self,
+        pixels: &[u8],
+        width: u32,
+        height: u32,
+    ) -> Result<(), String> {
+        let expected = width as usize * height as usize * 4;
+        if pixels.len() != expected {
+            return Err(format!(
+                "offline decoder frame has {} bytes; expected {}",
+                pixels.len(), expected
+            ));
+        }
+        if self.video_texture.width != width || self.video_texture.height != height {
+            self.video_texture = create_empty_source_texture(
+                &self.device,
+                "offline deterministic video texture",
+                width,
+                height,
+            );
+            self.rebuild_source_bind();
+        }
+        self.queue.write_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture: &self.video_texture.texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            pixels,
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(width * 4),
+                rows_per_image: Some(height),
+            },
+            wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+        );
+        self.offline_source_sequence = self.offline_source_sequence.wrapping_add(1).max(1);
+        self.video_texture.sequence = self.offline_source_sequence;
+        self.video_uploads = self.video_uploads.wrapping_add(1);
+        self.video_age_ms = 0.0;
+        Ok(())
+    }
+
+    fn restore_after_offline_export(&mut self) {
+        self.offline_capture = None;
+        self.offline_inputs = None;
+        self.offline_source_sequence = 0;
+        self.simulation_seconds = self.started.elapsed().as_secs_f64();
+        if let Some((width, height)) = self.deferred_surface_size.take() {
+            self.resize_surface(width, height);
+        }
+        self.clear_feedback();
+        self.apply_parameter_state(true);
+        if let Some(restore) = self.offline_restore.take() {
+            self.sources.video_audio_control.send(VideoAudioCommand::Seek {
+                seconds: restore.position_seconds,
+                playing: false,
+            });
+            self.sources.video_control.pause();
+            self.sources.video_control.seek(restore.position_seconds);
+            if restore.was_playing {
+                self.sources
+                    .video_audio_control
+                    .send(VideoAudioCommand::Play(restore.position_seconds));
+                self.sources.video_control.play();
+            }
+        }
+        self.last_frame = Instant::now();
+    }
+
+    fn cancel_active_offline_export(&mut self) {
+        if let Some(session) = self.offline_session.take() {
+            let started = session.started;
+            session.cancel();
+            self.offline_export.cancelled(started);
+            self.restore_after_offline_export();
+        }
+    }
+
+    fn fail_active_offline_export(&mut self, error: String) {
+        if let Some(session) = self.offline_session.take() {
+            session.cancel();
+        }
+        self.offline_export.fail(error.clone());
+        self.restore_after_offline_export();
+        self.last_error = error;
+    }
+
+    fn finish_active_offline_export(&mut self) {
+        let Some(session) = self.offline_session.take() else {
+            return;
+        };
+        let started = session.started;
+        self.offline_export.set_phase(if session.config.include_audio {
+            "muxing"
+        } else {
+            "finalizing"
+        });
+        match session.finish() {
+            Ok(path) => self.offline_export.complete(&path, started),
+            Err(error) => {
+                self.offline_export.fail(error.clone());
+                self.last_error = error;
+            }
+        }
+        self.restore_after_offline_export();
+    }
+
     fn handle_commands(&mut self, rx: &Receiver<RenderCommand>) -> bool {
         loop {
             match rx.try_recv() {
-                Ok(RenderCommand::Resize(width, height)) => self.resize_surface(width, height),
-                Ok(RenderCommand::ClearFeedback) => self.clear_feedback(),
+                Ok(RenderCommand::Resize(width, height)) => {
+                    // The deterministic export capture bind group references the current
+                    // authoritative output texture. Defer target-affecting resizes until
+                    // the offline session has restored the live renderer.
+                    if self.offline_session.is_none() {
+                        self.resize_surface(width, height);
+                    } else {
+                        self.deferred_surface_size = Some((width, height));
+                    }
+                }
+                Ok(RenderCommand::ClearFeedback) => {
+                    if self.offline_session.is_none() {
+                        self.clear_feedback();
+                    }
+                },
                 Ok(RenderCommand::RecoverSurface) => {
                     if let Err(error) = self.recover_surface(false) {
                         self.last_error = error;
                     }
                 }
                 Ok(RenderCommand::FireFlowPulse) => {
-                    self.flow_pulse_until = Some(Instant::now() + Duration::from_millis(220));
-                    self.flow_pulse_fires = self.flow_pulse_fires.wrapping_add(1);
+                    if self.offline_session.is_none() {
+                        self.flow_pulse_until = Some(Instant::now() + Duration::from_millis(220));
+                        self.flow_pulse_fires = self.flow_pulse_fires.wrapping_add(1);
+                    }
                 }
                 Ok(RenderCommand::CaptureStill {
                     mut config,
@@ -2430,7 +2928,9 @@ impl Renderer {
                         .max_texture_dimension_2d
                         .min(8192);
                     let pixels = u64::from(config.width).saturating_mul(u64::from(config.height));
-                    let result = if config.width == 0 || config.height == 0 {
+                    let result = if self.offline_session.is_some() {
+                        Err("still export is disabled while deterministic export is active".into())
+                    } else if config.width == 0 || config.height == 0 {
                         Err("still export dimensions must be greater than zero".into())
                     } else if config.width > max_dimension || config.height > max_dimension {
                         Err(format!(
@@ -2460,6 +2960,21 @@ impl Renderer {
                     }
                     let _ = reply.send(result);
                 }
+                Ok(RenderCommand::StartOfflineExport {
+                    config,
+                    metadata,
+                    parameter_snapshot,
+                    reply,
+                }) => {
+                    let result = self.begin_offline_export(config, metadata, parameter_snapshot);
+                    if let Err(error) = &result {
+                        self.last_error = error.clone();
+                    }
+                    let _ = reply.send(result);
+                }
+                Ok(RenderCommand::CancelOfflineExport) => {
+                    self.offline_export.request_cancel();
+                }
                 Ok(RenderCommand::StartSyphon { fps, reply }) => {
                     let result = self.start_syphon_output(fps);
                     if let Err(error) = &result {
@@ -2486,6 +3001,7 @@ impl Renderer {
                     if self.still_capture.busy() || self.export.info().active {
                         self.export.fail("still export interrupted by application shutdown".into());
                     }
+                    self.cancel_active_offline_export();
                     return false;
                 },
                 Err(TryRecvError::Empty) => return true,
@@ -2607,31 +3123,40 @@ impl Renderer {
     }
 
     fn upload_state(&mut self, delta_seconds: f32) {
-        self.apply_parameter_state(false);
-        let audio = self
-            .sources
-            .audio
-            .read()
-            .expect("audio snapshot poisoned")
-            .clone();
-        let midi = self
-            .sources
-            .midi
-            .read()
-            .expect("MIDI snapshot poisoned")
-            .clone();
-        let osc = self
-            .sources
-            .osc
-            .read()
-            .expect("OSC snapshot poisoned")
-            .clone();
-        let gesture = self
-            .sources
-            .gesture
-            .read()
-            .expect("gesture snapshot poisoned")
-            .clone();
+        if self.offline_session.is_none() {
+            self.apply_parameter_state(false);
+        }
+        let (audio, midi, osc, gesture) = if let Some(frozen) = self.offline_inputs.as_ref() {
+            (
+                frozen.audio.clone(),
+                frozen.midi.clone(),
+                frozen.osc.clone(),
+                frozen.gesture.clone(),
+            )
+        } else {
+            (
+                self.sources
+                    .audio
+                    .read()
+                    .expect("audio snapshot poisoned")
+                    .clone(),
+                self.sources
+                    .midi
+                    .read()
+                    .expect("MIDI snapshot poisoned")
+                    .clone(),
+                self.sources
+                    .osc
+                    .read()
+                    .expect("OSC snapshot poisoned")
+                    .clone(),
+                self.sources
+                    .gesture
+                    .read()
+                    .expect("gesture snapshot poisoned")
+                    .clone(),
+            )
+        };
 
         self.audio_sequence = audio.sequence;
         self.midi_sequence = midi.sequence;
@@ -2639,7 +3164,11 @@ impl Renderer {
         self.gesture_sequence = gesture.sequence;
         self.active_gesture_points = gesture.count;
 
-        let active_source = self.sources.source.get();
+        let active_source = if self.offline_session.is_some() {
+            ActiveSource::Video
+        } else {
+            self.sources.source.get()
+        };
         if active_source != self.last_history_source {
             self.history.clear();
             self.targets = create_targets(
@@ -2677,7 +3206,7 @@ impl Renderer {
         self.uniforms.resolution_time = [
             self.render_width as f32,
             self.render_height as f32,
-            self.started.elapsed().as_secs_f32(),
+            self.simulation_seconds as f32,
             delta_seconds,
         ];
         self.uniforms.source_dimensions = [
@@ -2696,7 +3225,11 @@ impl Renderer {
             self.base_mix,
             self.feedback.min(1.0),
             self.persistence.min(1.0),
-            self.sources.source.shader_code(),
+            if self.offline_session.is_some() {
+                ActiveSource::Video.code() as f32
+            } else {
+                self.sources.source.shader_code()
+            },
         ];
         self.uniforms.controls1 = [
             self.brightness,
@@ -2993,7 +3526,7 @@ impl Renderer {
         self.cluster_physics_time += f64::from(self.cluster_steer) * 0.004;
         let cluster_travel = (f64::from(self.cluster_speed).max(0.0) / 10.0).powf(1.7) * 7.0;
         let pulse = f64::from(self.cluster_pulse);
-        let now_seconds = self.started.elapsed().as_secs_f64();
+        let now_seconds = self.simulation_seconds;
 
         if pulse > 0.0 {
             let pulse_interval = (3.0 - pulse * 0.25).max(0.2);
@@ -3198,7 +3731,7 @@ impl Renderer {
             let per_center = ((bias_count as usize) / center_count).max(1);
             let breathe_factor = if self.cluster_breathe > 0.0 {
                 1.0
-                    + (self.started.elapsed().as_secs_f64() * 0.6).sin()
+                    + (self.simulation_seconds * 0.6).sin()
                         * f64::from(self.cluster_breathe)
             } else {
                 1.0
@@ -3397,6 +3930,9 @@ impl Renderer {
     }
 
     fn active_source_sequence(&self) -> u64 {
+        if self.offline_session.is_some() {
+            return self.offline_source_sequence;
+        }
         match self.sources.source.get() {
             ActiveSource::Video => self.video_texture.sequence,
             ActiveSource::Camera => self.camera_texture.sequence,
@@ -3494,17 +4030,61 @@ impl Renderer {
         }
 
         let now = Instant::now();
-        let delta = now.duration_since(self.last_frame).as_secs_f64();
+        let offline_active = self.offline_session.is_some();
+        let delta = if offline_active {
+            if self.offline_export.cancel_requested() {
+                self.cancel_active_offline_export();
+                return Ok(RenderOutcome::Presented);
+            }
+            let next = {
+                let session = self
+                    .offline_session
+                    .as_mut()
+                    .expect("offline session disappeared");
+                let width = session.config.source_width;
+                let height = session.config.source_height;
+                let fps = session.config.fps.max(1);
+                let frame_index = session.rendered_frames;
+                match session.next_frame() {
+                    Ok(Some(frame)) => Ok((frame, width, height, fps, frame_index)),
+                    Ok(None) => Err(None),
+                    Err(error) => Err(Some(error)),
+                }
+            };
+            match next {
+                Ok((frame, width, height, fps, frame_index)) => {
+                    if let Err(error) = self.upload_offline_video(&frame, width, height) {
+                        self.fail_active_offline_export(error.clone());
+                        return Err(error);
+                    }
+                    self.simulation_seconds = frame_index as f64 / fps as f64;
+                    1.0 / fps as f64
+                }
+                Err(None) => {
+                    self.finish_active_offline_export();
+                    return Ok(RenderOutcome::Presented);
+                }
+                Err(Some(error)) => {
+                    self.fail_active_offline_export(error.clone());
+                    return Err(error);
+                }
+            }
+        } else {
+            let live_delta = now.duration_since(self.last_frame).as_secs_f64();
+            self.simulation_seconds += live_delta.max(0.0);
+            self.upload_camera();
+            self.upload_video();
+            live_delta
+        };
         self.last_frame = now;
         if delta > 0.0 {
             self.measured_fps = 1.0 / delta;
             self.measured_frame_time_ms = delta * 1000.0;
         }
-        self.upload_camera();
-        self.upload_video();
         self.upload_state(delta as f32);
 
-        let external_output_active = self.syphon_enabled
+        let external_output_active = offline_active
+            || self.syphon_enabled
             || self.spout_enabled
             || self.recording.info().active
             || self.export.info().active;
@@ -3571,7 +4151,7 @@ impl Renderer {
         let source_sequence = self.active_source_sequence();
         if let Some(layer) = self
             .history
-            .reserve_capture(source_sequence, &self.history_capture_rate, now)
+            .reserve_capture(source_sequence, &self.history_capture_rate, self.simulation_seconds)
         {
             begin_texture_pass(
                 &mut encoder,
@@ -3977,7 +4557,11 @@ impl Renderer {
             wgpu::Color::BLACK,
         );
 
-        let output_targets = self.output_capture_targets(now);
+        let output_targets = if offline_active {
+            0
+        } else {
+            self.output_capture_targets(now)
+        };
         let readback_slot = self.output_readback.encode_copy(
             &mut encoder,
             &self.targets.output,
@@ -3985,16 +4569,25 @@ impl Renderer {
             now,
         );
 
-        let still_mapping_started = self.still_capture.encode_pending(
-            &self.device,
-            &mut encoder,
-            &self.export_pipeline,
-            &self.export_uniform_layout,
-            &self.export_source_layout,
-            &self.sampler,
-            &self.crisp_sampler,
-            &self.targets.output_view,
-        );
+        let still_mapping_started = if offline_active {
+            false
+        } else {
+            self.still_capture.encode_pending(
+                &self.device,
+                &mut encoder,
+                &self.export_pipeline,
+                &self.export_uniform_layout,
+                &self.export_source_layout,
+                &self.sampler,
+                &self.crisp_sampler,
+                &self.targets.output_view,
+            )
+        };
+        if offline_active {
+            if let Some(capture) = self.offline_capture.as_ref() {
+                capture.encode(&mut encoder, &self.export_pipeline);
+            }
+        }
 
         if let Some(surface_view) = surface_view.as_ref() {
             begin_fullscreen_pass(
@@ -4020,6 +4613,37 @@ impl Renderer {
             frame.present();
             if reconfigure {
                 self.surface.configure(&self.device, &self.config);
+            }
+        }
+        if offline_active {
+            let write_result = {
+                let (capture_slot, session_slot) =
+                    (&mut self.offline_capture, &mut self.offline_session);
+                let capture = capture_slot
+                    .as_mut()
+                    .ok_or_else(|| "deterministic export capture target is unavailable".to_string());
+                let session = session_slot
+                    .as_mut()
+                    .ok_or_else(|| "offline session disappeared before frame encode".to_string());
+                match (capture, session) {
+                    (Ok(capture), Ok(session)) => capture
+                        .read(&self.device)
+                        .and_then(|_| session.write_rgba_frame(&capture.pixels))
+                        .map(|_| (session.rendered_frames, session.total_frames, session.started)),
+                    (Err(error), _) | (_, Err(error)) => Err(error),
+                }
+            };
+            let progress = match write_result {
+                Ok(progress) => progress,
+                Err(error) => {
+                    self.fail_active_offline_export(error.clone());
+                    return Err(error);
+                }
+            };
+            self.offline_export
+                .update_progress(progress.0, progress.1, progress.2);
+            if progress.0 >= progress.1 {
+                self.finish_active_offline_export();
             }
         }
         self.frame_count = self.frame_count.wrapping_add(1);
@@ -4062,6 +4686,7 @@ impl Renderer {
                 && !self.spout_enabled
                 && !self.recording.info().active
                 && !self.export.info().active
+                && self.offline_session.is_none()
             {
                 self.apply_parameter_state(false);
                 *info.write().expect("renderer info poisoned") = self.info();
@@ -4077,7 +4702,7 @@ impl Renderer {
             }
             *info.write().expect("renderer info poisoned") = self.info();
             let elapsed = iteration_started.elapsed();
-            if elapsed < target_frame {
+            if self.offline_session.is_none() && elapsed < target_frame {
                 thread::sleep(target_frame - elapsed);
             }
         }
@@ -4086,6 +4711,7 @@ impl Renderer {
         if self.still_capture.busy() || self.export.info().active {
             self.export.fail("still export interrupted because the renderer stopped".into());
         }
+        self.cancel_active_offline_export();
         alive.store(false, Ordering::Relaxed);
     }
 }

@@ -1,5 +1,3 @@
-use std::time::{Duration, Instant};
-
 pub const HISTORY_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 pub const HISTORY_MEMORY_BUDGET_BYTES: u64 = 192 * 1024 * 1024;
 
@@ -15,7 +13,7 @@ pub struct GpuHistoryRing {
     pub captured_frames: u64,
     pub rate_skips: u64,
     pub rebuilds: u64,
-    last_capture: Option<Instant>,
+    last_capture_seconds: Option<f64>,
     last_evaluated_sequence: u64,
 }
 
@@ -95,7 +93,7 @@ impl GpuHistoryRing {
             captured_frames: 0,
             rate_skips: 0,
             rebuilds,
-            last_capture: None,
+            last_capture_seconds: None,
             last_evaluated_sequence: 0,
         }
     }
@@ -123,16 +121,16 @@ impl GpuHistoryRing {
         &mut self,
         source_sequence: u64,
         capture_rate: &str,
-        now: Instant,
+        now_seconds: f64,
     ) -> Option<u32> {
         if source_sequence == 0 || source_sequence == self.last_evaluated_sequence {
             return None;
         }
         self.last_evaluated_sequence = source_sequence;
-        if let Some(interval) = capture_interval(capture_rate) {
+        if let Some(interval_seconds) = capture_interval_seconds(capture_rate) {
             if self
-                .last_capture
-                .map(|last| now.duration_since(last) < interval)
+                .last_capture_seconds
+                .map(|last| now_seconds - last + 1.0e-9 < interval_seconds)
                 .unwrap_or(false)
             {
                 self.rate_skips = self.rate_skips.wrapping_add(1);
@@ -143,14 +141,14 @@ impl GpuHistoryRing {
         self.write_index = (self.write_index + 1) % self.capacity;
         self.count = (self.count + 1).min(self.capacity);
         self.captured_frames = self.captured_frames.wrapping_add(1);
-        self.last_capture = Some(now);
+        self.last_capture_seconds = Some(now_seconds);
         Some(layer)
     }
 
     pub fn clear(&mut self) {
         self.count = 0;
         self.write_index = 0;
-        self.last_capture = None;
+        self.last_capture_seconds = None;
         self.last_evaluated_sequence = 0;
     }
 
@@ -166,7 +164,7 @@ impl GpuHistoryRing {
     }
 }
 
-fn capture_interval(rate: &str) -> Option<Duration> {
+fn capture_interval_seconds(rate: &str) -> Option<f64> {
     let fps = match rate {
         "30" => 30.0,
         "24" => 24.0,
@@ -174,5 +172,5 @@ fn capture_interval(rate: &str) -> Option<Duration> {
         "10" => 10.0,
         _ => return None,
     };
-    Some(Duration::from_secs_f64(1.0 / fps))
+    Some(1.0 / fps)
 }

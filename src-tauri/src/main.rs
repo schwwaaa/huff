@@ -11,6 +11,7 @@ mod export;
 mod gesture;
 mod history;
 mod midi;
+mod offline_export;
 mod osc;
 mod output_frame;
 mod parameters;
@@ -28,6 +29,7 @@ use camera::{CameraDevice, CameraHandle};
 use export::{ExportHandle, StillExportConfig, StillExportMetadata};
 use gesture::{GestureHandle, GesturePoint};
 use midi::{MidiCommand, MidiHandle};
+use offline_export::{OfflineExportConfig, OfflineExportHandle, OfflineExportMetadata};
 use osc::{OscCommand, OscHandle};
 use parameters::{ParameterDefinition, ParameterSnapshot, ParameterStore};
 use recording::{RecordingAudioSource, RecordingHandle, RecordingStartConfig};
@@ -67,6 +69,7 @@ struct AppInfo {
     spout: spout::SpoutInfo,
     recording: recording::RecordingInfo,
     export: export::ExportInfo,
+    offline_export: offline_export::OfflineExportInfo,
     gesture: gesture::GestureInfo,
     parameter_revision: u64,
     native_milestone: String,
@@ -86,11 +89,12 @@ fn get_app_info(
     gesture: tauri::State<'_, GestureHandle>,
     recording: tauri::State<'_, RecordingHandle>,
     export: tauri::State<'_, ExportHandle>,
+    offline_export: tauri::State<'_, OfflineExportHandle>,
     parameters: tauri::State<'_, ParameterStore>,
     source: tauri::State<'_, SourceSelector>,
 ) -> AppInfo {
     AppInfo {
-        build: "HNW-10".into(),
+        build: "HNW-11".into(),
         renderer: renderer.info(),
         camera: camera.status(),
         camera_devices: camera.devices(),
@@ -106,9 +110,10 @@ fn get_app_info(
         spout: spout::info(),
         recording: recording.info(),
         export: export.info(),
+        offline_export: offline_export.info(),
         gesture: gesture.info(),
         parameter_revision: parameters.revision(),
-        native_milestone: "HNW-10".into(),
+        native_milestone: "HNW-11".into(),
         active_source: source.get().label().into(),
     }
 }
@@ -214,6 +219,7 @@ fn start_recording(
     renderer: tauri::State<'_, RendererHandle>,
     recording: tauri::State<'_, RecordingHandle>,
     export: tauri::State<'_, ExportHandle>,
+    offline_export: tauri::State<'_, OfflineExportHandle>,
     source: tauri::State<'_, SourceSelector>,
     video_audio: tauri::State<'_, VideoAudioHandle>,
     microphone_audio: tauri::State<'_, AudioHandle>,
@@ -225,6 +231,9 @@ fn start_recording(
     }
     if export.info().active {
         return Err("recording is disabled while a still export is active".into());
+    }
+    if offline_export.info().active {
+        return Err("recording is disabled while deterministic export is active".into());
     }
     if !matches!(fps, 30 | 60) {
         return Err("recording FPS must be 30 or 60".into());
@@ -333,6 +342,7 @@ fn export_still(
     renderer: tauri::State<'_, RendererHandle>,
     export: tauri::State<'_, ExportHandle>,
     recording: tauri::State<'_, RecordingHandle>,
+    offline_export: tauri::State<'_, OfflineExportHandle>,
     parameters: tauri::State<'_, ParameterStore>,
     source: tauri::State<'_, SourceSelector>,
     video: tauri::State<'_, VideoHandle>,
@@ -346,6 +356,9 @@ fn export_still(
     }
     if export.info().active {
         return Err("another still export is already active".into());
+    }
+    if offline_export.info().active {
+        return Err("still export is disabled while deterministic export is active".into());
     }
     if !matches!(sampling.as_str(), "smooth" | "crisp") {
         return Err("export sampling must be smooth or crisp".into());
@@ -383,7 +396,7 @@ fn export_still(
         fit_mode: fit_mode.clone(),
     };
     let metadata = StillExportMetadata {
-        engine_build: "HNW-10".into(),
+        engine_build: "HNW-11".into(),
         captured_unix_ms: StillExportMetadata::now_unix_ms(),
         active_source: source.get().label().into(),
         source_file: video_info.file_path,
@@ -397,11 +410,171 @@ fn export_still(
         sampling,
         fit_mode,
         parameter_revision: snapshot.revision,
-        parameter_values: serde_json::to_value(snapshot.values)
+        parameter_values: serde_json::to_value(snapshot.values.clone())
             .map_err(|error| format!("could not serialize parameter state: {error}"))?,
     };
     renderer.capture_still(config, metadata)?;
     Ok(Some(path.display().to_string()))
+}
+
+#[tauri::command]
+fn start_offline_export(
+    renderer: tauri::State<'_, RendererHandle>,
+    recording: tauri::State<'_, RecordingHandle>,
+    export: tauri::State<'_, ExportHandle>,
+    offline_export: tauri::State<'_, OfflineExportHandle>,
+    parameters: tauri::State<'_, ParameterStore>,
+    video: tauri::State<'_, VideoHandle>,
+    video_audio: tauri::State<'_, VideoAudioHandle>,
+    fps: u32,
+    duration_seconds: f64,
+    start_mode: String,
+    start_seconds: f64,
+    width: u32,
+    height: u32,
+    sampling: String,
+    fit_mode: String,
+    audio_mode: String,
+) -> Result<Option<String>, String> {
+    if recording.info().active || recording.info().finalizing {
+        return Err("deterministic export is disabled while recording or finalizing".into());
+    }
+    if export.info().active {
+        return Err("deterministic export is disabled while a PNG export is active".into());
+    }
+    if offline_export.info().active {
+        return Err("another deterministic export is already active".into());
+    }
+    if !matches!(fps, 24 | 30 | 60) {
+        return Err("deterministic export FPS must be 24, 30, or 60".into());
+    }
+    if !duration_seconds.is_finite() || !(0.1..=3600.0).contains(&duration_seconds) {
+        return Err("deterministic export duration must be between 0.1 and 3600 seconds".into());
+    }
+    if !matches!(start_mode.as_str(), "current" | "zero" | "custom") {
+        return Err("deterministic export start mode must be current, zero, or custom".into());
+    }
+    if !matches!(sampling.as_str(), "smooth" | "crisp") {
+        return Err("deterministic export sampling must be smooth or crisp".into());
+    }
+    if !matches!(fit_mode.as_str(), "fit" | "crop" | "stretch") {
+        return Err("deterministic export fit mode must be fit, crop, or stretch".into());
+    }
+    if !matches!(audio_mode.as_str(), "source" | "none") {
+        return Err("deterministic export audio mode must be source or none".into());
+    }
+    if width == 0 || height == 0 || width > 8192 || height > 8192 {
+        return Err("deterministic export dimensions must be between 1 and 8192 pixels per axis".into());
+    }
+    if width % 2 != 0 || height % 2 != 0 {
+        return Err("deterministic MP4 dimensions must be even for broad H.264 compatibility".into());
+    }
+    if u64::from(width).saturating_mul(u64::from(height)) > 35_000_000 {
+        return Err("deterministic export exceeds the bounded 35 megapixel limit".into());
+    }
+
+    let video_info = video.status();
+    if !video_info.loaded || video_info.file_path.is_empty() {
+        return Err("load a video file before starting deterministic export".into());
+    }
+    let start = match start_mode.as_str() {
+        "zero" => 0.0,
+        "custom" => start_seconds,
+        _ => video_info.position_seconds,
+    };
+    if !start.is_finite() || start < 0.0 || start > video_info.duration_seconds.max(0.0) {
+        return Err("deterministic export start time is outside the loaded video".into());
+    }
+    let playback_rate = video_info.playback_rate.clamp(0.1, 4.0);
+    if !video_info.looping {
+        let source_end = start + duration_seconds * playback_rate;
+        if video_info.duration_seconds > 0.0 && source_end > video_info.duration_seconds + 0.001 {
+            let available = ((video_info.duration_seconds - start) / playback_rate).max(0.0);
+            return Err(format!(
+                "the requested export exceeds the remaining source duration; {:.2} seconds are available at {:.2}×",
+                available, playback_rate
+            ));
+        }
+    }
+
+    let selected = rfd::FileDialog::new()
+        .add_filter("MPEG-4 video", &["mp4"])
+        .set_file_name("huff-offline-export.mp4")
+        .save_file();
+    let Some(mut path) = selected else {
+        return Ok(None);
+    };
+    if !path
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(|value| value.eq_ignore_ascii_case("mp4"))
+        .unwrap_or(false)
+    {
+        path.set_extension("mp4");
+    }
+
+    let render = renderer.info();
+    let audio_info = video_audio.info();
+    let snapshot = parameters.snapshot();
+    let deterministic_seed = snapshot
+        .number("source.seed", 912_831.0)
+        .round()
+        .max(0.0) as u64;
+    let include_audio = audio_mode == "source" && audio_info.has_audio;
+    if audio_mode == "source" && !audio_info.has_audio {
+        return Err("the loaded video has no audio stream; choose SILENT export".into());
+    }
+    let config = OfflineExportConfig {
+        path: path.clone(),
+        source_path: PathBuf::from(&video_info.file_path),
+        source_width: video_info.width,
+        source_height: video_info.height,
+        output_width: width,
+        output_height: height,
+        start_seconds: start,
+        duration_seconds,
+        fps,
+        playback_rate,
+        loop_source: video_info.looping,
+        include_audio,
+        audio_volume: audio_info.volume,
+        sampling: sampling.clone(),
+        fit_mode: fit_mode.clone(),
+    };
+    let metadata = OfflineExportMetadata {
+        engine_build: "HNW-11".into(),
+        created_unix_ms: OfflineExportMetadata::now_unix_ms(),
+        source_file: video_info.file_path.clone(),
+        source_codec: video_info.codec,
+        source_duration_seconds: video_info.duration_seconds,
+        source_playback_rate: playback_rate,
+        export_start_seconds: start,
+        export_duration_seconds: duration_seconds,
+        export_fps: fps,
+        render_width: render.width,
+        render_height: render.height,
+        export_width: width,
+        export_height: height,
+        sampling,
+        fit_mode,
+        include_audio,
+        loop_source: video_info.looping,
+        parameter_revision: snapshot.revision,
+        parameter_values: serde_json::to_value(snapshot.values.clone())
+            .map_err(|error| format!("could not serialize deterministic export state: {error}"))?,
+        deterministic_seed,
+    };
+    renderer.start_offline_export(config, metadata, snapshot)?;
+    Ok(Some(path.display().to_string()))
+}
+
+#[tauri::command]
+fn cancel_offline_export(
+    renderer: tauri::State<'_, RendererHandle>,
+    offline_export: tauri::State<'_, OfflineExportHandle>,
+) {
+    offline_export.request_cancel();
+    renderer.send(RenderCommand::CancelOfflineExport);
 }
 
 #[tauri::command]
@@ -782,6 +955,7 @@ fn main() {
         .setup(|app| {
             let recording = recording::start().map_err(std::io::Error::other)?;
             let export = export::start().map_err(std::io::Error::other)?;
+            let offline_export = OfflineExportHandle::new();
             let recording_audio = recording.audio_tap();
             let camera = camera::start().map_err(std::io::Error::other)?;
             let video = video::start().map_err(std::io::Error::other)?;
@@ -819,10 +993,13 @@ fn main() {
                     osc: osc.snapshot(),
                     gesture: gesture.snapshot(),
                     source: source.clone(),
+                    video_control: video.clone(),
+                    video_audio_control: video_audio.clone(),
                 },
                 parameters.clone(),
                 recording.clone(),
                 export.clone(),
+                offline_export.clone(),
             )
             .map_err(std::io::Error::other)?;
 
@@ -858,6 +1035,7 @@ fn main() {
                 let close_osc = osc.clone();
                 let close_recording = recording.clone();
                 let close_export = export.clone();
+                let close_offline_export = offline_export.clone();
                 controls.on_window_event(move |event| match event {
                     tauri::WindowEvent::Focused(focused) => {
                         if *focused {
@@ -870,6 +1048,7 @@ fn main() {
                         }
                         close_recording.shutdown();
                         close_export.shutdown();
+                        close_offline_export.request_cancel();
                         close_renderer.send(RenderCommand::Shutdown);
                         close_camera.shutdown();
                         close_video.shutdown();
@@ -894,6 +1073,7 @@ fn main() {
             app.manage(gesture);
             app.manage(recording);
             app.manage(export);
+            app.manage(offline_export);
             app.manage(parameters);
             app.manage(source);
             app.manage(renderer);
@@ -916,6 +1096,8 @@ fn main() {
             start_recording,
             stop_recording,
             export_still,
+            start_offline_export,
+            cancel_offline_export,
             focus_renderer,
             refresh_cameras,
             start_camera,

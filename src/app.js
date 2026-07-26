@@ -15,6 +15,7 @@ const appState = {
   toastTimer: 0,
   spoutAdaptersLoaded: false,
   exportCompleted: 0,
+  offlineCompleted: 0,
 };
 
 function toast(message, error = false) {
@@ -192,7 +193,7 @@ function configureRegistryControls() {
     feedbackGroup.title = 'Native HDR feedback is active; final effect-order parity continues with later render-graph milestones.';
   }
   const glitchGroup = byId('corruptOn')?.closest('.group');
-  if (glitchGroup) glitchGroup.title = "Milestone 10 includes Huff's native render graph, Syphon/Spout, CFR recording, and independent high-resolution PNG still export.";
+  if (glitchGroup) glitchGroup.title = "Milestone 11 adds deterministic frame-driven MP4 export to Huff's native render graph, Syphon/Spout, CFR recording, and PNG export.";
   const clusterGroup = byId('clusterTiles')?.closest('.group');
   if (clusterGroup) clusterGroup.title = 'Native cluster bodies are active: persistent centers, coherence, speed, steering, variance, pulse, inertia, breathing, bounce/wrap, bias, spread, and minimum spread.';
   const scanGroup = byId('clusters')?.closest('.group');
@@ -427,6 +428,75 @@ function wireExport() {
     }
   });
   syncExportDimensions(true);
+}
+
+function offlineDimensionsFromPreset() {
+  const preset = byId('offlinePreset')?.value || 'native';
+  const renderer = appState.info?.renderer || {};
+  const evenDimension = (value) => {
+    const bounded = Math.max(2, Math.min(8192, Math.round(Number(value || 2))));
+    return bounded % 2 === 0 ? bounded : Math.min(8192, bounded + 1);
+  };
+  if (preset === '1080p') return [1920, 1080];
+  if (preset === '4k') return [3840, 2160];
+  if (preset === '8k') return [7680, 4320];
+  if (preset === 'custom') {
+    return [evenDimension(byId('offlineW')?.value || 1920), evenDimension(byId('offlineH')?.value || 1080)];
+  }
+  return [evenDimension(renderer.width || 2), evenDimension(renderer.height || 2)];
+}
+
+function syncOfflineDimensions(force = false) {
+  const preset = byId('offlinePreset')?.value || 'native';
+  const [width, height] = offlineDimensionsFromPreset();
+  const widthInput = byId('offlineW');
+  const heightInput = byId('offlineH');
+  if (force || preset !== 'custom') {
+    if (widthInput) widthInput.value = String(width);
+    if (heightInput) heightInput.value = String(height);
+  }
+  const custom = preset === 'custom';
+  if (widthInput) widthInput.disabled = !custom;
+  if (heightInput) heightInput.disabled = !custom;
+  const customStart = byId('offlineStartMode')?.value === 'custom';
+  if (byId('offlineStartSeconds')) byId('offlineStartSeconds').disabled = !customStart;
+}
+
+function wireOfflineExport() {
+  byId('offlinePreset')?.addEventListener('change', () => syncOfflineDimensions(true));
+  byId('offlineStartMode')?.addEventListener('change', () => syncOfflineDimensions());
+  byId('offlineExportBtn')?.addEventListener('click', async () => {
+    const button = byId('offlineExportBtn');
+    button.disabled = true;
+    const [width, height] = offlineDimensionsFromPreset();
+    try {
+      const path = await call('start_offline_export', {
+        fps: Number(byId('offlineFps')?.value || 30),
+        durationSeconds: Number(byId('offlineDuration')?.value || 10),
+        startMode: byId('offlineStartMode')?.value || 'current',
+        startSeconds: Number(byId('offlineStartSeconds')?.value || 0),
+        width,
+        height,
+        sampling: byId('offlineSampling')?.value || 'smooth',
+        fitMode: byId('offlineFit')?.value || 'fit',
+        audioMode: byId('offlineAudio')?.value || 'source',
+      });
+      if (path) toast(`Deterministic export started · ${width}×${height} · ${basename(path)}`);
+      else button.disabled = false;
+    } catch (_) {
+      button.disabled = false;
+    }
+  });
+  byId('offlineCancelBtn')?.addEventListener('click', async () => {
+    byId('offlineCancelBtn').disabled = true;
+    toast('Cancelling deterministic export…');
+    try {
+      await call('cancel_offline_export');
+    } catch (_) {
+      byId('offlineCancelBtn').disabled = false;
+    }
+  });
+  syncOfflineDimensions(true);
 }
 
 function wireCamera() {
@@ -668,6 +738,7 @@ function displayInfo(info) {
   const spout = info.spout || {};
   const recording = info.recording || {};
   const exportInfo = info.export || {};
+  const offlineExport = info.offlineExport || {};
 
   setOptions(byId('cams'), info.cameraDevices || [], (item) => item.slot, (item) => item.name);
   setOptions(byId('midiPortSelect'), midi.ports || [], (item) => item, (item) => item);
@@ -692,6 +763,7 @@ function displayInfo(info) {
     : (spout.available ? 'SPOUT: OFF' : 'SPOUT: N/A');
 
   const recordingBusy = Boolean(recording.active || recording.finalizing);
+  const offlineBusy = Boolean(offlineExport.active);
   const recordPill = byId('recordPill');
   if (recordPill) {
     recordPill.classList.toggle('recording-active', Boolean(recording.active));
@@ -709,10 +781,10 @@ Audio: ${recording.audioSamples || 0} samples · ${recording.audioDroppedChunks 
 Approx: ${((recording.estimatedBytes || 0) / 1048576).toFixed(1)} MiB`
       : (recording.lastError || (recording.ffmpegAvailable ? 'Native MP4 recording ready' : 'FFmpeg unavailable'));
   }
-  if (byId('recordBtn')) byId('recordBtn').disabled = recordingBusy || !recording.ffmpegAvailable;
+  if (byId('recordBtn')) byId('recordBtn').disabled = recordingBusy || offlineBusy || !recording.ffmpegAvailable;
   if (byId('recordStopBtn')) byId('recordStopBtn').disabled = !recording.active;
-  if (byId('recordFps')) byId('recordFps').disabled = recordingBusy;
-  if (byId('recordAudio')) byId('recordAudio').disabled = recordingBusy;
+  if (byId('recordFps')) byId('recordFps').disabled = recordingBusy || offlineBusy;
+  if (byId('recordAudio')) byId('recordAudio').disabled = recordingBusy || offlineBusy;
   if (byId('renderApplyBtn')) byId('renderApplyBtn').disabled = recordingBusy;
   if (byId('resetBtn')) byId('resetBtn').disabled = recordingBusy;
   if (byId('presetLoadBtn')) byId('presetLoadBtn').disabled = recordingBusy;
@@ -738,15 +810,54 @@ Metadata: ${exportInfo.metadataPath || 'written beside PNG'}`;
     appState.exportCompleted = Number(exportInfo.completedExports || 0);
     toast(`PNG export complete · ${basename(exportInfo.path)}`);
   }
-  if (byId('exportStillBtn')) byId('exportStillBtn').disabled = exportBusy || recordingBusy || !exportInfo.ffmpegAvailable;
-  if (byId('exportPreset')) byId('exportPreset').disabled = exportBusy || recordingBusy;
-  if (byId('exportSampling')) byId('exportSampling').disabled = exportBusy || recordingBusy;
-  if (byId('exportFit')) byId('exportFit').disabled = exportBusy || recordingBusy;
+  if (byId('exportStillBtn')) byId('exportStillBtn').disabled = exportBusy || recordingBusy || offlineBusy || !exportInfo.ffmpegAvailable;
+  if (byId('exportPreset')) byId('exportPreset').disabled = exportBusy || recordingBusy || offlineBusy;
+  if (byId('exportSampling')) byId('exportSampling').disabled = exportBusy || recordingBusy || offlineBusy;
+  if (byId('exportFit')) byId('exportFit').disabled = exportBusy || recordingBusy || offlineBusy;
   syncExportDimensions();
   const customExport = byId('exportPreset')?.value === 'custom';
-  if (byId('exportW')) byId('exportW').disabled = exportBusy || recordingBusy || !customExport;
-  if (byId('exportH')) byId('exportH').disabled = exportBusy || recordingBusy || !customExport;
-  if (byId('recordBtn')) byId('recordBtn').disabled = recordingBusy || exportBusy || !recording.ffmpegAvailable;
+  if (byId('exportW')) byId('exportW').disabled = exportBusy || recordingBusy || offlineBusy || !customExport;
+  if (byId('exportH')) byId('exportH').disabled = exportBusy || recordingBusy || offlineBusy || !customExport;
+  if (byId('recordBtn')) byId('recordBtn').disabled = recordingBusy || exportBusy || offlineBusy || !recording.ffmpegAvailable;
+
+  const offlinePill = byId('offlineExportPill');
+  if (offlinePill) {
+    offlinePill.classList.toggle('offline-active', offlineBusy);
+    offlinePill.classList.toggle('offline-complete', !offlineBusy && offlineExport.phase === 'complete');
+    const progress = Math.max(0, Math.min(1, Number(offlineExport.progress || 0)));
+    offlinePill.textContent = offlineBusy
+      ? `OFFLINE: ${(progress * 100).toFixed(1)}% · ${offlineExport.renderedFrames || 0}/${offlineExport.totalFrames || 0}`
+      : (offlineExport.phase === 'complete'
+        ? `OFFLINE: ${offlineExport.width || 0}×${offlineExport.height || 0} ✓`
+        : (offlineExport.phase === 'cancelled'
+          ? 'OFFLINE: CANCELLED'
+          : (offlineExport.phase === 'error' ? 'OFFLINE: ERROR' : 'OFFLINE: READY')));
+    offlinePill.title = offlineExport.lastError || `${offlineExport.path || 'Deterministic MP4 export'}
+Source: ${offlineExport.sourcePath || '—'}
+${offlineExport.width || 0}×${offlineExport.height || 0} @ ${offlineExport.fps || 0} FPS · ${(offlineExport.durationSeconds || 0).toFixed(2)} s · rate ${(offlineExport.playbackRate || 1).toFixed(2)}×
+Phase: ${offlineExport.phase || 'ready'} · ${(progress * 100).toFixed(2)}%
+Frames: ${offlineExport.renderedFrames || 0}/${offlineExport.totalFrames || 0}
+Elapsed: ${(offlineExport.elapsedSeconds || 0).toFixed(2)} s · remaining ≈ ${(offlineExport.estimatedRemainingSeconds || 0).toFixed(2)} s
+Audio: ${offlineExport.includeAudio ? 'source AAC' : 'silent'} · ${((offlineExport.encodedBytes || 0) / 1048576).toFixed(1)} MiB
+Metadata: ${offlineExport.metadataPath || 'written beside MP4'}`;
+  }
+  if (Number(offlineExport.completedExports || 0) > appState.offlineCompleted) {
+    appState.offlineCompleted = Number(offlineExport.completedExports || 0);
+    toast(`Deterministic export complete · ${basename(offlineExport.path)}`);
+  }
+  const offlineControls = [
+    'offlineFps', 'offlineDuration', 'offlineStartMode', 'offlineStartSeconds',
+    'offlinePreset', 'offlineW', 'offlineH', 'offlineSampling', 'offlineFit', 'offlineAudio',
+  ];
+  for (const id of offlineControls) if (byId(id)) byId(id).disabled = offlineBusy;
+  if (byId('offlineExportBtn')) {
+    byId('offlineExportBtn').disabled = offlineBusy || recordingBusy || exportBusy || !offlineExport.ffmpegAvailable || !video.loaded;
+  }
+  if (byId('offlineCancelBtn')) byId('offlineCancelBtn').disabled = !offlineBusy;
+  if (!offlineBusy) syncOfflineDimensions();
+  for (const id of ['fileOpenBtn', 'playBtn', 'pauseBtn', 'refreshBtn', 'camStartBtn', 'camStopBtn', 'camRefreshBtn', 'resetBtn', 'clearBufBtn', 'renderApplyBtn', 'presetLoadBtn', 'presetImportBtn']) {
+    if (byId(id) && offlineBusy) byId(id).disabled = true;
+  }
 
   const syphonButton = byId('syphonToggleBtn');
   if (syphonButton) {
@@ -858,6 +969,7 @@ async function boot() {
   wireTransport();
   wireRecording();
   wireExport();
+  wireOfflineExport();
   wireCamera();
   wireNativeActions();
   wirePresets();
@@ -866,7 +978,7 @@ async function boot() {
   await refreshParameterState();
   await poll();
   setInterval(poll, 250);
-  console.info('Huff Native wgpu Milestone 10 loaded', {
+  console.info('Huff Native wgpu Milestone 11 loaded', {
     parameters: appState.registry.length,
     implemented: appState.registry.filter((definition) => definition.implemented).length,
   });

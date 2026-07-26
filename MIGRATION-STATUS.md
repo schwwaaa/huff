@@ -1,4 +1,4 @@
-# Huff native migration status · Milestone 10
+# Huff native migration status · Milestone 11
 
 ## Proven native foundation
 
@@ -31,29 +31,37 @@
 - 30/60 FPS CFR MP4 recording
 - Synchronized source-video audio or microphone capture
 - Safe recording finalization
+- Native, 1080p, 4K, 8K, and custom PNG still export
+- GPU Smooth/Crisp and Fit/Crop/Stretch export policies
 
-## Still export completed in Milestone 10
+## Deterministic export completed in Milestone 11
 
-- Native, 1080p, 4K, 8K, and custom PNG output
-- Independent export texture and readback
-- Smooth and Crisp GPU scaling
-- Fit, Crop, and Stretch policies
-- Export while the native window is minimized
-- No live-render resize, history rebuild, or feedback clear
-- Reproducibility sidecar with source and canonical parameter state
-- Bounded 35-megapixel allocation policy
+- Private exact-frame FFmpeg decoder
+- Fixed 24/30/60 FPS simulation timeline
+- One decoded source frame and one native render step per output frame
+- Frozen canonical parameter and external-control snapshots
+- Deterministic procedural/history/feedback reset boundary
+- Bounded three-frame source decode queue
+- Synchronous bounded GPU export readback
+- H.264 MP4 with MPEG-4 fallback
+- Playback-rate-aware source-audio AAC mux
+- Native, 1080p, 4K, 8K, and custom output sizes
+- Cancellation, shutdown cleanup, and live transport restoration
+- Reproducibility sidecar
 
 ## Remaining product systems
 
-1. Frame-driven deterministic video rendering
-2. Independent video-export resolution and codec profiles
-3. Image sequences and production codecs such as ProRes or FFV1
-4. Parameter-by-parameter visual and motion calibration
-5. MIDI and OSC map import/edit workflows
-6. Expanded automation, sequencing, routing, and project-state support
-7. Windows MSVC, Spout receiver, multi-GPU, MSI, and NSIS verification
-8. Optional lower-copy platform-specific texture interop research
+1. PNG image sequences and production codec profiles such as ProRes or FFV1
+2. Alpha-capable or lossless export paths where the final graph supports alpha
+3. Export-job manifests and queued jobs
+4. Automation/keyframe/sequence replay inside deterministic export
+5. True independent high-resolution graph execution rather than final resampling
+6. Parameter-by-parameter visual and motion calibration
+7. MIDI and OSC map import/edit workflows
+8. Expanded sequencing, routing, scoped recall, and project-state support
+9. Windows MSVC, Spout receiver, multi-GPU, MSI, and NSIS verification
+10. Optional lower-copy platform-specific texture interop research
 
 ## Current principle
 
-The live application pipeline, external output, recording, and still capture are native. Offline export should now be built as a frame-driven engine mode rather than by extending wall-clock recording.
+Huff now has separate modes for live performance recording and frame-driven rendering. The next work should deepen export formats and job structure without reopening effect calibration until the pipeline migration is complete.
