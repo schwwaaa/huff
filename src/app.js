@@ -23,6 +23,7 @@ const appState = {
   controlTargets: [],
   midiMapSignature: '',
   oscMapSignature: '',
+  stateModelCatalog: null,
 };
 
 function toast(message, error = false) {
@@ -1052,6 +1053,128 @@ function wirePresets() {
   });
 }
 
+const STATE_SCOPE_IDS = {
+  look: 'stateScopeLook',
+  source: 'stateScopeSource',
+  temporal: 'stateScopeTemporal',
+  routing: 'stateScopeRouting',
+  render: 'stateScopeRender',
+  transport: 'stateScopeTransport',
+  automation: 'stateScopeAutomation',
+  controlMaps: 'stateScopeMaps',
+  persistentPixels: 'stateScopePixels',
+};
+
+const STATE_KIND_ALLOWED = {
+  preset: { look: true, source: true, temporal: true, routing: true, render: false, transport: false, automation: false, controlMaps: false, persistentPixels: false },
+  snapshot: { look: true, source: true, temporal: true, routing: true, render: true, transport: true, automation: true, controlMaps: false, persistentPixels: false },
+  sequence: { look: false, source: false, temporal: false, routing: false, render: false, transport: false, automation: true, controlMaps: false, persistentPixels: false },
+  project: { look: true, source: true, temporal: true, routing: true, render: true, transport: true, automation: true, controlMaps: true, persistentPixels: false },
+};
+
+const STATE_KIND_DEFAULTS = {
+  preset: { look: true, source: false, temporal: true, routing: true, render: false, transport: false, automation: false, controlMaps: false, persistentPixels: false },
+  snapshot: { look: true, source: true, temporal: true, routing: true, render: true, transport: true, automation: true, controlMaps: false, persistentPixels: false },
+  sequence: { look: false, source: false, temporal: false, routing: false, render: false, transport: false, automation: true, controlMaps: false, persistentPixels: false },
+  project: { look: true, source: true, temporal: true, routing: true, render: true, transport: true, automation: true, controlMaps: true, persistentPixels: false },
+};
+
+function stateScopeFromUi() {
+  const scope = {};
+  for (const [key, id] of Object.entries(STATE_SCOPE_IDS)) scope[key] = Boolean(byId(id)?.checked);
+  return scope;
+}
+
+function applyStateScopeDefaults(kind = byId('stateDocumentKind')?.value || 'preset') {
+  const defaults = STATE_KIND_DEFAULTS[kind] || STATE_KIND_DEFAULTS.preset;
+  const allowed = STATE_KIND_ALLOWED[kind] || STATE_KIND_ALLOWED.preset;
+  for (const [key, id] of Object.entries(STATE_SCOPE_IDS)) {
+    const element = byId(id);
+    if (!element) continue;
+    element.checked = Boolean(defaults[key]);
+    element.disabled = !allowed[key];
+    element.title = allowed[key] ? '' : `${kind.toUpperCase()} documents do not capture this domain.`;
+  }
+  const pixels = byId('stateScopePixels');
+  if (pixels) {
+    pixels.checked = false;
+    pixels.disabled = true;
+    pixels.title = 'Persistent GPU pixel contents are deliberately separate and are not embedded by huff-state/v1.';
+  }
+  const saveButton = byId('stateSaveBtn');
+  if (saveButton) saveButton.textContent = `💾 Save ${kind[0].toUpperCase()}${kind.slice(1)}`;
+  const note = byId('stateScopeNote');
+  if (note) {
+    note.textContent = kind === 'preset'
+      ? 'Preset = reusable artistic condition. Source files, transport, render allocation, automation, maps, and GPU pixels remain untouched.'
+      : kind === 'snapshot'
+        ? 'Snapshot = broad current-state capture. Recall remains explicitly scoped and does not silently embed GPU pixel memory.'
+        : kind === 'sequence'
+          ? 'Sequence = the active canonical automation clip. It is source-independent state motion, not rendered video.'
+          : 'Project = selected parameters, source/transport references, automation, and controller maps in one portable container.';
+  }
+}
+
+async function loadStateModelCatalog() {
+  appState.stateModelCatalog = await call('get_state_model_catalog');
+  const catalog = appState.stateModelCatalog;
+  const status = byId('stateModelStatus');
+  if (status) {
+    status.textContent = `${catalog.schema} · ${catalog.parameterCount} params · ${catalog.presettableCount} preset · ${catalog.sequenceableCount} sequence`;
+  }
+}
+
+function wireStateDocuments() {
+  byId('stateDocumentKind')?.addEventListener('change', () => applyStateScopeDefaults());
+  applyStateScopeDefaults();
+
+  byId('stateSaveBtn')?.addEventListener('click', async () => {
+    const kind = byId('stateDocumentKind')?.value || 'preset';
+    const name = byId('stateDocumentName')?.value.trim() || `HUFF ${kind}`;
+    try {
+      const receipt = await call('save_state_document', {
+        kind,
+        name,
+        scope: stateScopeFromUi(),
+      });
+      if (!receipt) return;
+      byId('stateDocumentStatus').textContent = `SAVED ${String(receipt.kind).toUpperCase()} · ${receipt.parameterCount} PARAMS · ${basename(receipt.path)}`;
+      toast(`${receipt.name} saved · ${basename(receipt.path)}`);
+    } catch (_) {}
+  });
+
+  byId('stateLoadBtn')?.addEventListener('click', async () => {
+    try {
+      const result = await call('load_state_document', { scope: stateScopeFromUi() });
+      if (!result) return;
+      pushUndo();
+      applyStateToDom(result.parameterSnapshot);
+      if (result.automation) {
+        const clip = await call('get_active_automation_clip').catch(() => null);
+        persistAutomationClip(clip);
+        if (byId('offlineAutomation')) byId('offlineAutomation').value = clip ? 'active' : 'none';
+        syncOfflineAutomation();
+      }
+      const warnings = result.warnings || [];
+      const status = byId('stateDocumentStatus');
+      if (status) {
+        status.textContent = `LOADED ${String(result.kind).toUpperCase()} · ${result.appliedParameterCount} PARAMS${warnings.length ? ` · ${warnings.length} WARNING${warnings.length === 1 ? '' : 'S'}` : ''}`;
+        status.title = warnings.join('\n');
+        status.classList.toggle('warning', warnings.length > 0);
+      }
+      toast(`${result.name} loaded${warnings.length ? ` · ${warnings[0]}` : ''}`, warnings.length > 0);
+      await poll();
+    } catch (_) {}
+  });
+
+  byId('stateModelExportBtn')?.addEventListener('click', async () => {
+    try {
+      const path = await call('export_state_model_catalog');
+      if (path) toast(`State model exported · ${basename(path)}`);
+    } catch (_) {}
+  });
+}
+
 function mappingTargetOptions(selected = '') {
   const groups = new Map();
   for (const target of appState.controlTargets.filter((item) => item.mappable)) {
@@ -1297,6 +1420,8 @@ Approx: ${((recording.estimatedBytes || 0) / 1048576).toFixed(1)} MiB`
   if (byId('resetBtn')) byId('resetBtn').disabled = recordingBusy;
   if (byId('presetLoadBtn')) byId('presetLoadBtn').disabled = recordingBusy;
   if (byId('presetImportBtn')) byId('presetImportBtn').disabled = recordingBusy;
+  if (byId('stateLoadBtn')) byId('stateLoadBtn').disabled = recordingBusy || Boolean(automation.recording);
+  if (byId('stateSaveBtn')) byId('stateSaveBtn').disabled = Boolean(automation.recording);
 
   const exportBusy = Boolean(exportInfo.active);
   const exportPill = byId('exportPill');
@@ -1522,15 +1647,17 @@ async function boot() {
   wireCamera();
   wireNativeActions();
   wirePresets();
+  wireStateDocuments();
   wireMidiOsc();
   await call('set_video_audio_preview', { enabled: true }).catch(() => {});
   await restoreAutomationClip();
+  await loadStateModelCatalog();
   await loadCalibrationProfiles();
   await refreshParameterState();
   await refreshParityReport(true);
   await poll();
   setInterval(poll, 250);
-  console.info('Huff Native wgpu Milestone 17 loaded', {
+  console.info('Huff Native wgpu Milestone 18 loaded', {
     parameters: appState.registry.length,
     implemented: appState.registry.filter((definition) => definition.implemented).length,
   });

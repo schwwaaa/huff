@@ -1,39 +1,61 @@
-# HUFF Native wgpu · Milestone 17
+# HUFF Native wgpu · Milestone 18
 
-Milestone 17 turns the existing MIDI and OSC foundations into **canonical controller-mapping workflows**. Incoming controls now write directly into the same Rust-owned parameter store used by the HTML interface, presets, automation, rendering, and deterministic export.
+Milestone 18 formalizes HUFF state into four distinct portable document types: **presets, snapshots, sequences, and projects**. Recall is no longer treated as one undifferentiated JSON dump. Every document declares what it captured, and the operator chooses which domains may be restored.
 
-## MIDI and OSC mapping
+## State document types
 
-The MIDI and OSC panels now provide:
+- **Preset** — a reusable artistic condition. By default it captures Look, Temporal, and Routing parameters while leaving source files, transport, render allocation, automation, controller maps, and GPU pixel memory untouched.
+- **Snapshot** — a broad current-state capture. It may include parameters, source and transport references, render/history configuration, and the active automation clip, but recall is still explicitly scoped.
+- **Sequence** — the active canonical automation clip. It stores state changes and actions over time; it is source-independent and is not rendered video.
+- **Project** — a portable container for selected parameter domains, source/transport references, automation, and MIDI/OSC maps.
 
-- learn-next-input workflows;
-- manual mapping creation and editing;
-- canonical parameter and action target selection;
-- Absolute, Gate, Toggle, and Trigger behavior;
-- normalized output-range scaling;
-- Linear, Smooth, Square, Cube, and Square-root response curves;
-- per-mapping smoothing;
-- enable/disable state;
-- duplicate-source conflict warnings;
-- native Open and Save As dialogs;
-- portable `huff-control-map/v1` JSON documents;
-- compact factory maps that can be restored at any time.
+All four use the `huff-state/v1` schema.
 
-The canonical action targets are:
+## Selective recall
 
-- `clear_buffers`
-- `flow_pulse`
-- `reset_parameters`
+The State Library exposes explicit domains:
 
-Mapped parameter changes are recorded when automation recording is active. Action mappings also enter the automation action stream.
+- Look
+- Source
+- Temporal
+- Routing
+- Render
+- Transport
+- Automation
+- MIDI/OSC Maps
+- GPU Pixels
 
-## Important compatibility note
+A loaded document can restore only the intersection of:
 
-Milestone 01 contained eight demonstration MIDI/OSC values used as visual input signals. Those low-level signals remain available to the shader for experimental modulation, but the mapping editor no longer treats them as the main user-facing destination. The authoritative destination is now the canonical HUFF parameter/action registry.
+1. the domains captured by the document; and
+2. the domains currently checked by the operator.
 
-## Included systems
+This prevents an artistic preset from unexpectedly changing the video file, playback position, output dimensions, history allocation, automation clip, or controller mappings.
 
-The application currently includes native FFmpeg media playback, camera capture, Rust + wgpu rendering, GPU history and feedback, glitch/cluster/scanline/Smoosh/Luma/Global Mix/Flow processing, Syphon, Spout, live recording, high-resolution still export, deterministic production export, export automation replay, the provisional export queue, full export-resolution render graphs, the Parity Lab, and canonical MIDI/OSC maps.
+## Persistent image memory is separate
+
+HUFF’s GPU history ring, flying glitch buffer, feedback store, and Flow state are identified in state documents but their pixel contents are **not silently embedded**. Temporal or render recalls clear the relevant persistent runtime buffers when required. This is intentional: a preset is not a still image, a snapshot is not a field-store dump, and a sequence is not a movie.
+
+## Parameter state metadata
+
+Milestone 18 classifies all 98 canonical parameters with:
+
+- state domain;
+- preset eligibility;
+- snapshot and project scope;
+- sequenceability;
+- interpolation policy;
+- live-safety behavior.
+
+Use **Export State Model** in the State Library, or run:
+
+```bash
+npm run validate:state-model
+```
+
+## Existing quick presets
+
+The earlier local browser-storage preset row remains available for rapid testing and compatibility. The new State Library is the formal native file workflow. The older row may later be simplified or removed in a practical fork after the comprehensive evaluation cycle.
 
 ## Run
 
@@ -54,34 +76,23 @@ Windows DX12:
 npm run dev:dx12
 ```
 
-FFmpeg must be available on `PATH` for video playback, recording, and encoded export.
-
-## Mapping workflow
-
-1. Open **MIDI** or **OSC** from the top bar.
-2. Select a canonical target.
-3. Press **Learn Next**.
-4. Move the MIDI control or send the OSC message.
-5. Edit behavior, source, range, curve, smoothing, or notes in the table.
-6. Press **Save** on the row.
-7. Use **Save As…** to create a portable mapping file.
-
-See `CONTROL-MAPPING.md` for the file schema and behavioral details. Static map validation is available through `npm run validate:control-maps`.
+FFmpeg must be on `PATH` for file playback, recording, and encoded export.
 
 ## Runtime status
 
-The application runs locally, and earlier milestone tests include both successful and unsuccessful cases that are intentionally being retained until the broad refinement cycle. Milestone 17 is structurally integrated, but controller-specific behavior must still be tested with real USB devices, virtual MIDI ports, TouchOSC, Max/MSP, Pure Data, and other senders.
+The broader architecture is intentionally being completed before the long refinement pass. State documents are structurally integrated and the application’s static validators pass. Local testing should focus on save/load boundaries, selective recall, missing source files, automation restoration, and MIDI/OSC map restoration.
 
 ## Documentation
 
 - `MILESTONES.md` — authoritative complete roadmap
-- `UPGRADE-NOTES-17.md` — Milestone 17 implementation details
-- `CONTROL-MAPPING.md` — portable map schema and behavior
-- `TESTING.md` — focused Milestone 17 test cycle
+- `STATE-MODEL.md` — state types, recall domains, metadata, and file behavior
+- `UPGRADE-NOTES-18.md` — implementation details
+- `TESTING.md` — focused Milestone 18 test cycle
 - `MIGRATION-STATUS.md` — current native-port status
-- `VALIDATION.md` — checks completed in the packaging environment
-- `UPGRADE-NOTES-01..16` — prior milestone notes
+- `VALIDATION.md` — packaging-environment checks
+- `CONTROL-MAPPING.md` — Milestone 17 MIDI/OSC map schema
+- `UPGRADE-NOTES-01..17.md` — prior milestone notes
 
 ## Next milestone
 
-Milestone 18 formalizes presets, full snapshots, sequences, stored image state, projects, and selective recall scopes.
+Milestone 19 introduces constrained routing and named buses while preserving the stable fixed HUFF pipeline as a valid instrument recipe.

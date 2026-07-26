@@ -23,6 +23,7 @@ mod recording;
 mod renderer;
 mod source;
 mod spout;
+mod state_documents;
 mod syphon;
 mod video;
 mod video_audio;
@@ -50,6 +51,10 @@ use parameters::{ParameterDefinition, ParameterSnapshot, ParameterStore};
 use recording::{RecordingAudioSource, RecordingHandle, RecordingStartConfig};
 use renderer::{RenderCommand, RendererHandle};
 use source::{ActiveSource, SourceSelector};
+use state_documents::{
+    StateDocument, StateDocumentKind, StateDocumentReceipt, StateLoadResult, StateModelCatalog,
+    StateRecallScope,
+};
 use rosc::{encoder, OscMessage, OscPacket, OscType};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -142,7 +147,7 @@ fn get_app_info(
     source: tauri::State<'_, SourceSelector>,
 ) -> AppInfo {
     AppInfo {
-        build: "HNW-17".into(),
+        build: "HNW-18".into(),
         renderer: renderer.info(),
         camera: camera.status(),
         camera_devices: camera.devices(),
@@ -163,7 +168,7 @@ fn get_app_info(
         gesture: gesture.info(),
         automation: automation.info(),
         parameter_revision: parameters.revision(),
-        native_milestone: "HNW-17".into(),
+        native_milestone: "HNW-18".into(),
         active_source: source.get().label().into(),
     }
 }
@@ -339,6 +344,258 @@ fn set_active_automation_clip(
 #[tauri::command]
 fn clear_active_automation_clip(automation: tauri::State<'_, AutomationHandle>) {
     automation.clear();
+}
+
+#[tauri::command]
+fn get_state_model_catalog() -> StateModelCatalog {
+    state_documents::model_catalog()
+}
+
+#[tauri::command]
+fn export_state_model_catalog() -> Result<Option<String>, String> {
+    let Some(mut path) = rfd::FileDialog::new()
+        .add_filter("HUFF state model", &["json"])
+        .set_file_name("huff-state-model-v1.json")
+        .save_file()
+    else {
+        return Ok(None);
+    };
+    if !path
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(|value| value.eq_ignore_ascii_case("json"))
+        .unwrap_or(false)
+    {
+        path.set_extension("json");
+    }
+    let payload = serde_json::to_vec_pretty(&state_documents::model_catalog())
+        .map_err(|error| format!("could not serialize state model: {error}"))?;
+    std::fs::write(&path, payload)
+        .map_err(|error| format!("could not write state model {}: {error}", path.display()))?;
+    Ok(Some(path.display().to_string()))
+}
+
+#[tauri::command]
+fn save_state_document(
+    parameters: tauri::State<'_, ParameterStore>,
+    automation: tauri::State<'_, AutomationHandle>,
+    video: tauri::State<'_, VideoHandle>,
+    source: tauri::State<'_, SourceSelector>,
+    midi: tauri::State<'_, MidiHandle>,
+    osc: tauri::State<'_, OscHandle>,
+    kind: String,
+    name: String,
+    scope: StateRecallScope,
+) -> Result<Option<StateDocumentReceipt>, String> {
+    if automation.is_recording() {
+        return Err("stop automation recording before saving a state document".into());
+    }
+    let kind = StateDocumentKind::parse(&kind)?;
+    let document = state_documents::build_document(
+        kind,
+        name,
+        scope,
+        parameters.snapshot(),
+        source.get(),
+        video.status(),
+        automation.active_clip(),
+        midi.info(),
+        osc.info(),
+    )?;
+    let Some(path) = rfd::FileDialog::new()
+        .add_filter("HUFF state document", &["json"])
+        .set_file_name(state_documents::suggested_filename(kind, &document.name))
+        .save_file()
+    else {
+        return Ok(None);
+    };
+    let payload = serde_json::to_vec_pretty(&document)
+        .map_err(|error| format!("could not serialize state document: {error}"))?;
+    std::fs::write(&path, payload)
+        .map_err(|error| format!("could not write state document {}: {error}", path.display()))?;
+    Ok(Some(state_documents::receipt(
+        path.display().to_string(),
+        &document,
+    )))
+}
+
+#[tauri::command]
+fn load_state_document(
+    parameters: tauri::State<'_, ParameterStore>,
+    automation: tauri::State<'_, AutomationHandle>,
+    renderer: tauri::State<'_, RendererHandle>,
+    camera: tauri::State<'_, CameraHandle>,
+    video: tauri::State<'_, VideoHandle>,
+    video_audio: tauri::State<'_, VideoAudioHandle>,
+    source: tauri::State<'_, SourceSelector>,
+    midi: tauri::State<'_, MidiHandle>,
+    osc: tauri::State<'_, OscHandle>,
+    scope: StateRecallScope,
+) -> Result<Option<StateLoadResult>, String> {
+    if automation.is_recording() {
+        return Err("stop automation recording before loading a state document".into());
+    }
+    let Some(path) = rfd::FileDialog::new()
+        .add_filter("HUFF state document", &["json"])
+        .pick_file()
+    else {
+        return Ok(None);
+    };
+    let bytes = std::fs::read(&path)
+        .map_err(|error| format!("could not read state document {}: {error}", path.display()))?;
+    let document: StateDocument = serde_json::from_slice(&bytes)
+        .map_err(|error| format!("invalid state document {}: {error}", path.display()))?;
+    let document = state_documents::validate_document(document)?;
+    let mut result = state_documents::prepare_load(
+        &document,
+        &scope,
+        parameters.inner(),
+        path.display().to_string(),
+    )?;
+
+    if result.clear_temporal_buffers {
+        renderer.send(RenderCommand::ClearFeedback);
+        automation.record_action(ACTION_CLEAR_BUFFERS);
+    }
+    if result.applied_parameter_count > 0 {
+        automation.record_parameter_batch(
+            result.parameter_snapshot.values.clone(),
+            format!("state_recall:{}", result.name),
+        );
+    }
+
+    if result.applied_scope.automation {
+        if let Some(clip) = document.automation_clip.clone() {
+            result.automation = Some(automation.set_active_clip(clip)?);
+        }
+    }
+
+    if result.applied_scope.control_maps {
+        if let Some(map) = document.midi_map.clone() {
+            midi.send(MidiCommand::ReplaceMappings(map.mappings.clone()));
+            midi.send(MidiCommand::SetMapName(map.name.clone()));
+        }
+        if let Some(map) = document.osc_map.clone() {
+            osc.send(OscCommand::ReplaceMappings(map.mappings.clone()));
+            osc.send(OscCommand::SetMapName(map.name.clone()));
+        }
+    }
+
+    if let Some(source_state) = document.source_state.clone() {
+        let current_transport = video.status();
+        let mut referenced_video_available = true;
+        if result.applied_scope.source {
+            match source_state.active_source.as_str() {
+                "video" => {
+                    let video_path = PathBuf::from(&source_state.video_path);
+                    if video_path.is_file() {
+                        source.set(ActiveSource::Video);
+                        camera.stop_camera();
+                        video_audio.send(VideoAudioCommand::Open(video_path.clone()));
+                        video.open(video_path);
+                    } else {
+                        referenced_video_available = false;
+                        if !source_state.video_path.is_empty() {
+                            result.warnings.push(format!(
+                                "Referenced video file is unavailable: {}",
+                                source_state.video_path
+                            ));
+                        }
+                    }
+                }
+                "none" => source.set(ActiveSource::None),
+                "automatic" => source.set(ActiveSource::Automatic),
+                "camera" => {
+                    result.warnings.push(
+                        "Camera source was captured, but camera device recall is intentionally manual."
+                            .into(),
+                    );
+                }
+                other => result
+                    .warnings
+                    .push(format!("Unknown source state {other:?} was not applied")),
+            }
+        }
+
+        let should_apply_document_transport = result.applied_scope.transport
+            && source_state.active_source == "video"
+            && (!result.applied_scope.source || referenced_video_available);
+        if should_apply_document_transport {
+            apply_video_transport(
+                &video,
+                &video_audio,
+                source_state.video_decode_mode.clone(),
+                source_state.video_looping,
+                source_state.video_playback_rate,
+                source_state.video_position_seconds,
+                source_state.video_playing,
+            );
+        } else if result.applied_scope.source
+            && !result.applied_scope.transport
+            && source_state.active_source == "video"
+            && referenced_video_available
+        {
+            apply_video_transport(
+                &video,
+                &video_audio,
+                current_transport.decode_mode,
+                current_transport.looping,
+                current_transport.playback_rate,
+                current_transport.position_seconds,
+                current_transport.playing,
+            );
+        }
+    }
+
+    result.parameter_snapshot = parameters.snapshot();
+    Ok(Some(result))
+}
+
+fn apply_video_transport(
+    video: &VideoHandle,
+    video_audio: &VideoAudioHandle,
+    decode_mode: String,
+    looping: bool,
+    playback_rate: f64,
+    position_seconds: f64,
+    playing: bool,
+) {
+    let rate = if playback_rate.is_finite() {
+        playback_rate.clamp(0.25, 4.0)
+    } else {
+        1.0
+    };
+    let position = if position_seconds.is_finite() {
+        position_seconds.max(0.0)
+    } else {
+        0.0
+    };
+    let decode_mode = if matches!(decode_mode.as_str(), "software" | "auto") {
+        decode_mode
+    } else {
+        "software".into()
+    };
+    video.set_decode_mode(decode_mode);
+    video.set_loop(looping);
+    video.set_rate(rate);
+    video.seek(position);
+    video_audio.send(VideoAudioCommand::SetLoop(looping));
+    video_audio.send(VideoAudioCommand::SetRate {
+        rate,
+        position,
+        playing,
+    });
+    video_audio.send(VideoAudioCommand::Seek {
+        seconds: position,
+        playing,
+    });
+    if playing {
+        video.play();
+        video_audio.send(VideoAudioCommand::Play(position));
+    } else {
+        video.pause();
+        video_audio.send(VideoAudioCommand::Pause);
+    }
 }
 
 #[tauri::command]
@@ -573,7 +830,7 @@ fn export_still(
         fit_mode: fit_mode.clone(),
     };
     let metadata = StillExportMetadata {
-        engine_build: "HNW-17".into(),
+        engine_build: "HNW-18".into(),
         captured_unix_ms: StillExportMetadata::now_unix_ms(),
         active_source: source.get().label().into(),
         source_file: video_info.file_path,
@@ -764,7 +1021,7 @@ fn start_offline_export(
         queue_job_id: String::new(),
     };
     let metadata = OfflineExportMetadata {
-        engine_build: "HNW-17".into(),
+        engine_build: "HNW-18".into(),
         created_unix_ms: OfflineExportMetadata::now_unix_ms(),
         source_file: video_info.file_path.clone(),
         source_codec: video_info.codec,
@@ -1636,6 +1893,10 @@ fn main() {
             get_active_automation_clip,
             set_active_automation_clip,
             clear_active_automation_clip,
+            get_state_model_catalog,
+            export_state_model_catalog,
+            save_state_document,
+            load_state_document,
             start_syphon_output,
             stop_syphon_output,
             start_spout_output,

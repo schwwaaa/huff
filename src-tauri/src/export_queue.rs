@@ -528,7 +528,7 @@ impl ExportQueueHandle {
         config.path = path;
         retarget_metadata(&config, &mut metadata);
         metadata.created_unix_ms = u128::from(unix_ms());
-        metadata.engine_build = "HNW-17".into();
+        metadata.engine_build = "HNW-18".into();
         self.enqueue(config, metadata, template.parameter_snapshot)
     }
 

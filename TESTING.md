@@ -1,6 +1,6 @@
-# HUFF Native Milestone 17 test checklist
+# HUFF Native Milestone 18 test checklist
 
-Milestone 17 can be evaluated without resolving every deferred export or visual-parity issue. The goal is to confirm that controller messages reach canonical state safely and that mapping files round-trip correctly.
+The goal is to test distinctions and recall boundaries rather than refine every earlier effect or export path.
 
 ## 1. Launch
 
@@ -9,72 +9,70 @@ npm install
 npm run dev:metal
 ```
 
-Confirm the About panel reports Milestone 17 and both MIDI and OSC panels open without layout clipping.
+Confirm the About panel reports Milestone 18 and the State Library appears above the main parameter groups.
 
-## 2. MIDI device and learn
+## 2. Preset boundary
 
-1. Open MIDI and press Refresh.
-2. Select a USB controller or virtual port.
-3. Connect.
-4. Select `FEEDBACK · feedback.amount` as the target.
-5. Press Learn Next and move a CC control.
-6. Confirm a mapping row appears and the Feedback control moves in the main interface.
-7. Confirm the renderer follows the canonical value rather than only showing input activity.
+1. Load a video and move it to a recognizable position.
+2. Change several Look, Temporal, and Routing controls.
+3. Save a Preset using its default scope.
+4. Change the video position, playback rate, render resolution, and parameters.
+5. Load the preset.
+6. Confirm artistic parameters return while source path, transport, and render resolution remain unchanged.
 
-## 3. MIDI behaviors
+## 3. Snapshot boundary
 
-- Map a button to a Boolean parameter using Gate.
-- Change the row to Toggle and confirm one rising edge changes state once.
-- Map a note to `flow_pulse` using Trigger.
-- Set channel to `0` and confirm messages from more than one channel are accepted.
-- Create two mappings from the same source and confirm a conflict warning appears.
+1. Select Snapshot and keep the default broad scope.
+2. Save while a video is paused at a known position.
+3. Change the parameters and transport.
+4. Load the snapshot.
+5. Confirm selected parameters and transport return.
+6. Confirm temporal buffers clear when temporal or render state changes.
 
-## 4. OSC listener and learn
+## 4. Sequence document
 
-1. Start the listener on `0.0.0.0:9000`.
-2. Select `feedback.amount` and press Learn Next.
-3. Send a normalized float from TouchOSC, Max/MSP, Pure Data, or another sender.
-4. Confirm the address and argument index appear in the mapping table.
-5. Confirm Local Test drives `/huff/feedback`.
-6. Test a message whose numeric value is in a non-normalized range and edit Input Min/Input Max accordingly.
+1. Record a short automation clip.
+2. Select Sequence and save it.
+3. Clear the active automation.
+4. Load the sequence with Automation checked.
+5. Confirm the active clip returns and can be selected for deterministic export.
+6. Attempt to save a Sequence with no active clip and confirm the operation is rejected.
 
-## 5. Curves, ranges, and smoothing
+## 5. Project and controller maps
 
-For one continuous parameter:
+1. Create or load non-default MIDI and OSC maps.
+2. Record or import an automation clip.
+3. Select Project and save with Control Maps and Automation enabled.
+4. Replace the maps and clear automation.
+5. Load the project with those scopes checked.
+6. Confirm the map names, rows, and active automation return.
 
-- compare Linear and Square;
-- set Output to `0.25–0.75` and confirm the parameter is restricted to the middle half of its canonical range;
-- increase smoothing in the mapping row and confirm changes become slower;
-- enable Invert in the mapping row and confirm direction is reversed.
+## 6. Missing source handling
 
-Adjust Threshold for Gate, Toggle, or Trigger mappings and confirm the rising-edge point changes. The field is preserved through row edits and portable map round trips.
+1. Save a Snapshot or Project containing a video source reference.
+2. Move or rename the video file outside HUFF.
+3. Load the document with Source enabled.
+4. Confirm the parameter recall succeeds, the application remains running, and a missing-file warning is shown.
 
-## 6. Portable file round trip
+## 7. Scope intersection
 
-1. Save a MIDI map.
-2. Clear mappings.
-3. Open the saved map.
-4. Confirm targets, source data, behavior, curves, range, enable state, and notes return.
-5. Repeat for OSC.
-6. Open `control-maps/factory-midi.json` and `control-maps/factory-osc.json`.
+1. Save a Project with all supported domains.
+2. Before loading, check only Look and Routing.
+3. Confirm Render, Transport, Automation, and maps do not change.
+4. Save a Preset, then check every load scope. Confirm the preset still cannot restore domains it did not capture.
 
-## 7. Automation interaction
+## 8. Persistent image separation
 
-1. Begin automation recording.
-2. Move a mapped continuous controller.
-3. Fire a mapped Flow Pulse action.
-4. Stop recording.
-5. Confirm the clip contains parameter and action events.
+1. Build an obvious feedback/history image.
+2. Save a preset or snapshot.
+3. Change the image-memory contents.
+4. Load the document.
+5. Confirm the parameter state can return, but the old GPU pixel contents are not secretly restored.
 
-## 8. Safety and recovery
+## 9. State-model export
 
-- Disconnect MIDI while moving a control; HUFF should continue running.
-- Stop and restart OSC on the same port.
-- Attempt to bind a port already in use and confirm the error is shown.
-- Import an invalid schema and confirm it is rejected.
-- Start deterministic export and verify live controller actions do not mutate the private export graph.
-- Close the application with MIDI and OSC active and confirm shutdown does not hang.
+Press Export State Model and inspect the JSON. Confirm all 98 canonical parameters have domain, preset, sequence, interpolation, project, and live-safety metadata.
 
 ## Deferred refinement
 
-Controller-specific templates, relative encoders, 14-bit CC pairs, NRPN/RPN, MIDI output feedback, OSC timetags, and live automation playback are outside this milestone. They should be considered only after real devices establish which additions are useful.
+Project-relative media paths, embedded still/store resources, project folders, migration between future schema versions, camera-device identities, asset relinking, and a visual state browser remain later work. The first objective is proving the distinctions and safe recall rules.

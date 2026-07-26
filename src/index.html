@@ -969,6 +969,25 @@
         .mapping-table-wrap .map-note { width:120px; }
         .mapping-table-wrap button { padding:1px 5px; font-size:9px; }
         .mapping-row-conflict td { background:#fff0f0 !important; }
+
+        /* Milestone 18 scoped state documents */
+        .state-library-body { display:flex; flex-direction:column; gap:5px; }
+        .state-library-row { display:flex; align-items:center; gap:5px; flex-wrap:wrap; }
+        .state-library-row input[type=text], .state-library-row select {
+            background:#111; color:#e8eaf0; border:1px solid rgba(255,255,255,.18);
+            padding:2px 5px; font:10px 'Share Tech Mono',monospace;
+        }
+        #stateDocumentName { width:150px; }
+        #stateDocumentKind { min-width:100px; }
+        .state-scope-grid { display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:3px 5px; background:rgba(0,0,0,.28); border:1px inset rgba(255,255,255,.18); }
+        .state-scope-grid strong { color:var(--term-dgreen); font:11px 'VT323',monospace; letter-spacing:.1em; }
+        .state-scope-grid label { display:inline-flex; align-items:center; gap:3px; color:#b6b6b6; font:9px 'Share Tech Mono',monospace; text-transform:uppercase; }
+        .state-scope-grid input[type=checkbox] { margin:0; }
+        #stateScopeNote, #stateModelStatus, #stateDocumentStatus {
+            color:rgba(255,255,255,.38); font:9px 'Share Tech Mono',monospace; line-height:1.35;
+        }
+        #stateDocumentStatus { color:var(--term-dgreen); }
+        #stateDocumentStatus.warning { color:var(--term-yel); }
     </style>
 
     <style id="ws-mirror-style">
@@ -1033,11 +1052,11 @@
             <button id="aboutClose">×</button>
             <div class="a-icon"></div>
             <h1 style="font-family:'VT323',monospace;font-weight:normal;letter-spacing:.14em">huff</h1>
-            <div class="build">native engine · milestone 17 · 2026</div>
+            <div class="build">native engine · milestone 18 · 2026</div>
             <p>Huff is being migrated to a native Rust + wgpu media engine. The existing
             control surface is preserved while playback, timing, GPU rendering, and
             output move out of the WebView.</p>
-            <p><strong>Milestone 17:</strong> MIDI and OSC now address canonical parameters and actions through editable, learnable, validated, portable mapping files. The original input visual signals remain available while controller ownership is moved into the native state system.</p>
+            <p><strong>Milestone 18:</strong> presets, snapshots, sequences, and projects are now distinct scoped state documents. Recall domains are explicit, parameter sequenceability and live-safety metadata are inspectable, and persistent GPU pixel memory is never silently confused with reusable settings.</p>
         </div>
     </div>
 
@@ -1450,6 +1469,42 @@
                 <button id="presetImportBtn" class="btn-dim" style="font-size:10px;padding:3px 8px">↓ Import JSON</button>
                 <span style="font-size:9px;color:rgba(255,255,255,.22);padding:0 4px;font-family:'Share Tech Mono',monospace">Ctrl+Z: undo</span>
             </div>
+            </div>
+        </div>
+        </div>
+
+        <!-- MILESTONE 18 STATE DOCUMENTS -->
+        <div class="groups" style="margin-top:0">
+        <div class="group">
+            <div class="group-label">State Library</div>
+            <div class="group-body state-library-body">
+                <div class="state-library-row">
+                    <input id="stateDocumentName" type="text" placeholder="state document name…">
+                    <select id="stateDocumentKind" title="Preset, full snapshot, source-independent sequence, or project container">
+                        <option value="preset" selected>PRESET</option>
+                        <option value="snapshot">SNAPSHOT</option>
+                        <option value="sequence">SEQUENCE</option>
+                        <option value="project">PROJECT</option>
+                    </select>
+                    <button id="stateSaveBtn" class="btn-dim">💾 Save Preset</button>
+                    <button id="stateLoadBtn" class="btn-dim" title="Load a huff-state/v1 document using the selected recall domains">▶ Load State File</button>
+                    <button id="stateModelExportBtn" class="btn-dim" title="Export parameter scope, sequenceability, interpolation, project-scope, and live-safety metadata">↑ Export State Model</button>
+                    <span id="stateDocumentStatus">NO STATE DOCUMENT LOADED</span>
+                </div>
+                <div class="state-scope-grid" title="Only checked domains are captured or recalled. A document can never recall a domain it did not capture.">
+                    <strong>RECALL SCOPE</strong>
+                    <label><input id="stateScopeLook" type="checkbox" checked> Look</label>
+                    <label><input id="stateScopeSource" type="checkbox"> Source</label>
+                    <label><input id="stateScopeTemporal" type="checkbox" checked> Temporal</label>
+                    <label><input id="stateScopeRouting" type="checkbox" checked> Routing</label>
+                    <label><input id="stateScopeRender" type="checkbox"> Render</label>
+                    <label><input id="stateScopeTransport" type="checkbox"> Transport</label>
+                    <label><input id="stateScopeAutomation" type="checkbox"> Automation</label>
+                    <label><input id="stateScopeMaps" type="checkbox"> MIDI/OSC Maps</label>
+                    <label title="Declared but disabled in HNW-18: GPU pixel stores remain separate"><input id="stateScopePixels" type="checkbox" disabled> GPU Pixels</label>
+                </div>
+                <div id="stateScopeNote">Preset = reusable artistic condition. Source files, transport, render allocation, automation, maps, and GPU pixels remain untouched.</div>
+                <div id="stateModelStatus">huff-state/v1 · loading parameter metadata…</div>
             </div>
         </div>
         </div>

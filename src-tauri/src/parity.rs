@@ -378,7 +378,7 @@ pub fn build_report(parameters: &ParameterStore) -> ParityReport {
 
     ParityReport {
         schema_version: legacy.schema_version,
-        engine_build: "HNW-17".into(),
+        engine_build: "HNW-18".into(),
         generated_unix_ms: now_unix_ms(),
         parameter_revision: snapshot.revision,
         legacy_source: legacy.source.clone(),

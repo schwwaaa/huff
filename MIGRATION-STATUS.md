@@ -1,4 +1,4 @@
-# HUFF native migration status · Milestone 17
+# HUFF native migration status · Milestone 18
 
 ## Proven native foundation
 
@@ -73,12 +73,10 @@ The queue remains installed for later evaluation but is not treated as a settled
 
 ## Remaining ordered product work
 
-1. Complete MIDI and OSC mapping workflows
-2. Formal presets, snapshots, sequences, scoped recall, and projects
-3. Constrained routing and named buses
-4. Cross-platform production verification and deferred Milestone 15 failure analysis
-5. Optional lower-copy platform-specific texture interop research
-6. Hands-on visual calibration using the Milestone 16 Parity Lab throughout the refinement cycle
+1. Constrained routing and named buses
+2. Cross-platform production verification and deferred Milestone 15 failure analysis
+3. Optional lower-copy platform-specific texture interop research
+4. Hands-on visual calibration using the Milestone 16 Parity Lab throughout the refinement cycle
 
 ## Current principle
 
@@ -88,3 +86,17 @@ The broad native architecture is being completed before a long refinement pass. 
 ## Canonical controller mapping completed in Milestone 17
 
 MIDI and OSC now map directly to canonical Rust parameters and actions instead of remaining isolated demonstration inputs. Learn, edit, conflict warnings, behavior modes, scaling, curves, smoothing, factory restoration, and portable map files are integrated. Real-device and sender-specific testing remains part of the later refinement cycle.
+
+
+## Formal state documents completed in Milestone 18
+
+- Preset, Snapshot, Sequence, and Project are separate typed documents
+- `huff-state/v1` portable schema
+- explicit Look, Source, Temporal, Routing, Render, Transport, Automation, and Control Map scopes
+- scope-intersection recall prevents accidental broad state changes
+- source-file and transport references with missing-file warnings
+- active automation and MIDI/OSC map project storage
+- all 98 canonical parameters classified for preset, snapshot, sequence, interpolation, project, and live safety
+- persistent GPU pixel stores explicitly remain separate and are not silently embedded
+
+The earlier browser-local quick presets remain available for compatibility and rapid tests. The formal State Library is now the authoritative portable state workflow.

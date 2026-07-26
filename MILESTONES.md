@@ -1,7 +1,7 @@
 # HUFF Native wgpu — Master Milestone Record
 
-**Current build:** `0.17.0 / HNW-17`  
-**Current milestone:** Milestone 17 — MIDI and OSC Mapping Workflows  
+**Current build:** `0.18.0 / HNW-18`  
+**Current milestone:** Milestone 18 — Presets, Snapshots, Sequences, and Projects  
 **Tracking rule:** This file is the authoritative milestone index. It must be carried forward and updated in every complete project archive and every changed-files archive from Milestone 16 onward.
 
 This record describes the purpose of each milestone rather than serving as a detailed changelog. Corrective sub-milestones are listed with the milestone they stabilize. Runtime status is intentionally honest: a feature may be structurally integrated while still awaiting the larger cross-feature refinement and verification cycle.
@@ -80,11 +80,13 @@ Milestone 17 replaces the original eight demonstration input targets with mappin
 
 ---
 
-# Planned Milestones
-
 ## Milestone 18 — Presets, Snapshots, Sequences, and Projects
 
-Milestone 18 will formalize the state model so a preset, full snapshot, automation sequence, stored image, and project are no longer treated as interchangeable forms of recall. Parameters will gain explicit preset scope, sequenceability, interpolation policy, project scope, and live-safety metadata. Selective recall will prevent an artistic look from unexpectedly changing devices, output resolution, transport, or persistent image memory unless those domains are intentionally included.
+Milestone 18 formalizes HUFF state through the `huff-state/v1` document model. Presets are reusable scoped artistic conditions, snapshots are broad machine-state captures, sequences are source-independent automation clips, and projects can collect selected parameters, source/transport references, automation, and MIDI/OSC maps. Recall uses the intersection of the document’s captured scope and the operator’s selected load scope, preventing a look from silently changing transport, render allocation, automation, or mappings. All 98 canonical parameters now have state-domain, preset, snapshot, sequenceability, interpolation, project-scope, and live-safety metadata. Persistent GPU history, flying-buffer, feedback, and Flow pixels are identified but intentionally not embedded, keeping image stores separate from process-state recall.
+
+---
+
+# Planned Milestones
 
 ## Milestone 19 — Constrained Routing and Named Buses
 
