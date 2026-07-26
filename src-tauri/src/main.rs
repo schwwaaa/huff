@@ -4,6 +4,7 @@
 #[macro_use]
 extern crate objc;
 
+mod automation;
 mod audio;
 mod audio_router;
 mod camera;
@@ -24,6 +25,10 @@ mod syphon;
 mod video;
 mod video_audio;
 
+use automation::{
+    AutomationClip, AutomationHandle, AutomationInterpolation, ACTION_CLEAR_BUFFERS,
+    ACTION_FLOW_PULSE,
+};
 use audio::{AudioCommand, AudioHandle};
 use audio_router::{AudioRouterCommand, AudioRouterHandle};
 use camera::{CameraDevice, CameraHandle};
@@ -79,6 +84,7 @@ struct AppInfo {
     offline_export: offline_export::OfflineExportInfo,
     export_queue: export_queue::ExportQueueInfo,
     gesture: gesture::GestureInfo,
+    automation: automation::AutomationInfo,
     parameter_revision: u64,
     native_milestone: String,
     active_source: String,
@@ -99,11 +105,12 @@ fn get_app_info(
     export: tauri::State<'_, ExportHandle>,
     offline_export: tauri::State<'_, OfflineExportHandle>,
     export_queue: tauri::State<'_, ExportQueueHandle>,
+    automation: tauri::State<'_, AutomationHandle>,
     parameters: tauri::State<'_, ParameterStore>,
     source: tauri::State<'_, SourceSelector>,
 ) -> AppInfo {
     AppInfo {
-        build: "HNW-13".into(),
+        build: "HNW-14".into(),
         renderer: renderer.info(),
         camera: camera.status(),
         camera_devices: camera.devices(),
@@ -122,8 +129,9 @@ fn get_app_info(
         offline_export: offline_export.info(),
         export_queue: export_queue.info(),
         gesture: gesture.info(),
+        automation: automation.info(),
         parameter_revision: parameters.revision(),
-        native_milestone: "HNW-13".into(),
+        native_milestone: "HNW-14".into(),
         active_source: source.get().label().into(),
     }
 }
@@ -141,37 +149,107 @@ fn get_parameter_state(state: tauri::State<'_, ParameterStore>) -> ParameterSnap
 #[tauri::command]
 fn set_parameter(
     state: tauri::State<'_, ParameterStore>,
+    automation: tauri::State<'_, AutomationHandle>,
     id: String,
     value: serde_json::Value,
 ) -> Result<u64, String> {
-    state.set(&id, value)
+    let revision = state.set(&id, value)?;
+    if let Some(value) = state.value(&id) {
+        automation.record_parameter(&id, value);
+    }
+    Ok(revision)
 }
 
 #[tauri::command]
 fn set_parameter_batch(
     state: tauri::State<'_, ParameterStore>,
+    automation: tauri::State<'_, AutomationHandle>,
     values: BTreeMap<String, serde_json::Value>,
+    automation_label: Option<String>,
 ) -> Result<u64, String> {
-    state.set_many(values)
+    let ids: Vec<String> = values.keys().cloned().collect();
+    let revision = state.set_many(values)?;
+    let canonical = ids
+        .into_iter()
+        .filter_map(|id| state.value(&id).map(|value| (id, value)))
+        .collect();
+    automation.record_parameter_batch(
+        canonical,
+        automation_label.unwrap_or_else(|| "parameter_batch".into()),
+    );
+    Ok(revision)
 }
 
 #[tauri::command]
 fn reset_parameters(
     state: tauri::State<'_, ParameterStore>,
     renderer: tauri::State<'_, RendererHandle>,
+    automation: tauri::State<'_, AutomationHandle>,
 ) -> u64 {
     renderer.send(RenderCommand::ClearFeedback);
-    state.reset()
+    let revision = state.reset();
+    automation.record_parameter_batch(state.snapshot().values, "reset_parameters".into());
+    automation.record_action(ACTION_CLEAR_BUFFERS);
+    revision
 }
 
 #[tauri::command]
-fn clear_native_buffers(renderer: tauri::State<'_, RendererHandle>) {
+fn clear_native_buffers(
+    renderer: tauri::State<'_, RendererHandle>,
+    automation: tauri::State<'_, AutomationHandle>,
+) {
     renderer.send(RenderCommand::ClearFeedback);
+    automation.record_action(ACTION_CLEAR_BUFFERS);
 }
 
 #[tauri::command]
-fn fire_flow_pulse(renderer: tauri::State<'_, RendererHandle>) {
+fn fire_flow_pulse(
+    renderer: tauri::State<'_, RendererHandle>,
+    automation: tauri::State<'_, AutomationHandle>,
+) {
     renderer.send(RenderCommand::FireFlowPulse);
+    automation.record_action(ACTION_FLOW_PULSE);
+}
+
+#[tauri::command]
+fn start_automation_recording(
+    automation: tauri::State<'_, AutomationHandle>,
+    parameters: tauri::State<'_, ParameterStore>,
+    name: String,
+    interpolation: String,
+) -> Result<(), String> {
+    automation.begin(
+        name,
+        AutomationInterpolation::parse(&interpolation)?,
+        parameters.snapshot(),
+    )
+}
+
+#[tauri::command]
+fn stop_automation_recording(
+    automation: tauri::State<'_, AutomationHandle>,
+) -> Result<AutomationClip, String> {
+    automation.stop()
+}
+
+#[tauri::command]
+fn get_active_automation_clip(
+    automation: tauri::State<'_, AutomationHandle>,
+) -> Option<AutomationClip> {
+    automation.active_clip()
+}
+
+#[tauri::command]
+fn set_active_automation_clip(
+    automation: tauri::State<'_, AutomationHandle>,
+    clip: AutomationClip,
+) -> Result<automation::AutomationClipSummary, String> {
+    automation.set_active_clip(clip)
+}
+
+#[tauri::command]
+fn clear_active_automation_clip(automation: tauri::State<'_, AutomationHandle>) {
+    automation.clear();
 }
 
 #[tauri::command]
@@ -406,7 +484,7 @@ fn export_still(
         fit_mode: fit_mode.clone(),
     };
     let metadata = StillExportMetadata {
-        engine_build: "HNW-13".into(),
+        engine_build: "HNW-14".into(),
         captured_unix_ms: StillExportMetadata::now_unix_ms(),
         active_source: source.get().label().into(),
         source_file: video_info.file_path,
@@ -465,6 +543,7 @@ fn start_offline_export(
     renderer: tauri::State<'_, RendererHandle>,
     queue: tauri::State<'_, ExportQueueHandle>,
     parameters: tauri::State<'_, ParameterStore>,
+    automation: tauri::State<'_, AutomationHandle>,
     video: tauri::State<'_, VideoHandle>,
     video_audio: tauri::State<'_, VideoAudioHandle>,
     fps: u32,
@@ -478,7 +557,12 @@ fn start_offline_export(
     audio_mode: String,
     profile: String,
     preserve_alpha: bool,
+    automation_mode: String,
+    automation_loop: bool,
 ) -> Result<Option<ExportQueueReceipt>, String> {
+    if automation.is_recording() {
+        return Err("stop automation recording before queueing a deterministic export".into());
+    }
     if !matches!(fps, 24 | 30 | 60) {
         return Err("deterministic export FPS must be 24, 30, or 60".into());
     }
@@ -496,6 +580,9 @@ fn start_offline_export(
     }
     if !matches!(audio_mode.as_str(), "source" | "none") {
         return Err("deterministic export audio mode must be source or none".into());
+    }
+    if !matches!(automation_mode.as_str(), "none" | "active") {
+        return Err("deterministic export automation mode must be none or active".into());
     }
     validate_profile_support(&profile, preserve_alpha)?;
     if preserve_alpha && !profile_supports_alpha(&profile) {
@@ -538,6 +625,18 @@ fn start_offline_export(
         }
     }
 
+    let automation_clip = if automation_mode == "active" {
+        Some(
+            automation
+                .active_clip()
+                .ok_or_else(|| "record or import an automation clip before queueing automated export".to_string())?,
+        )
+    } else {
+        None
+    };
+    if automation_loop && automation_clip.is_none() {
+        return Err("automation looping requires ACTIVE AUTOMATION".into());
+    }
     let Some(path) = choose_offline_export_destination(&profile)? else {
         return Ok(None);
     };
@@ -571,10 +670,12 @@ fn start_offline_export(
         fit_mode: fit_mode.clone(),
         profile: profile.clone(),
         preserve_alpha,
+        automation_clip: automation_clip.clone(),
+        automation_loop,
         queue_job_id: String::new(),
     };
     let metadata = OfflineExportMetadata {
-        engine_build: "HNW-13".into(),
+        engine_build: "HNW-14".into(),
         created_unix_ms: OfflineExportMetadata::now_unix_ms(),
         source_file: video_info.file_path.clone(),
         source_codec: video_info.codec,
@@ -606,6 +707,21 @@ fn start_offline_export(
         video_codec: profile_codec(&profile)?,
         pixel_format: profile_pixel_format(&profile, preserve_alpha)?.into(),
         preserve_alpha,
+        automation_enabled: automation_clip.is_some(),
+        automation_name: automation_clip
+            .as_ref()
+            .map(|clip| clip.name.clone())
+            .unwrap_or_default(),
+        automation_duration_seconds: automation_clip
+            .as_ref()
+            .map(|clip| clip.duration_seconds)
+            .unwrap_or(0.0),
+        automation_event_count: automation_clip
+            .as_ref()
+            .map(|clip| clip.events.len())
+            .unwrap_or(0),
+        automation_loop,
+        automation_clip,
         frame_pattern: if profile == PROFILE_PNG_SEQUENCE {
             path.join("frame_%06d.png").display().to_string()
         } else {
@@ -1024,6 +1140,7 @@ fn clear_gesture(state: tauri::State<'_, GestureHandle>) {
 #[tauri::command]
 fn set_compositor_param(
     state: tauri::State<'_, ParameterStore>,
+    automation: tauri::State<'_, AutomationHandle>,
     name: String,
     value: f32,
 ) -> Result<u64, String> {
@@ -1034,7 +1151,11 @@ fn set_compositor_param(
         "contrast" => "color.contrast",
         _ => return Err(format!("legacy compositor parameter is not part of Huff Milestone 03: {name}")),
     };
-    state.set(canonical, serde_json::json!(value))
+    let revision = state.set(canonical, serde_json::json!(value))?;
+    if let Some(value) = state.value(canonical) {
+        automation.record_parameter(canonical, value);
+    }
+    Ok(revision)
 }
 
 #[tauri::command]
@@ -1047,9 +1168,12 @@ fn set_compositor_mode(mode: String) -> Result<(), String> {
 fn reset_compositor(
     state: tauri::State<'_, ParameterStore>,
     renderer: tauri::State<'_, RendererHandle>,
+    automation: tauri::State<'_, AutomationHandle>,
 ) {
     renderer.send(RenderCommand::ClearFeedback);
     state.reset();
+    automation.record_parameter_batch(state.snapshot().values, "reset_compositor".into());
+    automation.record_action(ACTION_CLEAR_BUFFERS);
 }
 
 #[tauri::command]
@@ -1083,6 +1207,7 @@ fn main() {
             let midi = midi::start().map_err(std::io::Error::other)?;
             let osc = osc::start().map_err(std::io::Error::other)?;
             let gesture = GestureHandle::new();
+            let automation = AutomationHandle::new();
             let parameters = ParameterStore::new();
             let source = SourceSelector::new(ActiveSource::Camera);
 
@@ -1127,6 +1252,7 @@ fn main() {
                 offline_export.clone(),
                 recording.clone(),
                 export.clone(),
+                automation.clone(),
             )
             .map_err(std::io::Error::other)?;
 
@@ -1204,6 +1330,7 @@ fn main() {
             app.manage(export);
             app.manage(offline_export);
             app.manage(export_queue);
+            app.manage(automation);
             app.manage(parameters);
             app.manage(source);
             app.manage(renderer);
@@ -1218,6 +1345,11 @@ fn main() {
             reset_parameters,
             clear_native_buffers,
             fire_flow_pulse,
+            start_automation_recording,
+            stop_automation_recording,
+            get_active_automation_clip,
+            set_active_automation_clip,
+            clear_active_automation_clip,
             start_syphon_output,
             stop_syphon_output,
             start_spout_output,

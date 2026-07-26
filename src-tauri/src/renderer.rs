@@ -1,4 +1,7 @@
 use crate::{
+    automation::{
+        OfflineAutomationPlayer, ACTION_CLEAR_BUFFERS, ACTION_FLOW_PULSE,
+    },
     audio::AudioSnapshot,
     camera::{CameraFrame, SharedCameraFrame},
     export::{ExportHandle, StillExportConfig, StillExportMetadata},
@@ -1327,6 +1330,8 @@ struct Renderer {
     offline_inputs: Option<FrozenInputState>,
     offline_restore: Option<OfflinePlaybackRestore>,
     offline_source_sequence: u64,
+    offline_automation: Option<OfflineAutomationPlayer>,
+    offline_flow_pulse_until_seconds: Option<f64>,
     deferred_surface_size: Option<(u32, u32)>,
     syphon_enabled: bool,
     syphon_fps: u32,
@@ -2077,6 +2082,8 @@ impl Renderer {
             offline_inputs: None,
             offline_restore: None,
             offline_source_sequence: 0,
+            offline_automation: None,
+            offline_flow_pulse_until_seconds: None,
             deferred_surface_size: None,
             syphon_enabled: false,
             syphon_fps: 30,
@@ -2699,6 +2706,14 @@ impl Renderer {
                 max_dimension, max_dimension
             ));
         }
+        let automation_player = match config.automation_clip.clone() {
+            Some(clip) => Some(OfflineAutomationPlayer::new(
+                parameter_snapshot.clone(),
+                clip,
+                config.automation_loop,
+            )?),
+            None => None,
+        };
         self.offline_export.begin(&config)?;
         let session = match OfflineExportSession::start(config.clone(), metadata) {
             Ok(session) => session,
@@ -2717,6 +2732,8 @@ impl Renderer {
         self.sources.video_control.pause();
 
         self.apply_parameter_snapshot(parameter_snapshot);
+        self.offline_automation = automation_player;
+        self.offline_flow_pulse_until_seconds = None;
         self.offline_inputs = Some(FrozenInputState {
             audio: self
                 .sources
@@ -2775,6 +2792,54 @@ impl Renderer {
         Ok(())
     }
 
+    fn apply_offline_automation(&mut self, absolute_seconds: f64) -> Result<(), String> {
+        let frame = match self.offline_automation.as_mut() {
+            Some(player) => Some(player.evaluate(absolute_seconds)),
+            None => None,
+        };
+        let Some(frame) = frame else {
+            return Ok(());
+        };
+        self.apply_parameter_snapshot(frame.snapshot);
+        for action in frame.actions {
+            match action.as_str() {
+                ACTION_CLEAR_BUFFERS => {
+                    self.clear_feedback();
+                    self.offline_flow_pulse_until_seconds = None;
+                    self.rebuild_offline_capture_after_target_change();
+                }
+                ACTION_FLOW_PULSE => {
+                    self.offline_flow_pulse_until_seconds =
+                        Some(absolute_seconds + 0.220);
+                    self.flow_pulse_fires = self.flow_pulse_fires.wrapping_add(1);
+                }
+                _ => return Err(format!("unsupported deterministic automation action: {action}")),
+            }
+        }
+        Ok(())
+    }
+
+    fn rebuild_offline_capture_after_target_change(&mut self) {
+        let Some(config) = self
+            .offline_session
+            .as_ref()
+            .map(|session| session.config.clone())
+        else {
+            return;
+        };
+        self.offline_capture = Some(OfflineFrameCapture::new(
+            &self.device,
+            &self.export_uniform_layout,
+            &self.export_source_layout,
+            &self.sampler,
+            &self.crisp_sampler,
+            &self.targets.output_view,
+            &config,
+            self.render_width,
+            self.render_height,
+        ));
+    }
+
     fn upload_offline_video(
         &mut self,
         pixels: &[u8],
@@ -2826,6 +2891,8 @@ impl Renderer {
     fn restore_after_offline_export(&mut self) {
         self.offline_capture = None;
         self.offline_inputs = None;
+        self.offline_automation = None;
+        self.offline_flow_pulse_until_seconds = None;
         self.offline_source_sequence = 0;
         self.simulation_seconds = self.started.elapsed().as_secs_f64();
         if let Some((width, height)) = self.deferred_surface_size.take() {
@@ -3291,14 +3358,30 @@ impl Renderer {
             blend_mode_code(&self.global_mix_blend),
             global_mix_position_code(&self.global_mix_position),
         ];
-        let now = Instant::now();
-        let fire_active = self
-            .flow_pulse_until
-            .map(|until| now <= until)
-            .unwrap_or(false);
-        if self.flow_pulse_until.map(|until| now > until).unwrap_or(false) {
-            self.flow_pulse_until = None;
-        }
+        let fire_active = if self.offline_session.is_some() {
+            let active = self
+                .offline_flow_pulse_until_seconds
+                .map(|until| self.simulation_seconds <= until)
+                .unwrap_or(false);
+            if self
+                .offline_flow_pulse_until_seconds
+                .map(|until| self.simulation_seconds > until)
+                .unwrap_or(false)
+            {
+                self.offline_flow_pulse_until_seconds = None;
+            }
+            active
+        } else {
+            let now = Instant::now();
+            let active = self
+                .flow_pulse_until
+                .map(|until| now <= until)
+                .unwrap_or(false);
+            if self.flow_pulse_until.map(|until| now > until).unwrap_or(false) {
+                self.flow_pulse_until = None;
+            }
+            active
+        };
         let pulse_active = !self.flow_pulse_triggered || fire_active;
         let pulse_layer = if pulse_active && self.flow_pulse > 0 {
             self.history
@@ -4080,6 +4163,12 @@ impl Renderer {
             self.upload_video();
             live_delta
         };
+        if offline_active {
+            if let Err(error) = self.apply_offline_automation(self.simulation_seconds) {
+                self.fail_active_offline_export(error.clone());
+                return Err(error);
+            }
+        }
         self.last_frame = now;
         if delta > 0.0 {
             self.measured_fps = 1.0 / delta;

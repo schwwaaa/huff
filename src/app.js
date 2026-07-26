@@ -126,9 +126,12 @@ async function setParameter(definition, value, recordUndo = true) {
   appState.revision = revision;
 }
 
-async function setBatch(values, recordUndo = true) {
+async function setBatch(values, recordUndo = true, automationLabel = '') {
   if (recordUndo) pushUndo();
-  const revision = await call('set_parameter_batch', { values });
+  const revision = await call('set_parameter_batch', {
+    values,
+    automationLabel: automationLabel || null,
+  });
   Object.assign(appState.values, values);
   appState.revision = revision;
 }
@@ -204,7 +207,7 @@ function configureRegistryControls() {
     feedbackGroup.title = 'Native HDR feedback is active; final effect-order parity continues with later render-graph milestones.';
   }
   const glitchGroup = byId('corruptOn')?.closest('.group');
-  if (glitchGroup) glitchGroup.title = "Milestone 13 adds a durable deterministic-export queue with automatic dispatch, pause/resume, reordering, cancellation, retry, repeat, and crash recovery.";
+  if (glitchGroup) glitchGroup.title = "Milestone 14 records canonical control changes and replays them frame-exactly during deterministic offline export.";
   const clusterGroup = byId('clusterTiles')?.closest('.group');
   if (clusterGroup) clusterGroup.title = 'Native cluster bodies are active: persistent centers, coherence, speed, steering, variance, pulse, inertia, breathing, bounce/wrap, bias, spread, and minimum spread.';
   const scanGroup = byId('clusters')?.closest('.group');
@@ -516,6 +519,15 @@ function syncOfflineDimensions(force = false) {
   if (byId('offlineStartSeconds')) byId('offlineStartSeconds').disabled = !customStart;
 }
 
+function syncOfflineAutomation() {
+  const active = byId('offlineAutomation')?.value === 'active';
+  const loop = byId('offlineAutomationLoop');
+  if (loop) {
+    loop.disabled = !active;
+    if (!active) loop.checked = false;
+  }
+}
+
 function queueStatusLabel(status) {
   return {
     queued: 'QUEUED',
@@ -575,7 +587,7 @@ function renderExportQueue(queue = {}) {
 ${job.outputPath || ''}`;
       return `<div class="export-queue-job" data-status="${escapeHtml(status)}" data-job-id="${escapeHtml(job.id)}" title="${escapeHtml(details)}">
         <div class="export-queue-job-meta">${escapeHtml(queueStatusLabel(status))}${warning} · #${Number(job.attempts || 0)}</div>
-        <div class="export-queue-job-path">${escapeHtml(basename(job.outputPath))} · ${escapeHtml(job.profileLabel || job.profile || '')} · ${Number(job.width || 0)}×${Number(job.height || 0)} @ ${Number(job.fps || 0)}</div>
+        <div class="export-queue-job-path">${escapeHtml(basename(job.outputPath))} · ${escapeHtml(job.profileLabel || job.profile || '')} · ${Number(job.width || 0)}×${Number(job.height || 0)} @ ${Number(job.fps || 0)}${job.automationEnabled ? ` · AUTO ${escapeHtml(job.automationName || 'clip')}${job.automationLoop ? ' ↻' : ''}` : ''}</div>
         <div class="export-queue-progress"><span style="width:${percent.toFixed(2)}%"></span><em>${percent.toFixed(1)}% · ${Number(job.renderedFrames || 0)}/${Number(job.totalFrames || 0)}</em></div>
         <div class="export-queue-actions">${actions.join('')}</div>
       </div>`;
@@ -603,6 +615,7 @@ function wireOfflineExport() {
   byId('offlineProfile')?.addEventListener('change', syncOfflineProfile);
   byId('offlinePreset')?.addEventListener('change', () => syncOfflineDimensions(true));
   byId('offlineStartMode')?.addEventListener('change', () => syncOfflineDimensions());
+  byId('offlineAutomation')?.addEventListener('change', syncOfflineAutomation);
   byId('offlineExportBtn')?.addEventListener('click', async () => {
     const button = byId('offlineExportBtn');
     button.disabled = true;
@@ -621,6 +634,8 @@ function wireOfflineExport() {
         audioMode: byId('offlineAudio')?.value || 'source',
         profile,
         preserveAlpha: Boolean(byId('offlineAlpha')?.checked),
+        automationMode: byId('offlineAutomation')?.value || 'none',
+        automationLoop: Boolean(byId('offlineAutomationLoop')?.checked),
       });
       if (receipt) toast(`${offlineProfileLabel(profile)} queued · position ${receipt.position || 1} · ${basename(receipt.path)}`);
     } finally {
@@ -672,6 +687,82 @@ function wireOfflineExport() {
     }
   });
   syncOfflineProfile();
+  syncOfflineAutomation();
+}
+
+const AUTOMATION_STORAGE_KEY = 'huffNativeAutomationClipV1';
+
+function persistAutomationClip(clip) {
+  if (clip) localStorage.setItem(AUTOMATION_STORAGE_KEY, JSON.stringify(clip));
+  else localStorage.removeItem(AUTOMATION_STORAGE_KEY);
+}
+
+async function restoreAutomationClip() {
+  const raw = localStorage.getItem(AUTOMATION_STORAGE_KEY);
+  if (!raw) return;
+  try {
+    const clip = JSON.parse(raw);
+    await call('set_active_automation_clip', { clip });
+  } catch (error) {
+    localStorage.removeItem(AUTOMATION_STORAGE_KEY);
+    toast(`Stored automation could not be restored: ${error}`, true);
+  }
+}
+
+function wireAutomation() {
+  byId('automationRecordBtn')?.addEventListener('click', async () => {
+    try {
+      await call('start_automation_recording', {
+        name: byId('automationName')?.value.trim() || 'HUFF Performance',
+        interpolation: byId('automationInterpolation')?.value || 'linear',
+      });
+      toast('Automation recording started · move controls or recall presets');
+    } catch (_) {}
+  });
+  byId('automationStopBtn')?.addEventListener('click', async () => {
+    try {
+      const clip = await call('stop_automation_recording');
+      persistAutomationClip(clip);
+      if (byId('offlineAutomation')) byId('offlineAutomation').value = 'active';
+      syncOfflineAutomation();
+      toast(`Automation captured · ${clip.events?.length || 0} events · ${Number(clip.durationSeconds || 0).toFixed(2)} s`);
+    } catch (_) {}
+  });
+  byId('automationClearBtn')?.addEventListener('click', async () => {
+    await call('clear_active_automation_clip').catch(() => {});
+    persistAutomationClip(null);
+    if (byId('offlineAutomation')) byId('offlineAutomation').value = 'none';
+    syncOfflineAutomation();
+    toast('Active automation cleared');
+  });
+  byId('automationExportBtn')?.addEventListener('click', async () => {
+    const clip = await call('get_active_automation_clip').catch(() => null);
+    if (!clip) return toast('No active automation clip to export', true);
+    const blob = new Blob([JSON.stringify(clip, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${String(clip.name || 'huff-automation').replace(/[^a-z0-9_-]+/gi, '-')}.huff-automation.json`;
+    anchor.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  });
+  const input = byId('automationLoadInput');
+  byId('automationImportBtn')?.addEventListener('click', () => input?.click());
+  input?.addEventListener('change', async () => {
+    const file = input.files?.[0];
+    if (!file) return;
+    try {
+      const clip = JSON.parse(await file.text());
+      const summary = await call('set_active_automation_clip', { clip });
+      persistAutomationClip(await call('get_active_automation_clip'));
+      if (byId('offlineAutomation')) byId('offlineAutomation').value = 'active';
+      syncOfflineAutomation();
+      toast(`Imported automation: ${summary.name} · ${summary.eventCount} events`);
+    } catch (error) {
+      toast(`Automation import failed: ${error}`, true);
+    }
+    input.value = '';
+  });
 }
 
 function wireCamera() {
@@ -809,7 +900,7 @@ function refreshPresetList(selected = '') {
   if (selected && presets[selected]) select.value = selected;
 }
 
-async function applyPresetValues(values, recordUndo = true) {
+async function applyPresetValues(values, recordUndo = true, automationLabel = 'preset_recall') {
   const updates = {};
   for (const definition of appState.registry) {
     if (!(definition.id in values) && !(definition.legacyId in values)) continue;
@@ -817,7 +908,7 @@ async function applyPresetValues(values, recordUndo = true) {
     updates[definition.id] = value;
     setControlValue(byId(definition.legacyId), definition, value);
   }
-  if (Object.keys(updates).length) await setBatch(updates, recordUndo);
+  if (Object.keys(updates).length) await setBatch(updates, recordUndo, automationLabel);
   updateConditionalInputs();
 }
 
@@ -836,7 +927,7 @@ function wirePresets() {
     const name = byId('presetList')?.value;
     const preset = presetStorage()[name];
     if (!preset) return;
-    await applyPresetValues(preset.values || preset);
+    await applyPresetValues(preset.values || preset, true, `preset:${name}`);
     toast(`Loaded preset: ${name}`);
   });
   byId('presetDeleteBtn')?.addEventListener('click', () => {
@@ -865,7 +956,7 @@ function wirePresets() {
     if (!file) return;
     try {
       const payload = JSON.parse(await file.text());
-      await applyPresetValues(payload.values || payload);
+      await applyPresetValues(payload.values || payload, true, `preset_import:${file.name}`);
       toast(`Imported ${file.name}`);
     } catch (error) {
       toast(`Preset import failed: ${error}`, true);
@@ -915,6 +1006,7 @@ function displayInfo(info) {
   const exportInfo = info.export || {};
   const offlineExport = info.offlineExport || {};
   const exportQueue = info.exportQueue || {};
+  const automation = info.automation || {};
 
   setOptions(byId('cams'), info.cameraDevices || [], (item) => item.slot, (item) => item.name);
   setOptions(byId('midiPortSelect'), midi.ports || [], (item) => item, (item) => item);
@@ -1019,6 +1111,7 @@ Phase: ${offlineExport.phase || 'ready'} · ${(progress * 100).toFixed(2)}%
 Frames: ${offlineExport.renderedFrames || 0}/${offlineExport.totalFrames || 0}
 Elapsed: ${(offlineExport.elapsedSeconds || 0).toFixed(2)} s · remaining ≈ ${(offlineExport.estimatedRemainingSeconds || 0).toFixed(2)} s
 Audio: ${audioDescription} · ${((offlineExport.encodedBytes || 0) / 1048576).toFixed(1)} MiB
+Automation: ${offlineExport.automationEnabled ? `${offlineExport.automationName || 'clip'} · ${offlineExport.automationEventCount || 0} events · ${Number(offlineExport.automationDurationSeconds || 0).toFixed(2)} s${offlineExport.automationLoop ? ' · loop' : ''}` : 'static state'}
 Frame pattern: ${offlineExport.framePattern || '—'}
 Metadata: ${offlineExport.metadataPath || '—'}
 Manifest: ${offlineExport.manifestPath || '—'}`;
@@ -1027,10 +1120,37 @@ Manifest: ${offlineExport.manifestPath || '—'}`;
     appState.offlineCompleted = Number(offlineExport.completedExports || 0);
   }
   renderExportQueue(exportQueue);
+  const automationPanel = byId('automationPanel');
+  const automationClip = automation.activeClip || null;
+  const automationRecording = Boolean(automation.recording);
+  automationPanel?.classList.toggle('recording', automationRecording);
+  if (byId('automationStatus')) {
+    byId('automationStatus').textContent = automationRecording
+      ? `RECORDING · ${Number(automation.elapsedSeconds || 0).toFixed(2)} s`
+      : (automationClip
+        ? `${automationClip.name} · ${automationClip.eventCount || 0} events · ${Number(automationClip.durationSeconds || 0).toFixed(2)} s`
+        : 'NO ACTIVE CLIP');
+    byId('automationStatus').title = automation.lastError || (automationClip
+      ? `Parameters: ${automationClip.parameterEvents || 0} · Actions: ${automationClip.actionEvents || 0}`
+      : 'Record or import a canonical automation clip for deterministic export replay.');
+  }
+  if (byId('automationRecordBtn')) byId('automationRecordBtn').disabled = automationRecording || offlineBusy;
+  if (byId('automationStopBtn')) byId('automationStopBtn').disabled = !automationRecording;
+  if (byId('automationImportBtn')) byId('automationImportBtn').disabled = automationRecording || offlineBusy;
+  if (byId('automationClearBtn')) byId('automationClearBtn').disabled = automationRecording || offlineBusy || !automationClip;
+  if (byId('automationExportBtn')) byId('automationExportBtn').disabled = automationRecording || !automationClip;
+  if (byId('automationName')) byId('automationName').disabled = automationRecording || offlineBusy;
+  if (byId('automationInterpolation')) byId('automationInterpolation').disabled = automationRecording || offlineBusy;
+  if (byId('offlineAutomation')) {
+    const requestedActive = byId('offlineAutomation').value === 'active';
+    byId('offlineAutomation').disabled = !automationClip;
+    if (!automationClip && requestedActive) byId('offlineAutomation').value = 'none';
+  }
+  syncOfflineAutomation();
   const alphaControl = byId('offlineAlpha');
   if (alphaControl) alphaControl.disabled = !offlineProfileSupportsAlpha();
   if (byId('offlineExportBtn')) {
-    byId('offlineExportBtn').disabled = !offlineExport.ffmpegAvailable || !video.loaded;
+    byId('offlineExportBtn').disabled = !offlineExport.ffmpegAvailable || !video.loaded || automationRecording;
   }
   if (byId('offlineCancelBtn')) byId('offlineCancelBtn').disabled = !offlineBusy;
   syncOfflineDimensions();
@@ -1149,15 +1269,17 @@ async function boot() {
   wireRecording();
   wireExport();
   wireOfflineExport();
+  wireAutomation();
   wireCamera();
   wireNativeActions();
   wirePresets();
   wireMidiOsc();
   await call('set_video_audio_preview', { enabled: true }).catch(() => {});
+  await restoreAutomationClip();
   await refreshParameterState();
   await poll();
   setInterval(poll, 250);
-  console.info('Huff Native wgpu Milestone 13 loaded', {
+  console.info('Huff Native wgpu Milestone 14 loaded', {
     parameters: appState.registry.length,
     implemented: appState.registry.filter((definition) => definition.implemented).length,
   });

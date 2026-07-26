@@ -114,6 +114,23 @@ impl ParameterStore {
         }
         self.revision.fetch_add(1, Ordering::AcqRel) + 1
     }
+
+    pub fn value(&self, id_or_legacy: &str) -> Option<Value> {
+        let definition = find_definition(id_or_legacy)?;
+        self.values
+            .read()
+            .ok()
+            .and_then(|state| state.get(&definition.id).cloned())
+    }
+}
+
+pub fn canonicalize_parameter_value(
+    id_or_legacy: &str,
+    value: Value,
+) -> Result<(String, Value), String> {
+    let definition = find_definition(id_or_legacy)
+        .ok_or_else(|| format!("unknown Huff parameter: {id_or_legacy}"))?;
+    Ok((definition.id.clone(), validate_value(definition, value)?))
 }
 
 fn validate_value(definition: &ParameterDefinition, value: Value) -> Result<Value, String> {

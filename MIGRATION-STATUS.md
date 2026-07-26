@@ -1,4 +1,4 @@
-# Huff native migration status · Milestone 13
+# Huff native migration status · Milestone 14
 
 ## Proven native foundation
 
@@ -45,32 +45,42 @@
 - Transactional temporary output and reproducibility metadata
 - Complete/cancelled/failed per-attempt lifecycle manifests
 
-## Durable export queue completed in Milestone 13
+## Provisional durable export queue retained from Milestone 13
 
 - Frozen job descriptions captured at enqueue time
 - Sequential automatic dispatch
-- Queue pause and resume
-- Waiting-job reorder and cancellation
-- Active-job cancellation
-- Per-job progress, ETA, attempt count, error, and history reporting
-- Retry from frame zero with stable queue job identity
-- Repeat to a new destination with a new queue job identity
-- Persistent application-data queue file
-- Adjacent `.huff-queue-job.json` descriptors
-- Queue-to-lifecycle-manifest `queueJobId` linkage
-- Source and destination conflict checks
-- Interrupted-session recovery and safe startup handling
+- Queue pause, reorder, cancellation, retry, repeat, history, and crash recovery
+- Persistent global queue and adjacent job descriptions
+- Source/destination conflict checks
+
+This remains installed for later evaluation but is not currently treated as a settled core Huff workflow.
+
+## Deterministic automation completed in Milestone 14
+
+- Canonical automation clip schema with stable IDs, names, duration, sequence order, and versioning
+- Initial-state capture at record start
+- Individual parameter event recording with short-interval coalescing
+- Atomic parameter-batch events for preset recall and reset
+- Recorded clear-buffer and Flow-pulse actions
+- Linear, smooth, ease-in, ease-out, and step numeric interpolation
+- Forced step behavior for Boolean and select parameters
+- Exact evaluation from offline frame time rather than wall-clock time
+- Optional clip looping across an export
+- Immutable automation copies frozen into queued jobs
+- Automation identity and complete clip data embedded in reproducibility metadata
+- JSON import/export and local active-clip restoration
+- Validation limits of 100,000 events and 24 hours
+- Resource-topology parameters explicitly excluded from replay
 
 ## Remaining product systems
 
-1. Automation, keyframe, action, and preset replay inside deterministic export
-2. True independent high-resolution graph execution rather than final resampling
-3. Parameter-by-parameter visual and motion calibration
-4. MIDI and OSC map import/edit workflows
-5. Expanded sequencing, routing, scoped recall, and project-state support
-6. Windows MSVC, Spout receiver, multi-GPU, MSI, and NSIS verification
-7. Optional lower-copy platform-specific texture interop research
+1. True independent high-resolution graph execution rather than final resampling
+2. Parameter-by-parameter visual and motion calibration
+3. MIDI and OSC map import/edit workflows
+4. Expanded sequencing, routing, scoped recall, and project-state support
+5. Windows MSVC, Spout receiver, multi-GPU, MSI, and NSIS verification
+6. Optional lower-copy platform-specific texture interop research
 
 ## Current principle
 
-Export architecture is now installed before the larger calibration cycle. The next structural milestone should make deterministic exports replay canonical time-varying instrument state without reopening visual tuning yet.
+The fixed offline timeline can now reproduce changing instrument state as well as static state. The next structural step is to run the full graph at export resolution before beginning the larger visual calibration cycle.

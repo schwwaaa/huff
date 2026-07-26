@@ -1,96 +1,79 @@
-# Huff Native Milestone 13 validation
+# Huff Native Milestone 14 validation
 
-The packaging environment does not provide Cargo, rustc, rustfmt, Metal, DX12, or a native Tauri runtime. Rust type/borrow checking and real GPU queue execution therefore remain required on the target machine before Milestone 13 is considered fully runtime-proven.
+The packaging environment provides Node.js 22 and FFmpeg 7.1.3, but it does not provide Cargo, rustc, rustfmt, Metal, DX12, or a native Tauri runtime. Rust type/borrow checking and real GPU automation export therefore remain required on the target machine before Milestone 14 is considered fully runtime-proven.
 
 ## Passed static checks
 
 - `src/app.js` passes `node --check` under Node.js 22.
 - `package.json`, `package-lock.json`, and `src-tauri/tauri.conf.json` parse as JSON.
-- Package, npm lockfile, Cargo manifest, Cargo lockfile project entry, and Tauri configuration are synchronized at `0.13.0`.
-- The native build identifier is synchronized at `HNW-13` for application info, still metadata, deterministic metadata, queue jobs, and lifecycle manifests.
-- All 294 HTML IDs are unique.
-- All 108 static JavaScript `byId()` references resolve to existing HTML IDs.
-- All 40 JavaScript Tauri command calls resolve to commands registered in `generate_handler!`.
-- Queue commands, queue controls, persistence paths, queue states, recovery paths, and descriptor naming are present and connected.
+- Package, npm lockfile, Cargo manifest, Cargo lockfile project entry, and Tauri configuration are synchronized at `0.14.0`.
+- Native build identifiers are synchronized at `HNW-14` for application info, still metadata, deterministic metadata, queue jobs, repeat jobs, and lifecycle manifests.
+- All 306 HTML IDs are unique.
+- All 120 static JavaScript `byId()` references resolve to existing HTML IDs.
+- All 45 JavaScript Tauri command calls resolve to commands registered among the 63 `generate_handler!` entries.
+- All five automation commands are registered and connected to controls.
+- A 51-check integration audit passed for versioning, UI wiring, command registration, automation schema markers, renderer integration, queue integration, metadata fields, safety exclusions, and build identifiers.
 - Modified Rust files pass a lexical comment/string/delimiter balance audit.
-- No Rust dependency or build-dependency was added.
+- Cargo and npm dependency sets are unchanged from Milestone 13.
 
-## Queue architecture checks
+## Automation architecture checks
 
-Source inspection confirms that Milestone 13 provides:
+Source inspection confirms that Milestone 14 provides:
 
-- one sequential background coordinator;
-- immutable queued copies of source/export configuration, metadata, deterministic seed, and canonical parameter state;
-- stable queue job IDs propagated into per-attempt lifecycle manifests;
-- global queue persistence in the application-data directory;
-- adjacent `.huff-queue-job.json` descriptors;
-- approximately one-second active-progress persistence;
-- immediate terminal-state persistence;
-- pause/resume without interrupting the active job;
-- waiting-job cancellation and active-job cancellation;
-- queued-job reordering;
-- retry from frame zero for failed, cancelled, and interrupted jobs;
-- repeat-to-new-destination behavior;
-- terminal history removal and clear-finished behavior;
-- startup recovery for `starting` and `running` jobs;
-- unreadable/newer queue-state backup rather than startup failure;
-- source-missing and unexpected-destination failure handling;
-- duplicate nonterminal destination prevention, including retry;
-- waiting while live recording finalizes or still export is active.
+- a versioned `AutomationClip` schema;
+- parameter, parameter-batch, and action events;
+- initial canonical state capture at time zero;
+- canonical value validation through the parameter registry;
+- numeric linear, smooth, ease-in, ease-out, and step interpolation;
+- forced step behavior for Boolean and select parameters;
+- stable event ordering and canonical sequence renumbering;
+- an event bound of 100,000 and duration bound of 24 hours;
+- exclusion of `render.*`, `history.*`, and `source.seed_on_load` from automation;
+- deterministic action support for buffer clear and Flow pulse;
+- exact evaluation from offline simulation time;
+- optional looping with action expansion across crossed loops;
+- immutable clip copies in queue configuration and export metadata;
+- queue dispatch waiting while automation recording is active;
+- JSON import/export and Rust-side revalidation;
+- local active-clip restoration in the control surface.
 
-## Transaction and recovery checks
+## Renderer integration checks
 
-Milestone 12's transactional exporter remains unchanged:
+Source inspection confirms:
 
-- video outputs encode to temporary files before final rename;
-- PNG sequences encode into a temporary directory before final rename;
-- audio muxing uses a separate temporary artifact;
-- incomplete temporary artifacts are not treated as committed destinations;
-- cancellation, failure, and completion retain distinct lifecycle states.
+- the automation player is created from the queued parameter snapshot and frozen clip;
+- automation is evaluated after exact-frame decoding and before GPU state upload;
+- Flow pulse uses fixed simulation time during offline export rather than wall-clock `Instant`;
+- a recorded clear action resets persistent renderer state;
+- offline capture bindings are rebuilt after clear replaces persistent target textures;
+- automation state is removed and normal live state is restored on completion, cancellation, or failure.
 
-Milestone 13 recovery uses that final-destination boundary. A persisted `starting` or `running` job is recovered as complete only when its final transactional destination exists; otherwise it becomes interrupted and the queue starts paused.
+## Included Rust unit tests
 
-## Export-profile regression
+`src-tauri/src/automation.rs` includes tests for:
 
-FFmpeg 7.1.3 encoded a synthetic three-frame 64×64 RGBA stream through the same profile argument families used by the deterministic exporter.
+- exact numeric interpolation at a timeline midpoint;
+- forced step behavior for discrete values;
+- one action firing per crossed automation loop;
+- action firing at frame time zero without duplicate firing.
 
-```text
-H.264 MP4
-codec_name=h264
-pix_fmt=yuv420p
-nb_frames=3
+These tests could not be executed in this environment because Cargo is unavailable.
 
-ProRes 422 HQ
-codec_name=prores
-pix_fmt=yuv422p10le
-nb_frames=3
+## Existing exporter regression boundary
 
-ProRes 4444 alpha
-codec_name=prores
-pix_fmt=yuva444p12le
-nb_frames=3
-
-FFV1 alpha
-codec_name=ffv1
-pix_fmt=bgra
-
-PNG sequence alpha
-3 numbered frames
-```
-
-The ProRes decoder reporting `yuva444p12le` is expected for the produced 4444 stream even though encoder input is requested as `yuva444p10le`.
+Milestone 14 does not change the Milestone 12 codec pipelines or transactional commit behavior. H.264, ProRes, FFV1, and PNG-sequence encoding still require local runtime regression because the renderer-to-encoder path now optionally receives time-varying state.
 
 ## Scope not runtime-validated here
 
-- Rust compilation and borrow checking
+- Rust compilation, type checking, and borrow checking
 - Tauri state injection and command deserialization
-- queue coordinator behavior under real renderer timing
-- app-data path behavior in packaged macOS and Windows builds
-- forced termination at every transaction boundary
-- long queues and long-duration exports
-- simultaneous UI polling and queue mutation under load
-- Metal, Vulkan, and DX12 wgpu behavior
-- Windows MSVC packaging and filesystem replacement semantics
+- automation recording under real high-frequency control input
+- exact GPU frame output for interpolation and action boundaries
+- clear-buffer capture rebinding on Metal, Vulkan, and DX12
+- long clips and the 100,000-event bound
+- local-storage behavior in packaged WebViews
+- queue crash recovery with frozen automation clips
+- macOS and Windows packaging
 
 ## Required local validation
 
@@ -101,4 +84,4 @@ npm install
 npm run dev:metal
 ```
 
-Follow `TESTING.md`. Begin with three short native-size H.264 jobs, then verify pause/resume, reordering, waiting-job cancellation, active cancellation, retry, repeat, and application-restart recovery before beginning long 4K/8K profile tests.
+Follow `TESTING.md`. Begin with a five-second linear control recording and two repeated native-size H.264 exports. Compare decoded frame hashes, then test preset recall, buffer clear, Flow pulse, looping, JSON import, and queue recovery before long 4K/8K exports.

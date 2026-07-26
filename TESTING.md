@@ -1,4 +1,4 @@
-# Huff Native Milestone 13 test checklist
+# Huff Native Milestone 14 test checklist
 
 ## Build and launch
 
@@ -14,121 +14,146 @@ ffmpeg -version
 ffmpeg -hide_banner -encoders | grep -E 'libx264|prores_ks|ffv1| png '
 ```
 
-## Basic queue sequence
+## Basic automation recording
 
-1. Load a video with motion and audio.
-2. Queue three short jobs with different profiles or visual states and unique destinations.
-3. Confirm the first job becomes `starting` and then `running`.
-4. Confirm the other two remain `queued`.
-5. Confirm progress, rendered frames, estimated time, and attempt count update.
-6. Confirm each next job starts only after the prior job completes.
-7. Confirm each output has `.huff-queue-job.json`, `.huff-export-job.json`, and reproducibility metadata.
-8. Confirm `queueJobId` in the lifecycle manifest matches the frozen queue descriptor.
+1. Load a short video with obvious motion.
+2. Set a simple initial Huff state.
+3. Name the clip `M14 Basic` and choose **LINEAR**.
+4. Press **Record**.
+5. Over approximately five seconds, move Feedback, Brightness, Glitch Alpha, and Flow Strength.
+6. Press **Stop**.
+7. Confirm the automation strip reports the name, duration, and nonzero event count.
+8. Export the clip as JSON and confirm it contains `schemaVersion`, `durationSeconds`, and ordered `events`.
 
-## Frozen-state test
+## Frame-exact deterministic replay
 
-1. Establish visual state A and queue an H.264 job.
-2. Change multiple parameters to state B before A begins or while another job is running.
-3. Queue a second job.
-4. Confirm the first output uses state A and the second uses state B.
-5. Inspect each queue descriptor's parameter snapshot.
+1. Choose **ACTIVE AUTOMATION** in deterministic export.
+2. Export a short native-resolution H.264 file at 30 FPS.
+3. Repeat to a second destination without recording again.
+4. Compare the two files or decoded frame hashes.
+5. Confirm the visual parameter changes occur at the same frames.
+6. Confirm the `.huff-offline.json`, `.huff-export-job.json`, and `.huff-queue-job.json` files identify the same automation name, duration, event count, loop state, and clip contents.
 
-## Pause and resume
+For a strict visual comparison:
 
-1. Queue at least two jobs.
-2. Pause the queue while the first job is running.
-3. Confirm the active job continues to completion.
-4. Confirm the next job does not start.
-5. Resume the queue and confirm dispatch continues.
-6. Pause while no job is active and confirm all waiting jobs remain queued.
+```bash
+mkdir -p /tmp/huff-a /tmp/huff-b
+ffmpeg -i first.mp4 -vsync 0 /tmp/huff-a/%06d.png
+ffmpeg -i second.mp4 -vsync 0 /tmp/huff-b/%06d.png
+shasum -a 256 /tmp/huff-a/*.png | awk '{print $1}' > /tmp/huff-a.txt
+shasum -a 256 /tmp/huff-b/*.png | awk '{print $1}' > /tmp/huff-b.txt
+diff /tmp/huff-a.txt /tmp/huff-b.txt
+```
 
-## Reorder
+Codec metadata can differ between files; decoded frame identity is the important test.
 
-1. Pause the queue.
-2. Add three jobs.
-3. Move the third job upward twice.
-4. Resume and confirm execution follows the displayed order.
-5. Confirm running and terminal entries cannot be reordered.
+## Interpolation modes
 
-## Cancellation
+For each numeric interpolation mode—LINEAR, SMOOTH, EASE IN, EASE OUT, and STEP:
 
-### Waiting job
+1. Record one slow move from a low Feedback value to a high value.
+2. Export the same interval.
+3. Confirm the transition shape matches the selected mode.
+4. Confirm Boolean toggles and select menus always switch discretely rather than blending.
 
-1. Pause the queue and add a job.
-2. Cancel the waiting entry.
-3. Confirm it becomes `cancelled` without starting FFmpeg.
-4. Confirm it remains available for retry or repeat.
+## Preset recall and reset
 
-### Active job
+1. Save two visibly different presets.
+2. Begin recording.
+3. Recall preset A, wait, recall preset B, then press Reset.
+4. Stop and export.
+5. Confirm each preset applies atomically on one timeline boundary.
+6. Confirm Reset restores default parameters and clears temporal state at the recorded point.
 
-1. Start a longer export.
-2. Cancel it from the job row or the global Cancel button.
-3. Confirm the private decoder and encoder stop.
-4. Confirm temporary output is removed.
-5. Confirm the queue entry and lifecycle manifest become `cancelled`.
-6. Confirm the next queued job starts when the queue is not paused.
+## Action replay
 
-## Retry
+### Clear buffers
 
-1. Cancel or deliberately fail a job.
-2. Press Retry.
-3. Confirm the same queue job ID remains and the attempt count increases.
-4. Confirm the job starts from frame zero with the original frozen parameters and original destination.
-5. Confirm retry is rejected when the final destination already exists or the source is missing.
+1. Build visible feedback/history content.
+2. Start recording and press **Clear** once.
+3. Continue moving controls and stop.
+4. Export with active automation.
+5. Confirm feedback, history, tile state, clusters, scan phases, and persistent effects reset on the recorded frame.
 
-## Repeat
+### Flow pulse
 
-1. Complete a short job.
-2. Press Repeat and select a new destination.
-3. Confirm a new queue job ID is created.
-4. Confirm the cloned job keeps its source interval, profile, dimensions, parameters, and deterministic seed.
-5. Confirm the repeated decoded frames match the original when the same output profile is used.
+1. Enable Flow and configure a visible pulse amount.
+2. Record two Flow pulses several seconds apart.
+3. Export.
+4. Confirm each pulse begins on a deterministic frame and remains active for the fixed 220 ms simulation interval.
+5. Repeat at 24, 30, and 60 FPS and confirm pulse timing remains time-based while frame count changes appropriately.
 
-## Crash/interruption recovery
+## Looping
 
-1. Queue two jobs and begin the first.
-2. Close the application while the first is rendering.
-3. Relaunch Huff.
-4. Confirm the unfinished job becomes `interrupted` and the queue is paused.
-5. Confirm the waiting job remains queued.
-6. Retry the interrupted job and resume the queue.
-7. Confirm restart begins from frame zero.
+1. Record a two-second automation clip with one parameter sweep and one Flow pulse.
+2. Export six seconds with **LOOP AUTO** enabled.
+3. Confirm the state returns to the clip beginning at each two-second boundary.
+4. Confirm the Flow pulse fires once per loop.
+5. Export without looping and confirm the final keyframed state is held after clip completion.
+6. Repeat the looping test with strong feedback but no recorded Clear action and confirm temporal memory continues across loops.
+7. Add a Clear action at the loop start and confirm each cycle begins from cleared persistent state.
 
-Also test closing immediately after final output commit. A committed destination should recover as completed rather than interrupted.
+## Queue coordination while recording
 
-## Recording and still-export coordination
+1. Queue a job and pause the queue.
+2. Start automation recording.
+3. Resume the queue.
+4. Confirm the job remains waiting with an automation-recording reason.
+5. Stop recording and confirm the queued job may dispatch.
 
-1. Start live recording and queue a deterministic job.
-2. Confirm the job remains queued with a waiting reason until recording stops and finalizes.
-3. Repeat while a PNG still export is active.
-4. Confirm deterministic dispatch begins only after the still export finishes.
-5. Confirm recording and still export remain disabled while a deterministic job is actively rendering.
+## Frozen queue copy
 
-## Missing source and destination conflict
+1. Record clip A and queue an automated export.
+2. Import or record clip B before job A begins.
+3. Queue another automated export.
+4. Confirm the first output uses clip A and the second uses clip B.
+5. Inspect the queue descriptors and confirm each contains its own frozen automation clip.
+6. Retry or repeat a job and confirm it retains the original frozen clip.
 
-1. Pause the queue and add a job.
-2. Move or delete its source file.
-3. Resume and confirm the job fails with a source-missing message while later valid jobs continue.
-4. Repeat with a file manually created at the queued destination.
-5. Confirm the job fails rather than overwriting the unexpected destination.
+## JSON import and validation
 
-## Queue persistence and history
+1. Export a valid automation clip.
+2. Clear the active clip and re-import the file.
+3. Confirm its summary and deterministic output match the original.
+4. Test invalid files:
+   - unknown parameter ID;
+   - out-of-range parameter value;
+   - unsupported action;
+   - event time below zero;
+   - event time above 24 hours;
+   - unsupported future schema version.
+5. Confirm Rust rejects each invalid clip without replacing the current active clip.
 
-1. Queue several jobs and close Huff before they start.
-2. Relaunch and confirm queued descriptions and order survive.
-3. Complete, cancel, and fail jobs.
-4. Remove one history entry and use Clear Finished.
-5. Confirm queued and active entries are retained.
-6. Inspect the application-data `huff-export-queue.json` for valid JSON.
+## Allocation-safety boundary
 
-## Existing profile regression
+Inspect an exported clip and confirm it does not contain:
 
-Run one short export for each Milestone 12 profile:
+```text
+render.*
+history.*
+source.seed_on_load
+```
 
-- H.264 MP4 with AAC;
-- ProRes 422 HQ with PCM;
-- ProRes 4444 with alpha;
-- FFV1 with FLAC and optional alpha;
-- PNG sequence with optional `audio.wav`.
+Change those controls during recording and confirm the export job still uses the static render/history/source-init settings captured when queued.
 
-Verify exact frame counts with `ffprobe` or numbered-file counts and confirm the queue does not change codec behavior.
+## Existing export regression
+
+1. Export with **STATIC STATE** and confirm Milestone 12 behavior is unchanged.
+2. Run one short export for each profile:
+   - H.264 MP4 with AAC;
+   - ProRes 422 HQ with PCM;
+   - ProRes 4444 with alpha;
+   - FFV1 with FLAC and optional alpha;
+   - PNG sequence with optional `audio.wav`.
+3. Verify frame counts and metadata.
+4. Exercise cancellation and confirm no partial destination is committed.
+
+## Queue regression
+
+Because Milestone 13 remains provisional, perform only a focused regression initially:
+
+1. Queue one static and one automated job.
+2. Confirm sequential dispatch.
+3. Cancel one waiting automated job and retry it.
+4. Restart the application with an interrupted automated job.
+5. Confirm its frozen clip survives recovery and retry from frame zero.

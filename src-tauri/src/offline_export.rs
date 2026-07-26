@@ -1,3 +1,4 @@
+use crate::automation::AutomationClip;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
@@ -43,6 +44,10 @@ pub struct OfflineExportConfig {
     pub fit_mode: String,
     pub profile: String,
     pub preserve_alpha: bool,
+    #[serde(default)]
+    pub automation_clip: Option<AutomationClip>,
+    #[serde(default)]
+    pub automation_loop: bool,
     #[serde(default)]
     pub queue_job_id: String,
 }
@@ -101,6 +106,18 @@ pub struct OfflineExportMetadata {
     pub video_codec: String,
     pub pixel_format: String,
     pub preserve_alpha: bool,
+    #[serde(default)]
+    pub automation_enabled: bool,
+    #[serde(default)]
+    pub automation_name: String,
+    #[serde(default)]
+    pub automation_duration_seconds: f64,
+    #[serde(default)]
+    pub automation_event_count: usize,
+    #[serde(default)]
+    pub automation_loop: bool,
+    #[serde(default)]
+    pub automation_clip: Option<AutomationClip>,
     pub frame_pattern: String,
     pub audio_artifact: String,
 }
@@ -144,7 +161,7 @@ impl ExportJobManifest {
         let started = unix_ms();
         Self {
             schema_version: 1,
-            job_id: format!("hnw13-{started}-{}", std::process::id()),
+            job_id: format!("hnw14-{started}-{}", std::process::id()),
             queue_job_id: config.queue_job_id.clone(),
             status: "running".into(),
             started_unix_ms: started,
@@ -180,6 +197,11 @@ pub struct OfflineExportInfo {
     pub frame_pattern: String,
     pub audio_artifact_path: String,
     pub preserve_alpha: bool,
+    pub automation_enabled: bool,
+    pub automation_name: String,
+    pub automation_duration_seconds: f64,
+    pub automation_event_count: usize,
+    pub automation_loop: bool,
     pub width: u32,
     pub height: u32,
     pub fps: u32,
@@ -216,6 +238,11 @@ impl Default for OfflineExportInfo {
             frame_pattern: String::new(),
             audio_artifact_path: String::new(),
             preserve_alpha: false,
+            automation_enabled: false,
+            automation_name: String::new(),
+            automation_duration_seconds: 0.0,
+            automation_event_count: 0,
+            automation_loop: false,
             width: 0,
             height: 0,
             fps: 0,
@@ -280,6 +307,23 @@ impl OfflineExportHandle {
         state.frame_pattern = frame_pattern_for(config);
         state.audio_artifact_path = audio_artifact_for(config);
         state.preserve_alpha = config.preserve_alpha;
+        state.automation_enabled = config.automation_clip.is_some();
+        state.automation_name = config
+            .automation_clip
+            .as_ref()
+            .map(|clip| clip.name.clone())
+            .unwrap_or_default();
+        state.automation_duration_seconds = config
+            .automation_clip
+            .as_ref()
+            .map(|clip| clip.duration_seconds)
+            .unwrap_or(0.0);
+        state.automation_event_count = config
+            .automation_clip
+            .as_ref()
+            .map(|clip| clip.events.len())
+            .unwrap_or(0);
+        state.automation_loop = config.automation_loop;
         state.width = config.output_width;
         state.height = config.output_height;
         state.fps = config.fps;
@@ -750,6 +794,12 @@ fn validate_config(config: &OfflineExportConfig) -> Result<(), String> {
         return Err("offline export fit mode must be fit, crop, or stretch".into());
     }
     validate_profile_support(&config.profile, config.preserve_alpha)?;
+    if config.automation_loop && config.automation_clip.is_none() {
+        return Err("automation looping requires an automation clip".into());
+    }
+    if let Some(clip) = &config.automation_clip {
+        crate::automation::normalize_clip(clip.clone())?;
+    }
     if config.is_image_sequence() && config.path.exists() {
         return Err("PNG sequence destination already exists; choose a new folder name".into());
     }

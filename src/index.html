@@ -171,6 +171,47 @@
             color: var(--term-dgreen);
             letter-spacing: .06em;
         }
+        .automation-panel {
+            display: flex; align-items: center; gap: 5px; flex-wrap: wrap;
+            padding: 3px 5px 4px;
+            background: #07100c;
+            border-bottom: 1px solid var(--win-mid);
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 10px;
+            color: #8fb59a;
+        }
+        .automation-panel strong {
+            color: var(--term-green);
+            font-weight: normal;
+            letter-spacing: .08em;
+        }
+        .automation-panel input[type=text] {
+            width: 132px;
+            background: var(--term-bg);
+            border-top: 1px solid var(--win-dark);
+            border-left: 1px solid var(--win-dark);
+            border-bottom: 1px solid var(--win-light);
+            border-right: 1px solid var(--win-light);
+            color: var(--term-green);
+            padding: 1px 4px;
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 10px;
+        }
+        .automation-panel.recording {
+            background: #180707;
+            border-bottom-color: #7f2020;
+        }
+        .automation-panel.recording strong,
+        .automation-panel.recording #automationStatus {
+            color: #ff7777;
+        }
+        #automationStatus {
+            color: #bce8c8;
+            border: 1px solid #315c3c;
+            background: #020b05;
+            padding: 2px 5px;
+            min-width: 160px;
+        }
         .export-queue-panel {
             background: #101010;
             border-bottom: 1px solid var(--win-mid);
@@ -940,11 +981,11 @@
             <button id="aboutClose">×</button>
             <div class="a-icon"></div>
             <h1 style="font-family:'VT323',monospace;font-weight:normal;letter-spacing:.14em">huff</h1>
-            <div class="build">native engine · milestone 13 · 2026</div>
+            <div class="build">native engine · milestone 14 · 2026</div>
             <p>Huff is being migrated to a native Rust + wgpu media engine. The existing
             control surface is preserved while playback, timing, GPU rendering, and
             output move out of the WebView.</p>
-            <p><strong>Milestone 13:</strong> Deterministic exports now enter a durable queue. Jobs capture their source, render settings, profile, parameters, and reproducibility state when queued; they can be reordered, paused, cancelled, retried from frame zero, repeated to a new destination, and recovered after an interrupted application session.</p>
+            <p><strong>Milestone 14:</strong> Huff can record canonical parameter gestures, preset recalls, buffer clears, and Flow pulses as automation clips. Offline export evaluates those clips against its fixed frame timeline, with exact interpolation, optional looping, and a frozen copy stored in every queued job.</p>
         </div>
     </div>
 
@@ -1263,10 +1304,36 @@
                 <option value="source" selected>SOURCE AUDIO</option>
                 <option value="none">SILENT</option>
             </select>
+            <select id="offlineAutomation" title="Render a static parameter snapshot or replay the active automation clip" style="font-size:10px;padding:1px 2px">
+                <option value="none" selected>STATIC STATE</option>
+                <option value="active">ACTIVE AUTOMATION</option>
+            </select>
+            <label title="Repeat the active automation clip until the export ends" style="display:inline-flex;align-items:center;gap:3px">
+                <input id="offlineAutomationLoop" type="checkbox"> LOOP AUTO
+            </label>
             <button id="offlineExportBtn" class="btn-red" title="Capture this deterministic export description and add it to the durable queue">＋ Queue</button>
             <button id="offlineCancelBtn" disabled title="Cancel the deterministic export">■ Cancel</button>
             <span class="pill" id="offlineExportPill" style="color:rgba(0,200,220,.7);border-color:rgba(0,200,220,.25)" title="Deterministic production export status">OFFLINE: READY</span>
         </div>
+
+        <div class="automation-panel" id="automationPanel">
+            <strong>AUTOMATION</strong>
+            <input id="automationName" type="text" value="HUFF Performance" maxlength="120" title="Name for the recorded canonical parameter performance">
+            <select id="automationInterpolation" title="Interpolation recorded between numeric parameter keyframes" style="font-size:10px;padding:1px 2px">
+                <option value="linear" selected>LINEAR</option>
+                <option value="smooth">SMOOTH</option>
+                <option value="ease_in">EASE IN</option>
+                <option value="ease_out">EASE OUT</option>
+                <option value="step">STEP</option>
+            </select>
+            <button id="automationRecordBtn" class="btn-red" title="Record canonical parameter changes, preset recalls, buffer clears, and flow pulse actions">● Record</button>
+            <button id="automationStopBtn" disabled title="Stop recording and make this the active automation clip">■ Stop</button>
+            <button id="automationExportBtn" title="Export the active automation clip as JSON">↑ Export</button>
+            <button id="automationImportBtn" title="Import an automation JSON clip">↓ Import</button>
+            <button id="automationClearBtn" title="Remove the active automation clip">✕ Clear</button>
+            <span id="automationStatus">NO ACTIVE CLIP</span>
+        </div>
+        <input id="automationLoadInput" type="file" accept=".json,application/json" style="display:none">
 
         <div class="export-queue-panel" id="exportQueuePanel">
             <div class="export-queue-toolbar">

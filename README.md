@@ -1,8 +1,10 @@
-# Huff Native wgpu · Milestone 13
+# Huff Native wgpu · Milestone 14
 
-Milestone 13 adds a **durable deterministic-export queue** to Huff's native Rust + wgpu engine.
+Milestone 14 adds **frame-exact automation replay to deterministic offline export**.
 
-The application now includes:
+Huff can now record a live control performance as canonical instrument state, save or import that performance as a `.huff-automation.json` clip, and evaluate it from the fixed offline timeline instead of from wall-clock timing.
+
+The application includes:
 
 - native FFmpeg video and synchronized audio playback;
 - native camera capture;
@@ -13,7 +15,8 @@ The application now includes:
 - deterministic 24/30/60 FPS production export;
 - H.264, ProRes, FFV1, and PNG-sequence profiles;
 - optional alpha preservation for compatible profiles;
-- a persistent sequential export queue with pause, reorder, cancellation, retry, repeat, history, and crash recovery.
+- the provisional durable export queue from Milestone 13;
+- canonical automation recording and deterministic replay.
 
 ## Run
 
@@ -36,71 +39,78 @@ npm run dev:dx12
 
 FFmpeg must be available on `PATH`.
 
-## Queue workflow
+## Automation workflow
 
-1. Load a video file and establish the desired Huff state.
-2. Choose the deterministic profile, timeline, dimensions, sampling, fit, audio, and alpha settings.
-3. Press **Queue Video** or **Queue Frames** and choose a new destination.
-4. Continue changing Huff and queue additional jobs. Each job keeps the state captured when it was added.
-5. The queue runs jobs sequentially and reports per-job progress and failure state.
+1. Load a video and establish an initial Huff state.
+2. Enter a clip name and interpolation mode in the **AUTOMATION** strip.
+3. Press **Record**.
+4. Move Huff controls, recall presets, clear buffers, or fire Flow pulses.
+5. Press **Stop**. The completed clip becomes the active automation.
+6. In deterministic export, choose **ACTIVE AUTOMATION** and optionally enable **LOOP AUTO**.
+7. Queue the export.
 
-The queue can be paused without interrupting its active export. Waiting jobs can be reordered or cancelled. Failed, cancelled, and interrupted jobs can be restarted from frame zero. Completed or retryable jobs can be repeated to a new destination.
+The queued job receives an immutable copy of the automation clip. Editing, importing, or clearing the active clip later does not alter jobs already queued.
 
-## Durable files
+## Recorded event types
 
-The global queue is stored in the platform application-data directory:
+Milestone 14 records:
+
+- individual canonical parameter changes;
+- parameter batches such as preset recalls and reset operations;
+- `clear_buffers` actions;
+- `flow_pulse` actions.
+
+Numeric parameters support:
+
+- linear;
+- smooth;
+- ease in;
+- ease out;
+- step interpolation.
+
+Boolean and select parameters always use step behavior.
+
+Render allocation, history allocation, and `source.seed_on_load` settings are intentionally excluded from automation. Those settings can change GPU resource topology or source initialization and remain frozen per export job.
+
+## Deterministic behavior
+
+For export frame `n` at frame rate `fps`, automation is evaluated at:
 
 ```text
-huff-export-queue.json
+simulation_time = n / fps
 ```
 
-Each queued job writes:
+No automation timing depends on UI polling, live render speed, or wall-clock duration. A slower-than-real-time export therefore produces the same keyframe state and action boundaries as a fast export.
+
+Looping repeats control state and recorded actions; it does not automatically clear feedback, history, or other persistent image memory. Record a **Clear** action at the desired loop boundary when each cycle must restart temporal state.
+
+The automation clip, loop setting, duration, event count, and name are included in queue descriptions and deterministic export metadata.
+
+## Clip files
+
+The active clip can be exported as:
 
 ```text
-<output-name>.huff-queue-job.json
+<name>.huff-automation.json
 ```
 
-Each encoding attempt retains Milestone 12's lifecycle manifest:
+The browser control surface also retains the latest active clip in local storage for restoration at the next launch. Imported clips are validated and canonicalized by Rust before they become active.
 
-```text
-<output-name>.huff-export-job.json
-```
+## Queue status
 
-Completed deterministic exports also write their reproducibility metadata:
-
-```text
-<output-file>.huff-offline.json
-```
-
-PNG sequences contain internal metadata and manifest copies.
-
-## Production profiles
-
-| Profile | Output | Video format | Audio | Alpha |
-|---|---|---|---|---|
-| H.264 MP4 | `.mp4` | `libx264`, MPEG-4 fallback | AAC | No |
-| ProRes 422 HQ | `.mov` | `prores_ks`, 10-bit 4:2:2 | 24-bit PCM | No |
-| ProRes 4444 | `.mov` | `prores_ks`, 4:4:4:4 | 24-bit PCM | Optional |
-| FFV1 Lossless | `.mkv` | FFV1 level 3 | FLAC | Optional |
-| PNG Sequence | folder | numbered RGB/RGBA PNG | optional `audio.wav` | Optional |
-
-## Recovery semantics
-
-Huff never treats an unfinished temporary output as complete. If the application closes during a job, the next launch checks whether the transactional final destination was committed. Otherwise the job is marked **interrupted**, the queue pauses, and the user may restart the frozen job from frame zero.
-
-This is restartable job recovery, not arbitrary frame-level codec continuation.
+Milestone 13's export queue remains present as provisional infrastructure. It is not required for authoring automation beyond the current deterministic export dispatch path, and it may be simplified or removed after the larger product testing cycle.
 
 ## Current resolution meaning
 
-1080p, 4K, 8K, and custom deterministic exports still resample Huff's completed internal render. Full high-resolution execution of every history and effect pass remains a later milestone.
+1080p, 4K, 8K, and custom deterministic exports still resample Huff's completed internal render. Full high-resolution execution of every history and effect pass remains Milestone 15.
 
 ## Documentation
 
-- `UPGRADE-NOTES-13.md` — queue architecture and recovery behavior
-- `TESTING.md` — Milestone 13 runtime checklist
+- `UPGRADE-NOTES-14.md` — automation schema, recording, and replay architecture
+- `TESTING.md` — Milestone 14 runtime checklist
 - `MIGRATION-STATUS.md` — completed and remaining systems
 - `VALIDATION.md` — validation completed in the packaging environment
 
 ## Next milestone
 
-Milestone 14 is deterministic automation replay: keyframes, parameter automation, registered actions, and preset recalls evaluated against the fixed export timeline.
+Milestone 15 is true independent high-resolution graph execution: the history, glitch, cluster, feedback, scan, Flow, and compositing passes run at the requested export resolution instead of only resampling the live-resolution result.

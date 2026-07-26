@@ -1,4 +1,5 @@
 use crate::{
+    automation::AutomationHandle,
     export::ExportHandle,
     offline_export::{OfflineExportConfig, OfflineExportHandle, OfflineExportMetadata},
     parameters::ParameterSnapshot,
@@ -17,7 +18,7 @@ use std::{
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
-const QUEUE_SCHEMA_VERSION: u32 = 1;
+const QUEUE_SCHEMA_VERSION: u32 = 2;
 const MAX_QUEUE_JOBS: usize = 100;
 const COORDINATOR_INTERVAL: Duration = Duration::from_millis(125);
 const PROGRESS_PERSIST_INTERVAL: Duration = Duration::from_secs(1);
@@ -79,7 +80,7 @@ impl ExportQueueJob {
     ) -> Self {
         let created = unix_ms();
         let id = format!(
-            "hnw13-{created}-{}-{}",
+            "hnw14-{created}-{}-{}",
             std::process::id(),
             JOB_COUNTER.fetch_add(1, Ordering::AcqRel)
         );
@@ -155,6 +156,11 @@ pub struct ExportQueueJobInfo {
     pub height: u32,
     pub fps: u32,
     pub duration_seconds: f64,
+    pub automation_enabled: bool,
+    pub automation_name: String,
+    pub automation_duration_seconds: f64,
+    pub automation_event_count: usize,
+    pub automation_loop: bool,
     pub rendered_frames: u64,
     pub total_frames: u64,
     pub progress: f64,
@@ -187,6 +193,26 @@ impl From<&ExportQueueJob> for ExportQueueJobInfo {
             height: job.config.output_height,
             fps: job.config.fps,
             duration_seconds: job.config.duration_seconds,
+            automation_enabled: job.config.automation_clip.is_some(),
+            automation_name: job
+                .config
+                .automation_clip
+                .as_ref()
+                .map(|clip| clip.name.clone())
+                .unwrap_or_default(),
+            automation_duration_seconds: job
+                .config
+                .automation_clip
+                .as_ref()
+                .map(|clip| clip.duration_seconds)
+                .unwrap_or(0.0),
+            automation_event_count: job
+                .config
+                .automation_clip
+                .as_ref()
+                .map(|clip| clip.events.len())
+                .unwrap_or(0),
+            automation_loop: job.config.automation_loop,
             rendered_frames: job.rendered_frames,
             total_frames: job.total_frames,
             progress: job.progress,
@@ -241,6 +267,7 @@ impl ExportQueueHandle {
         offline_export: OfflineExportHandle,
         recording: RecordingHandle,
         still_export: ExportHandle,
+        automation: AutomationHandle,
     ) -> Result<Self, String> {
         let (mut loaded, load_warning) = match load_queue_file(&persistence_path) {
             Ok(file) => (file, String::new()),
@@ -309,7 +336,14 @@ impl ExportQueueHandle {
         thread::Builder::new()
             .name("huff-export-queue".into())
             .spawn(move || {
-                coordinator_loop(worker, renderer, offline_export, recording, still_export)
+                coordinator_loop(
+                    worker,
+                    renderer,
+                    offline_export,
+                    recording,
+                    still_export,
+                    automation,
+                )
             })
             .map_err(|error| format!("could not start export queue coordinator: {error}"))?;
         Ok(handle)
@@ -494,7 +528,7 @@ impl ExportQueueHandle {
         config.path = path;
         retarget_metadata(&config, &mut metadata);
         metadata.created_unix_ms = u128::from(unix_ms());
-        metadata.engine_build = "HNW-13".into();
+        metadata.engine_build = "HNW-14".into();
         self.enqueue(config, metadata, template.parameter_snapshot)
     }
 
@@ -586,6 +620,7 @@ fn coordinator_loop(
     offline_export: OfflineExportHandle,
     recording: RecordingHandle,
     still_export: ExportHandle,
+    automation: AutomationHandle,
 ) {
     let mut last_progress_persist = Instant::now();
     while !queue.shutdown.load(Ordering::Acquire) {
@@ -659,7 +694,9 @@ fn coordinator_loop(
             if state.active_job_id.is_none() && !offline.active && !state.paused {
                 let recording_info = recording.info();
                 let still_info = still_export.info();
-                if recording_info.active || recording_info.finalizing {
+                if automation.is_recording() {
+                    state.waiting_reason = "waiting for automation recording to stop".into();
+                } else if recording_info.active || recording_info.finalizing {
                     state.waiting_reason = "waiting for live recording to stop".into();
                 } else if still_info.active {
                     state.waiting_reason = "waiting for still export to finish".into();
