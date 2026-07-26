@@ -8,6 +8,7 @@ mod audio;
 mod audio_router;
 mod camera;
 mod export;
+mod export_queue;
 mod gesture;
 mod history;
 mod midi;
@@ -27,6 +28,7 @@ use audio::{AudioCommand, AudioHandle};
 use audio_router::{AudioRouterCommand, AudioRouterHandle};
 use camera::{CameraDevice, CameraHandle};
 use export::{ExportHandle, StillExportConfig, StillExportMetadata};
+use export_queue::{ExportQueueHandle, ExportQueueReceipt};
 use gesture::{GestureHandle, GesturePoint};
 use midi::{MidiCommand, MidiHandle};
 use offline_export::{
@@ -75,6 +77,7 @@ struct AppInfo {
     recording: recording::RecordingInfo,
     export: export::ExportInfo,
     offline_export: offline_export::OfflineExportInfo,
+    export_queue: export_queue::ExportQueueInfo,
     gesture: gesture::GestureInfo,
     parameter_revision: u64,
     native_milestone: String,
@@ -95,11 +98,12 @@ fn get_app_info(
     recording: tauri::State<'_, RecordingHandle>,
     export: tauri::State<'_, ExportHandle>,
     offline_export: tauri::State<'_, OfflineExportHandle>,
+    export_queue: tauri::State<'_, ExportQueueHandle>,
     parameters: tauri::State<'_, ParameterStore>,
     source: tauri::State<'_, SourceSelector>,
 ) -> AppInfo {
     AppInfo {
-        build: "HNW-12".into(),
+        build: "HNW-13".into(),
         renderer: renderer.info(),
         camera: camera.status(),
         camera_devices: camera.devices(),
@@ -116,9 +120,10 @@ fn get_app_info(
         recording: recording.info(),
         export: export.info(),
         offline_export: offline_export.info(),
+        export_queue: export_queue.info(),
         gesture: gesture.info(),
         parameter_revision: parameters.revision(),
-        native_milestone: "HNW-12".into(),
+        native_milestone: "HNW-13".into(),
         active_source: source.get().label().into(),
     }
 }
@@ -401,7 +406,7 @@ fn export_still(
         fit_mode: fit_mode.clone(),
     };
     let metadata = StillExportMetadata {
-        engine_build: "HNW-12".into(),
+        engine_build: "HNW-13".into(),
         captured_unix_ms: StillExportMetadata::now_unix_ms(),
         active_source: source.get().label().into(),
         source_file: video_info.file_path,
@@ -422,12 +427,43 @@ fn export_still(
     Ok(Some(path.display().to_string()))
 }
 
+fn choose_offline_export_destination(profile: &str) -> Result<Option<PathBuf>, String> {
+    let extension = profile_extension(profile)?;
+    let mut dialog = rfd::FileDialog::new();
+    dialog = match profile {
+        "prores_hq" | "prores_4444" => dialog
+            .add_filter("QuickTime movie", &["mov"])
+            .set_file_name("huff-offline-export.mov"),
+        "ffv1" => dialog
+            .add_filter("Matroska video", &["mkv"])
+            .set_file_name("huff-offline-export.mkv"),
+        PROFILE_PNG_SEQUENCE => dialog.set_file_name("huff-png-sequence"),
+        _ => dialog
+            .add_filter("MPEG-4 video", &["mp4"])
+            .set_file_name("huff-offline-export.mp4"),
+    };
+    let Some(mut path) = dialog.save_file() else {
+        return Ok(None);
+    };
+    if profile != PROFILE_PNG_SEQUENCE
+        && !path
+            .extension()
+            .and_then(|value| value.to_str())
+            .map(|value| value.eq_ignore_ascii_case(extension))
+            .unwrap_or(false)
+    {
+        path.set_extension(extension);
+    }
+    if path.exists() {
+        return Err("export destination already exists; choose a new file or folder name".into());
+    }
+    Ok(Some(path))
+}
+
 #[tauri::command]
 fn start_offline_export(
     renderer: tauri::State<'_, RendererHandle>,
-    recording: tauri::State<'_, RecordingHandle>,
-    export: tauri::State<'_, ExportHandle>,
-    offline_export: tauri::State<'_, OfflineExportHandle>,
+    queue: tauri::State<'_, ExportQueueHandle>,
     parameters: tauri::State<'_, ParameterStore>,
     video: tauri::State<'_, VideoHandle>,
     video_audio: tauri::State<'_, VideoAudioHandle>,
@@ -442,16 +478,7 @@ fn start_offline_export(
     audio_mode: String,
     profile: String,
     preserve_alpha: bool,
-) -> Result<Option<String>, String> {
-    if recording.info().active || recording.info().finalizing {
-        return Err("deterministic export is disabled while recording or finalizing".into());
-    }
-    if export.info().active {
-        return Err("deterministic export is disabled while a PNG export is active".into());
-    }
-    if offline_export.info().active {
-        return Err("another deterministic export is already active".into());
-    }
+) -> Result<Option<ExportQueueReceipt>, String> {
     if !matches!(fps, 24 | 30 | 60) {
         return Err("deterministic export FPS must be 24, 30, or 60".into());
     }
@@ -489,7 +516,7 @@ fn start_offline_export(
 
     let video_info = video.status();
     if !video_info.loaded || video_info.file_path.is_empty() {
-        return Err("load a video file before starting deterministic export".into());
+        return Err("load a video file before queueing deterministic export".into());
     }
     let start = match start_mode.as_str() {
         "zero" => 0.0,
@@ -511,36 +538,9 @@ fn start_offline_export(
         }
     }
 
-    let extension = profile_extension(&profile)?;
-    let mut dialog = rfd::FileDialog::new();
-    dialog = match profile.as_str() {
-        "prores_hq" | "prores_4444" => dialog
-            .add_filter("QuickTime movie", &["mov"])
-            .set_file_name("huff-offline-export.mov"),
-        "ffv1" => dialog
-            .add_filter("Matroska video", &["mkv"])
-            .set_file_name("huff-offline-export.mkv"),
-        PROFILE_PNG_SEQUENCE => dialog.set_file_name("huff-png-sequence"),
-        _ => dialog
-            .add_filter("MPEG-4 video", &["mp4"])
-            .set_file_name("huff-offline-export.mp4"),
-    };
-    let selected = dialog.save_file();
-    let Some(mut path) = selected else {
+    let Some(path) = choose_offline_export_destination(&profile)? else {
         return Ok(None);
     };
-    if profile != PROFILE_PNG_SEQUENCE
-        && !path
-            .extension()
-            .and_then(|value| value.to_str())
-            .map(|value| value.eq_ignore_ascii_case(extension))
-            .unwrap_or(false)
-    {
-        path.set_extension(extension);
-    }
-    if profile == PROFILE_PNG_SEQUENCE && path.exists() {
-        return Err("PNG sequence destination already exists; choose a new folder name".into());
-    }
 
     let render = renderer.info();
     let audio_info = video_audio.info();
@@ -571,9 +571,10 @@ fn start_offline_export(
         fit_mode: fit_mode.clone(),
         profile: profile.clone(),
         preserve_alpha,
+        queue_job_id: String::new(),
     };
     let metadata = OfflineExportMetadata {
-        engine_build: "HNW-12".into(),
+        engine_build: "HNW-13".into(),
         created_unix_ms: OfflineExportMetadata::now_unix_ms(),
         source_file: video_info.file_path.clone(),
         source_codec: video_info.codec,
@@ -618,17 +619,76 @@ fn start_offline_export(
             String::new()
         },
     };
-    renderer.start_offline_export(config, metadata, snapshot)?;
-    Ok(Some(path.display().to_string()))
+    queue.enqueue(config, metadata, snapshot).map(Some)
 }
 
 #[tauri::command]
 fn cancel_offline_export(
     renderer: tauri::State<'_, RendererHandle>,
     offline_export: tauri::State<'_, OfflineExportHandle>,
+    queue: tauri::State<'_, ExportQueueHandle>,
 ) {
-    offline_export.request_cancel();
-    renderer.send(RenderCommand::CancelOfflineExport);
+    queue.cancel_active(&renderer, &offline_export);
+}
+
+#[tauri::command]
+fn set_export_queue_paused(
+    queue: tauri::State<'_, ExportQueueHandle>,
+    paused: bool,
+) -> Result<(), String> {
+    queue.set_paused(paused)
+}
+
+#[tauri::command]
+fn cancel_export_queue_job(
+    queue: tauri::State<'_, ExportQueueHandle>,
+    job_id: String,
+) -> Result<(), String> {
+    queue.cancel_job(&job_id)
+}
+
+#[tauri::command]
+fn retry_export_queue_job(
+    queue: tauri::State<'_, ExportQueueHandle>,
+    job_id: String,
+) -> Result<(), String> {
+    queue.retry_job(&job_id)
+}
+
+#[tauri::command]
+fn repeat_export_queue_job(
+    queue: tauri::State<'_, ExportQueueHandle>,
+    job_id: String,
+) -> Result<Option<ExportQueueReceipt>, String> {
+    let job = queue.job(&job_id)?;
+    let Some(path) = choose_offline_export_destination(&job.config.profile)? else {
+        return Ok(None);
+    };
+    queue.repeat_job_to(&job_id, path).map(Some)
+}
+
+#[tauri::command]
+fn remove_export_queue_job(
+    queue: tauri::State<'_, ExportQueueHandle>,
+    job_id: String,
+) -> Result<(), String> {
+    queue.remove_job(&job_id)
+}
+
+#[tauri::command]
+fn clear_finished_export_jobs(
+    queue: tauri::State<'_, ExportQueueHandle>,
+) -> Result<usize, String> {
+    queue.clear_finished()
+}
+
+#[tauri::command]
+fn move_export_queue_job(
+    queue: tauri::State<'_, ExportQueueHandle>,
+    job_id: String,
+    direction: i32,
+) -> Result<(), String> {
+    queue.move_job(&job_id, direction)
 }
 
 #[tauri::command]
@@ -1057,6 +1117,19 @@ fn main() {
             )
             .map_err(std::io::Error::other)?;
 
+            let queue_dir = app
+                .path()
+                .app_data_dir()
+                .map_err(std::io::Error::other)?;
+            let export_queue = ExportQueueHandle::start(
+                queue_dir.join("huff-export-queue.json"),
+                renderer.clone(),
+                offline_export.clone(),
+                recording.clone(),
+                export.clone(),
+            )
+            .map_err(std::io::Error::other)?;
+
             let resize = renderer.clone();
             renderer_window.on_window_event(move |event| match event {
                 tauri::WindowEvent::Resized(size) => {
@@ -1090,6 +1163,7 @@ fn main() {
                 let close_recording = recording.clone();
                 let close_export = export.clone();
                 let close_offline_export = offline_export.clone();
+                let close_export_queue = export_queue.clone();
                 controls.on_window_event(move |event| match event {
                     tauri::WindowEvent::Focused(focused) => {
                         if *focused {
@@ -1103,6 +1177,7 @@ fn main() {
                         close_recording.shutdown();
                         close_export.shutdown();
                         close_offline_export.request_cancel();
+                        close_export_queue.shutdown();
                         close_renderer.send(RenderCommand::Shutdown);
                         close_camera.shutdown();
                         close_video.shutdown();
@@ -1128,6 +1203,7 @@ fn main() {
             app.manage(recording);
             app.manage(export);
             app.manage(offline_export);
+            app.manage(export_queue);
             app.manage(parameters);
             app.manage(source);
             app.manage(renderer);
@@ -1152,6 +1228,13 @@ fn main() {
             export_still,
             start_offline_export,
             cancel_offline_export,
+            set_export_queue_paused,
+            cancel_export_queue_job,
+            retry_export_queue_job,
+            repeat_export_queue_job,
+            remove_export_queue_job,
+            clear_finished_export_jobs,
+            move_export_queue_job,
             focus_renderer,
             refresh_cameras,
             start_camera,

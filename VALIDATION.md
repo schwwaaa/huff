@@ -1,54 +1,58 @@
-# Huff Native Milestone 12 validation
+# Huff Native Milestone 13 validation
 
-The packaging environment did not provide Cargo, rustc, rustfmt, a standalone WGSL compiler, Metal, or DX12. Local Rust compilation and real GPU export remain required before Milestone 12 is considered runtime-proven.
+The packaging environment does not provide Cargo, rustc, rustfmt, Metal, DX12, or a native Tauri runtime. Rust type/borrow checking and real GPU queue execution therefore remain required on the target machine before Milestone 13 is considered fully runtime-proven.
 
 ## Passed static checks
 
-- `src/app.js` passes `node --check`.
+- `src/app.js` passes `node --check` under Node.js 22.
 - `package.json`, `package-lock.json`, and `src-tauri/tauri.conf.json` parse as JSON.
-- Package, npm lockfile, Cargo manifest, Cargo lockfile project entry, and Tauri configuration are synchronized at `0.12.0`.
-- `HNW-12` is reported by application info, PNG still sidecars, and deterministic-export metadata.
-- All HTML IDs are unique.
-- Every JavaScript `byId()` reference resolves to an existing HTML ID.
-- Every JavaScript Tauri command name is present in the Rust command surface.
-- Modified Rust files pass a lexical delimiter/string/comment balance audit.
-- No new Rust crate dependency was introduced.
+- Package, npm lockfile, Cargo manifest, Cargo lockfile project entry, and Tauri configuration are synchronized at `0.13.0`.
+- The native build identifier is synchronized at `HNW-13` for application info, still metadata, deterministic metadata, queue jobs, and lifecycle manifests.
+- All 294 HTML IDs are unique.
+- All 108 static JavaScript `byId()` references resolve to existing HTML IDs.
+- All 40 JavaScript Tauri command calls resolve to commands registered in `generate_handler!`.
+- Queue commands, queue controls, persistence paths, queue states, recovery paths, and descriptor naming are present and connected.
+- Modified Rust files pass a lexical comment/string/delimiter balance audit.
+- No Rust dependency or build-dependency was added.
 
-## Profile and UI wiring checks
+## Queue architecture checks
 
-- The command accepts `profile` and `preserveAlpha`.
-- H.264, ProRes HQ, ProRes 4444, FFV1, and PNG-sequence values map to native profile validation.
-- File extensions are selected natively as `.mp4`, `.mov`, or `.mkv`; PNG sequence uses a destination directory name.
-- Alpha is available only for ProRes 4444, FFV1, and PNG sequences.
-- H.264 and ProRes HQ enforce even dimensions.
-- The status surface reports profile, output kind, alpha, frame pattern, metadata path, manifest path, audio behavior, progress, and output size.
+Source inspection confirms that Milestone 13 provides:
 
-## Transaction and lifecycle checks
+- one sequential background coordinator;
+- immutable queued copies of source/export configuration, metadata, deterministic seed, and canonical parameter state;
+- stable queue job IDs propagated into per-attempt lifecycle manifests;
+- global queue persistence in the application-data directory;
+- adjacent `.huff-queue-job.json` descriptors;
+- approximately one-second active-progress persistence;
+- immediate terminal-state persistence;
+- pause/resume without interrupting the active job;
+- waiting-job cancellation and active-job cancellation;
+- queued-job reordering;
+- retry from frame zero for failed, cancelled, and interrupted jobs;
+- repeat-to-new-destination behavior;
+- terminal history removal and clear-finished behavior;
+- startup recovery for `starting` and `running` jobs;
+- unreadable/newer queue-state backup rather than startup failure;
+- source-missing and unexpected-destination failure handling;
+- duplicate nonterminal destination prevention, including retry;
+- waiting while live recording finalizes or still export is active.
 
-- Video outputs encode to hidden temporary files before destination replacement.
-- Audio muxing writes to a second temporary file before final replacement.
-- PNG frames encode to a hidden temporary directory.
-- PNG sequence audio is written inside that temporary directory before final rename.
-- Existing PNG-sequence destinations are rejected instead of deleted or merged.
-- Cancel and renderer failure use distinct manifest terminal states.
-- Running manifests are written after decoder and encoder startup.
-- Complete manifests list output artifacts and rendered frame totals.
-- PNG sequences receive both adjacent and internal manifest copies.
-- Reproducibility metadata remains separate from the job-lifecycle manifest.
+## Transaction and recovery checks
 
-## Alpha-path checks
+Milestone 12's transactional exporter remains unchanged:
 
-- The export uniform carries an explicit alpha-preservation flag.
-- Still export leaves that flag disabled and keeps prior opaque behavior.
-- Alpha-capable deterministic profiles preserve sampled render alpha.
-- FIT bars are transparent only when alpha preservation is enabled.
-- Opaque profiles force alpha to one before encoding.
+- video outputs encode to temporary files before final rename;
+- PNG sequences encode into a temporary directory before final rename;
+- audio muxing uses a separate temporary artifact;
+- incomplete temporary artifacts are not treated as committed destinations;
+- cancellation, failure, and completion retain distinct lifecycle states.
 
-## FFmpeg profile tests
+Milestone 13 recovery uses that final-destination boundary. A persisted `starting` or `running` job is recovered as complete only when its final transactional destination exists; otherwise it becomes interrupted and the queue starts paused.
 
-A synthetic three-frame 64×64 RGBA stream was encoded through the exact profile argument families used by Milestone 12.
+## Export-profile regression
 
-Observed probe results:
+FFmpeg 7.1.3 encoded a synthetic three-frame 64×64 RGBA stream through the same profile argument families used by the deterministic exporter.
 
 ```text
 H.264 MP4
@@ -71,38 +75,22 @@ codec_name=ffv1
 pix_fmt=bgra
 
 PNG sequence alpha
-frame_000000.png
-frame_000001.png
-frame_000002.png
+3 numbered frames
 ```
 
-The ProRes decoder reporting `yuva444p12le` is expected behavior for the produced 4444 stream even though the encoder input pixel format is requested as `yuva444p10le`.
-
-## Audio-profile tests
-
-A synthetic H.264/AAC source was muxed using each profile's audio policy.
-
-Observed:
-
-```text
-H.264 MP4: AAC audio
-ProRes MOV: pcm_s24le audio
-FFV1 MKV: FLAC audio
-PNG sequence: separate pcm_s24le WAV
-```
-
-All test outputs probed successfully.
+The ProRes decoder reporting `yuva444p12le` is expected for the produced 4444 stream even though encoder input is requested as `yuva444p10le`.
 
 ## Scope not runtime-validated here
 
-- Rust type and borrow checking
-- Tauri command deserialization on target machines
-- wgpu export-shader pipeline creation on Metal, Vulkan, and DX12
-- actual alpha values produced by Huff's full compositor under user presets
-- long-duration encoder backpressure
-- 4K/8K ProRes and FFV1 disk throughput
-- cancellation during operating-system-level FFmpeg stalls
-- Windows MSVC and packaged-app behavior
+- Rust compilation and borrow checking
+- Tauri state injection and command deserialization
+- queue coordinator behavior under real renderer timing
+- app-data path behavior in packaged macOS and Windows builds
+- forced termination at every transaction boundary
+- long queues and long-duration exports
+- simultaneous UI polling and queue mutation under load
+- Metal, Vulkan, and DX12 wgpu behavior
+- Windows MSVC packaging and filesystem replacement semantics
 
 ## Required local validation
 
@@ -113,4 +101,4 @@ npm install
 npm run dev:metal
 ```
 
-Follow `TESTING.md`, beginning with short native-size H.264 and PNG-sequence jobs before testing ProRes, FFV1, alpha, 4K/8K, cancellation, and unusual source files.
+Follow `TESTING.md`. Begin with three short native-size H.264 jobs, then verify pause/resume, reordering, waiting-job cancellation, active cancellation, retry, repeat, and application-restart recovery before beginning long 4K/8K profile tests.

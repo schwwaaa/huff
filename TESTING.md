@@ -1,4 +1,4 @@
-# Huff Native Milestone 12 test checklist
+# Huff Native Milestone 13 test checklist
 
 ## Build and launch
 
@@ -7,189 +7,128 @@ npm install
 npm run dev:metal
 ```
 
-Confirm FFmpeg and required encoders:
+Confirm FFmpeg:
 
 ```bash
 ffmpeg -version
 ffmpeg -hide_banner -encoders | grep -E 'libx264|prores_ks|ffv1| png '
 ```
 
-## Baseline deterministic test
+## Basic queue sequence
 
-1. Load a video with visible motion and audio.
-2. Enable a recognizable combination of Glitch, Feedback, Clusters, Scanlines, and Flow.
-3. Choose `H.264 MP4`, `30 FPS`, `START CURRENT`, `5` seconds, `NATIVE`, `SMOOTH`, `FIT`, and `SOURCE AUDIO`.
-4. Export and confirm live playback pauses.
-5. Confirm progress reaches the exact requested frame count.
-6. Confirm playback returns to the prior position and resumes only if it was previously playing.
-7. Confirm the output, `.huff-offline.json`, and `.huff-export-job.json` exist.
-8. Confirm the manifest status is `complete`.
+1. Load a video with motion and audio.
+2. Queue three short jobs with different profiles or visual states and unique destinations.
+3. Confirm the first job becomes `starting` and then `running`.
+4. Confirm the other two remain `queued`.
+5. Confirm progress, rendered frames, estimated time, and attempt count update.
+6. Confirm each next job starts only after the prior job completes.
+7. Confirm each output has `.huff-queue-job.json`, `.huff-export-job.json`, and reproducibility metadata.
+8. Confirm `queueJobId` in the lifecycle manifest matches the frozen queue descriptor.
 
-## H.264 MP4
+## Frozen-state test
 
-Probe a five-second 30 FPS export:
+1. Establish visual state A and queue an H.264 job.
+2. Change multiple parameters to state B before A begins or while another job is running.
+3. Queue a second job.
+4. Confirm the first output uses state A and the second uses state B.
+5. Inspect each queue descriptor's parameter snapshot.
 
-```bash
-ffprobe -v error \
-  -count_frames \
-  -select_streams v:0 \
-  -show_entries stream=codec_name,pix_fmt,avg_frame_rate,nb_read_frames,duration,width,height \
-  -of default=nw=1 exported.mp4
-```
+## Pause and resume
 
-Expected essentials:
+1. Queue at least two jobs.
+2. Pause the queue while the first job is running.
+3. Confirm the active job continues to completion.
+4. Confirm the next job does not start.
+5. Resume the queue and confirm dispatch continues.
+6. Pause while no job is active and confirm all waiting jobs remain queued.
 
-```text
-codec_name=h264 when libx264 is available
-pix_fmt=yuv420p
-avg_frame_rate=30/1
-nb_read_frames=150
-```
+## Reorder
 
-Confirm odd custom dimensions are normalized by the UI or rejected by native validation.
+1. Pause the queue.
+2. Add three jobs.
+3. Move the third job upward twice.
+4. Resume and confirm execution follows the displayed order.
+5. Confirm running and terminal entries cannot be reordered.
 
-## ProRes 422 HQ
+## Cancellation
 
-1. Select `PRORES 422 HQ` with source audio.
-2. Export a short native-size interval.
-3. Probe:
+### Waiting job
 
-```bash
-ffprobe -v error -show_entries stream=codec_name,profile,pix_fmt,codec_type -of default=nw=1 exported.mov
-```
+1. Pause the queue and add a job.
+2. Cancel the waiting entry.
+3. Confirm it becomes `cancelled` without starting FFmpeg.
+4. Confirm it remains available for retry or repeat.
 
-Expected:
+### Active job
 
-```text
-video codec_name=prores
-video pix_fmt=yuv422p10le
-audio codec_name=pcm_s24le
-```
+1. Start a longer export.
+2. Cancel it from the job row or the global Cancel button.
+3. Confirm the private decoder and encoder stop.
+4. Confirm temporary output is removed.
+5. Confirm the queue entry and lifecycle manifest become `cancelled`.
+6. Confirm the next queued job starts when the queue is not paused.
 
-Confirm ALPHA is disabled for this profile.
+## Retry
 
-## ProRes 4444 and alpha
+1. Cancel or deliberately fail a job.
+2. Press Retry.
+3. Confirm the same queue job ID remains and the attempt count increases.
+4. Confirm the job starts from frame zero with the original frozen parameters and original destination.
+5. Confirm retry is rejected when the final destination already exists or the source is missing.
 
-1. Select `PRORES 4444`.
-2. Confirm ALPHA becomes available and defaults on when entering this profile.
-3. Export with `FIT` into a target aspect ratio different from the render.
-4. Probe the video stream:
+## Repeat
 
-```bash
-ffprobe -v error -select_streams v:0 -show_entries stream=codec_name,profile,pix_fmt -of default=nw=1 exported.mov
-```
+1. Complete a short job.
+2. Press Repeat and select a new destination.
+3. Confirm a new queue job ID is created.
+4. Confirm the cloned job keeps its source interval, profile, dimensions, parameters, and deterministic seed.
+5. Confirm the repeated decoded frames match the original when the same output profile is used.
 
-Expected alpha-capable output commonly reports `yuva444p12le` after ProRes decoding, even though encoding requests `yuva444p10le`.
+## Crash/interruption recovery
 
-Import the result into an application that displays alpha and confirm FIT bars are transparent. Remember that opaque rendered pixels remain opaque.
+1. Queue two jobs and begin the first.
+2. Close the application while the first is rendering.
+3. Relaunch Huff.
+4. Confirm the unfinished job becomes `interrupted` and the queue is paused.
+5. Confirm the waiting job remains queued.
+6. Retry the interrupted job and resume the queue.
+7. Confirm restart begins from frame zero.
 
-## FFV1 lossless
+Also test closing immediately after final output commit. A committed destination should recover as completed rather than interrupted.
 
-1. Select `FFV1 LOSSLESS`.
-2. Test once without alpha and once with alpha.
-3. Probe:
+## Recording and still-export coordination
 
-```bash
-ffprobe -v error -show_entries stream=codec_name,pix_fmt,codec_type -of default=nw=1 exported.mkv
-```
+1. Start live recording and queue a deterministic job.
+2. Confirm the job remains queued with a waiting reason until recording stops and finalizes.
+3. Repeat while a PNG still export is active.
+4. Confirm deterministic dispatch begins only after the still export finishes.
+5. Confirm recording and still export remain disabled while a deterministic job is actively rendering.
 
-Expected:
+## Missing source and destination conflict
 
-```text
-video codec_name=ffv1
-video pix_fmt=bgr0 or bgra
-audio codec_name=flac when source audio is enabled
-```
+1. Pause the queue and add a job.
+2. Move or delete its source file.
+3. Resume and confirm the job fails with a source-missing message while later valid jobs continue.
+4. Repeat with a file manually created at the queued destination.
+5. Confirm the job fails rather than overwriting the unexpected destination.
 
-## PNG sequence
+## Queue persistence and history
 
-1. Select `PNG SEQUENCE`.
-2. Choose a destination name that does not already exist.
-3. Export three seconds at 24 FPS.
-4. Confirm the final directory contains exactly 72 numbered PNG files:
+1. Queue several jobs and close Huff before they start.
+2. Relaunch and confirm queued descriptions and order survive.
+3. Complete, cancel, and fail jobs.
+4. Remove one history entry and use Clear Finished.
+5. Confirm queued and active entries are retained.
+6. Inspect the application-data `huff-export-queue.json` for valid JSON.
 
-```text
-frame_000000.png
-...
-frame_000071.png
-```
+## Existing profile regression
 
-5. With source audio enabled, confirm `audio.wav` exists and is approximately three seconds long.
-6. Confirm `huff-offline.json` and `huff-export-job.json` exist inside the directory.
-7. Confirm the adjacent `<folder>.huff-export-job.json` also exists.
-8. Repeat with ALPHA enabled and inspect a PNG with a transparency-aware viewer.
+Run one short export for each Milestone 12 profile:
 
-Count frames:
+- H.264 MP4 with AAC;
+- ProRes 422 HQ with PCM;
+- ProRes 4444 with alpha;
+- FFV1 with FLAC and optional alpha;
+- PNG sequence with optional `audio.wav`.
 
-```bash
-find sequence-folder -name 'frame_*.png' | wc -l
-```
-
-## Manifest lifecycle
-
-### Complete
-
-Confirm:
-
-```text
-status = complete
-renderedFrames = totalFrames
-finishedUnixMs is populated
-artifacts lists the video or PNG pattern
-error is empty
-```
-
-### Cancelled
-
-1. Begin a longer 4K or PNG-sequence export.
-2. Cancel after several frames.
-3. Confirm the final destination file/folder was not created.
-4. Confirm hidden temporary output was removed.
-5. Confirm the adjacent job manifest remains with `status = cancelled` and the partial rendered-frame count.
-
-### Failed
-
-Temporarily remove access to an encoder or use an invalid destination permission in a controlled test. Confirm the manifest records `status = failed` and a useful error message without replacing an existing destination.
-
-## Repeatability comparison
-
-Export the same interval twice using the same profile, state, source, start, duration, FPS, size, fit, sampling, and alpha policy.
-
-For video profiles, compare decoded representative frames rather than container bytes:
-
-```bash
-mkdir -p compare-a compare-b
-ffmpeg -i first.mov  -vf "select='eq(n,0)+eq(n,30)+eq(n,90)'" -vsync 0 compare-a/frame-%02d.png
-ffmpeg -i second.mov -vf "select='eq(n,0)+eq(n,30)+eq(n,90)'" -vsync 0 compare-b/frame-%02d.png
-shasum -a 256 compare-a/*.png compare-b/*.png
-```
-
-For PNG sequences, compare the numbered PNG hashes directly.
-
-## Playback rate and audio
-
-Test 0.5×, 1×, 2×, and 4× for every profile that carries audio.
-
-Verify:
-
-- output duration remains the requested duration;
-- source motion changes speed;
-- audio follows the selected playback rate;
-- H.264 audio is AAC;
-- ProRes audio is PCM;
-- FFV1 audio is FLAC;
-- PNG-sequence audio is a separate PCM WAV;
-- non-looping requests beyond the remaining source duration are rejected.
-
-## Exclusion and frozen-state tests
-
-During active deterministic export:
-
-- recording and still export requests must be rejected;
-- source loading, transport, render-target changes, reset, and feedback clear must be disabled or ignored;
-- parameter/UI changes must not alter the frozen job;
-- Syphon and Spout hold their latest live frame and resume afterward.
-
-## Shutdown safety
-
-Begin each output kind and close Huff. Confirm no decoder or encoder process remains and temporary outputs are removed on the next controlled cleanup pass. Verify the job manifest is not falsely marked complete.
+Verify exact frame counts with `ffprobe` or numbered-file counts and confirm the queue does not change codec behavior.

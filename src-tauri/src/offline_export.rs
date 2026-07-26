@@ -43,6 +43,8 @@ pub struct OfflineExportConfig {
     pub fit_mode: String,
     pub profile: String,
     pub preserve_alpha: bool,
+    #[serde(default)]
+    pub queue_job_id: String,
 }
 
 impl OfflineExportConfig {
@@ -122,6 +124,7 @@ struct ExportArtifact {
 struct ExportJobManifest {
     schema_version: u32,
     job_id: String,
+    queue_job_id: String,
     status: String,
     started_unix_ms: u128,
     finished_unix_ms: Option<u128>,
@@ -141,7 +144,8 @@ impl ExportJobManifest {
         let started = unix_ms();
         Self {
             schema_version: 1,
-            job_id: format!("hnw12-{started}-{}", std::process::id()),
+            job_id: format!("hnw13-{started}-{}", std::process::id()),
+            queue_job_id: config.queue_job_id.clone(),
             status: "running".into(),
             started_unix_ms: started,
             finished_unix_ms: None,
@@ -165,6 +169,7 @@ pub struct OfflineExportInfo {
     pub active: bool,
     pub cancelling: bool,
     pub phase: String,
+    pub queue_job_id: String,
     pub path: String,
     pub metadata_path: String,
     pub manifest_path: String,
@@ -200,6 +205,7 @@ impl Default for OfflineExportInfo {
             active: false,
             cancelling: false,
             phase: "ready".into(),
+            queue_job_id: String::new(),
             path: String::new(),
             metadata_path: String::new(),
             manifest_path: String::new(),
@@ -263,6 +269,7 @@ impl OfflineExportHandle {
         state.active = true;
         state.cancelling = false;
         state.phase = "starting".into();
+        state.queue_job_id = config.queue_job_id.clone();
         state.path = config.path.display().to_string();
         state.metadata_path = metadata_path_for(config).display().to_string();
         state.manifest_path = manifest_path_for(config).display().to_string();

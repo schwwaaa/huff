@@ -171,6 +171,63 @@
             color: var(--term-dgreen);
             letter-spacing: .06em;
         }
+        .export-queue-panel {
+            background: #101010;
+            border-bottom: 1px solid var(--win-mid);
+            padding: 3px 5px 4px;
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 10px;
+        }
+        .export-queue-toolbar {
+            display: flex; align-items: center; gap: 5px; flex-wrap: wrap;
+            color: var(--term-dgreen);
+            margin-bottom: 3px;
+        }
+        .export-queue-toolbar strong { color: var(--term-green); font-weight: normal; }
+        .export-queue-list {
+            display: flex; flex-direction: column; gap: 2px;
+            max-height: 154px; overflow-y: auto;
+        }
+        .export-queue-empty {
+            color: #6b806b; padding: 4px 3px;
+            border: 1px dashed #304030;
+        }
+        .export-queue-job {
+            display: grid;
+            grid-template-columns: minmax(115px, .8fr) minmax(180px, 1.5fr) minmax(110px, .8fr) auto;
+            gap: 5px; align-items: center;
+            padding: 3px 4px;
+            border: 1px solid #304030;
+            background: #050805;
+            color: #91aa91;
+        }
+        .export-queue-job[data-status="running"],
+        .export-queue-job[data-status="starting"] { border-color: #00aa66; color: #c8ffd8; }
+        .export-queue-job[data-status="completed"] { border-color: #3b7a3b; }
+        .export-queue-job[data-status="failed"] { border-color: #aa3030; color: #ff9a9a; }
+        .export-queue-job[data-status="cancelled"],
+        .export-queue-job[data-status="interrupted"] { border-color: #806020; color: #ffd27a; }
+        .export-queue-job-path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #d5dfd5; }
+        .export-queue-job-meta { white-space: nowrap; }
+        .export-queue-progress {
+            height: 8px; min-width: 90px; position: relative;
+            border: 1px solid #335533; background: #001000;
+        }
+        .export-queue-progress > span {
+            position: absolute; left: 0; top: 0; bottom: 0;
+            background: #00a050;
+        }
+        .export-queue-progress > em {
+            position: absolute; inset: -2px 2px auto 2px;
+            color: #d8ffe2; font-style: normal; font-size: 9px; text-align: center;
+            text-shadow: 1px 1px #000;
+        }
+        .export-queue-actions { display: flex; gap: 2px; justify-content: flex-end; flex-wrap: wrap; }
+        .export-queue-actions button { font-size: 9px; padding: 1px 4px; min-width: 22px; }
+        @media (max-width: 900px) {
+            .export-queue-job { grid-template-columns: 1fr auto; }
+            .export-queue-job-path { grid-column: 1 / -1; }
+        }
         #seekBar {
             -webkit-appearance: none; appearance: none;
             flex: 1; height: 4px; min-width: 80px;
@@ -883,11 +940,11 @@
             <button id="aboutClose">×</button>
             <div class="a-icon"></div>
             <h1 style="font-family:'VT323',monospace;font-weight:normal;letter-spacing:.14em">huff</h1>
-            <div class="build">native engine · milestone 12 · 2026</div>
+            <div class="build">native engine · milestone 13 · 2026</div>
             <p>Huff is being migrated to a native Rust + wgpu media engine. The existing
             control surface is preserved while playback, timing, GPU rendering, and
             output move out of the WebView.</p>
-            <p><strong>Milestone 12:</strong> Huff's deterministic exporter now supports H.264, ProRes 422 HQ, ProRes 4444, FFV1, and PNG image sequences. Alpha-capable profiles preserve the native render alpha channel, and every job writes a durable export manifest alongside its reproducibility metadata.</p>
+            <p><strong>Milestone 13:</strong> Deterministic exports now enter a durable queue. Jobs capture their source, render settings, profile, parameters, and reproducibility state when queued; they can be reordered, paused, cancelled, retried from frame zero, repeated to a new destination, and recovered after an interrupted application session.</p>
         </div>
     </div>
 
@@ -1206,9 +1263,21 @@
                 <option value="source" selected>SOURCE AUDIO</option>
                 <option value="none">SILENT</option>
             </select>
-            <button id="offlineExportBtn" class="btn-red" title="Render a frame-driven deterministic production export">▶ Export</button>
+            <button id="offlineExportBtn" class="btn-red" title="Capture this deterministic export description and add it to the durable queue">＋ Queue</button>
             <button id="offlineCancelBtn" disabled title="Cancel the deterministic export">■ Cancel</button>
             <span class="pill" id="offlineExportPill" style="color:rgba(0,200,220,.7);border-color:rgba(0,200,220,.25)" title="Deterministic production export status">OFFLINE: READY</span>
+        </div>
+
+        <div class="export-queue-panel" id="exportQueuePanel">
+            <div class="export-queue-toolbar">
+                <strong id="exportQueueSummary">QUEUE: EMPTY</strong>
+                <button id="exportQueuePauseBtn" title="Pause or resume automatic dispatch. The active export is not interrupted.">Ⅱ Pause Queue</button>
+                <button id="exportQueueClearBtn" title="Remove completed, failed, cancelled, and interrupted entries from the queue history">⌫ Clear Finished</button>
+                <span id="exportQueueWaiting"></span>
+            </div>
+            <div class="export-queue-list" id="exportQueueList">
+                <div class="export-queue-empty">No deterministic export jobs have been queued.</div>
+            </div>
         </div>
 
         <!-- seek / time row -->

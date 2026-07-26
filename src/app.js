@@ -16,6 +16,8 @@ const appState = {
   spoutAdaptersLoaded: false,
   exportCompleted: 0,
   offlineCompleted: 0,
+  queueStatuses: new Map(),
+  queueInitialized: false,
 };
 
 function toast(message, error = false) {
@@ -40,6 +42,15 @@ async function call(command, args = {}) {
 
 function basename(path) {
   return String(path || '').split(/[\\/]/).filter(Boolean).pop() || 'no file selected';
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
 }
 
 function formatTime(seconds) {
@@ -193,7 +204,7 @@ function configureRegistryControls() {
     feedbackGroup.title = 'Native HDR feedback is active; final effect-order parity continues with later render-graph milestones.';
   }
   const glitchGroup = byId('corruptOn')?.closest('.group');
-  if (glitchGroup) glitchGroup.title = "Milestone 12 adds deterministic H.264, ProRes, FFV1, and PNG-sequence profiles with alpha-capable output and durable job manifests.";
+  if (glitchGroup) glitchGroup.title = "Milestone 13 adds a durable deterministic-export queue with automatic dispatch, pause/resume, reordering, cancellation, retry, repeat, and crash recovery.";
   const clusterGroup = byId('clusterTiles')?.closest('.group');
   if (clusterGroup) clusterGroup.title = 'Native cluster bodies are active: persistent centers, coherence, speed, steering, variance, pulse, inertia, breathing, bounce/wrap, bias, spread, and minimum spread.';
   const scanGroup = byId('clusters')?.closest('.group');
@@ -480,7 +491,7 @@ function syncOfflineProfile() {
     if (profile === 'prores_4444' && !alpha.checked) alpha.checked = true;
   }
   const button = byId('offlineExportBtn');
-  if (button) button.textContent = profile === 'png_sequence' ? '▶ Export Frames' : '▶ Export Video';
+  if (button) button.textContent = profile === 'png_sequence' ? '＋ Queue Frames' : '＋ Queue Video';
   const audio = byId('offlineAudio');
   if (audio) {
     const sourceOption = [...audio.options].find((option) => option.value === 'source');
@@ -505,6 +516,89 @@ function syncOfflineDimensions(force = false) {
   if (byId('offlineStartSeconds')) byId('offlineStartSeconds').disabled = !customStart;
 }
 
+function queueStatusLabel(status) {
+  return {
+    queued: 'QUEUED',
+    starting: 'STARTING',
+    running: 'RUNNING',
+    completed: 'COMPLETE',
+    failed: 'FAILED',
+    cancelled: 'CANCELLED',
+    interrupted: 'INTERRUPTED',
+  }[status] || String(status || 'UNKNOWN').toUpperCase();
+}
+
+function renderExportQueue(queue = {}) {
+  const jobs = Array.isArray(queue.jobs) ? queue.jobs : [];
+  const summary = byId('exportQueueSummary');
+  const waiting = byId('exportQueueWaiting');
+  const list = byId('exportQueueList');
+  const pause = byId('exportQueuePauseBtn');
+  if (summary) {
+    const pending = Number(queue.queuedCount || 0);
+    const running = Number(queue.runningCount || 0);
+    const terminal = Number(queue.completedCount || 0)
+      + Number(queue.failedCount || 0)
+      + Number(queue.cancelledCount || 0)
+      + Number(queue.interruptedCount || 0);
+    summary.textContent = jobs.length
+      ? `QUEUE: ${pending} WAITING · ${running} ACTIVE · ${terminal} HISTORY`
+      : 'QUEUE: EMPTY';
+    summary.title = `Durable queue: ${queue.persistencePath || '—'}`;
+  }
+  if (waiting) waiting.textContent = queue.waitingReason ? `WAIT: ${queue.waitingReason}` : '';
+  if (pause) pause.textContent = queue.paused ? '▶ Resume Queue' : 'Ⅱ Pause Queue';
+  if (!list) return;
+  if (!jobs.length) {
+    list.innerHTML = '<div class="export-queue-empty">No deterministic export jobs have been queued.</div>';
+  } else {
+    list.innerHTML = jobs.map((job) => {
+      const status = String(job.status || 'queued');
+      const progress = Math.max(0, Math.min(1, Number(job.progress || 0)));
+      const percent = status === 'completed' ? 100 : progress * 100;
+      const queued = status === 'queued';
+      const active = status === 'starting' || status === 'running';
+      const retryable = Boolean(job.retryable);
+      const completed = status === 'completed';
+      const actions = [];
+      if (queued) {
+        actions.push('<button data-action="up" title="Move earlier">↑</button>');
+        actions.push('<button data-action="down" title="Move later">↓</button>');
+        actions.push('<button data-action="cancel-job" title="Cancel before it starts">■</button>');
+      }
+      if (active) actions.push('<button data-action="cancel-active" title="Cancel active export">■ Cancel</button>');
+      if (retryable) actions.push('<button data-action="retry" title="Restart from frame zero using the frozen job state">↻ Retry</button>');
+      if (completed || retryable) actions.push('<button data-action="repeat" title="Clone this frozen job and choose a new output destination">⧉ Repeat</button>');
+      if (job.removable && !queued) actions.push('<button data-action="remove" title="Remove from queue history">✕</button>');
+      const warning = !job.sourceExists ? ' · SOURCE MISSING' : '';
+      const details = job.lastError || `${job.sourcePath || ''}
+${job.outputPath || ''}`;
+      return `<div class="export-queue-job" data-status="${escapeHtml(status)}" data-job-id="${escapeHtml(job.id)}" title="${escapeHtml(details)}">
+        <div class="export-queue-job-meta">${escapeHtml(queueStatusLabel(status))}${warning} · #${Number(job.attempts || 0)}</div>
+        <div class="export-queue-job-path">${escapeHtml(basename(job.outputPath))} · ${escapeHtml(job.profileLabel || job.profile || '')} · ${Number(job.width || 0)}×${Number(job.height || 0)} @ ${Number(job.fps || 0)}</div>
+        <div class="export-queue-progress"><span style="width:${percent.toFixed(2)}%"></span><em>${percent.toFixed(1)}% · ${Number(job.renderedFrames || 0)}/${Number(job.totalFrames || 0)}</em></div>
+        <div class="export-queue-actions">${actions.join('')}</div>
+      </div>`;
+    }).join('');
+  }
+
+  const currentStatuses = new Map(jobs.map((job) => [job.id, String(job.status || '')]));
+  if (appState.queueInitialized) {
+    for (const job of jobs) {
+      const previous = appState.queueStatuses.get(job.id);
+      const status = String(job.status || '');
+      if (previous && previous !== status) {
+        if (status === 'completed') toast(`${job.profileLabel || 'Export'} complete · ${basename(job.outputPath)}`);
+        else if (status === 'failed') toast(`Export failed · ${basename(job.outputPath)} · ${job.lastError || 'unknown error'}`, true);
+        else if (status === 'interrupted') toast(`Export interrupted · ${basename(job.outputPath)}`, true);
+      }
+    }
+  } else {
+    appState.queueInitialized = true;
+  }
+  appState.queueStatuses = currentStatuses;
+}
+
 function wireOfflineExport() {
   byId('offlineProfile')?.addEventListener('change', syncOfflineProfile);
   byId('offlinePreset')?.addEventListener('change', () => syncOfflineDimensions(true));
@@ -515,7 +609,7 @@ function wireOfflineExport() {
     const [width, height] = offlineDimensionsFromPreset();
     const profile = selectedOfflineProfile();
     try {
-      const path = await call('start_offline_export', {
+      const receipt = await call('start_offline_export', {
         fps: Number(byId('offlineFps')?.value || 30),
         durationSeconds: Number(byId('offlineDuration')?.value || 10),
         startMode: byId('offlineStartMode')?.value || 'current',
@@ -528,19 +622,53 @@ function wireOfflineExport() {
         profile,
         preserveAlpha: Boolean(byId('offlineAlpha')?.checked),
       });
-      if (path) toast(`${offlineProfileLabel(profile)} export started · ${width}×${height} · ${basename(path)}`);
-      else button.disabled = false;
-    } catch (_) {
+      if (receipt) toast(`${offlineProfileLabel(profile)} queued · position ${receipt.position || 1} · ${basename(receipt.path)}`);
+    } finally {
       button.disabled = false;
     }
   });
   byId('offlineCancelBtn')?.addEventListener('click', async () => {
     byId('offlineCancelBtn').disabled = true;
-    toast('Cancelling deterministic export…');
+    toast('Cancelling active deterministic export…');
     try {
       await call('cancel_offline_export');
     } catch (_) {
       byId('offlineCancelBtn').disabled = false;
+    }
+  });
+  byId('exportQueuePauseBtn')?.addEventListener('click', async () => {
+    const paused = !Boolean(appState.info?.exportQueue?.paused);
+    await call('set_export_queue_paused', { paused }).catch(() => {});
+  });
+  byId('exportQueueClearBtn')?.addEventListener('click', async () => {
+    const removed = await call('clear_finished_export_jobs').catch(() => null);
+    if (removed !== null) toast(`Removed ${removed} finished export ${removed === 1 ? 'job' : 'jobs'}`);
+  });
+  byId('exportQueueList')?.addEventListener('click', async (event) => {
+    const button = event.target.closest('button[data-action]');
+    const row = event.target.closest('[data-job-id]');
+    if (!button || !row) return;
+    const jobId = row.dataset.jobId;
+    const action = button.dataset.action;
+    button.disabled = true;
+    try {
+      if (action === 'up' || action === 'down') {
+        await call('move_export_queue_job', { jobId, direction: action === 'up' ? -1 : 1 });
+      } else if (action === 'cancel-job') {
+        await call('cancel_export_queue_job', { jobId });
+      } else if (action === 'cancel-active') {
+        await call('cancel_offline_export');
+      } else if (action === 'retry') {
+        await call('retry_export_queue_job', { jobId });
+        toast('Export restarted from frame zero with its frozen state');
+      } else if (action === 'repeat') {
+        const receipt = await call('repeat_export_queue_job', { jobId });
+        if (receipt) toast(`Repeated export queued · ${basename(receipt.path)}`);
+      } else if (action === 'remove') {
+        await call('remove_export_queue_job', { jobId });
+      }
+    } catch (_) {
+      button.disabled = false;
     }
   });
   syncOfflineProfile();
@@ -786,6 +914,7 @@ function displayInfo(info) {
   const recording = info.recording || {};
   const exportInfo = info.export || {};
   const offlineExport = info.offlineExport || {};
+  const exportQueue = info.exportQueue || {};
 
   setOptions(byId('cams'), info.cameraDevices || [], (item) => item.slot, (item) => item.name);
   setOptions(byId('midiPortSelect'), midi.ports || [], (item) => item, (item) => item);
@@ -896,20 +1025,15 @@ Manifest: ${offlineExport.manifestPath || '—'}`;
   }
   if (Number(offlineExport.completedExports || 0) > appState.offlineCompleted) {
     appState.offlineCompleted = Number(offlineExport.completedExports || 0);
-    toast(`${offlineExport.profileLabel || 'Deterministic'} export complete · ${basename(offlineExport.path)}`);
   }
-  const offlineControls = [
-    'offlineProfile', 'offlineFps', 'offlineDuration', 'offlineStartMode', 'offlineStartSeconds',
-    'offlinePreset', 'offlineW', 'offlineH', 'offlineSampling', 'offlineFit', 'offlineAudio',
-  ];
-  for (const id of offlineControls) if (byId(id)) byId(id).disabled = offlineBusy;
+  renderExportQueue(exportQueue);
   const alphaControl = byId('offlineAlpha');
-  if (alphaControl) alphaControl.disabled = offlineBusy || !offlineProfileSupportsAlpha();
+  if (alphaControl) alphaControl.disabled = !offlineProfileSupportsAlpha();
   if (byId('offlineExportBtn')) {
-    byId('offlineExportBtn').disabled = offlineBusy || recordingBusy || exportBusy || !offlineExport.ffmpegAvailable || !video.loaded;
+    byId('offlineExportBtn').disabled = !offlineExport.ffmpegAvailable || !video.loaded;
   }
   if (byId('offlineCancelBtn')) byId('offlineCancelBtn').disabled = !offlineBusy;
-  if (!offlineBusy) syncOfflineDimensions();
+  syncOfflineDimensions();
   for (const id of ['fileOpenBtn', 'playBtn', 'pauseBtn', 'refreshBtn', 'camStartBtn', 'camStopBtn', 'camRefreshBtn', 'resetBtn', 'clearBufBtn', 'renderApplyBtn', 'presetLoadBtn', 'presetImportBtn']) {
     if (byId(id) && offlineBusy) byId(id).disabled = true;
   }
@@ -1033,7 +1157,7 @@ async function boot() {
   await refreshParameterState();
   await poll();
   setInterval(poll, 250);
-  console.info('Huff Native wgpu Milestone 12 loaded', {
+  console.info('Huff Native wgpu Milestone 13 loaded', {
     parameters: appState.registry.length,
     implemented: appState.registry.filter((definition) => definition.implemented).length,
   });

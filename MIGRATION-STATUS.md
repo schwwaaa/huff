@@ -1,4 +1,4 @@
-# Huff native migration status · Milestone 12
+# Huff native migration status · Milestone 13
 
 ## Proven native foundation
 
@@ -31,50 +31,46 @@
 - 30/60 FPS CFR MP4 recording
 - Synchronized source-video audio or microphone capture
 - Safe recording finalization
-- Native, 1080p, 4K, 8K, and custom PNG still export
-- GPU Smooth/Crisp and Fit/Crop/Stretch export policies
+- Native through custom-size PNG still export
 
-## Deterministic render foundation completed in Milestone 11
+## Deterministic and production export completed
 
 - Private exact-frame FFmpeg decoder
 - Fixed 24/30/60 FPS simulation timeline
-- One decoded source frame and one native render step per output frame
-- Frozen canonical parameter and external-control snapshots
+- Frozen canonical parameters and control snapshots
 - Deterministic procedural/history/feedback reset boundary
-- Bounded three-frame source decode queue
-- Synchronous bounded GPU export readback
 - Playback-rate-aware source audio
-- Native, 1080p, 4K, 8K, and custom output sizes
-- Cancellation, shutdown cleanup, and live transport restoration
-- Reproducibility sidecar
+- H.264, ProRes 422 HQ, ProRes 4444, FFV1, and PNG-sequence profiles
+- Optional alpha preservation where supported
+- Transactional temporary output and reproducibility metadata
+- Complete/cancelled/failed per-attempt lifecycle manifests
 
-## Production export completed in Milestone 12
+## Durable export queue completed in Milestone 13
 
-- Profile-driven encoder selection
-- H.264 MP4
-- ProRes 422 HQ MOV
-- ProRes 4444 MOV
-- FFV1 lossless MKV
-- Numbered PNG image sequences
-- Optional separate 24-bit WAV for PNG sequences
-- Profile-specific AAC, PCM, and FLAC audio handling
-- Optional alpha preservation for ProRes 4444, FFV1, and PNG
-- Transparent FIT bars when alpha is enabled
-- Transactional temporary video and sequence outputs
-- Durable running/complete/cancelled/failed export-job manifests
-- Artifact lists, frame patterns, audio paths, and complete reproducibility metadata
+- Frozen job descriptions captured at enqueue time
+- Sequential automatic dispatch
+- Queue pause and resume
+- Waiting-job reorder and cancellation
+- Active-job cancellation
+- Per-job progress, ETA, attempt count, error, and history reporting
+- Retry from frame zero with stable queue job identity
+- Repeat to a new destination with a new queue job identity
+- Persistent application-data queue file
+- Adjacent `.huff-queue-job.json` descriptors
+- Queue-to-lifecycle-manifest `queueJobId` linkage
+- Source and destination conflict checks
+- Interrupted-session recovery and safe startup handling
 
 ## Remaining product systems
 
-1. Export queue, retry/repeat, durable pending jobs, and job history
-2. Automation/keyframe/sequence replay inside deterministic export
-3. True independent high-resolution graph execution rather than final resampling
-4. Parameter-by-parameter visual and motion calibration
-5. MIDI and OSC map import/edit workflows
-6. Expanded sequencing, routing, scoped recall, and project-state support
-7. Windows MSVC, Spout receiver, multi-GPU, MSI, and NSIS verification
-8. Optional lower-copy platform-specific texture interop research
+1. Automation, keyframe, action, and preset replay inside deterministic export
+2. True independent high-resolution graph execution rather than final resampling
+3. Parameter-by-parameter visual and motion calibration
+4. MIDI and OSC map import/edit workflows
+5. Expanded sequencing, routing, scoped recall, and project-state support
+6. Windows MSVC, Spout receiver, multi-GPU, MSI, and NSIS verification
+7. Optional lower-copy platform-specific texture interop research
 
 ## Current principle
 
-Huff now has separate modes for live performance recording and deterministic production rendering. The export path is format-aware and transaction-safe. The next structural work should make export jobs queueable and repeatable without reopening effect calibration yet.
+Export architecture is now installed before the larger calibration cycle. The next structural milestone should make deterministic exports replay canonical time-varying instrument state without reopening visual tuning yet.

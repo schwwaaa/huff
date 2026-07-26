@@ -1,6 +1,6 @@
-# Huff Native wgpu · Milestone 12
+# Huff Native wgpu · Milestone 13
 
-Milestone 12 expands Huff's fixed-timestep deterministic exporter into a **production export system**.
+Milestone 13 adds a **durable deterministic-export queue** to Huff's native Rust + wgpu engine.
 
 The application now includes:
 
@@ -10,10 +10,10 @@ The application now includes:
 - Syphon output on macOS and a SpoutDX path on Windows;
 - synchronized 30/60 FPS live MP4 recording;
 - native, 1080p, 4K, 8K, and custom PNG still export;
-- deterministic 24/30/60 FPS offline export;
-- H.264, ProRes, FFV1, and PNG-sequence production profiles;
+- deterministic 24/30/60 FPS production export;
+- H.264, ProRes, FFV1, and PNG-sequence profiles;
 - optional alpha preservation for compatible profiles;
-- reproducibility metadata and durable export-job manifests.
+- a persistent sequential export queue with pause, reorder, cancellation, retry, repeat, history, and crash recovery.
 
 ## Run
 
@@ -34,118 +34,73 @@ Windows DX12:
 npm run dev:dx12
 ```
 
-FFmpeg must be available on `PATH` for file decoding, audio, recording, still encoding, and deterministic export.
+FFmpeg must be available on `PATH`.
 
-## Production export profiles
+## Queue workflow
 
-| Profile | Output | Video format | Audio behavior | Alpha |
-|---|---|---|---|---|
-| **H.264 MP4** | `.mp4` | `libx264`, with the existing MPEG-4 fallback | AAC 192 kbps | No |
-| **ProRes 422 HQ** | `.mov` | `prores_ks`, profile 3, `yuv422p10le` | 24-bit PCM | No |
-| **ProRes 4444** | `.mov` | `prores_ks`, profile 4 | 24-bit PCM | Optional `yuva444p10le` |
-| **FFV1 Lossless** | `.mkv` | FFV1 level 3, intra-only, slice CRC | FLAC | Optional BGRA |
-| **PNG Sequence** | folder | `frame_000000.png`, `frame_000001.png`, … | Optional `audio.wav`, 24-bit PCM | Optional RGBA |
+1. Load a video file and establish the desired Huff state.
+2. Choose the deterministic profile, timeline, dimensions, sampling, fit, audio, and alpha settings.
+3. Press **Queue Video** or **Queue Frames** and choose a new destination.
+4. Continue changing Huff and queue additional jobs. Each job keeps the state captured when it was added.
+5. The queue runs jobs sequentially and reports per-job progress and failure state.
 
-H.264 and ProRes 422 HQ require even output dimensions. FFV1 and PNG sequences may use odd dimensions. ProRes 4444 is kept on the production-safe even-dimension path by the UI presets but is not forced by the exporter.
+The queue can be paused without interrupting its active export. Waiting jobs can be reordered or cancelled. Failed, cancelled, and interrupted jobs can be restarted from frame zero. Completed or retryable jobs can be repeated to a new destination.
 
-## Alpha behavior
+## Durable files
 
-The `ALPHA` option is enabled only for ProRes 4444, FFV1, and PNG sequences.
-
-When enabled:
-
-- the export scaling pass preserves the alpha channel already present in Huff's authoritative output texture;
-- `FIT` letterbox regions become transparent instead of opaque black;
-- the selected codec or image format receives an alpha-capable pixel format.
-
-This does not automatically key an opaque source. It preserves alpha that the render graph actually produces.
-
-## Deterministic timeline
-
-The exporter still owns its timeline:
+The global queue is stored in the platform application-data directory:
 
 ```text
-private exact-frame decoder
-        ↓
-one source frame
-        ↓
-one fixed native simulation step
-        ↓
-one completed Huff output frame
-        ↓
-production encoder or numbered PNG frame
+huff-export-queue.json
 ```
 
-The export may run slower than real time, but it renders the requested frame count without relying on wall-clock presentation timing.
-
-At export start Huff freezes canonical parameters and control-input snapshots, resets temporal/procedural state, and uses the selected source interval, seed, playback rate, frame rate, duration, output size, profile, and alpha policy for the entire job.
-
-## Reproducibility metadata
-
-Video exports write:
+Each queued job writes:
 
 ```text
-<output-file>.huff-offline.json
+<output-name>.huff-queue-job.json
 ```
 
-PNG sequences write:
-
-```text
-<sequence-folder>/huff-offline.json
-```
-
-The metadata records source details, timeline settings, dimensions, scaling policy, profile, codec, pixel format, alpha policy, complete canonical parameter state, and deterministic seed.
-
-## Export-job manifests
-
-Every job writes a lifecycle manifest immediately after its FFmpeg processes start:
+Each encoding attempt retains Milestone 12's lifecycle manifest:
 
 ```text
 <output-name>.huff-export-job.json
 ```
 
-The manifest is updated to `complete`, `cancelled`, or `failed` and records:
-
-- a stable job ID;
-- start and finish timestamps;
-- requested and rendered frame counts;
-- output path and output kind;
-- numbered-frame pattern;
-- audio artifact path;
-- produced artifacts;
-- reproducibility metadata;
-- failure details when applicable.
-
-Completed PNG sequences also contain an internal copy:
+Completed deterministic exports also write their reproducibility metadata:
 
 ```text
-<sequence-folder>/huff-export-job.json
+<output-file>.huff-offline.json
 ```
 
-## Cancellation and destination safety
+PNG sequences contain internal metadata and manifest copies.
 
-Video profiles encode to temporary files and replace the selected destination only after successful completion. PNG sequences encode into a hidden temporary directory and rename it only after all frames and optional audio are complete.
+## Production profiles
 
-Cancellation or failure:
+| Profile | Output | Video format | Audio | Alpha |
+|---|---|---|---|---|
+| H.264 MP4 | `.mp4` | `libx264`, MPEG-4 fallback | AAC | No |
+| ProRes 422 HQ | `.mov` | `prores_ks`, 10-bit 4:2:2 | 24-bit PCM | No |
+| ProRes 4444 | `.mov` | `prores_ks`, 4:4:4:4 | 24-bit PCM | Optional |
+| FFV1 Lossless | `.mkv` | FFV1 level 3 | FLAC | Optional |
+| PNG Sequence | folder | numbered RGB/RGBA PNG | optional `audio.wav` | Optional |
 
-- terminates the private decoder and encoder;
-- removes temporary video files or temporary sequence directories;
-- leaves a cancelled/failed job manifest;
-- restores the live source position and prior play/pause state.
+## Recovery semantics
 
-A PNG-sequence destination must not already exist, preventing Huff from deleting or mixing with unrelated files.
+Huff never treats an unfinished temporary output as complete. If the application closes during a job, the next launch checks whether the transactional final destination was committed. Otherwise the job is marked **interrupted**, the queue pauses, and the user may restart the frozen job from frame zero.
+
+This is restartable job recovery, not arbitrary frame-level codec continuation.
 
 ## Current resolution meaning
 
-1080p, 4K, 8K, and custom exports still resample Huff's completed internal render through the GPU export pass. They do not yet rerun the complete history/effect graph at an independently larger working resolution.
+1080p, 4K, 8K, and custom deterministic exports still resample Huff's completed internal render. Full high-resolution execution of every history and effect pass remains a later milestone.
 
 ## Documentation
 
-- `UPGRADE-NOTES-12.md` — profile architecture, alpha behavior, and manifests
-- `TESTING.md` — runtime checklist for every profile
+- `UPGRADE-NOTES-13.md` — queue architecture and recovery behavior
+- `TESTING.md` — Milestone 13 runtime checklist
 - `MIGRATION-STATUS.md` — completed and remaining systems
-- `VALIDATION.md` — static and FFmpeg pipeline validation
+- `VALIDATION.md` — validation completed in the packaging environment
 
 ## Next milestone
 
-The next milestone is **export queue and job management**: queued jobs, durable pending-job descriptions, repeat/retry operations, clearer failure history, and safe sequential execution. Automation replay remains the following structural milestone.
+Milestone 14 is deterministic automation replay: keyframes, parameter automation, registered actions, and preset recalls evaluated against the fixed export timeline.
