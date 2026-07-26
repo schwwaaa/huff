@@ -4,6 +4,7 @@ use crate::{
     },
     audio::AudioSnapshot,
     camera::{CameraFrame, SharedCameraFrame},
+    control_mapping::ControlActionBus,
     export::{ExportHandle, StillExportConfig, StillExportMetadata},
     gesture::{GestureSnapshot, MAX_POINTS},
     history::{GpuHistoryRing, HISTORY_FORMAT},
@@ -52,6 +53,7 @@ pub struct InputSources {
     pub midi: Arc<RwLock<MidiSnapshot>>,
     pub osc: Arc<RwLock<OscSnapshot>>,
     pub gesture: Arc<RwLock<GestureSnapshot>>,
+    pub control_actions: ControlActionBus,
     pub source: SourceSelector,
     pub video_control: VideoHandle,
     pub video_audio_control: VideoAudioHandle,
@@ -2980,6 +2982,23 @@ impl Renderer {
         self.restore_after_offline_export();
     }
 
+    fn handle_control_actions(&mut self) {
+        let actions = self.sources.control_actions.drain();
+        if self.offline_session.is_some() {
+            return;
+        }
+        for action in actions {
+            match action.as_str() {
+                ACTION_CLEAR_BUFFERS => self.clear_feedback(),
+                ACTION_FLOW_PULSE => {
+                    self.flow_pulse_until = Some(Instant::now() + Duration::from_millis(220));
+                    self.flow_pulse_fires = self.flow_pulse_fires.wrapping_add(1);
+                }
+                _ => {}
+            }
+        }
+    }
+
     fn handle_commands(&mut self, rx: &Receiver<RenderCommand>) -> bool {
         loop {
             match rx.try_recv() {
@@ -4814,6 +4833,7 @@ impl Renderer {
             if !self.handle_commands(&rx) {
                 break;
             }
+            self.handle_control_actions();
             if self.minimized
                 && !self.syphon_enabled
                 && !self.spout_enabled

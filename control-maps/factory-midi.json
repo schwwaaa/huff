@@ -1,0 +1,39 @@
+{
+  "schema": "huff-control-map/v1",
+  "name": "Factory MIDI Minimal",
+  "notes": "CC1 controls Feedback Amount; middle C triggers Flow Pulse.",
+  "mappings": [
+    {
+      "id": 1,
+      "target": "feedback.amount",
+      "sourceKind": "cc",
+      "channel": 1,
+      "number": 1,
+      "min": 0.0,
+      "max": 1.0,
+      "invert": false,
+      "smoothing": 0.18,
+      "enabled": true,
+      "behavior": "absolute",
+      "curve": "linear",
+      "threshold": 0.5,
+      "note": "Mod wheel to feedback"
+    },
+    {
+      "id": 2,
+      "target": "flow_pulse",
+      "sourceKind": "note_on",
+      "channel": 1,
+      "number": 60,
+      "min": 0.0,
+      "max": 1.0,
+      "invert": false,
+      "smoothing": 0.0,
+      "enabled": true,
+      "behavior": "trigger",
+      "curve": "linear",
+      "threshold": 0.1,
+      "note": "Middle C"
+    }
+  ]
+}

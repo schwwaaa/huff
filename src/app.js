@@ -20,6 +20,9 @@ const appState = {
   queueInitialized: false,
   parityReport: null,
   parityRefreshTimer: 0,
+  controlTargets: [],
+  midiMapSignature: '',
+  oscMapSignature: '',
 };
 
 function toast(message, error = false) {
@@ -1049,19 +1052,172 @@ function wirePresets() {
   });
 }
 
+function mappingTargetOptions(selected = '') {
+  const groups = new Map();
+  for (const target of appState.controlTargets.filter((item) => item.mappable)) {
+    if (!groups.has(target.group)) groups.set(target.group, []);
+    groups.get(target.group).push(target);
+  }
+  return [...groups.entries()].map(([group, targets]) =>
+    `<optgroup label="${escapeHtml(group)}">${targets.map((target) =>
+      `<option value="${escapeHtml(target.id)}" ${target.id === selected ? 'selected' : ''}>${escapeHtml(target.label)} · ${escapeHtml(target.id)}</option>`
+    ).join('')}</optgroup>`
+  ).join('');
+}
+
+function populateMappingTargetSelects() {
+  for (const id of ['midiTargetSelect', 'oscTargetSelect']) {
+    const select = byId(id);
+    if (!select) continue;
+    const previous = select.value;
+    select.innerHTML = mappingTargetOptions(previous);
+    if (previous && [...select.options].some((option) => option.value === previous)) select.value = previous;
+  }
+}
+
+function mappingWarnings(elementId, warnings = []) {
+  const element = byId(elementId);
+  if (!element) return;
+  element.textContent = warnings.length ? warnings.join('\n') : '';
+}
+
+function renderMidiMappings(midi = {}) {
+  const mappings = midi.mappings || [];
+  const signature = JSON.stringify([mappings, midi.validationWarnings, midi.learnTarget, midi.mapName]);
+  if (signature === appState.midiMapSignature) return;
+  if (document.activeElement?.closest?.('#midiMapTable')) return;
+  appState.midiMapSignature = signature;
+  if (byId('midiMapName')) byId('midiMapName').textContent = `${midi.mapName || 'Custom'} · ${mappings.length}`;
+  mappingWarnings('midiMapWarnings', midi.validationWarnings || []);
+  const learn = byId('midiLearnStatus');
+  if (learn) {
+    learn.textContent = midi.learnTarget ? `ARMED: move a MIDI control for ${midi.learnTarget}` : 'Select a canonical target, then move a control.';
+    learn.classList.toggle('armed', Boolean(midi.learnTarget));
+  }
+  const body = byId('midiMapTbody');
+  if (!body) return;
+  body.innerHTML = mappings.length ? mappings.map((mapping) => `
+    <tr data-id="${mapping.id}">
+      <td><input data-field="enabled" type="checkbox" ${mapping.enabled !== false ? 'checked' : ''}></td>
+      <td>
+        <select data-field="sourceKind" class="map-source">
+          ${['cc','note_on','pitch_bend','channel_pressure','poly_aftertouch','program_change'].map((kind) => `<option value="${kind}" ${mapping.sourceKind === kind ? 'selected' : ''}>${kind}</option>`).join('')}
+        </select>
+        ch<input data-field="channel" class="map-mini" type="number" min="0" max="16" value="${mapping.channel ?? 1}">
+        #<input data-field="number" class="map-mini" type="number" min="0" max="127" value="${mapping.number ?? 0}">
+      </td>
+      <td><select data-field="target" class="map-target">${mappingTargetOptions(mapping.target)}</select></td>
+      <td><select data-field="behavior" class="map-mode">${['absolute','gate','toggle','trigger'].map((mode) => `<option ${mapping.behavior === mode ? 'selected' : ''}>${mode}</option>`).join('')}</select></td>
+      <td><input data-field="min" class="map-mini" type="number" min="0" max="1" step="0.01" value="${mapping.min ?? 0}">–<input data-field="max" class="map-mini" type="number" min="0" max="1" step="0.01" value="${mapping.max ?? 1}"></td>
+      <td><select data-field="curve">${['linear','smooth','square','cube','sqrt'].map((curve) => `<option ${mapping.curve === curve ? 'selected' : ''}>${curve}</option>`).join('')}</select></td>
+      <td><input data-field="invert" type="checkbox" ${mapping.invert ? 'checked' : ''}></td>
+      <td><input data-field="smoothing" class="map-mini" type="number" min="0" max="0.98" step="0.01" value="${mapping.smoothing ?? 0.18}"></td>
+      <td><input data-field="threshold" class="map-mini" type="number" min="0" max="1" step="0.01" value="${mapping.threshold ?? 0.5}"></td>
+      <td><input data-field="note" class="map-note" value="${escapeHtml(mapping.note || '')}"></td>
+      <td><button data-action="save">Save</button> <button data-action="delete">×</button></td>
+    </tr>`).join('') : '<tr><td colspan="11">No MIDI mappings. Learn a control or add a row.</td></tr>';
+}
+
+function renderOscMappings(osc = {}) {
+  const mappings = osc.mappings || [];
+  const signature = JSON.stringify([mappings, osc.validationWarnings, osc.learnTarget, osc.mapName]);
+  if (signature === appState.oscMapSignature) return;
+  if (document.activeElement?.closest?.('#oscMapTable')) return;
+  appState.oscMapSignature = signature;
+  if (byId('oscMapName')) byId('oscMapName').textContent = `${osc.mapName || 'Custom'} · ${mappings.length}`;
+  mappingWarnings('oscMapWarnings', osc.validationWarnings || []);
+  const learn = byId('oscLearnStatus');
+  if (learn) {
+    learn.textContent = osc.learnTarget ? `ARMED: send an OSC value for ${osc.learnTarget}` : 'Select a canonical target, then send an OSC message.';
+    learn.classList.toggle('armed', Boolean(osc.learnTarget));
+  }
+  const body = byId('oscMapTbody');
+  if (!body) return;
+  body.innerHTML = mappings.length ? mappings.map((mapping) => `
+    <tr data-id="${mapping.id}">
+      <td><input data-field="enabled" type="checkbox" ${mapping.enabled !== false ? 'checked' : ''}></td>
+      <td><input data-field="address" class="map-source" value="${escapeHtml(mapping.address || '/huff/control')}"> [<input data-field="argumentIndex" class="map-mini" type="number" min="0" max="31" value="${mapping.argumentIndex ?? 0}">]</td>
+      <td><select data-field="target" class="map-target">${mappingTargetOptions(mapping.target)}</select></td>
+      <td><select data-field="behavior" class="map-mode">${['absolute','gate','toggle','trigger'].map((mode) => `<option ${mapping.behavior === mode ? 'selected' : ''}>${mode}</option>`).join('')}</select></td>
+      <td><input data-field="inputMin" class="map-mini" type="number" step="0.01" value="${mapping.inputMin ?? 0}">–<input data-field="inputMax" class="map-mini" type="number" step="0.01" value="${mapping.inputMax ?? 1}"></td>
+      <td><input data-field="outputMin" class="map-mini" type="number" min="0" max="1" step="0.01" value="${mapping.outputMin ?? 0}">–<input data-field="outputMax" class="map-mini" type="number" min="0" max="1" step="0.01" value="${mapping.outputMax ?? 1}"></td>
+      <td><select data-field="curve">${['linear','smooth','square','cube','sqrt'].map((curve) => `<option ${mapping.curve === curve ? 'selected' : ''}>${curve}</option>`).join('')}</select></td>
+      <td><input data-field="invert" type="checkbox" ${mapping.invert ? 'checked' : ''}></td>
+      <td><input data-field="smoothing" class="map-mini" type="number" min="0" max="0.98" step="0.01" value="${mapping.smoothing ?? 0.18}"></td>
+      <td><input data-field="threshold" class="map-mini" type="number" min="0" max="1" step="0.01" value="${mapping.threshold ?? 0.5}"></td>
+      <td><button data-action="save">Save</button> <button data-action="delete">×</button></td>
+    </tr>`).join('') : '<tr><td colspan="11">No OSC mappings. Learn an address or add a row.</td></tr>';
+}
+
+function rowValue(row, field, fallback = '') {
+  const element = row.querySelector(`[data-field="${field}"]`);
+  if (!element) return fallback;
+  if (element.type === 'checkbox') return element.checked;
+  if (element.type === 'number') return Number(element.value);
+  return element.value;
+}
+
+function midiMappingFromRow(row) {
+  return {
+    id: Number(row.dataset.id || 0), target: rowValue(row, 'target'), sourceKind: rowValue(row, 'sourceKind'),
+    channel: rowValue(row, 'channel', 1), number: rowValue(row, 'number', 0),
+    min: rowValue(row, 'min', 0), max: rowValue(row, 'max', 1), invert: rowValue(row, 'invert', false), smoothing: rowValue(row, 'smoothing', 0.18),
+    enabled: rowValue(row, 'enabled', true), behavior: rowValue(row, 'behavior', 'absolute'),
+    curve: rowValue(row, 'curve', 'linear'), threshold: rowValue(row, 'threshold', 0.5), note: rowValue(row, 'note', ''),
+  };
+}
+
+function oscMappingFromRow(row) {
+  return {
+    id: Number(row.dataset.id || 0), target: rowValue(row, 'target'), address: rowValue(row, 'address'),
+    argumentIndex: rowValue(row, 'argumentIndex', 0), inputMin: rowValue(row, 'inputMin', 0), inputMax: rowValue(row, 'inputMax', 1),
+    outputMin: rowValue(row, 'outputMin', 0), outputMax: rowValue(row, 'outputMax', 1), invert: rowValue(row, 'invert', false), smoothing: rowValue(row, 'smoothing', 0.18),
+    enabled: rowValue(row, 'enabled', true), behavior: rowValue(row, 'behavior', 'absolute'),
+    curve: rowValue(row, 'curve', 'linear'), threshold: rowValue(row, 'threshold', 0.5), note: '',
+  };
+}
+
 function wireMidiOsc() {
   byId('midiRefreshBtn')?.addEventListener('click', () => call('refresh_midi_ports').catch(() => {}));
   byId('midiConnectBtn')?.addEventListener('click', () => call('connect_midi', { name: byId('midiPortSelect')?.value || '' }).catch(() => {}));
   byId('midiDisconnectBtn')?.addEventListener('click', () => call('disconnect_midi').catch(() => {}));
-  byId('midiDebugBtn')?.addEventListener('click', () => console.info('Huff MIDI info', appState.info?.midi));
-  for (const id of ['midiLoadMapBtn', 'midiClearMapBtn', 'oscLoadMapBtn', 'oscClearMapBtn']) {
-    const button = byId(id);
-    if (button) {
-      button.disabled = true;
-      button.classList.add('native-pending');
-      button.title = 'Canonical native mapping editor arrives after parameter parity';
-    }
-  }
+  byId('midiLearnBtn')?.addEventListener('click', () => call('arm_midi_learn', { target: byId('midiTargetSelect')?.value || '' }).catch(() => {}));
+  byId('midiCancelLearnBtn')?.addEventListener('click', () => call('cancel_midi_learn').catch(() => {}));
+  byId('midiAddBtn')?.addEventListener('click', () => call('update_midi_mapping', { mapping: {
+    id: 0, target: byId('midiTargetSelect')?.value || 'feedback.amount', sourceKind: 'cc', channel: 1, number: 1,
+    min: 0, max: 1, invert: false, smoothing: 0.18, enabled: true, behavior: 'absolute', curve: 'linear', threshold: 0.5, note: 'New mapping',
+  }}).catch(() => {}));
+  byId('midiLoadMapBtn')?.addEventListener('click', async () => { const result = await call('load_midi_map'); if (result) toast(`Loaded ${result.name}`); });
+  byId('midiSaveMapBtn')?.addEventListener('click', async () => { const result = await call('save_midi_map'); if (result) toast(`Saved ${basename(result.path)}`); });
+  byId('midiFactoryMapBtn')?.addEventListener('click', () => call('load_factory_midi_map').catch(() => {}));
+  byId('midiClearMapBtn')?.addEventListener('click', () => call('clear_midi_mappings').catch(() => {}));
+  byId('midiMapTbody')?.addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-action]'); if (!button) return;
+    const row = button.closest('tr[data-id]'); if (!row) return;
+    if (button.dataset.action === 'delete') call('delete_midi_mapping', { id: Number(row.dataset.id) }).catch(() => {});
+    else call('update_midi_mapping', { mapping: midiMappingFromRow(row) }).then(() => toast('MIDI mapping saved')).catch(() => {});
+  });
+
+  byId('oscStartBtn')?.addEventListener('click', () => call('bind_osc', { host: byId('oscHost')?.value || '0.0.0.0', port: Number(byId('oscPort')?.value || 9000) }).catch(() => {}));
+  byId('oscStopBtn')?.addEventListener('click', () => call('stop_osc').catch(() => {}));
+  byId('oscTestBtn')?.addEventListener('click', () => call('send_osc_test', { host: '127.0.0.1', port: Number(byId('oscPort')?.value || 9000), address: '/huff/feedback', value: 0.65 }).catch(() => {}));
+  byId('oscLearnBtn')?.addEventListener('click', () => call('arm_osc_learn', { target: byId('oscTargetSelect')?.value || '' }).catch(() => {}));
+  byId('oscCancelLearnBtn')?.addEventListener('click', () => call('cancel_osc_learn').catch(() => {}));
+  byId('oscAddBtn')?.addEventListener('click', () => call('update_osc_mapping', { mapping: {
+    id: 0, target: byId('oscTargetSelect')?.value || 'feedback.amount', address: '/huff/control', argumentIndex: 0,
+    inputMin: 0, inputMax: 1, outputMin: 0, outputMax: 1, invert: false, smoothing: 0.18,
+    enabled: true, behavior: 'absolute', curve: 'linear', threshold: 0.5, note: 'New mapping',
+  }}).catch(() => {}));
+  byId('oscLoadMapBtn')?.addEventListener('click', async () => { const result = await call('load_osc_map'); if (result) toast(`Loaded ${result.name}`); });
+  byId('oscSaveMapBtn')?.addEventListener('click', async () => { const result = await call('save_osc_map'); if (result) toast(`Saved ${basename(result.path)}`); });
+  byId('oscFactoryMapBtn')?.addEventListener('click', () => call('load_factory_osc_map').catch(() => {}));
+  byId('oscClearMapBtn')?.addEventListener('click', () => call('clear_osc_mappings').catch(() => {}));
+  byId('oscMapTbody')?.addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-action]'); if (!button) return;
+    const row = button.closest('tr[data-id]'); if (!row) return;
+    if (button.dataset.action === 'delete') call('delete_osc_mapping', { id: Number(row.dataset.id) }).catch(() => {});
+    else call('update_osc_mapping', { mapping: oscMappingFromRow(row) }).then(() => toast('OSC mapping saved')).catch(() => {});
+  });
 }
 
 function setOptions(select, items, valueOf, labelOf) {
@@ -1293,8 +1449,12 @@ Manifest: ${offlineExport.manifestPath || '—'}`;
     : '';
 
   if (byId('midiBridgeStatus')) byId('midiBridgeStatus').textContent = midi.connected
-    ? `${midi.connectedPort} · ${(midi.messagesPerSecond || 0).toFixed(1)} msg/s`
+    ? `${midi.connectedPort} · ${(midi.messagesPerSecond || 0).toFixed(1)} msg/s · ${midi.mappings?.length || 0} mappings`
     : (midi.lastError || 'Not connected');
+  renderMidiMappings(midi);
+  renderOscMappings(osc);
+  if (byId('oscHost') && document.activeElement !== byId('oscHost')) byId('oscHost').value = osc.bindHost || '0.0.0.0';
+  if (byId('oscPort') && document.activeElement !== byId('oscPort')) byId('oscPort').value = String(osc.port || 9000);
   if (byId('oscStatusBox')) {
     byId('oscStatusBox').textContent = osc.listening
       ? `Listening on ${osc.localAddress || `0.0.0.0:${osc.port}`}`
@@ -1348,9 +1508,11 @@ async function boot() {
     return;
   }
   appState.registry = await call('get_parameter_registry');
+  appState.controlTargets = await call('get_control_target_catalog');
   appState.byLegacy = new Map(appState.registry.map((definition) => [definition.legacyId, definition]));
   appState.byId = new Map(appState.registry.map((definition) => [definition.id, definition]));
   configureRegistryControls();
+  populateMappingTargetSelects();
   wireTransport();
   wireRecording();
   wireExport();
@@ -1368,7 +1530,7 @@ async function boot() {
   await refreshParityReport(true);
   await poll();
   setInterval(poll, 250);
-  console.info('Huff Native wgpu Milestone 16 loaded', {
+  console.info('Huff Native wgpu Milestone 17 loaded', {
     parameters: appState.registry.length,
     implemented: appState.registry.filter((definition) => definition.implemented).length,
   });

@@ -8,6 +8,7 @@ mod automation;
 mod audio;
 mod audio_router;
 mod camera;
+mod control_mapping;
 mod export;
 mod export_queue;
 mod gesture;
@@ -33,23 +34,24 @@ use automation::{
 use audio::{AudioCommand, AudioHandle};
 use audio_router::{AudioRouterCommand, AudioRouterHandle};
 use camera::{CameraDevice, CameraHandle};
+use control_mapping::{target_catalog, ControlActionBus, ControlTargetInfo};
 use export::{ExportHandle, StillExportConfig, StillExportMetadata};
 use export_queue::{ExportQueueHandle, ExportQueueReceipt};
 use gesture::{GestureHandle, GesturePoint};
-use midi::{MidiCommand, MidiHandle};
+use midi::{MidiCommand, MidiHandle, MidiMapping};
 use offline_export::{
     profile_codec, profile_container, profile_extension, profile_label,
     profile_pixel_format, profile_requires_even_dimensions, profile_supports_alpha,
     validate_profile_support, OfflineExportConfig, OfflineExportHandle, OfflineExportMetadata,
     PROFILE_PNG_SEQUENCE,
 };
-use osc::{OscCommand, OscHandle};
+use osc::{OscCommand, OscHandle, OscMapping};
 use parameters::{ParameterDefinition, ParameterSnapshot, ParameterStore};
 use recording::{RecordingAudioSource, RecordingHandle, RecordingStartConfig};
 use renderer::{RenderCommand, RendererHandle};
 use source::{ActiveSource, SourceSelector};
 use rosc::{encoder, OscMessage, OscPacket, OscType};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
     net::UdpSocket,
@@ -58,6 +60,35 @@ use std::{
 use tauri::Manager;
 use video::VideoHandle;
 use video_audio::{VideoAudioCommand, VideoAudioHandle};
+
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct MidiMapDocument {
+    schema: String,
+    name: String,
+    #[serde(default)]
+    notes: String,
+    mappings: Vec<MidiMapping>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct OscMapDocument {
+    schema: String,
+    name: String,
+    #[serde(default)]
+    notes: String,
+    mappings: Vec<OscMapping>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ControlMapFileResult {
+    path: String,
+    name: String,
+    mapping_count: usize,
+}
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -111,7 +142,7 @@ fn get_app_info(
     source: tauri::State<'_, SourceSelector>,
 ) -> AppInfo {
     AppInfo {
-        build: "HNW-16".into(),
+        build: "HNW-17".into(),
         renderer: renderer.info(),
         camera: camera.status(),
         camera_devices: camera.devices(),
@@ -132,7 +163,7 @@ fn get_app_info(
         gesture: gesture.info(),
         automation: automation.info(),
         parameter_revision: parameters.revision(),
-        native_milestone: "HNW-16".into(),
+        native_milestone: "HNW-17".into(),
         active_source: source.get().label().into(),
     }
 }
@@ -140,6 +171,11 @@ fn get_app_info(
 #[tauri::command]
 fn get_parameter_registry() -> Vec<ParameterDefinition> {
     parameters::definitions().to_vec()
+}
+
+#[tauri::command]
+fn get_control_target_catalog() -> Vec<ControlTargetInfo> {
+    target_catalog()
 }
 
 #[tauri::command]
@@ -537,7 +573,7 @@ fn export_still(
         fit_mode: fit_mode.clone(),
     };
     let metadata = StillExportMetadata {
-        engine_build: "HNW-16".into(),
+        engine_build: "HNW-17".into(),
         captured_unix_ms: StillExportMetadata::now_unix_ms(),
         active_source: source.get().label().into(),
         source_file: video_info.file_path,
@@ -728,7 +764,7 @@ fn start_offline_export(
         queue_job_id: String::new(),
     };
     let metadata = OfflineExportMetadata {
-        engine_build: "HNW-16".into(),
+        engine_build: "HNW-17".into(),
         created_unix_ms: OfflineExportMetadata::now_unix_ms(),
         source_file: video_info.file_path.clone(),
         source_codec: video_info.codec,
@@ -1137,7 +1173,6 @@ fn connect_midi(state: tauri::State<'_, MidiHandle>, name: String) -> Result<(),
         return Err("select a MIDI input".into());
     }
     state.send(MidiCommand::Connect(name));
-    state.send(MidiCommand::LoadStarterMappings);
     Ok(())
 }
 
@@ -1156,7 +1191,6 @@ fn bind_osc(
         return Err("OSC port must be between 1 and 65535".into());
     }
     state.send(OscCommand::Bind(host, port));
-    state.send(OscCommand::LoadStarterMappings);
     Ok(())
 }
 
@@ -1185,6 +1219,184 @@ fn send_osc_test(host: String, port: u16, address: String, value: f32) -> Result
         .send_to(&bytes, format!("{}:{}", host.trim(), port))
         .map_err(|error| error.to_string())?;
     Ok(())
+}
+
+#[tauri::command]
+fn arm_midi_learn(state: tauri::State<'_, MidiHandle>, target: String) -> Result<(), String> {
+    if !control_mapping::valid_target(&target) {
+        return Err(format!("invalid MIDI learn target: {target}"));
+    }
+    state.send(MidiCommand::ArmLearn(target));
+    Ok(())
+}
+
+#[tauri::command]
+fn cancel_midi_learn(state: tauri::State<'_, MidiHandle>) {
+    state.send(MidiCommand::CancelLearn);
+}
+
+#[tauri::command]
+fn update_midi_mapping(state: tauri::State<'_, MidiHandle>, mapping: MidiMapping) {
+    state.send(MidiCommand::UpdateMapping(mapping));
+}
+
+#[tauri::command]
+fn delete_midi_mapping(state: tauri::State<'_, MidiHandle>, id: u64) {
+    state.send(MidiCommand::DeleteMapping(id));
+}
+
+#[tauri::command]
+fn clear_midi_mappings(state: tauri::State<'_, MidiHandle>) {
+    state.send(MidiCommand::ClearMappings);
+}
+
+#[tauri::command]
+fn load_factory_midi_map(state: tauri::State<'_, MidiHandle>) {
+    state.send(MidiCommand::LoadStarterMappings);
+}
+
+#[tauri::command]
+fn load_midi_map(state: tauri::State<'_, MidiHandle>) -> Result<Option<ControlMapFileResult>, String> {
+    let Some(path) = rfd::FileDialog::new()
+        .add_filter("HUFF MIDI map", &["json"])
+        .pick_file()
+    else {
+        return Ok(None);
+    };
+    let bytes = std::fs::read(&path)
+        .map_err(|error| format!("could not read MIDI map {}: {error}", path.display()))?;
+    let document: MidiMapDocument = serde_json::from_slice(&bytes)
+        .map_err(|error| format!("invalid MIDI map {}: {error}", path.display()))?;
+    if document.schema != control_mapping::MAPPING_SCHEMA {
+        return Err(format!("unsupported MIDI map schema: {}", document.schema));
+    }
+    let count = document.mappings.len();
+    state.send(MidiCommand::ReplaceMappings(document.mappings));
+    state.send(MidiCommand::SetMapName(document.name.clone()));
+    Ok(Some(ControlMapFileResult {
+        path: path.display().to_string(),
+        name: document.name,
+        mapping_count: count,
+    }))
+}
+
+#[tauri::command]
+fn save_midi_map(state: tauri::State<'_, MidiHandle>) -> Result<Option<ControlMapFileResult>, String> {
+    let info = state.info();
+    let Some(mut path) = rfd::FileDialog::new()
+        .add_filter("HUFF MIDI map", &["json"])
+        .set_file_name("huff-midi-map.json")
+        .save_file()
+    else {
+        return Ok(None);
+    };
+    if !path.extension().and_then(|value| value.to_str()).map(|value| value.eq_ignore_ascii_case("json")).unwrap_or(false) {
+        path.set_extension("json");
+    }
+    let document = MidiMapDocument {
+        schema: control_mapping::MAPPING_SCHEMA.into(),
+        name: info.map_name.clone(),
+        notes: "Portable HUFF canonical MIDI mapping".into(),
+        mappings: info.mappings,
+    };
+    let payload = serde_json::to_vec_pretty(&document)
+        .map_err(|error| format!("could not serialize MIDI map: {error}"))?;
+    std::fs::write(&path, payload)
+        .map_err(|error| format!("could not write MIDI map {}: {error}", path.display()))?;
+    Ok(Some(ControlMapFileResult {
+        path: path.display().to_string(),
+        name: document.name,
+        mapping_count: document.mappings.len(),
+    }))
+}
+
+#[tauri::command]
+fn arm_osc_learn(state: tauri::State<'_, OscHandle>, target: String) -> Result<(), String> {
+    if !control_mapping::valid_target(&target) {
+        return Err(format!("invalid OSC learn target: {target}"));
+    }
+    state.send(OscCommand::ArmLearn(target));
+    Ok(())
+}
+
+#[tauri::command]
+fn cancel_osc_learn(state: tauri::State<'_, OscHandle>) {
+    state.send(OscCommand::CancelLearn);
+}
+
+#[tauri::command]
+fn update_osc_mapping(state: tauri::State<'_, OscHandle>, mapping: OscMapping) {
+    state.send(OscCommand::UpdateMapping(mapping));
+}
+
+#[tauri::command]
+fn delete_osc_mapping(state: tauri::State<'_, OscHandle>, id: u64) {
+    state.send(OscCommand::DeleteMapping(id));
+}
+
+#[tauri::command]
+fn clear_osc_mappings(state: tauri::State<'_, OscHandle>) {
+    state.send(OscCommand::ClearMappings);
+}
+
+#[tauri::command]
+fn load_factory_osc_map(state: tauri::State<'_, OscHandle>) {
+    state.send(OscCommand::LoadStarterMappings);
+}
+
+#[tauri::command]
+fn load_osc_map(state: tauri::State<'_, OscHandle>) -> Result<Option<ControlMapFileResult>, String> {
+    let Some(path) = rfd::FileDialog::new()
+        .add_filter("HUFF OSC map", &["json"])
+        .pick_file()
+    else {
+        return Ok(None);
+    };
+    let bytes = std::fs::read(&path)
+        .map_err(|error| format!("could not read OSC map {}: {error}", path.display()))?;
+    let document: OscMapDocument = serde_json::from_slice(&bytes)
+        .map_err(|error| format!("invalid OSC map {}: {error}", path.display()))?;
+    if document.schema != control_mapping::MAPPING_SCHEMA {
+        return Err(format!("unsupported OSC map schema: {}", document.schema));
+    }
+    let count = document.mappings.len();
+    state.send(OscCommand::ReplaceMappings(document.mappings));
+    state.send(OscCommand::SetMapName(document.name.clone()));
+    Ok(Some(ControlMapFileResult {
+        path: path.display().to_string(),
+        name: document.name,
+        mapping_count: count,
+    }))
+}
+
+#[tauri::command]
+fn save_osc_map(state: tauri::State<'_, OscHandle>) -> Result<Option<ControlMapFileResult>, String> {
+    let info = state.info();
+    let Some(mut path) = rfd::FileDialog::new()
+        .add_filter("HUFF OSC map", &["json"])
+        .set_file_name("huff-osc-map.json")
+        .save_file()
+    else {
+        return Ok(None);
+    };
+    if !path.extension().and_then(|value| value.to_str()).map(|value| value.eq_ignore_ascii_case("json")).unwrap_or(false) {
+        path.set_extension("json");
+    }
+    let document = OscMapDocument {
+        schema: control_mapping::MAPPING_SCHEMA.into(),
+        name: info.map_name.clone(),
+        notes: "Portable HUFF canonical OSC mapping".into(),
+        mappings: info.mappings,
+    };
+    let payload = serde_json::to_vec_pretty(&document)
+        .map_err(|error| format!("could not serialize OSC map: {error}"))?;
+    std::fs::write(&path, payload)
+        .map_err(|error| format!("could not write OSC map {}: {error}", path.display()))?;
+    Ok(Some(ControlMapFileResult {
+        path: path.display().to_string(),
+        name: document.name,
+        mapping_count: document.mappings.len(),
+    }))
 }
 
 #[tauri::command]
@@ -1264,16 +1476,24 @@ fn main() {
                 video_audio.snapshot(),
             )
             .map_err(std::io::Error::other)?;
-            let midi = midi::start().map_err(std::io::Error::other)?;
-            let osc = osc::start().map_err(std::io::Error::other)?;
             let gesture = GestureHandle::new();
             let automation = AutomationHandle::new();
             let parameters = ParameterStore::new();
+            let control_actions = ControlActionBus::default();
+            let midi = midi::start(
+                parameters.clone(),
+                automation.clone(),
+                control_actions.clone(),
+            )
+            .map_err(std::io::Error::other)?;
+            let osc = osc::start(
+                parameters.clone(),
+                automation.clone(),
+                control_actions.clone(),
+            )
+            .map_err(std::io::Error::other)?;
             let source = SourceSelector::new(ActiveSource::Camera);
 
-            osc.send(OscCommand::LoadStarterMappings);
-            osc.send(OscCommand::Bind("0.0.0.0".into(), 9000));
-            midi.send(MidiCommand::LoadStarterMappings);
 
             let renderer_window = tauri::window::WindowBuilder::new(app, "renderer")
                 .title("huff · native wgpu output")
@@ -1291,6 +1511,7 @@ fn main() {
                     midi: midi.snapshot(),
                     osc: osc.snapshot(),
                     gesture: gesture.snapshot(),
+                    control_actions: control_actions.clone(),
                     source: source.clone(),
                     video_control: video.clone(),
                     video_audio_control: video_audio.clone(),
@@ -1399,6 +1620,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             get_app_info,
             get_parameter_registry,
+            get_control_target_catalog,
             get_parameter_state,
             get_calibration_profiles,
             get_parity_report,
@@ -1455,9 +1677,25 @@ fn main() {
             refresh_midi_ports,
             connect_midi,
             disconnect_midi,
+            arm_midi_learn,
+            cancel_midi_learn,
+            update_midi_mapping,
+            delete_midi_mapping,
+            clear_midi_mappings,
+            load_factory_midi_map,
+            load_midi_map,
+            save_midi_map,
             bind_osc,
             stop_osc,
             send_osc_test,
+            arm_osc_learn,
+            cancel_osc_learn,
+            update_osc_mapping,
+            delete_osc_mapping,
+            clear_osc_mappings,
+            load_factory_osc_map,
+            load_osc_map,
+            save_osc_map,
             push_gesture_point,
             clear_gesture,
             set_compositor_param,

@@ -1,4 +1,4 @@
-# HUFF native migration status · Milestone 16
+# HUFF native migration status · Milestone 17
 
 ## Proven native foundation
 
@@ -83,3 +83,8 @@ The queue remains installed for later evaluation but is not treated as a settled
 ## Current principle
 
 The broad native architecture is being completed before a long refinement pass. Milestone 16 makes that strategy safer by preserving the original control semantics and creating repeatable visual test states without pretending that static source comparison can replace hands-on image and motion judgment.
+
+
+## Canonical controller mapping completed in Milestone 17
+
+MIDI and OSC now map directly to canonical Rust parameters and actions instead of remaining isolated demonstration inputs. Learn, edit, conflict warnings, behavior modes, scaling, curves, smoothing, factory restoration, and portable map files are integrated. Real-device and sender-specific testing remains part of the later refinement cycle.

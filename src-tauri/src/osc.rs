@@ -1,11 +1,19 @@
+use crate::{
+    automation::AutomationHandle,
+    control_mapping::{
+        apply_target, default_behavior, default_curve, default_threshold, default_true,
+        normalize_curve, valid_target, ControlActionBus,
+    },
+    parameters::ParameterStore,
+};
 use rosc::{decoder, OscMessage, OscPacket, OscType};
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::VecDeque,
+    collections::{BTreeMap, VecDeque},
     io::ErrorKind,
     net::UdpSocket,
     sync::{
-        mpsc::{sync_channel, Receiver, SyncSender, TryRecvError},
+        mpsc::{sync_channel, Receiver, SyncSender},
         Arc, RwLock,
     },
     thread,
@@ -15,28 +23,6 @@ use std::{
 pub const PARAMETER_COUNT: usize = 8;
 pub const SIGNAL_COUNT: usize = 32;
 pub const HISTORY_LIMIT: usize = 32;
-
-pub const PARAMETER_NAMES: [&str; PARAMETER_COUNT] = [
-    "hue",
-    "zoom",
-    "rotation",
-    "field_strength",
-    "turbulence",
-    "trail",
-    "exposure",
-    "pulse_decay",
-];
-
-pub const PARAMETER_LABELS: [&str; PARAMETER_COUNT] = [
-    "Hue",
-    "Zoom",
-    "Rotation",
-    "Field strength",
-    "Turbulence",
-    "Trail persistence",
-    "Exposure",
-    "Pulse decay",
-];
 
 pub const DEFAULT_PARAMETERS: [f32; PARAMETER_COUNT] = [
     0.58, 0.45, 0.50, 0.55, 0.42, 0.76, 0.45, 0.62,
@@ -55,6 +41,16 @@ pub struct OscMapping {
     pub output_max: f32,
     pub invert: bool,
     pub smoothing: f32,
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    #[serde(default = "default_behavior")]
+    pub behavior: String,
+    #[serde(default = "default_curve")]
+    pub curve: String,
+    #[serde(default = "default_threshold")]
+    pub threshold: f32,
+    #[serde(default)]
+    pub note: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -75,25 +71,14 @@ pub enum OscCommand {
     Stop,
     ArmLearn(String),
     CancelLearn,
-    SetManual(String, f32),
     UpdateMapping(OscMapping),
     DeleteMapping(u64),
     ReplaceMappings(Vec<OscMapping>),
     ClearMappings,
     LoadStarterMappings,
-    ResetParameters,
+    SetMapName(String),
     ClearHistory,
     Shutdown,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ParameterInfo {
-    pub name: String,
-    pub label: String,
-    pub value: f32,
-    pub smoothing: f32,
-    pub mapped: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -104,8 +89,9 @@ pub struct OscInfo {
     pub listening: bool,
     pub local_address: String,
     pub learn_target: String,
+    pub map_name: String,
     pub mappings: Vec<OscMapping>,
-    pub parameters: Vec<ParameterInfo>,
+    pub validation_warnings: Vec<String>,
     pub history: Vec<OscEvent>,
     pub total_packets: u64,
     pub total_messages: u64,
@@ -150,7 +136,9 @@ struct OscShared {
     listening: bool,
     local_address: String,
     learn_target: Option<String>,
+    map_name: String,
     mappings: Vec<OscMapping>,
+    previous_inputs: BTreeMap<u64, f32>,
     history: VecDeque<OscEvent>,
     total_packets: u64,
     total_messages: u64,
@@ -172,7 +160,9 @@ impl Default for OscShared {
             listening: false,
             local_address: String::new(),
             learn_target: None,
+            map_name: "Factory: Minimal".into(),
             mappings: Vec::new(),
+            previous_inputs: BTreeMap::new(),
             history: VecDeque::new(),
             total_packets: 0,
             total_messages: 0,
@@ -204,28 +194,26 @@ impl OscHandle {
         Arc::clone(&self.snapshot)
     }
 
+    pub fn mappings(&self) -> Vec<OscMapping> {
+        self.shared
+            .read()
+            .expect("OSC state poisoned")
+            .mappings
+            .clone()
+    }
+
     pub fn info(&self) -> OscInfo {
         let shared = self.shared.read().expect("OSC state poisoned");
         let snapshot = self.snapshot.read().expect("OSC snapshot poisoned");
-        let parameters = PARAMETER_NAMES
-            .iter()
-            .enumerate()
-            .map(|(index, name)| ParameterInfo {
-                name: (*name).to_string(),
-                label: PARAMETER_LABELS[index].to_string(),
-                value: snapshot.parameters[index],
-                smoothing: snapshot.smoothing[index],
-                mapped: shared.mappings.iter().any(|mapping| mapping.target.as_str() == *name),
-            })
-            .collect();
         OscInfo {
             bind_host: shared.bind_host.clone(),
             port: shared.port,
             listening: shared.listening,
             local_address: shared.local_address.clone(),
             learn_target: shared.learn_target.clone().unwrap_or_default(),
+            map_name: shared.map_name.clone(),
             mappings: shared.mappings.clone(),
-            parameters,
+            validation_warnings: mapping_warnings(&shared.mappings),
             history: shared.history.iter().cloned().collect(),
             total_packets: shared.total_packets,
             total_messages: shared.total_messages,
@@ -239,7 +227,11 @@ impl OscHandle {
     }
 }
 
-pub fn start() -> Result<OscHandle, String> {
+pub fn start(
+    parameters: ParameterStore,
+    automation: AutomationHandle,
+    actions: ControlActionBus,
+) -> Result<OscHandle, String> {
     let (tx, rx) = sync_channel(256);
     let shared = Arc::new(RwLock::new(OscShared::default()));
     let snapshot = Arc::new(RwLock::new(OscSnapshot::default()));
@@ -247,7 +239,16 @@ pub fn start() -> Result<OscHandle, String> {
     let thread_snapshot = Arc::clone(&snapshot);
     thread::Builder::new()
         .name("huff-osc-network".into())
-        .spawn(move || worker(rx, thread_shared, thread_snapshot))
+        .spawn(move || {
+            worker(
+                rx,
+                thread_shared,
+                thread_snapshot,
+                parameters,
+                automation,
+                actions,
+            )
+        })
         .map_err(|error| format!("could not start OSC worker: {error}"))?;
     let handle = OscHandle { tx, shared, snapshot };
     handle.send(OscCommand::LoadStarterMappings);
@@ -259,18 +260,18 @@ fn worker(
     rx: Receiver<OscCommand>,
     shared: Arc<RwLock<OscShared>>,
     snapshot: Arc<RwLock<OscSnapshot>>,
+    parameters: ParameterStore,
+    automation: AutomationHandle,
+    actions: ControlActionBus,
 ) {
     let mut socket: Option<UdpSocket> = None;
     let mut buffer = vec![0_u8; 65_536];
     let mut running = true;
-
     while running {
         loop {
             match rx.try_recv() {
                 Ok(command) => match command {
-                    OscCommand::Bind(host, port) => {
-                        socket = bind_socket(&host, port, &shared);
-                    }
+                    OscCommand::Bind(host, port) => socket = bind_socket(&host, port, &shared),
                     OscCommand::Stop => {
                         socket = None;
                         let mut state = shared.write().expect("OSC state poisoned");
@@ -279,54 +280,33 @@ fn worker(
                         state.last_error.clear();
                     }
                     OscCommand::ArmLearn(target) => {
-                        shared.write().expect("OSC state poisoned").learn_target = Some(target);
+                        if valid_target(&target) {
+                            shared.write().expect("OSC state poisoned").learn_target = Some(target);
+                        }
                     }
                     OscCommand::CancelLearn => {
                         shared.write().expect("OSC state poisoned").learn_target = None;
                     }
-                    OscCommand::SetManual(target, value) => {
-                        if let Some(index) = parameter_index(&target) {
-                            let mut data = snapshot.write().expect("OSC snapshot poisoned");
-                            data.parameters[index] = value.clamp(0.0, 1.0);
-                            data.sequence = data.sequence.wrapping_add(1);
-                        }
-                    }
-                    OscCommand::UpdateMapping(mut mapping) => {
-                        normalize_mapping(&mut mapping);
-                        let mut state = shared.write().expect("OSC state poisoned");
-                        if let Some(existing) = state.mappings.iter_mut().find(|item| item.id == mapping.id) {
-                            *existing = mapping;
-                        }
-                        refresh_snapshot_smoothing(&state.mappings, &snapshot);
-                    }
+                    OscCommand::UpdateMapping(mapping) => update_mapping(mapping, &shared),
                     OscCommand::DeleteMapping(id) => {
                         let mut state = shared.write().expect("OSC state poisoned");
                         state.mappings.retain(|mapping| mapping.id != id);
-                        refresh_snapshot_smoothing(&state.mappings, &snapshot);
+                        state.previous_inputs.remove(&id);
                     }
-                    OscCommand::ReplaceMappings(mut mappings) => {
-                        for mapping in &mut mappings {
-                            normalize_mapping(mapping);
-                        }
-                        let mut state = shared.write().expect("OSC state poisoned");
-                        state.next_mapping_id = mappings.iter().map(|mapping| mapping.id).max().unwrap_or(0) + 1;
-                        state.mappings = mappings;
-                        refresh_snapshot_smoothing(&state.mappings, &snapshot);
-                    }
+                    OscCommand::ReplaceMappings(mappings) => replace_mappings(mappings, &shared),
                     OscCommand::ClearMappings => {
                         let mut state = shared.write().expect("OSC state poisoned");
                         state.mappings.clear();
-                        refresh_snapshot_smoothing(&state.mappings, &snapshot);
+                        state.previous_inputs.clear();
+                        state.learn_target = None;
+                        state.map_name = "Empty".into();
                     }
                     OscCommand::LoadStarterMappings => {
-                        let mut state = shared.write().expect("OSC state poisoned");
-                        state.mappings = starter_mappings();
-                        state.next_mapping_id = 9;
-                        refresh_snapshot_smoothing(&state.mappings, &snapshot);
+                        replace_mappings(starter_mappings(), &shared);
+                        shared.write().expect("OSC state poisoned").map_name = "Factory: Minimal".into();
                     }
-                    OscCommand::ResetParameters => {
-                        let mut data = snapshot.write().expect("OSC snapshot poisoned");
-                        *data = OscSnapshot::default();
+                    OscCommand::SetMapName(name) => {
+                        shared.write().expect("OSC state poisoned").map_name = name;
                     }
                     OscCommand::ClearHistory => {
                         shared.write().expect("OSC state poisoned").history.clear();
@@ -336,8 +316,8 @@ fn worker(
                         break;
                     }
                 },
-                Err(TryRecvError::Empty) => break,
-                Err(TryRecvError::Disconnected) => {
+                Err(std::sync::mpsc::TryRecvError::Empty) => break,
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => {
                     running = false;
                     break;
                 }
@@ -347,47 +327,50 @@ fn worker(
             break;
         }
 
-        let mut received_any = false;
         if let Some(active_socket) = socket.as_ref() {
-            for _ in 0..64 {
-                match active_socket.recv_from(&mut buffer) {
-                    Ok((size, sender)) => {
-                        received_any = true;
-                        {
-                            let mut state = shared.write().expect("OSC state poisoned");
-                            state.total_packets = state.total_packets.wrapping_add(1);
-                            state.last_sender = sender.to_string();
-                        }
-                        match decoder::decode_udp(&buffer[..size]) {
-                            Ok((_remaining, packet)) => {
-                                process_packet(packet, &sender.to_string(), 0, &shared, &snapshot);
-                            }
-                            Err(error) => {
-                                let mut state = shared.write().expect("OSC state poisoned");
-                                state.decode_errors = state.decode_errors.wrapping_add(1);
-                                state.last_error = format!("OSC decode error from {sender}: {error}");
-                            }
-                        }
+            match active_socket.recv_from(&mut buffer) {
+                Ok((size, sender)) => {
+                    {
+                        let mut state = shared.write().expect("OSC state poisoned");
+                        state.total_packets = state.total_packets.wrapping_add(1);
                     }
-                    Err(error) if error.kind() == ErrorKind::WouldBlock => break,
-                    Err(error) => {
-                        shared.write().expect("OSC state poisoned").last_error =
-                            format!("OSC receive error: {error}");
-                        break;
+                    match decoder::decode_udp(&buffer[..size]) {
+                        Ok((_, packet)) => process_packet(
+                            packet,
+                            &sender.to_string(),
+                            0,
+                            &shared,
+                            &snapshot,
+                            &parameters,
+                            &automation,
+                            &actions,
+                        ),
+                        Err(error) => {
+                            let mut state = shared.write().expect("OSC state poisoned");
+                            state.decode_errors = state.decode_errors.wrapping_add(1);
+                            state.last_error = format!("OSC decode error: {error}");
+                        }
                     }
                 }
+                Err(error) if error.kind() == ErrorKind::WouldBlock => {
+                    thread::sleep(Duration::from_millis(2));
+                }
+                Err(error) => {
+                    shared.write().expect("OSC state poisoned").last_error =
+                        format!("OSC receive error: {error}");
+                    thread::sleep(Duration::from_millis(20));
+                }
             }
+        } else {
+            thread::sleep(Duration::from_millis(20));
         }
-
         update_message_rate(&shared);
-        if !received_any {
-            thread::sleep(Duration::from_millis(2));
-        }
     }
 }
 
 fn bind_socket(host: &str, port: u16, shared: &Arc<RwLock<OscShared>>) -> Option<UdpSocket> {
-    let address = format!("{}:{}", host.trim(), port);
+    let host = if host.trim().is_empty() { "0.0.0.0" } else { host.trim() };
+    let address = format!("{host}:{port}");
     match UdpSocket::bind(&address) {
         Ok(socket) => {
             if let Err(error) = socket.set_nonblocking(true) {
@@ -395,21 +378,18 @@ fn bind_socket(host: &str, port: u16, shared: &Arc<RwLock<OscShared>>) -> Option
                     format!("could not make OSC socket nonblocking: {error}");
                 return None;
             }
-            let local_address = socket.local_addr().map(|value| value.to_string()).unwrap_or(address.clone());
+            let local = socket.local_addr().map(|value| value.to_string()).unwrap_or(address.clone());
             let mut state = shared.write().expect("OSC state poisoned");
-            state.bind_host = host.trim().to_string();
+            state.bind_host = host.into();
             state.port = port;
             state.listening = true;
-            state.local_address = local_address;
+            state.local_address = local;
             state.last_error.clear();
             Some(socket)
         }
         Err(error) => {
             let mut state = shared.write().expect("OSC state poisoned");
-            state.bind_host = host.trim().to_string();
-            state.port = port;
             state.listening = false;
-            state.local_address.clear();
             state.last_error = format!("could not bind UDP {address}: {error}");
             None
         }
@@ -422,16 +402,34 @@ fn process_packet(
     depth: u32,
     shared: &Arc<RwLock<OscShared>>,
     snapshot: &Arc<RwLock<OscSnapshot>>,
+    parameters: &ParameterStore,
+    automation: &AutomationHandle,
+    actions: &ControlActionBus,
 ) {
     match packet {
-        OscPacket::Message(message) => process_message(message, sender, depth, shared, snapshot),
+        OscPacket::Message(message) => process_message(
+            message,
+            sender,
+            depth,
+            shared,
+            snapshot,
+            parameters,
+            automation,
+            actions,
+        ),
         OscPacket::Bundle(bundle) => {
-            {
-                let mut state = shared.write().expect("OSC state poisoned");
-                state.total_bundles = state.total_bundles.wrapping_add(1);
-            }
+            shared.write().expect("OSC state poisoned").total_bundles += 1;
             for nested in bundle.content {
-                process_packet(nested, sender, depth.saturating_add(1), shared, snapshot);
+                process_packet(
+                    nested,
+                    sender,
+                    depth.saturating_add(1),
+                    shared,
+                    snapshot,
+                    parameters,
+                    automation,
+                    actions,
+                );
             }
         }
     }
@@ -443,6 +441,9 @@ fn process_message(
     depth: u32,
     shared: &Arc<RwLock<OscShared>>,
     snapshot: &Arc<RwLock<OscSnapshot>>,
+    parameters: &ParameterStore,
+    automation: &AutomationHandle,
+    actions: &ControlActionBus,
 ) {
     let numeric_values = message.args.iter().filter_map(numeric_value).collect::<Vec<_>>();
     let event = OscEvent {
@@ -450,80 +451,119 @@ fn process_message(
         argument_types: message.args.iter().map(argument_type_name).collect(),
         arguments: message.args.iter().map(argument_display).collect(),
         numeric_values: numeric_values.clone(),
-        sender: sender.to_string(),
+        sender: sender.into(),
         bundle_depth: depth,
-        timestamp_micros: SystemTime::now().duration_since(UNIX_EPOCH).map(|value| value.as_micros() as u64).unwrap_or(0),
+        timestamp_micros: SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|value| value.as_micros() as u64)
+            .unwrap_or(0),
     };
 
-    let learn_target = {
+    let mappings = {
         let mut state = shared.write().expect("OSC state poisoned");
         state.total_messages = state.total_messages.wrapping_add(1);
         state.rate_window_messages = state.rate_window_messages.wrapping_add(1);
-        state.last_sender = sender.to_string();
+        state.last_sender = sender.into();
         state.last_error.clear();
         state.history.push_front(event);
         while state.history.len() > HISTORY_LIMIT {
             state.history.pop_back();
         }
-        state.learn_target.take()
+        if let Some(target) = state.learn_target.take() {
+            if let Some((argument_index, _)) = message
+                .args
+                .iter()
+                .enumerate()
+                .find(|(_, argument)| numeric_value(argument).is_some())
+            {
+                let id = state.next_mapping_id;
+                state.next_mapping_id = state.next_mapping_id.wrapping_add(1).max(1);
+                state.mappings.push(OscMapping {
+                    id,
+                    target,
+                    address: message.addr.clone(),
+                    argument_index,
+                    input_min: 0.0,
+                    input_max: 1.0,
+                    output_min: 0.0,
+                    output_max: 1.0,
+                    invert: false,
+                    smoothing: 0.18,
+                    enabled: true,
+                    behavior: "absolute".into(),
+                    curve: "linear".into(),
+                    threshold: 0.5,
+                    note: "Learned".into(),
+                });
+                state.map_name = "Custom / learned".into();
+            } else {
+                state.last_error = "OSC Learn requires a numeric argument".into();
+            }
+        }
+        state.mappings.clone()
     };
 
-    if let Some(target) = learn_target {
-        if let Some((argument_index, _)) = message
-            .args
-            .iter()
-            .enumerate()
-            .find(|(_, argument)| numeric_value(argument).is_some())
-        {
-            let mut state = shared.write().expect("OSC state poisoned");
-            let id = state.next_mapping_id;
-            state.next_mapping_id = state.next_mapping_id.wrapping_add(1);
-            state.mappings.retain(|mapping| mapping.target != target);
-            state.mappings.push(OscMapping {
-                id,
-                target,
-                address: message.addr.clone(),
-                argument_index,
-                input_min: 0.0,
-                input_max: 1.0,
-                output_min: 0.0,
-                output_max: 1.0,
-                invert: false,
-                smoothing: 0.18,
-            });
-            refresh_snapshot_smoothing(&state.mappings, snapshot);
-        } else {
-            shared.write().expect("OSC state poisoned").last_error =
-                "OSC Learn requires an int, float, double, long, bool, or char argument".into();
-        }
+    {
+        let mut data = snapshot.write().expect("OSC snapshot poisoned");
+        let first_value = numeric_values.first().copied().unwrap_or(1.0);
+        let signal_index = address_hash(&message.addr) % SIGNAL_COUNT;
+        data.signals = [0.0; SIGNAL_COUNT];
+        data.signals[signal_index] = normalize_visual_value(first_value);
+        data.last_value = first_value;
+        data.last_address_phase = signal_index as f32 / (SIGNAL_COUNT.saturating_sub(1).max(1) as f32);
+        data.pulse = 1.0;
+        data.signal_sequence = data.signal_sequence.wrapping_add(1);
+        data.sequence = data.sequence.wrapping_add(1);
     }
 
-    let active_mappings = shared.read().expect("OSC state poisoned").mappings.clone();
-    let mut data = snapshot.write().expect("OSC snapshot poisoned");
-    let first_value = numeric_values.first().copied().unwrap_or(1.0);
-    let signal_index = address_hash(&message.addr) % SIGNAL_COUNT;
-    data.signals = [0.0; SIGNAL_COUNT];
-    data.signals[signal_index] = normalize_visual_value(first_value);
-    data.last_value = first_value;
-    data.last_address_phase = signal_index as f32 / (SIGNAL_COUNT.saturating_sub(1).max(1) as f32);
-    data.pulse = 1.0;
-    data.signal_sequence = data.signal_sequence.wrapping_add(1);
-
-    for mapping in active_mappings {
-        if mapping.address != message.addr {
+    for mapping in mappings {
+        if !mapping.enabled || mapping.address != message.addr {
             continue;
         }
         let Some(raw_value) = message.args.get(mapping.argument_index).and_then(numeric_value) else {
             continue;
         };
-        let Some(index) = parameter_index(&mapping.target) else {
-            continue;
+        let mut normalized = ((raw_value - mapping.input_min)
+            / (mapping.input_max - mapping.input_min))
+            .clamp(0.0, 1.0);
+        if mapping.invert {
+            normalized = 1.0 - normalized;
+        }
+        normalized = normalize_curve(normalized, &mapping.curve);
+        if matches!(mapping.behavior.as_str(), "toggle" | "trigger" | "gate") {
+            normalized = if normalized >= mapping.threshold { 1.0 } else { 0.0 };
+        }
+        let previous = shared
+            .read()
+            .expect("OSC state poisoned")
+            .previous_inputs
+            .get(&mapping.id)
+            .copied()
+            .unwrap_or(0.0);
+        let effective = if mapping.behavior == "absolute" {
+            previous + (normalized - previous) * (1.0 - mapping.smoothing.clamp(0.0, 0.98))
+        } else {
+            normalized
         };
-        data.parameters[index] = map_value(raw_value, &mapping);
-        data.smoothing[index] = mapping.smoothing.clamp(0.0, 0.98);
+        if let Err(error) = apply_target(
+            &mapping.target,
+            &mapping.behavior,
+            effective,
+            previous,
+            mapping.output_min,
+            mapping.output_max,
+            parameters,
+            automation,
+            actions,
+        ) {
+            shared.write().expect("OSC state poisoned").last_error = error;
+        }
+        shared
+            .write()
+            .expect("OSC state poisoned")
+            .previous_inputs
+            .insert(mapping.id, effective);
     }
-    data.sequence = data.sequence.wrapping_add(1);
-
 }
 
 fn update_message_rate(shared: &Arc<RwLock<OscShared>>) {
@@ -536,17 +576,15 @@ fn update_message_rate(shared: &Arc<RwLock<OscShared>>) {
     }
 }
 
-fn parameter_index(name: &str) -> Option<usize> {
-    PARAMETER_NAMES.iter().position(|candidate| *candidate == name)
-}
-
-fn normalize_mapping(mapping: &mut OscMapping) {
-    let trimmed_address = mapping.address.trim();
-    mapping.address = if trimmed_address.starts_with('/') {
-        trimmed_address.to_string()
-    } else {
-        format!("/{trimmed_address}")
-    };
+fn normalize_mapping(mapping: &mut OscMapping) -> Result<(), String> {
+    if !valid_target(&mapping.target) {
+        return Err(format!("invalid OSC mapping target: {}", mapping.target));
+    }
+    let trimmed = mapping.address.trim();
+    mapping.address = if trimmed.starts_with('/') { trimmed.into() } else { format!("/{trimmed}") };
+    if mapping.address == "/" {
+        return Err("OSC address cannot be empty".into());
+    }
     mapping.input_min = finite_or(mapping.input_min, 0.0);
     mapping.input_max = finite_or(mapping.input_max, 1.0);
     if (mapping.input_max - mapping.input_min).abs() < f32::EPSILON {
@@ -555,32 +593,128 @@ fn normalize_mapping(mapping: &mut OscMapping) {
     mapping.output_min = finite_or(mapping.output_min, 0.0).clamp(0.0, 1.0);
     mapping.output_max = finite_or(mapping.output_max, 1.0).clamp(0.0, 1.0);
     mapping.smoothing = finite_or(mapping.smoothing, 0.18).clamp(0.0, 0.98);
+    mapping.threshold = finite_or(mapping.threshold, 0.5).clamp(0.0, 1.0);
+    if !matches!(mapping.behavior.as_str(), "absolute" | "toggle" | "gate" | "trigger") {
+        mapping.behavior = "absolute".into();
+    }
+    if !matches!(mapping.curve.as_str(), "linear" | "square" | "cube" | "sqrt" | "smooth") {
+        mapping.curve = "linear".into();
+    }
+    Ok(())
 }
 
-fn refresh_snapshot_smoothing(mappings: &[OscMapping], snapshot: &Arc<RwLock<OscSnapshot>>) {
-    let mut data = snapshot.write().expect("OSC snapshot poisoned");
-    data.smoothing = [0.18; PARAMETER_COUNT];
-    for mapping in mappings {
-        if let Some(index) = parameter_index(&mapping.target) {
-            data.smoothing[index] = mapping.smoothing.clamp(0.0, 0.98);
+fn update_mapping(mut mapping: OscMapping, shared: &Arc<RwLock<OscShared>>) {
+    let result = normalize_mapping(&mut mapping);
+    let mut state = shared.write().expect("OSC state poisoned");
+    if let Err(error) = result {
+        state.last_error = error;
+        return;
+    }
+    if mapping.id == 0 {
+        mapping.id = state.next_mapping_id;
+        state.next_mapping_id = state.next_mapping_id.wrapping_add(1).max(1);
+        state.mappings.push(mapping);
+    } else if let Some(existing) = state.mappings.iter_mut().find(|item| item.id == mapping.id) {
+        *existing = mapping;
+    } else {
+        state.next_mapping_id = state.next_mapping_id.max(mapping.id.saturating_add(1));
+        state.mappings.push(mapping);
+    }
+    state.map_name = "Custom".into();
+    state.last_error.clear();
+}
+
+fn replace_mappings(mappings: Vec<OscMapping>, shared: &Arc<RwLock<OscShared>>) {
+    let mut cleaned = Vec::new();
+    let mut errors = Vec::new();
+    let mut next_id = 1_u64;
+    for mut mapping in mappings.into_iter().take(256) {
+        if mapping.id == 0 {
+            mapping.id = next_id;
+        }
+        next_id = next_id.max(mapping.id.saturating_add(1));
+        match normalize_mapping(&mut mapping) {
+            Ok(()) => cleaned.push(mapping),
+            Err(error) => errors.push(error),
         }
     }
-    data.sequence = data.sequence.wrapping_add(1);
+    let mut state = shared.write().expect("OSC state poisoned");
+    state.mappings = cleaned;
+    state.previous_inputs.clear();
+    state.next_mapping_id = next_id.max(1);
+    state.learn_target = None;
+    state.last_error = errors.join("; ");
 }
 
-fn map_value(value: f32, mapping: &OscMapping) -> f32 {
-    let mut normalized = ((value - mapping.input_min) / (mapping.input_max - mapping.input_min)).clamp(0.0, 1.0);
-    if mapping.invert {
-        normalized = 1.0 - normalized;
+fn mapping_warnings(mappings: &[OscMapping]) -> Vec<String> {
+    let mut warnings = Vec::new();
+    for (index, mapping) in mappings.iter().enumerate() {
+        if !valid_target(&mapping.target) {
+            warnings.push(format!("Mapping {} has unknown target {}", mapping.id, mapping.target));
+        }
+        for other in mappings.iter().skip(index + 1) {
+            if mapping.enabled
+                && other.enabled
+                && mapping.address == other.address
+                && mapping.argument_index == other.argument_index
+            {
+                warnings.push(format!(
+                    "Source conflict: {}[{}] drives {} and {}",
+                    mapping.address, mapping.argument_index, mapping.target, other.target
+                ));
+            }
+        }
     }
-    (mapping.output_min + normalized * (mapping.output_max - mapping.output_min)).clamp(0.0, 1.0)
+    warnings
+}
+
+fn starter_mappings() -> Vec<OscMapping> {
+    vec![
+        OscMapping {
+            id: 1,
+            target: "feedback.amount".into(),
+            address: "/huff/feedback".into(),
+            argument_index: 0,
+            input_min: 0.0,
+            input_max: 1.0,
+            output_min: 0.0,
+            output_max: 1.0,
+            invert: false,
+            smoothing: 0.18,
+            enabled: true,
+            behavior: "absolute".into(),
+            curve: "linear".into(),
+            threshold: 0.5,
+            note: "Feedback amount".into(),
+        },
+        OscMapping {
+            id: 2,
+            target: "flow_pulse".into(),
+            address: "/huff/flow/pulse".into(),
+            argument_index: 0,
+            input_min: 0.0,
+            input_max: 1.0,
+            output_min: 0.0,
+            output_max: 1.0,
+            invert: false,
+            smoothing: 0.0,
+            enabled: true,
+            behavior: "trigger".into(),
+            curve: "linear".into(),
+            threshold: 0.1,
+            note: "Flow pulse".into(),
+        },
+    ]
+}
+
+fn finite_or(value: f32, fallback: f32) -> f32 {
+    if value.is_finite() { value } else { fallback }
 }
 
 fn normalize_visual_value(value: f32) -> f32 {
     if !value.is_finite() {
-        return 0.0;
-    }
-    if (0.0..=1.0).contains(&value) {
+        0.0
+    } else if (0.0..=1.0).contains(&value) {
         value
     } else {
         (value.abs() / (1.0 + value.abs())).clamp(0.0, 1.0)
@@ -616,7 +750,7 @@ fn argument_type_name(value: &OscType) -> String {
         OscType::Nil => "nil",
         OscType::Inf => "inf",
     }
-    .to_string()
+    .into()
 }
 
 fn argument_display(value: &OscType) -> String {
@@ -645,31 +779,4 @@ fn address_hash(address: &str) -> usize {
         hash = hash.wrapping_mul(16_777_619);
     }
     hash as usize
-}
-
-fn finite_or(value: f32, fallback: f32) -> f32 {
-    if value.is_finite() { value } else { fallback }
-}
-
-fn starter_mappings() -> Vec<OscMapping> {
-    PARAMETER_NAMES
-        .iter()
-        .enumerate()
-        .map(|(index, target)| OscMapping {
-            id: index as u64 + 1,
-            target: (*target).to_string(),
-            address: match *target {
-                "field_strength" => "/field".into(),
-                "pulse_decay" => "/pulse_decay".into(),
-                other => format!("/{other}"),
-            },
-            argument_index: 0,
-            input_min: 0.0,
-            input_max: 1.0,
-            output_min: 0.0,
-            output_max: 1.0,
-            invert: false,
-            smoothing: 0.18,
-        })
-        .collect()
 }

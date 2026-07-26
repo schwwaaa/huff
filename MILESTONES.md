@@ -1,7 +1,7 @@
 # HUFF Native wgpu — Master Milestone Record
 
-**Current build:** `0.16.0 / HNW-16`  
-**Current milestone:** Milestone 16 — Parameter Contract and Parity Lab  
+**Current build:** `0.17.0 / HNW-17`  
+**Current milestone:** Milestone 17 — MIDI and OSC Mapping Workflows  
 **Tracking rule:** This file is the authoritative milestone index. It must be carried forward and updated in every complete project archive and every changed-files archive from Milestone 16 onward.
 
 This record describes the purpose of each milestone rather than serving as a detailed changelog. Corrective sub-milestones are listed with the milestone they stabilize. Runtime status is intentionally honest: a feature may be structurally integrated while still awaiting the larger cross-feature refinement and verification cycle.
@@ -74,11 +74,13 @@ Milestone 16 embeds the exact legacy HUFF control contract extracted from the su
 
 ---
 
-# Planned Milestones
-
 ## Milestone 17 — MIDI and OSC Mapping Workflows
 
-Milestone 17 will turn the existing native MIDI and OSC foundations into complete user-facing mapping workflows. The target is reliable import, editing, validation, saving, conflict visibility, scaling, toggle/trigger behavior, and portable mapping files using canonical parameter and action identifiers. The milestone should preserve the ability to use small factory maps while making custom controllers practical without hand-editing JSON for every change.
+Milestone 17 replaces the original eight demonstration input targets with mappings that write directly into HUFF’s canonical native parameter store and action system. MIDI and OSC mappings can now be learned, added, edited, enabled or disabled, validated for conflicting sources, scaled through normalized output ranges, shaped with selectable curves, and assigned Absolute, Gate, Toggle, or Trigger behavior. Portable `huff-control-map/v1` JSON files can be opened and saved through native dialogs, compact factory maps remain available, OSC listener controls are exposed in the interface, and mapped changes are recorded by the automation system when recording is active. Clear Buffers, Flow Pulse, and Reset Parameters are available as canonical action targets. The feature is integrated for the later controller-specific test cycle; individual devices and unusual MIDI/OSC senders may still require refinement.
+
+---
+
+# Planned Milestones
 
 ## Milestone 18 — Presets, Snapshots, Sequences, and Projects
 

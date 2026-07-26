@@ -1,9 +1,17 @@
+use crate::{
+    automation::AutomationHandle,
+    control_mapping::{
+        apply_target, default_behavior, default_curve, default_threshold, default_true,
+        normalize_curve, valid_target, ControlActionBus,
+    },
+    parameters::ParameterStore,
+};
 use midir::{Ignore, MidiInput, MidiInputConnection};
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::VecDeque,
+    collections::{BTreeMap, VecDeque},
     sync::{
-        mpsc::{sync_channel, Receiver, SyncSender, TryRecvError},
+        mpsc::{sync_channel, Receiver, SyncSender},
         Arc, RwLock,
     },
     thread,
@@ -25,26 +33,8 @@ pub const PARAMETER_NAMES: [&str; PARAMETER_COUNT] = [
     "pulse_decay",
 ];
 
-pub const PARAMETER_LABELS: [&str; PARAMETER_COUNT] = [
-    "Hue",
-    "Zoom",
-    "Rotation",
-    "Field strength",
-    "Turbulence",
-    "Trail persistence",
-    "Exposure",
-    "Pulse decay",
-];
-
 pub const DEFAULT_PARAMETERS: [f32; PARAMETER_COUNT] = [
-    0.58, // hue
-    0.45, // normalized zoom
-    0.50, // normalized rotation
-    0.55, // field strength
-    0.42, // turbulence
-    0.76, // trail persistence
-    0.45, // normalized exposure
-    0.62, // pulse decay
+    0.58, 0.45, 0.50, 0.55, 0.42, 0.76, 0.45, 0.62,
 ];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -72,6 +62,16 @@ pub struct MidiMapping {
     pub max: f32,
     pub invert: bool,
     pub smoothing: f32,
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    #[serde(default = "default_behavior")]
+    pub behavior: String,
+    #[serde(default = "default_curve")]
+    pub curve: String,
+    #[serde(default = "default_threshold")]
+    pub threshold: f32,
+    #[serde(default)]
+    pub note: String,
 }
 
 #[derive(Debug, Clone)]
@@ -81,24 +81,13 @@ pub enum MidiCommand {
     Disconnect,
     ArmLearn(String),
     CancelLearn,
-    SetManual(String, f32),
     UpdateMapping(MidiMapping),
     DeleteMapping(u64),
     ReplaceMappings(Vec<MidiMapping>),
     ClearMappings,
     LoadStarterMappings,
-    ResetParameters,
+    SetMapName(String),
     Shutdown,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ParameterInfo {
-    pub name: String,
-    pub label: String,
-    pub value: f32,
-    pub smoothing: f32,
-    pub mapped: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -108,8 +97,9 @@ pub struct MidiInfo {
     pub connected_port: String,
     pub connected: bool,
     pub learn_target: String,
+    pub map_name: String,
     pub mappings: Vec<MidiMapping>,
-    pub parameters: Vec<ParameterInfo>,
+    pub validation_warnings: Vec<String>,
     pub history: Vec<MidiEvent>,
     pub total_messages: u64,
     pub messages_per_second: f64,
@@ -153,7 +143,9 @@ struct MidiShared {
     ports: Vec<String>,
     connected_port: String,
     learn_target: Option<String>,
+    map_name: String,
     mappings: Vec<MidiMapping>,
+    previous_inputs: BTreeMap<u64, f32>,
     history: VecDeque<MidiEvent>,
     total_messages: u64,
     messages_per_second: f64,
@@ -169,7 +161,9 @@ impl Default for MidiShared {
             ports: Vec::new(),
             connected_port: String::new(),
             learn_target: None,
+            map_name: "Factory: Minimal".into(),
             mappings: Vec::new(),
+            previous_inputs: BTreeMap::new(),
             history: VecDeque::with_capacity(HISTORY_LIMIT),
             total_messages: 0,
             messages_per_second: 0.0,
@@ -197,33 +191,29 @@ impl MidiHandle {
         Arc::clone(&self.snapshot)
     }
 
+    pub fn mappings(&self) -> Vec<MidiMapping> {
+        self.shared
+            .read()
+            .expect("MIDI state poisoned")
+            .mappings
+            .clone()
+    }
+
     pub fn info(&self) -> MidiInfo {
         let shared = self.shared.read().expect("MIDI state poisoned");
         let snapshot = self.snapshot.read().expect("MIDI snapshot poisoned");
-        let parameters = PARAMETER_NAMES
-            .iter()
-            .enumerate()
-            .map(|(index, name)| ParameterInfo {
-                name: (*name).to_string(),
-                label: PARAMETER_LABELS[index].to_string(),
-                value: snapshot.parameters[index],
-                smoothing: snapshot.smoothing[index],
-                mapped: shared.mappings.iter().any(|mapping| mapping.target == *name),
-            })
-            .collect();
-        let active_notes = snapshot.notes.iter().filter(|value| **value > 0.001).count() as u32;
-
         MidiInfo {
             ports: shared.ports.clone(),
             connected_port: shared.connected_port.clone(),
             connected: !shared.connected_port.is_empty(),
             learn_target: shared.learn_target.clone().unwrap_or_default(),
+            map_name: shared.map_name.clone(),
             mappings: shared.mappings.clone(),
-            parameters,
+            validation_warnings: mapping_warnings(&shared.mappings),
             history: shared.history.iter().cloned().collect(),
             total_messages: shared.total_messages,
             messages_per_second: shared.messages_per_second,
-            active_notes,
+            active_notes: snapshot.notes.iter().filter(|value| **value > 0.001).count() as u32,
             pitch_bend: snapshot.pitch_bend,
             channel_pressure: snapshot.channel_pressure,
             sequence: snapshot.sequence,
@@ -232,20 +222,33 @@ impl MidiHandle {
     }
 }
 
-pub fn start() -> Result<MidiHandle, String> {
+pub fn start(
+    parameters: ParameterStore,
+    automation: AutomationHandle,
+    actions: ControlActionBus,
+) -> Result<MidiHandle, String> {
     let (tx, rx) = sync_channel(256);
     let shared = Arc::new(RwLock::new(MidiShared::default()));
     let snapshot = Arc::new(RwLock::new(MidiSnapshot::default()));
-
     let thread_shared = Arc::clone(&shared);
     let thread_snapshot = Arc::clone(&snapshot);
     thread::Builder::new()
         .name("huff-midi-registry".into())
-        .spawn(move || run_midi_thread(rx, thread_shared, thread_snapshot))
+        .spawn(move || {
+            run_midi_thread(
+                rx,
+                thread_shared,
+                thread_snapshot,
+                parameters,
+                automation,
+                actions,
+            )
+        })
         .map_err(|error| format!("could not start MIDI thread: {error}"))?;
 
     let handle = MidiHandle { tx, shared, snapshot };
     handle.send(MidiCommand::RefreshPorts);
+    handle.send(MidiCommand::LoadStarterMappings);
     Ok(handle)
 }
 
@@ -253,15 +256,24 @@ fn run_midi_thread(
     rx: Receiver<MidiCommand>,
     shared: Arc<RwLock<MidiShared>>,
     snapshot: Arc<RwLock<MidiSnapshot>>,
+    parameters: ParameterStore,
+    automation: AutomationHandle,
+    actions: ControlActionBus,
 ) {
     let mut connection: Option<MidiInputConnection<()>> = None;
-
     loop {
         match rx.recv_timeout(Duration::from_millis(40)) {
             Ok(MidiCommand::RefreshPorts) => refresh_ports(&shared),
             Ok(MidiCommand::Connect(name)) => {
                 connection = None;
-                match open_connection(&name, Arc::clone(&shared), Arc::clone(&snapshot)) {
+                match open_connection(
+                    &name,
+                    Arc::clone(&shared),
+                    Arc::clone(&snapshot),
+                    parameters.clone(),
+                    automation.clone(),
+                    actions.clone(),
+                ) {
                     Ok(new_connection) => {
                         connection = Some(new_connection);
                         let mut state = shared.write().expect("MIDI state poisoned");
@@ -282,56 +294,38 @@ fn run_midi_thread(
                 state.learn_target = None;
             }
             Ok(MidiCommand::ArmLearn(target)) => {
-                if parameter_index(&target).is_some() {
+                if valid_target(&target) {
                     shared.write().expect("MIDI state poisoned").learn_target = Some(target);
                 }
             }
             Ok(MidiCommand::CancelLearn) => {
                 shared.write().expect("MIDI state poisoned").learn_target = None;
             }
-            Ok(MidiCommand::SetManual(target, value)) => {
-                if let Some(index) = parameter_index(&target) {
-                    let mut data = snapshot.write().expect("MIDI snapshot poisoned");
-                    data.parameters[index] = value.clamp(0.0, 1.0);
-                    data.sequence = data.sequence.wrapping_add(1);
-                }
-            }
-            Ok(MidiCommand::UpdateMapping(mapping)) => {
-                update_mapping(mapping, &shared, &snapshot);
-            }
+            Ok(MidiCommand::UpdateMapping(mapping)) => update_mapping(mapping, &shared),
             Ok(MidiCommand::DeleteMapping(id)) => {
                 let mut state = shared.write().expect("MIDI state poisoned");
                 state.mappings.retain(|mapping| mapping.id != id);
-                refresh_mapping_smoothing(&state.mappings, &snapshot);
+                state.previous_inputs.remove(&id);
             }
-            Ok(MidiCommand::ReplaceMappings(mappings)) => {
-                replace_mappings(mappings, &shared, &snapshot);
-            }
+            Ok(MidiCommand::ReplaceMappings(mappings)) => replace_mappings(mappings, &shared),
             Ok(MidiCommand::ClearMappings) => {
                 let mut state = shared.write().expect("MIDI state poisoned");
                 state.mappings.clear();
+                state.previous_inputs.clear();
                 state.learn_target = None;
-                snapshot.write().expect("MIDI snapshot poisoned").smoothing = [0.18; PARAMETER_COUNT];
+                state.map_name = "Empty".into();
             }
             Ok(MidiCommand::LoadStarterMappings) => {
-                replace_mappings(starter_mappings(), &shared, &snapshot);
+                replace_mappings(starter_mappings(), &shared);
+                shared.write().expect("MIDI state poisoned").map_name = "Factory: Minimal".into();
             }
-            Ok(MidiCommand::ResetParameters) => {
-                let mut data = snapshot.write().expect("MIDI snapshot poisoned");
-                data.parameters = DEFAULT_PARAMETERS;
-                data.pitch_bend = 0.0;
-                data.channel_pressure = 0.0;
-                data.pulse = 0.0;
-                data.note_sequence = data.note_sequence.wrapping_add(1);
-                data.notes = [0.0; NOTE_COUNT];
-                data.sequence = data.sequence.wrapping_add(1);
+            Ok(MidiCommand::SetMapName(name)) => {
+                shared.write().expect("MIDI state poisoned").map_name = name;
             }
             Ok(MidiCommand::Shutdown) => break,
             Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
             Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
         }
-
-        // The connection is intentionally held by this thread. Dropping it disconnects the port.
         let _connection_is_active = connection.is_some();
     }
 }
@@ -359,6 +353,9 @@ fn open_connection(
     requested_name: &str,
     shared: Arc<RwLock<MidiShared>>,
     snapshot: Arc<RwLock<MidiSnapshot>>,
+    parameters: ParameterStore,
+    automation: AutomationHandle,
+    actions: ControlActionBus,
 ) -> Result<MidiInputConnection<()>, String> {
     let mut input = MidiInput::new("huff-midi-input").map_err(|error| error.to_string())?;
     input.ignore(Ignore::None);
@@ -383,11 +380,16 @@ fn open_connection(
             &port,
             "huff-midi-connection",
             move |timestamp, bytes, _| {
-                if bytes.is_empty() {
-                    return;
+                if !bytes.is_empty() {
+                    process_event(
+                        parse_midi(timestamp, bytes),
+                        &shared,
+                        &snapshot,
+                        &parameters,
+                        &automation,
+                        &actions,
+                    );
                 }
-                let event = parse_midi(timestamp, bytes);
-                process_event(event, &shared, &snapshot);
             },
             (),
         )
@@ -400,7 +402,6 @@ fn parse_midi(timestamp_micros: u64, bytes: &[u8]) -> MidiEvent {
     let data2 = bytes.get(2).copied().unwrap_or(0);
     let message_type = status & 0xF0;
     let channel = (status & 0x0F) + 1;
-
     let (kind, number, raw_value, value, signed_value) = match message_type {
         0x80 => ("note_off", data1, data2, 0.0, -1.0),
         0x90 if data2 > 0 => {
@@ -429,12 +430,10 @@ fn parse_midi(timestamp_micros: u64, bytes: &[u8]) -> MidiEvent {
             let normalized = raw14 as f32 / 16383.0;
             ("pitch_bend", 0, data2, normalized, normalized * 2.0 - 1.0)
         }
-        0xF0 => ("system", data1, data2, 0.0, 0.0),
         _ => ("unknown", data1, data2, 0.0, 0.0),
     };
-
     MidiEvent {
-        kind: kind.to_string(),
+        kind: kind.into(),
         channel,
         data1: number,
         data2: raw_value,
@@ -449,9 +448,11 @@ fn process_event(
     event: MidiEvent,
     shared: &Arc<RwLock<MidiShared>>,
     snapshot: &Arc<RwLock<MidiSnapshot>>,
+    parameters: &ParameterStore,
+    automation: &AutomationHandle,
+    actions: &ControlActionBus,
 ) {
-    let mut learned_mapping: Option<MidiMapping> = None;
-    {
+    let mappings = {
         let mut state = shared.write().expect("MIDI state poisoned");
         state.total_messages = state.total_messages.wrapping_add(1);
         state.rate_window_messages = state.rate_window_messages.wrapping_add(1);
@@ -469,86 +470,99 @@ fn process_event(
 
         if let Some(target) = state.learn_target.take() {
             if can_learn_from(&event) {
-                state.mappings.retain(|mapping| mapping.target != target);
-                let mapping = MidiMapping {
-                    id: state.next_mapping_id,
+                let id = state.next_mapping_id;
+                state.next_mapping_id = state.next_mapping_id.wrapping_add(1).max(1);
+                state.mappings.push(MidiMapping {
+                    id,
                     target,
-                    source_kind: learn_kind(&event).to_string(),
+                    source_kind: learn_kind(&event).into(),
                     channel: event.channel,
                     number: event.data1,
                     min: 0.0,
                     max: 1.0,
                     invert: false,
                     smoothing: 0.18,
-                };
-                state.next_mapping_id = state.next_mapping_id.wrapping_add(1).max(1);
-                state.mappings.push(mapping.clone());
-                learned_mapping = Some(mapping);
+                    enabled: true,
+                    behavior: if event.kind == "note_on" { "toggle".into() } else { "absolute".into() },
+                    curve: "linear".into(),
+                    threshold: 0.5,
+                    note: "Learned".into(),
+                });
+                state.map_name = "Custom / learned".into();
             } else {
                 state.learn_target = Some(target);
             }
         }
+        state.mappings.clone()
+    };
 
-        let mappings = state.mappings.clone();
-        drop(state);
-        apply_event_to_snapshot(&event, &mappings, snapshot);
-    }
-
-    if let Some(mapping) = learned_mapping {
-        if let Some(index) = parameter_index(&mapping.target) {
-            snapshot.write().expect("MIDI snapshot poisoned").smoothing[index] = mapping.smoothing;
-        }
-    }
-}
-
-fn apply_event_to_snapshot(
-    event: &MidiEvent,
-    mappings: &[MidiMapping],
-    snapshot: &Arc<RwLock<MidiSnapshot>>,
-) {
-    let mut data = snapshot.write().expect("MIDI snapshot poisoned");
-    match event.kind.as_str() {
-        "note_on" => {
-            let index = event.data1 as usize;
-            if index < NOTE_COUNT {
-                data.notes[index] = event.value;
-                data.last_note = event.data1 as f32 / 127.0;
-                data.pulse = event.value.max(data.pulse);
-                data.note_sequence = data.note_sequence.wrapping_add(1);
+    {
+        let mut data = snapshot.write().expect("MIDI snapshot poisoned");
+        match event.kind.as_str() {
+            "note_on" => {
+                let index = event.data1 as usize;
+                if index < NOTE_COUNT {
+                    data.notes[index] = event.value;
+                    data.last_note = event.data1 as f32 / 127.0;
+                    data.pulse = event.value.max(data.pulse);
+                    data.note_sequence = data.note_sequence.wrapping_add(1);
+                }
             }
-        }
-        "note_off" => {
-            let index = event.data1 as usize;
-            if index < NOTE_COUNT {
-                data.notes[index] = 0.0;
+            "note_off" => {
+                let index = event.data1 as usize;
+                if index < NOTE_COUNT {
+                    data.notes[index] = 0.0;
+                }
             }
+            "pitch_bend" => data.pitch_bend = event.signed_value,
+            "channel_pressure" => data.channel_pressure = event.value,
+            _ => {}
         }
-        "pitch_bend" => data.pitch_bend = event.signed_value,
-        "channel_pressure" => data.channel_pressure = event.value,
-        _ => {}
+        data.sequence = data.sequence.wrapping_add(1);
     }
 
     for mapping in mappings {
-        if !mapping_matches(mapping, event) {
+        if !mapping.enabled || !mapping_matches(&mapping, &event) {
             continue;
         }
-        if let Some(index) = parameter_index(&mapping.target) {
-            let source_value = if mapping.source_kind == "note_on" && event.kind == "note_off" {
-                0.0
-            } else {
-                event.value
-            };
-            let normalized = if mapping.invert {
-                1.0 - source_value
-            } else {
-                source_value
-            };
-            data.parameters[index] = (mapping.min + (mapping.max - mapping.min) * normalized)
-                .clamp(0.0, 1.0);
-            data.smoothing[index] = mapping.smoothing.clamp(0.0, 0.98);
+        let source_value = if mapping.source_kind == "note_on" && event.kind == "note_off" {
+            0.0
+        } else {
+            event.value
+        };
+        let mut normalized = if mapping.invert { 1.0 - source_value } else { source_value };
+        normalized = normalize_curve(normalized, &mapping.curve);
+        if matches!(mapping.behavior.as_str(), "toggle" | "trigger" | "gate") {
+            normalized = if normalized >= mapping.threshold { 1.0 } else { 0.0 };
         }
+        let previous = {
+            let state = shared.read().expect("MIDI state poisoned");
+            state.previous_inputs.get(&mapping.id).copied().unwrap_or(0.0)
+        };
+        let effective = if mapping.behavior == "absolute" {
+            previous + (normalized - previous) * (1.0 - mapping.smoothing.clamp(0.0, 0.98))
+        } else {
+            normalized
+        };
+        if let Err(error) = apply_target(
+            &mapping.target,
+            &mapping.behavior,
+            effective,
+            previous,
+            mapping.min,
+            mapping.max,
+            parameters,
+            automation,
+            actions,
+        ) {
+            shared.write().expect("MIDI state poisoned").last_error = error;
+        }
+        shared
+            .write()
+            .expect("MIDI state poisoned")
+            .previous_inputs
+            .insert(mapping.id, effective);
     }
-    data.sequence = data.sequence.wrapping_add(1);
 }
 
 fn can_learn_from(event: &MidiEvent) -> bool {
@@ -559,10 +573,7 @@ fn can_learn_from(event: &MidiEvent) -> bool {
 }
 
 fn learn_kind(event: &MidiEvent) -> &str {
-    match event.kind.as_str() {
-        "note_off" => "note_on",
-        kind => kind,
-    }
+    if event.kind == "note_off" { "note_on" } else { &event.kind }
 }
 
 fn mapping_matches(mapping: &MidiMapping, event: &MidiEvent) -> bool {
@@ -577,135 +588,134 @@ fn mapping_matches(mapping: &MidiMapping, event: &MidiEvent) -> bool {
             mapping.source_kind == event.kind && mapping.number == event.data1
         }
         "pitch_bend" | "channel_pressure" => mapping.source_kind == event.kind,
+        "program_change" => event.kind == "program_change" && mapping.number == event.data1,
         _ => false,
     }
 }
 
-fn parameter_index(name: &str) -> Option<usize> {
-    PARAMETER_NAMES.iter().position(|candidate| *candidate == name)
-}
-
-fn update_mapping(
-    mut mapping: MidiMapping,
-    shared: &Arc<RwLock<MidiShared>>,
-    snapshot: &Arc<RwLock<MidiSnapshot>>,
-) {
-    if parameter_index(&mapping.target).is_none() {
-        return;
+fn normalize_mapping(mapping: &mut MidiMapping) -> Result<(), String> {
+    if !valid_target(&mapping.target) {
+        return Err(format!("invalid MIDI mapping target: {}", mapping.target));
     }
+    if !matches!(
+        mapping.source_kind.as_str(),
+        "cc" | "note_on" | "pitch_bend" | "channel_pressure" | "poly_aftertouch" | "program_change"
+    ) {
+        return Err(format!("invalid MIDI source kind: {}", mapping.source_kind));
+    }
+    if !matches!(mapping.behavior.as_str(), "absolute" | "toggle" | "gate" | "trigger") {
+        mapping.behavior = "absolute".into();
+    }
+    if !matches!(mapping.curve.as_str(), "linear" | "square" | "cube" | "sqrt" | "smooth") {
+        mapping.curve = "linear".into();
+    }
+    mapping.channel = mapping.channel.min(16);
     mapping.min = mapping.min.clamp(0.0, 1.0);
     mapping.max = mapping.max.clamp(0.0, 1.0);
     mapping.smoothing = mapping.smoothing.clamp(0.0, 0.98);
-    let mut state = shared.write().expect("MIDI state poisoned");
-    if let Some(existing) = state.mappings.iter_mut().find(|item| item.id == mapping.id) {
-        *existing = mapping;
-    }
-    refresh_mapping_smoothing(&state.mappings, snapshot);
+    mapping.threshold = mapping.threshold.clamp(0.0, 1.0);
+    Ok(())
 }
 
-fn replace_mappings(
-    mappings: Vec<MidiMapping>,
-    shared: &Arc<RwLock<MidiShared>>,
-    snapshot: &Arc<RwLock<MidiSnapshot>>,
-) {
+fn update_mapping(mut mapping: MidiMapping, shared: &Arc<RwLock<MidiShared>>) {
+    let result = normalize_mapping(&mut mapping);
+    let mut state = shared.write().expect("MIDI state poisoned");
+    if let Err(error) = result {
+        state.last_error = error;
+        return;
+    }
+    if mapping.id == 0 {
+        mapping.id = state.next_mapping_id;
+        state.next_mapping_id = state.next_mapping_id.wrapping_add(1).max(1);
+        state.mappings.push(mapping);
+    } else if let Some(existing) = state.mappings.iter_mut().find(|item| item.id == mapping.id) {
+        *existing = mapping;
+    } else {
+        state.next_mapping_id = state.next_mapping_id.max(mapping.id.saturating_add(1));
+        state.mappings.push(mapping);
+    }
+    state.map_name = "Custom".into();
+    state.last_error.clear();
+}
+
+fn replace_mappings(mappings: Vec<MidiMapping>, shared: &Arc<RwLock<MidiShared>>) {
     let mut cleaned = Vec::new();
+    let mut errors = Vec::new();
     let mut next_id = 1_u64;
-    for mut mapping in mappings.into_iter().take(64) {
-        if parameter_index(&mapping.target).is_none() {
-            continue;
-        }
-        if !matches!(
-            mapping.source_kind.as_str(),
-            "cc" | "note_on" | "pitch_bend" | "channel_pressure" | "poly_aftertouch"
-        ) {
-            continue;
-        }
-        mapping.min = mapping.min.clamp(0.0, 1.0);
-        mapping.max = mapping.max.clamp(0.0, 1.0);
-        mapping.smoothing = mapping.smoothing.clamp(0.0, 0.98);
+    for mut mapping in mappings.into_iter().take(256) {
         if mapping.id == 0 {
             mapping.id = next_id;
         }
         next_id = next_id.max(mapping.id.saturating_add(1));
-        cleaned.push(mapping);
-    }
-
-    let mut state = shared.write().expect("MIDI state poisoned");
-    state.mappings = cleaned;
-    state.next_mapping_id = next_id.max(1);
-    state.learn_target = None;
-    refresh_mapping_smoothing(&state.mappings, snapshot);
-}
-
-fn refresh_mapping_smoothing(
-    mappings: &[MidiMapping],
-    snapshot: &Arc<RwLock<MidiSnapshot>>,
-) {
-    let mut data = snapshot.write().expect("MIDI snapshot poisoned");
-    data.smoothing = [0.18; PARAMETER_COUNT];
-    for mapping in mappings {
-        if let Some(index) = parameter_index(&mapping.target) {
-            data.smoothing[index] = mapping.smoothing.clamp(0.0, 0.98);
+        match normalize_mapping(&mut mapping) {
+            Ok(()) => cleaned.push(mapping),
+            Err(error) => errors.push(error),
         }
     }
+    let mut state = shared.write().expect("MIDI state poisoned");
+    state.mappings = cleaned;
+    state.previous_inputs.clear();
+    state.next_mapping_id = next_id.max(1);
+    state.learn_target = None;
+    state.last_error = errors.join("; ");
+}
+
+fn mapping_warnings(mappings: &[MidiMapping]) -> Vec<String> {
+    let mut warnings = Vec::new();
+    for (index, mapping) in mappings.iter().enumerate() {
+        if !valid_target(&mapping.target) {
+            warnings.push(format!("Mapping {} has unknown target {}", mapping.id, mapping.target));
+        }
+        for other in mappings.iter().skip(index + 1) {
+            if mapping.enabled
+                && other.enabled
+                && mapping.source_kind == other.source_kind
+                && mapping.channel == other.channel
+                && mapping.number == other.number
+            {
+                warnings.push(format!(
+                    "Source conflict: {} ch{} #{} drives {} and {}",
+                    mapping.source_kind, mapping.channel, mapping.number, mapping.target, other.target
+                ));
+            }
+        }
+    }
+    warnings
 }
 
 fn starter_mappings() -> Vec<MidiMapping> {
     vec![
         MidiMapping {
             id: 1,
-            target: "field_strength".into(),
+            target: "feedback.amount".into(),
             source_kind: "cc".into(),
             channel: 1,
             number: 1,
             min: 0.0,
             max: 1.0,
             invert: false,
-            smoothing: 0.22,
+            smoothing: 0.18,
+            enabled: true,
+            behavior: "absolute".into(),
+            curve: "linear".into(),
+            threshold: 0.5,
+            note: "Mod wheel → feedback".into(),
         },
         MidiMapping {
             id: 2,
-            target: "exposure".into(),
-            source_kind: "cc".into(),
+            target: "flow_pulse".into(),
+            source_kind: "note_on".into(),
             channel: 1,
-            number: 7,
-            min: 0.15,
-            max: 0.9,
-            invert: false,
-            smoothing: 0.18,
-        },
-        MidiMapping {
-            id: 3,
-            target: "hue".into(),
-            source_kind: "cc".into(),
-            channel: 1,
-            number: 10,
+            number: 60,
             min: 0.0,
             max: 1.0,
             invert: false,
-            smoothing: 0.12,
-        },
-        MidiMapping {
-            id: 4,
-            target: "turbulence".into(),
-            source_kind: "cc".into(),
-            channel: 1,
-            number: 74,
-            min: 0.0,
-            max: 1.0,
-            invert: false,
-            smoothing: 0.28,
-        },
-        MidiMapping {
-            id: 5,
-            target: "rotation".into(),
-            source_kind: "pitch_bend".into(),
-            channel: 1,
-            number: 0,
-            min: 0.0,
-            max: 1.0,
-            invert: false,
-            smoothing: 0.35,
+            smoothing: 0.0,
+            enabled: true,
+            behavior: "trigger".into(),
+            curve: "linear".into(),
+            threshold: 0.1,
+            note: "Middle C → Flow pulse".into(),
         },
     ]
 }

@@ -940,6 +940,35 @@
             font-size: 11px; color: var(--term-dgreen); max-width: 155px;
             font-family: 'VT323', monospace;
         }
+
+        /* Milestone 17 canonical mapping editor */
+        #midiBox, #oscBox { max-width: 920px; width: 96%; }
+        .mapping-toolbar { display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin:0 14px 6px; }
+        #midiBox .mapping-toolbar { margin-left:0; margin-right:0; }
+        .mapping-toolbar input, .mapping-toolbar select, .mapping-table-wrap input, .mapping-table-wrap select {
+            background:var(--term-bg); color:var(--term-green); border:1px solid #707070;
+            padding:2px 4px; font:10px 'Share Tech Mono',monospace;
+        }
+        .mapping-target { min-width:320px; flex:1; }
+        .mapping-status, .mapping-warnings, .mapping-help {
+            margin:4px 14px 8px; padding:5px 7px; background:var(--term-bg); color:#909090;
+            border:1px inset #a0a0a0; font:10px 'Share Tech Mono',monospace; line-height:1.45;
+        }
+        #midiBox .mapping-status, #midiBox .mapping-warnings, #midiBox .mapping-help { margin-left:0; margin-right:0; }
+        .mapping-status.armed { color:var(--term-yel); }
+        .mapping-warnings:empty { display:none; }
+        .mapping-warnings { color:var(--term-red); white-space:pre-line; }
+        .mapping-table-wrap { overflow:auto; max-height:350px; margin:0 14px; border:1px inset #aaa; }
+        #midiBox .mapping-table-wrap { margin-left:0; margin-right:0; }
+        .mapping-table-wrap table { min-width:930px; margin:0 !important; }
+        .mapping-table-wrap td { white-space:nowrap; }
+        .mapping-table-wrap .map-source { width:92px; }
+        .mapping-table-wrap .map-target { width:210px; }
+        .mapping-table-wrap .map-mode { width:78px; }
+        .mapping-table-wrap .map-mini { width:46px; }
+        .mapping-table-wrap .map-note { width:120px; }
+        .mapping-table-wrap button { padding:1px 5px; font-size:9px; }
+        .mapping-row-conflict td { background:#fff0f0 !important; }
     </style>
 
     <style id="ws-mirror-style">
@@ -1004,11 +1033,11 @@
             <button id="aboutClose">×</button>
             <div class="a-icon"></div>
             <h1 style="font-family:'VT323',monospace;font-weight:normal;letter-spacing:.14em">huff</h1>
-            <div class="build">native engine · milestone 16 · 2026</div>
+            <div class="build">native engine · milestone 17 · 2026</div>
             <p>Huff is being migrated to a native Rust + wgpu media engine. The existing
             control surface is preserved while playback, timing, GPU rendering, and
             output move out of the WebView.</p>
-            <p><strong>Milestone 16:</strong> the Parity Lab embeds the exact legacy control contract, verifies native defaults/ranges/steps/options, supplies reproducible effect-isolation profiles, and exports a machine-readable report for the later visual calibration cycle.</p>
+            <p><strong>Milestone 17:</strong> MIDI and OSC now address canonical parameters and actions through editable, learnable, validated, portable mapping files. The original input visual signals remain available while controller ownership is moved into the native state system.</p>
         </div>
     </div>
 
@@ -1018,48 +1047,45 @@
     <div id="midiOverlay">
       <div id="midiBox">
         <button id="midiClose">×</button>
-        <h2>MIDI</h2>
-        <div class="midi-sub">MIDI runs natively via Rust · USB controllers + virtual ports (IAC Bus · loopMIDI · Max/MSP · Pd)</div>
+        <h2>MIDI Mapping</h2>
+        <div class="midi-sub">Canonical native parameters + actions · learn, edit, validate, import, and save portable maps</div>
 
-        <!-- Port selection + connect -->
         <div class="midi-section-label">Device</div>
         <div id="midiStatusRow">
-          <select id="midiPortSelect" style="flex:1;font-size:11px;padding:4px 6px;background:rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.12);border-radius:5px;color:#e8eaf0;font-family:inherit">
-            <option value="">— click Refresh to list ports —</option>
-          </select>
-          <button id="midiRefreshBtn" style="font-size:10px;padding:3px 8px">↻ Refresh</button>
-          <button id="midiConnectBtn" class="btn-dim" style="font-size:10px;padding:3px 8px">Connect</button>
-          <button id="midiDisconnectBtn" style="font-size:10px;padding:3px 8px;color:#ff6060">Disconnect</button>
+          <select id="midiPortSelect" style="flex:1;min-width:240px"><option value="">— Refresh to list ports —</option></select>
+          <button id="midiRefreshBtn">↻ Refresh</button>
+          <button id="midiConnectBtn" class="btn-dim">Connect</button>
+          <button id="midiDisconnectBtn">Disconnect</button>
         </div>
-        <div id="midiBridgeStatus" style="font-size:11px;margin-top:6px;padding:6px 10px;border-radius:5px;background:rgba(255,255,255,.04);color:rgba(255,255,255,.4);min-height:28px;line-height:1.5">Not connected</div>
+        <div id="midiBridgeStatus">Not connected</div>
 
-        <!-- Debug button -->
-        <button id="midiDebugBtn" style="margin-top:6px;font-size:9px;padding:2px 8px;opacity:.5">Debug: log all ports to console</button>
+        <div class="midi-section-label">Learn / Add</div>
+        <div class="mapping-toolbar">
+          <select id="midiTargetSelect" class="mapping-target"></select>
+          <button id="midiLearnBtn" class="btn-dim">● Learn Next</button>
+          <button id="midiCancelLearnBtn">Cancel Learn</button>
+          <button id="midiAddBtn">＋ Add CC</button>
+        </div>
+        <div id="midiLearnStatus" class="mapping-status">Select a canonical target, then move a control.</div>
 
-        <!-- Map loader -->
-        <div class="midi-section-label">MIDI Map</div>
+        <div class="midi-section-label">Map File</div>
         <div id="midiMapRow">
-          <span id="midiMapName" title="No map loaded">No map loaded</span>
-          <button id="midiLoadMapBtn" class="btn-dim" style="font-size:10px;padding:3px 8px">📂 Load Map…</button>
-          <button id="midiClearMapBtn" class="btn-dim" style="font-size:10px;padding:3px 8px;color:#ff6060">✕ Clear</button>
+          <span id="midiMapName">Factory: Minimal</span>
+          <button id="midiLoadMapBtn">Open…</button>
+          <button id="midiSaveMapBtn">Save As…</button>
+          <button id="midiFactoryMapBtn">Factory</button>
+          <button id="midiClearMapBtn">Clear</button>
         </div>
+        <div id="midiMapWarnings" class="mapping-warnings"></div>
 
-        <!-- Map preview table -->
-        <div class="midi-section-label" style="margin-top:14px">Active Mappings</div>
-        <table id="midiMapTable">
-          <thead>
-            <tr><th>CC</th><th>Parameter ID</th><th>Type</th><th>Note</th></tr>
-          </thead>
-          <tbody id="midiMapTbody">
-            <tr><td colspan="4" style="color:rgba(255,255,255,.25);font-style:italic;padding:8px 6px">Load a map file to see mappings.</td></tr>
-          </tbody>
-        </table>
-
-        <div style="margin-top:18px;font-size:10px;color:rgba(255,255,255,.25);line-height:1.7">
-          Map format: <code>src/midi/FORMAT.md</code> &nbsp;·&nbsp;
-          Factory maps: <code>nanokontrol2.json</code> · <code>nanokontrol1.json</code> · <code>generic.json</code><br>
-          Soft MIDI: enable IAC Driver (macOS Audio MIDI Setup) or install loopMIDI (Windows), then send from Max/MSP or Pd to that port.
+        <div class="midi-section-label">Active Mappings</div>
+        <div class="mapping-table-wrap">
+          <table id="midiMapTable">
+            <thead><tr><th>On</th><th>Source</th><th>Target</th><th>Mode</th><th>Range</th><th>Curve</th><th>Inv</th><th>Smooth</th><th>Thresh</th><th>Note</th><th></th></tr></thead>
+            <tbody id="midiMapTbody"></tbody>
+          </table>
         </div>
+        <div class="mapping-help">Channel 0 accepts all channels. Output range is normalized to the selected parameter's canonical range. Note/CC mappings can be Absolute, Gate, Toggle, or Trigger.</div>
       </div>
     </div>
 
@@ -1159,37 +1185,46 @@
     <div id="oscOverlay">
       <div id="oscBox">
         <button id="oscClose">×</button>
-        <h2>OSC</h2>
-        <div class="osc-sub">Open Sound Control · UDP · receive from TouchOSC, Max/MSP, Pure Data, SuperCollider, TouchDesigner</div>
+        <h2>OSC Mapping</h2>
+        <div class="osc-sub">UDP Open Sound Control · canonical parameters + actions · TouchOSC, Max/MSP, Pd, SuperCollider, TouchDesigner</div>
 
         <div class="osc-section-label">Listener</div>
+        <div class="mapping-toolbar">
+          <input id="oscHost" value="0.0.0.0" style="width:110px" title="Bind host">
+          <input id="oscPort" type="number" value="9000" min="1" max="65535" style="width:78px">
+          <button id="oscStartBtn" class="btn-dim">Start</button>
+          <button id="oscStopBtn">Stop</button>
+          <button id="oscTestBtn">Local Test</button>
+        </div>
         <div id="oscStatusBox">Starting…</div>
 
-        <div class="osc-section-label">OSC Map</div>
+        <div class="osc-section-label">Learn / Add</div>
+        <div class="mapping-toolbar">
+          <select id="oscTargetSelect" class="mapping-target"></select>
+          <button id="oscLearnBtn" class="btn-dim">● Learn Next</button>
+          <button id="oscCancelLearnBtn">Cancel Learn</button>
+          <button id="oscAddBtn">＋ Add Address</button>
+        </div>
+        <div id="oscLearnStatus" class="mapping-status">Select a canonical target, then send an OSC message.</div>
+
+        <div class="osc-section-label">Map File</div>
         <div id="oscMapRow">
-          <span id="oscMapName" title="No map loaded">No map loaded</span>
-          <button id="oscLoadMapBtn" class="btn-dim" style="font-size:10px;padding:3px 8px">📂 Load Map…</button>
-          <button id="oscClearMapBtn" class="btn-dim" style="font-size:10px;padding:3px 8px;color:#ff6060">✕ Clear</button>
+          <span id="oscMapName">Factory: Minimal</span>
+          <button id="oscLoadMapBtn">Open…</button>
+          <button id="oscSaveMapBtn">Save As…</button>
+          <button id="oscFactoryMapBtn">Factory</button>
+          <button id="oscClearMapBtn">Clear</button>
         </div>
+        <div id="oscMapWarnings" class="mapping-warnings"></div>
 
-        <div class="osc-section-label" style="margin-top:14px">Active Mappings</div>
-        <table id="oscMapTable">
-          <thead>
-            <tr><th>Address</th><th>Parameter ID</th><th>Type</th><th>In range</th><th>Note</th></tr>
-          </thead>
-          <tbody id="oscMapTbody">
-            <tr><td colspan="5" style="color:rgba(255,255,255,.25);font-style:italic;padding:8px 6px">Load a map file to see mappings.</td></tr>
-          </tbody>
-        </table>
-
-        <div style="margin-top:18px;font-size:10px;color:rgba(255,255,255,.25);line-height:1.8">
-          <strong style="color:rgba(255,255,255,.4)">Send OSC to this machine's IP on port 9000.</strong><br>
-          TouchOSC: Settings → OSC → Host = this machine's IP · Port (outgoing) = 9000<br>
-          Max/MSP: <code>[udpsend 127.0.0.1 9000]</code> &nbsp;·&nbsp;
-          Pure Data: <code>[netsend -u -b 127.0.0.1 9000]</code><br>
-          Map format: <code>src/osc/FORMAT.md</code> &nbsp;·&nbsp;
-          Factory maps: <code>touchosc-mix.json</code> · <code>touchosc-effects.json</code> · <code>generic-16.json</code>
+        <div class="osc-section-label">Active Mappings</div>
+        <div class="mapping-table-wrap">
+          <table id="oscMapTable">
+            <thead><tr><th>On</th><th>Address / Arg</th><th>Target</th><th>Mode</th><th>Input</th><th>Output</th><th>Curve</th><th>Inv</th><th>Smooth</th><th>Thresh</th><th></th></tr></thead>
+            <tbody id="oscMapTbody"></tbody>
+          </table>
         </div>
+        <div class="mapping-help">Send OSC to this machine on the selected UDP port. Learn captures the first numeric argument and preserves its argument index.</div>
       </div>
     </div>
 

@@ -1,0 +1,41 @@
+{
+  "schema": "huff-control-map/v1",
+  "name": "Factory OSC Minimal",
+  "notes": "Two normalized float controls on UDP port 9000.",
+  "mappings": [
+    {
+      "id": 1,
+      "target": "feedback.amount",
+      "address": "/huff/feedback",
+      "argumentIndex": 0,
+      "inputMin": 0.0,
+      "inputMax": 1.0,
+      "outputMin": 0.0,
+      "outputMax": 1.0,
+      "invert": false,
+      "smoothing": 0.18,
+      "enabled": true,
+      "behavior": "absolute",
+      "curve": "linear",
+      "threshold": 0.5,
+      "note": "Feedback"
+    },
+    {
+      "id": 2,
+      "target": "flow_pulse",
+      "address": "/huff/flow/pulse",
+      "argumentIndex": 0,
+      "inputMin": 0.0,
+      "inputMax": 1.0,
+      "outputMin": 0.0,
+      "outputMax": 1.0,
+      "invert": false,
+      "smoothing": 0.0,
+      "enabled": true,
+      "behavior": "trigger",
+      "curve": "linear",
+      "threshold": 0.1,
+      "note": "Flow pulse"
+    }
+  ]
+}

@@ -1,133 +1,80 @@
-# HUFF Native Milestone 16 test checklist
+# HUFF Native Milestone 17 test checklist
 
-Milestone 16 is primarily a parameter-contract and reproducibility milestone. It does not require the unresolved Milestone 15 export cases to be debugged before continuing.
+Milestone 17 can be evaluated without resolving every deferred export or visual-parity issue. The goal is to confirm that controller messages reach canonical state safely and that mapping files round-trip correctly.
 
-## 1. Static contract validation
-
-From the project root:
+## 1. Launch
 
 ```bash
 npm install
-npm run validate:parity
-```
-
-Expected result:
-
-```text
-HUFF parity contract exact: 87/87
-Native registry parameters: 98
-Native-only parameters: 11
-```
-
-Any mismatch should be treated as an intentional schema change requiring review or as a regression.
-
-## 2. Launch
-
-macOS Metal:
-
-```bash
 npm run dev:metal
 ```
 
-Windows DX12:
+Confirm the About panel reports Milestone 17 and both MIDI and OSC panels open without layout clipping.
 
-```powershell
-npm run dev:dx12
-```
+## 2. MIDI device and learn
 
-Confirm the About panel shows Milestone 16 and the PARITY LAB row appears between Automation and Export Queue.
+1. Open MIDI and press Refresh.
+2. Select a USB controller or virtual port.
+3. Connect.
+4. Select `FEEDBACK · feedback.amount` as the target.
+5. Press Learn Next and move a CC control.
+6. Confirm a mapping row appears and the Feedback control moves in the main interface.
+7. Confirm the renderer follows the canonical value rather than only showing input activity.
 
-## 3. Initial comparison
+## 3. MIDI behaviors
 
-Click **Compare** before changing controls.
+- Map a button to a Boolean parameter using Gate.
+- Change the row to Toggle and confirm one rising edge changes state once.
+- Map a note to `flow_pulse` using Trigger.
+- Set channel to `0` and confirm messages from more than one channel are accepted.
+- Create two mappings from the same source and confirm a conflict warning appears.
 
-Expected:
+## 4. OSC listener and learn
 
-- contract score is `87/87`;
-- contract mismatch count is zero;
-- current delta is normally zero after a fresh launch with defaults;
-- the tooltip lists eleven native-only controls.
+1. Start the listener on `0.0.0.0:9000`.
+2. Select `feedback.amount` and press Learn Next.
+3. Send a normalized float from TouchOSC, Max/MSP, Pure Data, or another sender.
+4. Confirm the address and argument index appear in the mapping table.
+5. Confirm Local Test drives `/huff/feedback`.
+6. Test a message whose numeric value is in a non-normalized range and edit Input Min/Input Max accordingly.
 
-## 4. Current-value tracking
+## 5. Curves, ranges, and smoothing
 
-Move one mapped effect slider and wait briefly.
+For one continuous parameter:
 
-Expected:
+- compare Linear and Square;
+- set Output to `0.25–0.75` and confirm the parameter is restricted to the middle half of its canonical range;
+- increase smoothing in the mapping row and confirm changes become slower;
+- enable Invert in the mapping row and confirm direction is reversed.
 
-- `CURRENT Δ` increases;
-- no contract error appears;
-- moving the control back to its exact default reduces the delta again.
+Adjust Threshold for Gate, Toggle, or Trigger mappings and confirm the rising-edge point changes. The field is preserved through row edits and portable map round trips.
 
-This confirms that the report distinguishes current artistic state from the static control contract.
+## 6. Portable file round trip
 
-## 5. Legacy Defaults
+1. Save a MIDI map.
+2. Clear mappings.
+3. Open the saved map.
+4. Confirm targets, source data, behavior, curves, range, enable state, and notes return.
+5. Repeat for OSC.
+6. Open `control-maps/factory-midi.json` and `control-maps/factory-osc.json`.
 
-Change several controls, choose **Legacy Defaults**, and click **Apply Profile**.
+## 7. Automation interaction
 
-Expected:
+1. Begin automation recording.
+2. Move a mapped continuous controller.
+3. Fire a mapped Flow Pulse action.
+4. Stop recording.
+5. Confirm the clip contains parameter and action events.
 
-- mapped legacy controls return to their original defaults;
-- the native render-resolution and history settings remain unchanged;
-- persistent buffers clear;
-- the current delta returns to zero.
+## 8. Safety and recovery
 
-## 6. Isolation profiles
+- Disconnect MIDI while moving a control; HUFF should continue running.
+- Stop and restart OSC on the same port.
+- Attempt to bind a port already in use and confirm the error is shown.
+- Import an invalid schema and confirm it is rejected.
+- Start deterministic export and verify live controller actions do not mutate the private export graph.
+- Close the application with MIDI and OSC active and confirm shutdown does not hang.
 
-Apply each profile separately:
+## Deferred refinement
 
-```text
-Glitch Isolation
-Cluster Isolation
-Scanline Isolation
-Feedback Reference
-Flow Reference
-```
-
-For each profile:
-
-- the expected effect family becomes active;
-- unrelated effect families are disabled;
-- the output begins from a cleared temporal state;
-- applying the same profile twice produces the same parameter state.
-
-Visual equality with the legacy renderer is not required to advance development; record obvious differences for the later refinement cycle.
-
-## 7. Report export
-
-Click **Export Report** and select a destination.
-
-Open the JSON and confirm it includes:
-
-```text
-engineBuild = HNW-16
-legacyContractParameters = 87
-nativeRegistryParameters = 98
-exactContractParameters = 87
-contractMismatchFields = 0
-nativeOnlyParameters
-currentDifferences
-profiles
-```
-
-## 8. Automation interaction
-
-Start automation recording, apply one calibration profile, then stop recording.
-
-Expected:
-
-- the profile’s parameter changes are stored as a canonical batch;
-- a clear-buffers action is included;
-- the clip can still be selected for deterministic export.
-
-## 9. Regression smoke test
-
-Perform a brief smoke test only:
-
-- load and play a video;
-- start and stop camera input;
-- toggle Glitch and Scanlines;
-- trigger Flow pulse;
-- capture a PNG still;
-- run one short H.264 deterministic export if the current local Milestone 15 path is working.
-
-Do not block continued milestone work on previously observed high-resolution export failures. Preserve logs and failed job manifests for the later production-verification cycle.
+Controller-specific templates, relative encoders, 14-bit CC pairs, NRPN/RPN, MIDI output feedback, OSC timetags, and live automation playback are outside this milestone. They should be considered only after real devices establish which additions are useful.
