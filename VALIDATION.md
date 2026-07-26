@@ -1,87 +1,97 @@
-# Huff Native Milestone 14 validation
+# Huff Native Milestone 15 validation
 
-The packaging environment provides Node.js 22 and FFmpeg 7.1.3, but it does not provide Cargo, rustc, rustfmt, Metal, DX12, or a native Tauri runtime. Rust type/borrow checking and real GPU automation export therefore remain required on the target machine before Milestone 14 is considered fully runtime-proven.
+## Environment boundary
 
-## Passed static checks
+The packaging environment provides Node.js 22.16.0 and FFmpeg 7.1.3. It does not provide Cargo, rustc, rustfmt, Metal, DX12, Vulkan presentation, or a native Tauri runtime.
 
-- `src/app.js` passes `node --check` under Node.js 22.
+Rust type/borrow checking, WGSL pipeline creation, real GPU allocation, video decoding into the export graph, and application-level 4K/8K execution must therefore be validated locally before Milestone 15 is considered runtime-proven.
+
+## Completed static checks
+
+- `src/app.js` passes `node --check`.
 - `package.json`, `package-lock.json`, and `src-tauri/tauri.conf.json` parse as JSON.
-- Package, npm lockfile, Cargo manifest, Cargo lockfile project entry, and Tauri configuration are synchronized at `0.14.0`.
-- Native build identifiers are synchronized at `HNW-14` for application info, still metadata, deterministic metadata, queue jobs, repeat jobs, and lifecycle manifests.
-- All 306 HTML IDs are unique.
-- All 120 static JavaScript `byId()` references resolve to existing HTML IDs.
-- All 45 JavaScript Tauri command calls resolve to commands registered among the 63 `generate_handler!` entries.
-- All five automation commands are registered and connected to controls.
-- A 51-check integration audit passed for versioning, UI wiring, command registration, automation schema markers, renderer integration, queue integration, metadata fields, safety exclusions, and build identifiers.
-- Modified Rust files pass a lexical comment/string/delimiter balance audit.
-- Cargo and npm dependency sets are unchanged from Milestone 13.
+- Package, npm lockfile, Cargo manifest, Cargo lockfile project entry, and Tauri configuration identify application version `0.15.0`.
+- Current application, still-export, deterministic-export, queue, repeat, lifecycle, and automation build identifiers use `HNW-15` / `hnw15`.
+- The HTML contains 306 unique IDs with no duplicates.
+- All 120 statically discoverable `byId(...)` frontend references resolve to HTML elements.
+- Every Rust source file passes a lexical delimiter and comment/string termination audit.
+- `compositor.wgsl` and `export.wgsl` pass delimiter/comment termination audits.
+- The Rust and WGSL `Uniforms` structures contain the same 21 `vec4` fields in identical order, including `source_mapping`.
+- The Cargo dependency set is unchanged from Milestone 14; only the project version changed.
 
-## Automation architecture checks
+## Full-resolution graph inspection
 
-Source inspection confirms that Milestone 14 provides:
+Source inspection confirms that deterministic export now:
 
-- a versioned `AutomationClip` schema;
-- parameter, parameter-batch, and action events;
-- initial canonical state capture at time zero;
-- canonical value validation through the parameter registry;
-- numeric linear, smooth, ease-in, ease-out, and step interpolation;
-- forced step behavior for Boolean and select parameters;
-- stable event ordering and canonical sequence renumbering;
-- an event bound of 100,000 and duration bound of 24 hours;
-- exclusion of `render.*`, `history.*`, and `source.seed_on_load` from automation;
-- deterministic action support for buffer clear and Flow pulse;
-- exact evaluation from offline simulation time;
-- optional looping with action expansion across crossed loops;
-- immutable clip copies in queue configuration and export metadata;
-- queue dispatch waiting while automation recording is active;
-- JSON import/export and Rust-side revalidation;
-- local active-clip restoration in the control surface.
+- calculates output-relative history dimensions before starting;
+- allocates a new bounded `GpuHistoryRing` for the export topology;
+- recreates the complete offscreen target set at output dimensions;
+- protects graph topology from automation snapshot application;
+- selects the requested source sampler for the offline session;
+- maps FIT/CROP/STRETCH in the source-composite shader before history/effects;
+- performs a direct output-texture-to-buffer copy;
+- does not invoke the export scaling pipeline for deterministic video frames;
+- retains the export scaling pipeline for still-image export;
+- reports graph mode, history dimensions/capacity, and estimated graph bytes;
+- restores live topology after completion, cancellation, and failure.
 
-## Renderer integration checks
+The render loop skips live output readback targets while offline export is active, so the old Syphon/Spout/recording readback allocation is not used against the temporary export-sized texture.
 
-Source inspection confirms:
+## Restoration-path inspection
 
-- the automation player is created from the queued parameter snapshot and frozen clip;
-- automation is evaluated after exact-frame decoding and before GPU state upload;
-- Flow pulse uses fixed simulation time during offline export rather than wall-clock `Instant`;
-- a recorded clear action resets persistent renderer state;
-- offline capture bindings are rebuilt after clear replaces persistent target textures;
-- automation state is removed and normal live state is restored on completion, cancellation, or failure.
+All deterministic terminal paths call `restore_after_offline_export()` after removing the active session:
 
-## Included Rust unit tests
+- cancellation;
+- rendering/decoder/encoder failure;
+- successful finalization or finalization failure.
 
-`src-tauri/src/automation.rs` includes tests for:
+The restoration path:
 
-- exact numeric interpolation at a timeline midpoint;
-- forced step behavior for discrete values;
-- one action firing per crossed automation loop;
-- action firing at frame time zero without duplicate firing.
+1. releases offline capture and frozen input/automation state;
+2. restores the prior graph or applies a deferred surface resize;
+3. rebuilds the normal live source sampler bind;
+4. reapplies current canonical UI state;
+5. clears reconstructed temporal resources;
+6. restores source position and play/pause state.
 
-These tests could not be executed in this environment because Cargo is unavailable.
+## Metadata inspection
 
-## Existing exporter regression boundary
+`OfflineExportMetadata` includes backward-compatible defaulted fields for:
 
-Milestone 14 does not change the Milestone 12 codec pipelines or transactional commit behavior. H.264, ProRes, FFV1, and PNG-sequence encoding still require local runtime regression because the renderer-to-encoder path now optionally receives time-varying state.
+```text
+graphMode
+liveReferenceWidth
+liveReferenceHeight
+graphHistoryWidth
+graphHistoryHeight
+graphHistoryCapacity
+graphEstimatedGpuBytes
+```
 
-## Scope not runtime-validated here
+The active offline status object exposes graph diagnostics to the frontend tooltip.
 
-- Rust compilation, type checking, and borrow checking
-- Tauri state injection and command deserialization
-- automation recording under real high-frequency control input
-- exact GPU frame output for interpolation and action boundaries
-- clear-buffer capture rebinding on Metal, Vulkan, and DX12
-- long clips and the 100,000-event bound
-- local-storage behavior in packaged WebViews
-- queue crash recovery with frozen automation clips
-- macOS and Windows packaging
+## FFmpeg synthetic profile checks
+
+Four synthetic 64×64 RGBA frames were encoded successfully with the available FFmpeg installation through:
+
+- libx264 / H.264 MP4;
+- prores_ks / ProRes 422 HQ;
+- prores_ks / ProRes 4444 alpha;
+- FFV1 / Matroska;
+- PNG image sequence.
+
+These checks validate local encoder availability only. They do not validate Rust process management, muxing with real source audio, transactional commit, or GPU readback.
 
 ## Required local validation
 
-Run:
+Run the checklist in `TESTING.md`, with particular attention to:
 
-```bash
-npm install
-npm run dev:metal
-```
-
-Follow `TESTING.md`. Begin with a five-second linear control recording and two repeated native-size H.264 exports. Compare decoded frame hashes, then test preset recall, buffer clear, Flow pulse, looping, JSON import, and queue recovery before long 4K/8K exports.
+- Cargo compilation and WGSL validation;
+- native-resolution regression;
+- proof that 4K/8K effect geometry is independently evaluated;
+- history capacity at large dimensions;
+- automation topology preservation;
+- completion/cancel/failure restoration;
+- deferred surface resizing;
+- Syphon/Spout recovery;
+- GPU allocation behavior across adapters.

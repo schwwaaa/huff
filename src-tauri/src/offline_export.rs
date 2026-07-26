@@ -92,6 +92,20 @@ pub struct OfflineExportMetadata {
     pub render_height: u32,
     pub export_width: u32,
     pub export_height: u32,
+    #[serde(default)]
+    pub graph_mode: String,
+    #[serde(default)]
+    pub live_reference_width: u32,
+    #[serde(default)]
+    pub live_reference_height: u32,
+    #[serde(default)]
+    pub graph_history_width: u32,
+    #[serde(default)]
+    pub graph_history_height: u32,
+    #[serde(default)]
+    pub graph_history_capacity: u32,
+    #[serde(default)]
+    pub graph_estimated_gpu_bytes: u64,
     pub sampling: String,
     pub fit_mode: String,
     pub include_audio: bool,
@@ -161,7 +175,7 @@ impl ExportJobManifest {
         let started = unix_ms();
         Self {
             schema_version: 1,
-            job_id: format!("hnw14-{started}-{}", std::process::id()),
+            job_id: format!("hnw15-{started}-{}", std::process::id()),
             queue_job_id: config.queue_job_id.clone(),
             status: "running".into(),
             started_unix_ms: started,
@@ -197,6 +211,11 @@ pub struct OfflineExportInfo {
     pub frame_pattern: String,
     pub audio_artifact_path: String,
     pub preserve_alpha: bool,
+    pub graph_mode: String,
+    pub graph_history_width: u32,
+    pub graph_history_height: u32,
+    pub graph_history_capacity: u32,
+    pub graph_estimated_gpu_bytes: u64,
     pub automation_enabled: bool,
     pub automation_name: String,
     pub automation_duration_seconds: f64,
@@ -238,6 +257,11 @@ impl Default for OfflineExportInfo {
             frame_pattern: String::new(),
             audio_artifact_path: String::new(),
             preserve_alpha: false,
+            graph_mode: "full_resolution".into(),
+            graph_history_width: 0,
+            graph_history_height: 0,
+            graph_history_capacity: 0,
+            graph_estimated_gpu_bytes: 0,
             automation_enabled: false,
             automation_name: String::new(),
             automation_duration_seconds: 0.0,
@@ -307,6 +331,11 @@ impl OfflineExportHandle {
         state.frame_pattern = frame_pattern_for(config);
         state.audio_artifact_path = audio_artifact_for(config);
         state.preserve_alpha = config.preserve_alpha;
+        state.graph_mode = "full_resolution".into();
+        state.graph_history_width = 0;
+        state.graph_history_height = 0;
+        state.graph_history_capacity = 0;
+        state.graph_estimated_gpu_bytes = 0;
         state.automation_enabled = config.automation_clip.is_some();
         state.automation_name = config
             .automation_clip
@@ -363,12 +392,30 @@ impl OfflineExportHandle {
         }
     }
 
+    pub fn set_graph_topology(
+        &self,
+        history_width: u32,
+        history_height: u32,
+        history_capacity: u32,
+        estimated_gpu_bytes: u64,
+    ) {
+        if let Ok(mut state) = self.info.write() {
+            if state.active {
+                state.graph_mode = "full_resolution".into();
+                state.graph_history_width = history_width;
+                state.graph_history_height = history_height;
+                state.graph_history_capacity = history_capacity;
+                state.graph_estimated_gpu_bytes = estimated_gpu_bytes;
+            }
+        }
+    }
+
     pub fn update_progress(&self, rendered_frames: u64, total_frames: u64, started: Instant) {
         if let Ok(mut state) = self.info.write() {
             if !state.active {
                 return;
             }
-            state.phase = "rendering".into();
+            state.phase = "rendering_full_graph".into();
             state.rendered_frames = rendered_frames;
             state.total_frames = total_frames;
             state.progress = if total_frames == 0 {

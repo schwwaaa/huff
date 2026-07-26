@@ -207,7 +207,7 @@ function configureRegistryControls() {
     feedbackGroup.title = 'Native HDR feedback is active; final effect-order parity continues with later render-graph milestones.';
   }
   const glitchGroup = byId('corruptOn')?.closest('.group');
-  if (glitchGroup) glitchGroup.title = "Milestone 14 records canonical control changes and replays them frame-exactly during deterministic offline export.";
+  if (glitchGroup) glitchGroup.title = "Native glitch, scan, feedback, Flow, history, and final compositing now execute at the requested deterministic export resolution.";
   const clusterGroup = byId('clusterTiles')?.closest('.group');
   if (clusterGroup) clusterGroup.title = 'Native cluster bodies are active: persistent centers, coherence, speed, steering, variance, pulse, inertia, breathing, bounce/wrap, bias, spread, and minimum spread.';
   const scanGroup = byId('clusters')?.closest('.group');
@@ -1111,6 +1111,8 @@ Phase: ${offlineExport.phase || 'ready'} · ${(progress * 100).toFixed(2)}%
 Frames: ${offlineExport.renderedFrames || 0}/${offlineExport.totalFrames || 0}
 Elapsed: ${(offlineExport.elapsedSeconds || 0).toFixed(2)} s · remaining ≈ ${(offlineExport.estimatedRemainingSeconds || 0).toFixed(2)} s
 Audio: ${audioDescription} · ${((offlineExport.encodedBytes || 0) / 1048576).toFixed(1)} MiB
+Graph: ${(offlineExport.graphMode || 'full_resolution').replaceAll('_', ' ').toUpperCase()} · ${offlineExport.width || 0}×${offlineExport.height || 0}
+History: ${offlineExport.graphHistoryWidth || 0}×${offlineExport.graphHistoryHeight || 0} × ${offlineExport.graphHistoryCapacity || 0} frames · resource floor ${(Number(offlineExport.graphEstimatedGpuBytes || 0) / 1073741824).toFixed(2)} GiB
 Automation: ${offlineExport.automationEnabled ? `${offlineExport.automationName || 'clip'} · ${offlineExport.automationEventCount || 0} events · ${Number(offlineExport.automationDurationSeconds || 0).toFixed(2)} s${offlineExport.automationLoop ? ' · loop' : ''}` : 'static state'}
 Frame pattern: ${offlineExport.framePattern || '—'}
 Metadata: ${offlineExport.metadataPath || '—'}
@@ -1279,7 +1281,7 @@ async function boot() {
   await refreshParameterState();
   await poll();
   setInterval(poll, 250);
-  console.info('Huff Native wgpu Milestone 14 loaded', {
+  console.info('Huff Native wgpu Milestone 15 loaded', {
     parameters: appState.registry.length,
     implemented: appState.registry.filter((definition) => definition.implemented).length,
   });

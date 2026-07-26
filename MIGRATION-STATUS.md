@@ -1,4 +1,4 @@
-# Huff native migration status · Milestone 14
+# Huff native migration status · Milestone 15
 
 ## Proven native foundation
 
@@ -12,7 +12,7 @@
 
 ## Native renderer completed
 
-- Independent render and GPU-history resolutions
+- Independent live render and GPU-history resolutions
 - GPU temporal texture-array history
 - Persistent flying-frame-buffer model
 - Historical glitch tiles and smear instances
@@ -33,54 +33,49 @@
 - Safe recording finalization
 - Native through custom-size PNG still export
 
-## Deterministic and production export completed
+## Deterministic production export completed
 
 - Private exact-frame FFmpeg decoder
 - Fixed 24/30/60 FPS simulation timeline
-- Frozen canonical parameters and control snapshots
+- Frozen canonical parameter and control snapshots
 - Deterministic procedural/history/feedback reset boundary
 - Playback-rate-aware source audio
 - H.264, ProRes 422 HQ, ProRes 4444, FFV1, and PNG-sequence profiles
-- Optional alpha preservation where supported
 - Transactional temporary output and reproducibility metadata
-- Complete/cancelled/failed per-attempt lifecycle manifests
+- Complete/cancelled/failed lifecycle manifests
+- Canonical automation recording, interpolation, looping, actions, and frame-exact replay
 
-## Provisional durable export queue retained from Milestone 13
+## Full-resolution graph execution completed in Milestone 15
+
+- Private export-sized working graph for every deterministic job
+- Source FIT/CROP/STRETCH applied before temporal processing
+- SMOOTH/CRISP source sampling applied before the graph
+- Export-relative history dimensions and bounded capacity
+- Full-resolution glitch, clusters, scanlines, Smoosh, feedback, Luma Key, Global Mix, Flow, and final output
+- Direct 1:1 authoritative-output readback with no final export resize
+- Topology guard preventing automation from reverting export dimensions
+- Graph topology and estimated allocation recorded in metadata and diagnostics
+- Explicit maximum-dimension and bounded-memory preflight
+- Restoration of live graph, source sampler, output readback, transport, and deferred resize after every exit path
+
+## Provisional export queue retained
 
 - Frozen job descriptions captured at enqueue time
-- Sequential automatic dispatch
-- Queue pause, reorder, cancellation, retry, repeat, history, and crash recovery
+- Sequential dispatch
+- Pause, reorder, cancellation, retry, repeat, history, and crash recovery
 - Persistent global queue and adjacent job descriptions
 - Source/destination conflict checks
 
-This remains installed for later evaluation but is not currently treated as a settled core Huff workflow.
+The queue remains installed for later evaluation but is not treated as a settled core Huff workflow.
 
-## Deterministic automation completed in Milestone 14
+## Remaining product work
 
-- Canonical automation clip schema with stable IDs, names, duration, sequence order, and versioning
-- Initial-state capture at record start
-- Individual parameter event recording with short-interval coalescing
-- Atomic parameter-batch events for preset recall and reset
-- Recorded clear-buffer and Flow-pulse actions
-- Linear, smooth, ease-in, ease-out, and step numeric interpolation
-- Forced step behavior for Boolean and select parameters
-- Exact evaluation from offline frame time rather than wall-clock time
-- Optional clip looping across an export
-- Immutable automation copies frozen into queued jobs
-- Automation identity and complete clip data embedded in reproducibility metadata
-- JSON import/export and local active-clip restoration
-- Validation limits of 100,000 events and 24 hours
-- Resource-topology parameters explicitly excluded from replay
-
-## Remaining product systems
-
-1. True independent high-resolution graph execution rather than final resampling
-2. Parameter-by-parameter visual and motion calibration
-3. MIDI and OSC map import/edit workflows
-4. Expanded sequencing, routing, scoped recall, and project-state support
-5. Windows MSVC, Spout receiver, multi-GPU, MSI, and NSIS verification
-6. Optional lower-copy platform-specific texture interop research
+1. Parameter-by-parameter visual and motion calibration
+2. MIDI and OSC map import/edit workflows
+3. Expanded sequencing, routing, scoped recall, and project-state support
+4. Windows MSVC, Spout receiver, multi-GPU, MSI, and NSIS verification
+5. Optional lower-copy platform-specific texture interop research
 
 ## Current principle
 
-The fixed offline timeline can now reproduce changing instrument state as well as static state. The next structural step is to run the full graph at export resolution before beginning the larger visual calibration cycle.
+The native graph, deterministic timeline, production codecs, automation replay, and independent high-resolution execution are now structurally present. The next phase should tune Huff as an instrument rather than add another broad subsystem before the larger test and calibration cycle.

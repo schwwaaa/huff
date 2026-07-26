@@ -981,11 +981,11 @@
             <button id="aboutClose">×</button>
             <div class="a-icon"></div>
             <h1 style="font-family:'VT323',monospace;font-weight:normal;letter-spacing:.14em">huff</h1>
-            <div class="build">native engine · milestone 14 · 2026</div>
+            <div class="build">native engine · milestone 15 · 2026</div>
             <p>Huff is being migrated to a native Rust + wgpu media engine. The existing
             control surface is preserved while playback, timing, GPU rendering, and
             output move out of the WebView.</p>
-            <p><strong>Milestone 14:</strong> Huff can record canonical parameter gestures, preset recalls, buffer clears, and Flow pulses as automation clips. Offline export evaluates those clips against its fixed frame timeline, with exact interpolation, optional looping, and a frozen copy stored in every queued job.</p>
+            <p><strong>Milestone 15:</strong> deterministic video export now rebuilds the complete native render graph at the requested output size. History, glitch tiles, clusters, scanlines, feedback, Flow, keying, and final compositing execute at 1080p, 4K, 8K, or custom resolution instead of enlarging a completed live-resolution frame.</p>
         </div>
     </div>
 
@@ -1281,7 +1281,7 @@
             <input id="offlineStartSeconds" type="number" min="0" step="0.001" value="0" title="Custom source start in seconds" style="width:68px;font-size:10px;padding:1px 2px">
             <label>DUR</label>
             <input id="offlineDuration" type="number" min="0.1" max="3600" step="0.1" value="10" title="Output duration in seconds" style="width:60px;font-size:10px;padding:1px 2px">
-            <select id="offlinePreset" title="Deterministic export resolution" style="font-size:10px;padding:1px 2px">
+            <select id="offlinePreset" title="Full native render-graph resolution for deterministic export" style="font-size:10px;padding:1px 2px">
                 <option value="native" selected>NATIVE</option>
                 <option value="1080p">1080P</option>
                 <option value="4k">4K</option>
@@ -1291,11 +1291,11 @@
             <input id="offlineW" type="number" min="1" max="8192" value="1920" title="Offline export width" style="width:56px;font-size:10px;padding:1px 2px">
             <span style="font-size:10px;color:#404040">×</span>
             <input id="offlineH" type="number" min="1" max="8192" value="1080" title="Offline export height" style="width:56px;font-size:10px;padding:1px 2px">
-            <select id="offlineSampling" title="Offline export scaling sampler" style="font-size:10px;padding:1px 2px">
+            <select id="offlineSampling" title="Source sampler used before the full-resolution effect graph" style="font-size:10px;padding:1px 2px">
                 <option value="smooth" selected>SMOOTH</option>
                 <option value="crisp">CRISP</option>
             </select>
-            <select id="offlineFit" title="Offline export aspect policy" style="font-size:10px;padding:1px 2px">
+            <select id="offlineFit" title="Source aspect policy applied before history and effects" style="font-size:10px;padding:1px 2px">
                 <option value="fit" selected>FIT</option>
                 <option value="crop">CROP</option>
                 <option value="stretch">STRETCH</option>

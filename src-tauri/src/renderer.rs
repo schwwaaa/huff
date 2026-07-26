@@ -42,6 +42,7 @@ const HDR_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
 const OUTPUT_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
 const OUTPUT_READBACK_SLOTS: usize = 3;
 const OUTPUT_BYTES_PER_PIXEL: u32 = 4;
+const OFFLINE_GRAPH_MEMORY_LIMIT_BYTES: u64 = 3 * 1024 * 1024 * 1024;
 
 #[derive(Clone)]
 pub struct InputSources {
@@ -311,6 +312,7 @@ struct Uniforms {
     flow_state0: [f32; 4],
     flow_state1: [f32; 4],
     flow_state2: [f32; 4],
+    source_mapping: [f32; 4],
 }
 
 #[repr(C)]
@@ -1036,87 +1038,19 @@ struct OfflineFrameCapture {
     width: u32,
     height: u32,
     padded_bytes_per_row: u32,
-    texture: wgpu::Texture,
-    view: wgpu::TextureView,
     buffer: wgpu::Buffer,
     pixels: Vec<u8>,
-    _uniform_buffer: wgpu::Buffer,
-    uniform_bind: wgpu::BindGroup,
-    source_bind: wgpu::BindGroup,
 }
 
 impl OfflineFrameCapture {
-    #[allow(clippy::too_many_arguments)]
-    fn new(
-        device: &wgpu::Device,
-        uniform_layout: &wgpu::BindGroupLayout,
-        source_layout: &wgpu::BindGroupLayout,
-        smooth_sampler: &wgpu::Sampler,
-        crisp_sampler: &wgpu::Sampler,
-        source_view: &wgpu::TextureView,
-        config: &OfflineExportConfig,
-        source_width: u32,
-        source_height: u32,
-    ) -> Self {
-        let width = config.output_width.max(1);
-        let height = config.output_height.max(1);
-        let uniforms = ExportUniforms {
-            source_size: [source_width.max(1) as f32, source_height.max(1) as f32],
-            target_size: [width as f32, height as f32],
-            fit_mode: [
-                match config.fit_mode.as_str() {
-                    "crop" => 1.0,
-                    "stretch" => 2.0,
-                    _ => 0.0,
-                },
-                if config.preserve_alpha { 1.0 } else { 0.0 },
-                0.0,
-                0.0,
-            ],
-        };
-        let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("huff deterministic export uniforms"),
-            contents: bytemuck::bytes_of(&uniforms),
-            usage: wgpu::BufferUsages::UNIFORM,
-        });
-        let uniform_bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("huff deterministic export uniform bind"),
-            layout: uniform_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: uniform_buffer.as_entire_binding(),
-            }],
-        });
-        let sampler = if config.sampling == "crisp" {
-            crisp_sampler
-        } else {
-            smooth_sampler
-        };
-        let source_bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("huff deterministic export source bind"),
-            layout: source_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(source_view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(sampler),
-                },
-            ],
-        });
-        let (texture, view) = create_output_texture(
-            device,
-            "huff deterministic export target",
-            width,
-            height,
-        );
+    fn new(device: &wgpu::Device, width: u32, height: u32) -> Self {
+        let width = width.max(1);
+        let height = height.max(1);
         let dense_bytes_per_row = width.saturating_mul(OUTPUT_BYTES_PER_PIXEL);
         let padded_bytes_per_row = align_copy_bytes_per_row(dense_bytes_per_row);
         let buffer_size = u64::from(padded_bytes_per_row).saturating_mul(u64::from(height));
         let buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("huff deterministic export readback"),
+            label: Some("huff full-graph deterministic export readback"),
             size: buffer_size.max(4),
             usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
             mapped_at_creation: false,
@@ -1125,46 +1059,15 @@ impl OfflineFrameCapture {
             width,
             height,
             padded_bytes_per_row,
-            texture,
-            view,
             buffer,
             pixels: vec![0_u8; width as usize * height as usize * OUTPUT_BYTES_PER_PIXEL as usize],
-            _uniform_buffer: uniform_buffer,
-            uniform_bind,
-            source_bind,
         }
     }
 
-    fn encode(
-        &self,
-        encoder: &mut wgpu::CommandEncoder,
-        pipeline: &wgpu::RenderPipeline,
-    ) {
-        {
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("huff deterministic export scaling pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &self.view,
-                    resolve_target: None,
-                    depth_slice: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: None,
-                timestamp_writes: None,
-                occlusion_query_set: None,
-                multiview_mask: None,
-            });
-            pass.set_pipeline(pipeline);
-            pass.set_bind_group(0, &self.uniform_bind, &[]);
-            pass.set_bind_group(1, &self.source_bind, &[]);
-            pass.draw(0..3, 0..1);
-        }
+    fn encode(&self, encoder: &mut wgpu::CommandEncoder, source: &wgpu::Texture) {
         encoder.copy_texture_to_buffer(
             wgpu::TexelCopyTextureInfo {
-                texture: &self.texture,
+                texture: source,
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
                 aspect: wgpu::TextureAspect::All,
@@ -1272,6 +1175,15 @@ struct OfflinePlaybackRestore {
     was_playing: bool,
 }
 
+#[derive(Debug, Clone, Copy)]
+struct OfflineRenderRestore {
+    render_width: u32,
+    render_height: u32,
+    history_width: u32,
+    history_height: u32,
+    history_capacity: u32,
+}
+
 struct Renderer {
     window: tauri::Window,
     instance: wgpu::Instance,
@@ -1329,6 +1241,7 @@ struct Renderer {
     offline_capture: Option<OfflineFrameCapture>,
     offline_inputs: Option<FrozenInputState>,
     offline_restore: Option<OfflinePlaybackRestore>,
+    offline_render_restore: Option<OfflineRenderRestore>,
     offline_source_sequence: u64,
     offline_automation: Option<OfflineAutomationPlayer>,
     offline_flow_pulse_until_seconds: Option<f64>,
@@ -1577,6 +1490,7 @@ impl Renderer {
             flow_state0: [0.0; 4],
             flow_state1: [-1.0, 0.0, 0.0, 0.0],
             flow_state2: [1.0, 0.0, 0.0, 0.0],
+            source_mapping: [0.0; 4],
         };
         let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("huff native uniform buffer"),
@@ -2081,6 +1995,7 @@ impl Renderer {
             offline_capture: None,
             offline_inputs: None,
             offline_restore: None,
+            offline_render_restore: None,
             offline_source_sequence: 0,
             offline_automation: None,
             offline_flow_pulse_until_seconds: None,
@@ -2407,6 +2322,84 @@ impl Renderer {
         self.effect_seeded = false;
     }
 
+    fn replace_graph_resources(
+        &mut self,
+        render_width: u32,
+        render_height: u32,
+        history_width: u32,
+        history_height: u32,
+        history_capacity: u32,
+        rebuild_output_readback: bool,
+    ) {
+        self.render_width = render_width.max(1);
+        self.render_height = render_height.max(1);
+        self.history_width = history_width.max(1);
+        self.history_height = history_height.max(1);
+
+        let rebuilds = self.history.rebuilds.wrapping_add(1);
+        self.history = GpuHistoryRing::new(
+            &self.device,
+            self.history_width,
+            self.history_height,
+            history_capacity.max(1),
+            rebuilds,
+        );
+        self.glitch_history_bind_smooth = create_glitch_history_bind(
+            &self.device,
+            &self.glitch_history_layout,
+            self.history.array_view(),
+            &self.sampler,
+            "huff glitch history smooth bind",
+        );
+        self.glitch_history_bind_crisp = create_glitch_history_bind(
+            &self.device,
+            &self.glitch_history_layout,
+            self.history.array_view(),
+            &self.crisp_sampler,
+            "huff glitch history crisp bind",
+        );
+        self.targets = create_targets(
+            &self.device,
+            self.render_width,
+            self.render_height,
+            &self.feedback_layout,
+            &self.scan_layout,
+            &self.smoosh_layout,
+            &self.present_layout,
+            &self.sampler,
+            &self.crisp_sampler,
+            self.history.array_view(),
+        );
+        self.history_capture_bind = create_present_bind(
+            &self.device,
+            &self.present_layout,
+            &self.targets.composite_view,
+            &self.targets.composite_view,
+            &self.sampler,
+            "huff history capture source bind",
+        );
+        if rebuild_output_readback {
+            self.output_readback
+                .rebuild(&self.device, self.render_width, self.render_height);
+        }
+
+        self.history.clear();
+        self.glitch_tiles_cpu.clear();
+        self.glitch_base_tiles = 0;
+        self.glitch_instance_count = 0;
+        self.glitch_phase_x = 0.0;
+        self.glitch_phase_y = 1000.0;
+        self.scan_phase_x = 0.0;
+        self.scan_phase_y = 2000.0;
+        self.scan_spin_angle = f64::from(self.scan_angle_manual);
+        self.scan_bands_cpu.clear();
+        self.scan_band_count = 0;
+        self.flow_pulse_until = None;
+        self.reset_cluster_physics();
+        self.effect_is_a = false;
+        self.effect_seeded = false;
+    }
+
     fn reset_cluster_physics(&mut self) {
         self.cluster_physics.clear();
         self.cluster_physics_time = 0.0;
@@ -2620,74 +2613,51 @@ impl Renderer {
         }
 
         self.render_mode = snapshot.text("render.resolution_mode", "match").to_string();
-        let recording = self.recording.info();
-        let desired = if recording.active || recording.finalizing {
-            (self.render_width, self.render_height)
-        } else {
-            match self.render_mode.as_str() {
-            "640x360" => (640, 360),
-            "960x540" => (960, 540),
-            "1280x720" => (1280, 720),
-            "1920x1080" => (1920, 1080),
-            "custom" => (
-                snapshot
-                    .number("render.custom_width", 1280.0)
-                    .round()
-                    .clamp(160.0, 3840.0) as u32,
-                snapshot
-                    .number("render.custom_height", 720.0)
-                    .round()
-                    .clamp(160.0, 2160.0) as u32,
-            ),
-                _ => (self.surface_width, self.surface_height),
-            }
-        };
-        self.rebuild_targets(desired.0, desired.1);
-
         self.history_capture_rate =
             snapshot.text("history.capture_rate", "every").to_string();
         self.history_sampling = snapshot.text("history.sampling", "smooth").to_string();
-        let history_resolution = snapshot.text("history.resolution", "full");
-        let (history_width, history_height) = match history_resolution {
-            "75" => (
-                (self.render_width as f32 * 0.75).round() as u32,
-                (self.render_height as f32 * 0.75).round() as u32,
-            ),
-            "50" => (
-                (self.render_width as f32 * 0.5).round() as u32,
-                (self.render_height as f32 * 0.5).round() as u32,
-            ),
-            "25" => (
-                (self.render_width as f32 * 0.25).round() as u32,
-                (self.render_height as f32 * 0.25).round() as u32,
-            ),
-            "custom" => (
-                snapshot
-                    .number("history.custom_width", 960.0)
-                    .round()
-                    .clamp(64.0, 3840.0) as u32,
-                snapshot
-                    .number("history.custom_height", 540.0)
-                    .round()
-                    .clamp(64.0, 2160.0) as u32,
-            ),
-            _ => (self.render_width, self.render_height),
-        };
-        self.history_width = history_width.max(1);
-        self.history_height = history_height.max(1);
-        let capacity = GpuHistoryRing::capacity_for(
-            self.history_width,
-            self.history_height,
-            self.history_quality,
-            self.device.limits().max_texture_array_layers,
-        );
-        self.rebuild_history_if_needed(self.history_width, self.history_height, capacity);
+
+        // Milestone 15 owns the render and history topology for the lifetime of
+        // a deterministic export. Automation can update artistic state, but it
+        // must not collapse the full-resolution graph back to the live window
+        // dimensions on every evaluated frame.
+        if self.offline_session.is_none() {
+            let recording = self.recording.info();
+            let desired = if recording.active || recording.finalizing {
+                (self.render_width, self.render_height)
+            } else {
+                render_dimensions_for_snapshot(
+                    &snapshot,
+                    self.surface_width,
+                    self.surface_height,
+                )
+            };
+            self.rebuild_targets(desired.0, desired.1);
+
+            let (history_width, history_height) = history_dimensions_for_snapshot(
+                &snapshot,
+                self.render_width,
+                self.render_height,
+            );
+            self.history_width = history_width;
+            self.history_height = history_height;
+            let capacity = GpuHistoryRing::capacity_for(
+                self.history_width,
+                self.history_height,
+                self.history_quality,
+                self.device.limits().max_texture_array_layers,
+            );
+            self.rebuild_history_if_needed(self.history_width, self.history_height, capacity);
+        } else {
+            self.history_width = self.history.width;
+            self.history_height = self.history.height;
+        }
     }
 
     fn begin_offline_export(
         &mut self,
         config: OfflineExportConfig,
-        metadata: OfflineExportMetadata,
+        mut metadata: OfflineExportMetadata,
         parameter_snapshot: ParameterSnapshot,
     ) -> Result<(), String> {
         if self.offline_session.is_some() || self.offline_export.info().active {
@@ -2706,6 +2676,34 @@ impl Renderer {
                 max_dimension, max_dimension
             ));
         }
+
+        let (history_width, history_height) = history_dimensions_for_snapshot(
+            &parameter_snapshot,
+            config.output_width,
+            config.output_height,
+        );
+        let history_capacity = GpuHistoryRing::capacity_for(
+            history_width,
+            history_height,
+            parameter_snapshot
+                .number("render.quality", 1.0)
+                .clamp(0.0, 3.0) as f32,
+            self.device.limits().max_texture_array_layers,
+        );
+        let estimated_gpu_bytes = estimate_full_graph_bytes(
+            config.output_width,
+            config.output_height,
+            history_width,
+            history_height,
+            history_capacity,
+        );
+        if estimated_gpu_bytes > OFFLINE_GRAPH_MEMORY_LIMIT_BYTES {
+            return Err(format!(
+                "full-resolution graph requires at least {:.2} GiB of bounded GPU resources; reduce export or history resolution",
+                estimated_gpu_bytes as f64 / 1_073_741_824.0
+            ));
+        }
+
         let automation_player = match config.automation_clip.clone() {
             Some(clip) => Some(OfflineAutomationPlayer::new(
                 parameter_snapshot.clone(),
@@ -2714,7 +2712,22 @@ impl Renderer {
             )?),
             None => None,
         };
+
+        metadata.render_width = config.output_width;
+        metadata.render_height = config.output_height;
+        metadata.graph_mode = "full_resolution".into();
+        metadata.graph_history_width = history_width;
+        metadata.graph_history_height = history_height;
+        metadata.graph_history_capacity = history_capacity;
+        metadata.graph_estimated_gpu_bytes = estimated_gpu_bytes;
+
         self.offline_export.begin(&config)?;
+        self.offline_export.set_graph_topology(
+            history_width,
+            history_height,
+            history_capacity,
+            estimated_gpu_bytes,
+        );
         let session = match OfflineExportSession::start(config.clone(), metadata) {
             Ok(session) => session,
             Err(error) => {
@@ -2732,6 +2745,22 @@ impl Renderer {
         self.sources.video_control.pause();
 
         self.apply_parameter_snapshot(parameter_snapshot);
+        self.offline_render_restore = Some(OfflineRenderRestore {
+            render_width: self.render_width,
+            render_height: self.render_height,
+            history_width: self.history.width,
+            history_height: self.history.height,
+            history_capacity: self.history.capacity,
+        });
+        self.replace_graph_resources(
+            config.output_width,
+            config.output_height,
+            history_width,
+            history_height,
+            history_capacity,
+            false,
+        );
+
         self.offline_automation = automation_player;
         self.offline_flow_pulse_until_seconds = None;
         self.offline_inputs = Some(FrozenInputState {
@@ -2760,7 +2789,6 @@ impl Renderer {
                 .expect("gesture snapshot poisoned")
                 .clone(),
         });
-        self.clear_feedback();
         self.simulation_seconds = 0.0;
         self.frame_count = 0;
         self.offline_source_sequence = 0;
@@ -2774,21 +2802,15 @@ impl Renderer {
                 config.source_width,
                 config.source_height,
             );
-            self.rebuild_source_bind();
         }
         self.offline_capture = Some(OfflineFrameCapture::new(
             &self.device,
-            &self.export_uniform_layout,
-            &self.export_source_layout,
-            &self.sampler,
-            &self.crisp_sampler,
-            &self.targets.output_view,
-            &config,
-            self.render_width,
-            self.render_height,
+            config.output_width,
+            config.output_height,
         ));
         self.offline_session = Some(session);
-        self.offline_export.set_phase("rendering");
+        self.rebuild_source_bind();
+        self.offline_export.set_phase("rendering_full_graph");
         Ok(())
     }
 
@@ -2806,7 +2828,6 @@ impl Renderer {
                 ACTION_CLEAR_BUFFERS => {
                     self.clear_feedback();
                     self.offline_flow_pulse_until_seconds = None;
-                    self.rebuild_offline_capture_after_target_change();
                 }
                 ACTION_FLOW_PULSE => {
                     self.offline_flow_pulse_until_seconds =
@@ -2817,27 +2838,6 @@ impl Renderer {
             }
         }
         Ok(())
-    }
-
-    fn rebuild_offline_capture_after_target_change(&mut self) {
-        let Some(config) = self
-            .offline_session
-            .as_ref()
-            .map(|session| session.config.clone())
-        else {
-            return;
-        };
-        self.offline_capture = Some(OfflineFrameCapture::new(
-            &self.device,
-            &self.export_uniform_layout,
-            &self.export_source_layout,
-            &self.sampler,
-            &self.crisp_sampler,
-            &self.targets.output_view,
-            &config,
-            self.render_width,
-            self.render_height,
-        ));
     }
 
     fn upload_offline_video(
@@ -2895,11 +2895,32 @@ impl Renderer {
         self.offline_flow_pulse_until_seconds = None;
         self.offline_source_sequence = 0;
         self.simulation_seconds = self.started.elapsed().as_secs_f64();
+
+        // The deterministic export owns a private full-resolution render graph.
+        // Restore the exact live topology that existed before export before any
+        // deferred UI state or feedback reset is applied.
+        let render_restore = self.offline_render_restore.take();
         if let Some((width, height)) = self.deferred_surface_size.take() {
             self.resize_surface(width, height);
+        } else if let Some(restore) = render_restore {
+            self.replace_graph_resources(
+                restore.render_width,
+                restore.render_height,
+                restore.history_width,
+                restore.history_height,
+                restore.history_capacity,
+                true,
+            );
         }
-        self.clear_feedback();
+
+        // The offline session has already been removed by the caller, so this
+        // reinstates the normal smooth live-source sampler. Then apply any
+        // parameter changes made while export was running and clear the newly
+        // restored live temporal resources.
+        self.rebuild_source_bind();
         self.apply_parameter_state(true);
+        self.clear_feedback();
+
         if let Some(restore) = self.offline_restore.take() {
             self.sources.video_audio_control.send(VideoAudioCommand::Seek {
                 seconds: restore.position_seconds,
@@ -2963,9 +2984,9 @@ impl Renderer {
         loop {
             match rx.try_recv() {
                 Ok(RenderCommand::Resize(width, height)) => {
-                    // The deterministic export capture bind group references the current
-                    // authoritative output texture. Defer target-affecting resizes until
-                    // the offline session has restored the live renderer.
+                    // The deterministic export owns a private full-resolution graph. Defer
+                    // surface-driven live topology changes until that graph has been
+                    // released and the live renderer can be restored safely.
                     if self.offline_session.is_none() {
                         self.resize_surface(width, height);
                     } else {
@@ -3184,12 +3205,22 @@ impl Renderer {
     }
 
     fn rebuild_source_bind(&mut self) {
+        let sampler = if self
+            .offline_session
+            .as_ref()
+            .map(|session| session.config.sampling == "crisp")
+            .unwrap_or(false)
+        {
+            &self.crisp_sampler
+        } else {
+            &self.sampler
+        };
         self.source_bind = create_source_bind(
             &self.device,
             &self.source_layout,
             &self.camera_texture.view,
             &self.video_texture.view,
-            &self.sampler,
+            sampler,
         );
     }
 
@@ -3307,6 +3338,15 @@ impl Renderer {
             self.contrast,
             self.surface_width as f32,
             self.surface_height as f32,
+        ];
+        self.uniforms.source_mapping = [
+            self.offline_session
+                .as_ref()
+                .map(|session| source_mapping_code(&session.config.fit_mode))
+                .unwrap_or(0.0),
+            0.0,
+            0.0,
+            0.0,
         ];
         self.uniforms.feedback_transform = [
             self.feedback_x,
@@ -4678,7 +4718,7 @@ impl Renderer {
         };
         if offline_active {
             if let Some(capture) = self.offline_capture.as_ref() {
-                capture.encode(&mut encoder, &self.export_pipeline);
+                capture.encode(&mut encoder, &self.targets.output);
             }
         }
 
@@ -5084,6 +5124,92 @@ fn create_present_bind(
             },
         ],
     })
+}
+
+fn render_dimensions_for_snapshot(
+    snapshot: &ParameterSnapshot,
+    surface_width: u32,
+    surface_height: u32,
+) -> (u32, u32) {
+    match snapshot.text("render.resolution_mode", "match") {
+        "640x360" => (640, 360),
+        "960x540" => (960, 540),
+        "1280x720" => (1280, 720),
+        "1920x1080" => (1920, 1080),
+        "custom" => (
+            snapshot
+                .number("render.custom_width", 1280.0)
+                .round()
+                .clamp(160.0, 3840.0) as u32,
+            snapshot
+                .number("render.custom_height", 720.0)
+                .round()
+                .clamp(160.0, 2160.0) as u32,
+        ),
+        _ => (surface_width.max(1), surface_height.max(1)),
+    }
+}
+
+fn history_dimensions_for_snapshot(
+    snapshot: &ParameterSnapshot,
+    render_width: u32,
+    render_height: u32,
+) -> (u32, u32) {
+    let dimensions = match snapshot.text("history.resolution", "full") {
+        "75" => (
+            (render_width as f32 * 0.75).round() as u32,
+            (render_height as f32 * 0.75).round() as u32,
+        ),
+        "50" => (
+            (render_width as f32 * 0.5).round() as u32,
+            (render_height as f32 * 0.5).round() as u32,
+        ),
+        "25" => (
+            (render_width as f32 * 0.25).round() as u32,
+            (render_height as f32 * 0.25).round() as u32,
+        ),
+        "custom" => (
+            snapshot
+                .number("history.custom_width", 960.0)
+                .round()
+                .clamp(64.0, 3840.0) as u32,
+            snapshot
+                .number("history.custom_height", 540.0)
+                .round()
+                .clamp(64.0, 2160.0) as u32,
+        ),
+        _ => (render_width, render_height),
+    };
+    (dimensions.0.max(1), dimensions.1.max(1))
+}
+
+fn estimate_full_graph_bytes(
+    render_width: u32,
+    render_height: u32,
+    history_width: u32,
+    history_height: u32,
+    history_capacity: u32,
+) -> u64 {
+    let render_pixels = u64::from(render_width.max(1))
+        .saturating_mul(u64::from(render_height.max(1)));
+    let history_pixels = u64::from(history_width.max(1))
+        .saturating_mul(u64::from(history_height.max(1)))
+        .saturating_mul(u64::from(history_capacity.max(1)));
+
+    // Five RGBA16F working targets, one RGBA8 authoritative output, and one
+    // RGBA8 readback buffer. The source texture and driver alignment overhead
+    // are intentionally not counted, so this is a conservative lower bound.
+    render_pixels
+        .saturating_mul(48)
+        .saturating_add(history_pixels.saturating_mul(4))
+}
+
+fn source_mapping_code(fit_mode: &str) -> f32 {
+    match fit_mode {
+        "fit" => 1.0,
+        "crop" => 2.0,
+        _ => 0.0,
+    }
 }
 
 fn create_hdr_texture(device: &wgpu::Device, label: &str, width: u32, height: u32) -> (wgpu::Texture, wgpu::TextureView) {

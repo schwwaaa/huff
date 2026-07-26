@@ -110,7 +110,7 @@ fn get_app_info(
     source: tauri::State<'_, SourceSelector>,
 ) -> AppInfo {
     AppInfo {
-        build: "HNW-14".into(),
+        build: "HNW-15".into(),
         renderer: renderer.info(),
         camera: camera.status(),
         camera_devices: camera.devices(),
@@ -131,7 +131,7 @@ fn get_app_info(
         gesture: gesture.info(),
         automation: automation.info(),
         parameter_revision: parameters.revision(),
-        native_milestone: "HNW-14".into(),
+        native_milestone: "HNW-15".into(),
         active_source: source.get().label().into(),
     }
 }
@@ -484,7 +484,7 @@ fn export_still(
         fit_mode: fit_mode.clone(),
     };
     let metadata = StillExportMetadata {
-        engine_build: "HNW-14".into(),
+        engine_build: "HNW-15".into(),
         captured_unix_ms: StillExportMetadata::now_unix_ms(),
         active_source: source.get().label().into(),
         source_file: video_info.file_path,
@@ -675,7 +675,7 @@ fn start_offline_export(
         queue_job_id: String::new(),
     };
     let metadata = OfflineExportMetadata {
-        engine_build: "HNW-14".into(),
+        engine_build: "HNW-15".into(),
         created_unix_ms: OfflineExportMetadata::now_unix_ms(),
         source_file: video_info.file_path.clone(),
         source_codec: video_info.codec,
@@ -684,10 +684,17 @@ fn start_offline_export(
         export_start_seconds: start,
         export_duration_seconds: duration_seconds,
         export_fps: fps,
-        render_width: render.width,
-        render_height: render.height,
+        render_width: width,
+        render_height: height,
         export_width: width,
         export_height: height,
+        graph_mode: "full_resolution".into(),
+        live_reference_width: render.width,
+        live_reference_height: render.height,
+        graph_history_width: 0,
+        graph_history_height: 0,
+        graph_history_capacity: 0,
+        graph_estimated_gpu_bytes: 0,
         sampling,
         fit_mode,
         include_audio,

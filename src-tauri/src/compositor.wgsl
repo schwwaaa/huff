@@ -19,6 +19,7 @@ struct Uniforms {
     flow_state0: vec4<f32>,
     flow_state1: vec4<f32>,
     flow_state2: vec4<f32>,
+    source_mapping: vec4<f32>,
 };
 
 struct GesturePoint {
@@ -129,28 +130,89 @@ fn source_available_for_selection() -> bool {
     return false;
 }
 
+fn map_source_uv(
+    uv: vec2<f32>,
+    source_size: vec2<f32>,
+    target_size: vec2<f32>,
+    mode: f32,
+) -> vec3<f32> {
+    let safe_source = max(source_size, vec2<f32>(1.0));
+    let safe_target = max(target_size, vec2<f32>(1.0));
+    let source_aspect = safe_source.x / safe_source.y;
+    let target_aspect = safe_target.x / safe_target.y;
+    var mapped = uv;
+    var valid = 1.0;
+
+    // 0 = stretch/live behavior, 1 = fit/letterbox, 2 = crop/fill.
+    if (mode > 0.5 && mode < 1.5) {
+        if (target_aspect > source_aspect) {
+            let visible_width = source_aspect / target_aspect;
+            mapped.x = (mapped.x - 0.5) / visible_width + 0.5;
+        } else {
+            let visible_height = target_aspect / source_aspect;
+            mapped.y = (mapped.y - 0.5) / visible_height + 0.5;
+        }
+        if (any(mapped < vec2<f32>(0.0)) || any(mapped > vec2<f32>(1.0))) {
+            valid = 0.0;
+        }
+    } else if (mode >= 1.5) {
+        if (target_aspect > source_aspect) {
+            let crop_height = source_aspect / target_aspect;
+            mapped.y = (mapped.y - 0.5) * crop_height + 0.5;
+        } else {
+            let crop_width = target_aspect / source_aspect;
+            mapped.x = (mapped.x - 0.5) * crop_width + 0.5;
+        }
+    }
+    return vec3<f32>(mapped, valid);
+}
+
 // Clean source only. Base Mix belongs to the final display composite in the
 // original application; temporal history always captures the unprocessed frame.
+// During deterministic export, the source is mapped into the export-sized graph
+// before history, glitch, scan, feedback, Flow, and final compositing execute.
 @fragment
 fn fs_composite(input: VertexOutput) -> @location(0) vec4<f32> {
     let camera_available = u.source_state.x > 0.5;
     let video_available = u.source_state.y > 0.5;
     let background = background_color(u.source_state.z);
+    let render_size = max(u.resolution_time.xy, vec2<f32>(1.0));
+    let mapping_mode = u.source_mapping.x;
     var source = background;
     let selected_source = u32(u.controls0.w + 0.5);
     if (selected_source == 1u) {
         if (video_available) {
-            source = textureSample(video_texture, source_sampler, input.uv).rgb;
+            let mapped = map_source_uv(input.uv, u.source_dimensions.zw, render_size, mapping_mode);
+            if (mapped.z > 0.5) {
+                source = textureSample(video_texture, source_sampler, mapped.xy).rgb;
+            } else {
+                source = vec3<f32>(0.0);
+            }
         }
     } else if (selected_source == 2u) {
         if (camera_available) {
-            source = textureSample(camera_texture, source_sampler, input.uv).rgb;
+            let mapped = map_source_uv(input.uv, u.source_dimensions.xy, render_size, mapping_mode);
+            if (mapped.z > 0.5) {
+                source = textureSample(camera_texture, source_sampler, mapped.xy).rgb;
+            } else {
+                source = vec3<f32>(0.0);
+            }
         }
     } else if (selected_source == 0u) {
         if (camera_available) {
-            source = textureSample(camera_texture, source_sampler, input.uv).rgb;
+            let mapped = map_source_uv(input.uv, u.source_dimensions.xy, render_size, mapping_mode);
+            if (mapped.z > 0.5) {
+                source = textureSample(camera_texture, source_sampler, mapped.xy).rgb;
+            } else {
+                source = vec3<f32>(0.0);
+            }
         } else if (video_available) {
-            source = textureSample(video_texture, source_sampler, input.uv).rgb;
+            let mapped = map_source_uv(input.uv, u.source_dimensions.zw, render_size, mapping_mode);
+            if (mapped.z > 0.5) {
+                source = textureSample(video_texture, source_sampler, mapped.xy).rgb;
+            } else {
+                source = vec3<f32>(0.0);
+            }
         }
     }
     return vec4<f32>(source, 1.0);
