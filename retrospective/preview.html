@@ -1,0 +1,1505 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>HUFF Native wgpu Full Retrospective</title>
+  <style>
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+        font-size: 12pt;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    svg {
+      height: auto;
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      background-color: #1a1a1a;
+      border: none;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">HUFF Native wgpu Full Retrospective</h1>
+</header>
+<h1 id="huff-native-wgpu-full-development-retrospective">HUFF Native
+wgpu — Full Development Retrospective</h1>
+<p><strong>Build reviewed:</strong> <code>0.21.0 / HNW-21</code><br />
+<strong>Roadmap:</strong> Milestones 01–21 complete<br />
+<strong>Document type:</strong> Architecture, migration, milestone,
+product, and testing retrospective<br />
+<strong>Primary audience:</strong> The project owner, future
+maintainers, collaborators, local AI systems, and anyone deciding what
+belongs in the full study branch versus a streamlined production
+branch<br />
+<strong>Source baseline:</strong> Original Tauri v1 + p5.js HUFF archive
+and the completed Milestone 21 native-wgpu archive<br />
+<strong>Honesty rule:</strong> “Integrated” means present in the
+codebase. It does not automatically mean every platform, codec, device,
+receiver, long session, or extreme setting has been fully certified.</p>
+<hr />
+<h2 id="executive-retrospective">Executive retrospective</h2>
+<p>HUFF began as a highly effective browser-rendered video instrument
+packaged inside Tauri. Its immediacy came from p5.js, Canvas2D, direct
+DOM controls, a persistent graphics buffer, and a two-window
+arrangement. That design was artistically productive, but the browser
+owned nearly everything important: the draw loop, pixels, history,
+feedback memory, timing, and the final canvas. Native Syphon and Spout
+output therefore required reading the canvas back to the CPU, sending
+raw frames through a local WebSocket, and uploading them again on the
+platform side. Source state and control state were also distributed
+among DOM elements, JavaScript objects, WebSocket roles, and Rust
+bridges.</p>
+<p>The native migration did not merely translate JavaScript into Rust.
+It changed the <strong>ownership model</strong> of the application:</p>
+<ul>
+<li>Rust now owns canonical state.</li>
+<li>wgpu owns the authoritative image and persistent GPU resources.</li>
+<li>FFmpeg and camera workers own media acquisition under explicit
+source rules.</li>
+<li>The HTML interface acts as a control surface rather than the
+renderer.</li>
+<li>Recording and export receive the native Program image.</li>
+<li>Presets, automation, mappings, routing, verification, and
+interoperability reports speak through typed schemas.</li>
+</ul>
+<p>The finished roadmap produces a far more capable system: native
+temporal memory, a complete GPU effect graph, Syphon and Spout output,
+live recording, deterministic rendering, production codecs, automation
+replay, full-resolution export, controller mapping, formal state
+documents, constrained pipeline recipes, runtime verification, and an
+honest interoperability research boundary.</p>
+<p>The cost is equally real. The native codebase is larger and more
+specialized. GPU state, media workers, persistent temporal stores,
+platform bridges, export graphs, and schemas create more places where
+subtle bugs can hide. Some later features are intentionally provisional
+or research-oriented. The next phase should therefore
+<strong>not</strong> add broad new architecture immediately. It should
+convert the completed roadmap into a measured, calibrated, pruned, and
+release-ready instrument.</p>
+<hr />
+<h2 id="the-development-graph">The development graph</h2>
+<figure>
+<img src="assets/HUFF-DEVELOPMENT-GRAPH.png"
+alt="HUFF Milestones 01–21 development graph" />
+<figcaption aria-hidden="true">HUFF Milestones 01–21 development
+graph</figcaption>
+</figure>
+<p>The roadmap naturally divided into six phases:</p>
+<ol type="1">
+<li><strong>Native substrate — 01–03:</strong> establish ownership,
+media stability, and GPU history.</li>
+<li><strong>Rebuild the visual instrument — 04–07:</strong> restore the
+flying framebuffer, clusters, scanlines, and complete effect graph.</li>
+<li><strong>Output and deliverables — 08–12:</strong> connect HUFF to
+other software and create live, still, and deterministic production
+output.</li>
+<li><strong>Repeatable production — 13–15:</strong> queue jobs, replay
+automation, and render the complete graph at export resolution.</li>
+<li><strong>Formalize the instrument — 16–19:</strong> preserve the
+legacy contract, map controllers, define state documents, and expose
+named buses and recipes.</li>
+<li><strong>Observe and prepare — 20–21:</strong> make production health
+visible, recover safely, and define the future lower-copy transport
+boundary.</li>
+</ol>
+<p>A scalable Mermaid version is included below for Obsidian and other
+Markdown systems:</p>
+<pre class="mermaid"><code>flowchart TD
+    A[01 Native foundation] --&gt; B[02 Source ownership and stability]
+    B --&gt; C[03 GPU temporal history]
+    C --&gt; D[04 Historical glitch and flying framebuffer]
+    D --&gt; E[05 Cluster bodies]
+    E --&gt; F[06 Scanlines and layer priority]
+    F --&gt; G[07 Complete core render graph]
+    G --&gt; H[08 Syphon and Spout]
+    H --&gt; I[09 Live CFR recording]
+    I --&gt; J[10 High-resolution stills]
+    J --&gt; K[11 Deterministic video export]
+    K --&gt; L[12 Production formats and image sequences]
+    L --&gt; M[13 Durable export queue — provisional]
+    M --&gt; N[14 Deterministic automation replay]
+    N --&gt; O[15 True export-resolution graph — refinement pending]
+    O --&gt; P[16 Legacy parameter contract and parity lab]
+    P --&gt; Q[17 MIDI and OSC mapping]
+    Q --&gt; R[18 Presets, snapshots, sequences, projects]
+    R --&gt; S[19 Named buses and pipeline recipes]
+    S --&gt; T[20 Production verification and recovery]
+    T --&gt; U[21 Lower-copy interoperability research]
+    U --&gt; V[Testing, calibration, pruning, packaging, release]</code></pre>
+<hr />
+<h2 id="architecture-migration-at-a-glance">Architecture migration at a
+glance</h2>
+<figure>
+<img src="assets/HUFF-ARCHITECTURE-MIGRATION.png"
+alt="HUFF original-to-native architecture migration" />
+<figcaption aria-hidden="true">HUFF original-to-native architecture
+migration</figcaption>
+</figure>
+<h3 id="original-huff">Original HUFF</h3>
+<p>The original application used Tauri v1 as a desktop shell around a
+p5.js/Canvas2D instrument. The controls window contained the draw loop
+and queried DOM controls directly. A separate canvas window received
+JPEG frames through a localhost WebSocket. Temporal history lived in
+browser <code>ImageData</code>; feedback lived in <code>gBuf</code>;
+Syphon and Spout used <code>canvas.getImageData()</code>, a
+magic-prefixed WebSocket frame, Rust interception, and a platform
+texture upload.</p>
+<h3 id="native-huff">Native HUFF</h3>
+<p>The current application uses Tauri v2 for the shell and control
+surface, while Rust and wgpu own the render window, source textures,
+temporal history, persistent buffers, effect passes, final Program
+texture, recording, and export. The interface sends commands into a
+canonical parameter/action model. Syphon and Spout receive bounded
+asynchronous readbacks from the native Program texture. State, mapping,
+routing, production verification, and interoperability are described
+with explicit JSON schemas.</p>
+<h3 id="what-was-preserved">What was preserved</h3>
+<ul>
+<li>Two-window instrument identity: controls plus a dedicated
+output.</li>
+<li>The original parameter vocabulary and 87-control contract.</li>
+<li>The flying-framebuffer concept.</li>
+<li>Historical glitch tiles, clusters, scanlines, Flow, Smoosh, keying,
+feedback, and clean-video relationships.</li>
+<li>MIDI, OSC, Syphon, Spout, presets, and live performance
+orientation.</li>
+<li>The principle that HUFF is an instrument, not merely a file
+converter or generic node editor.</li>
+</ul>
+<h3 id="what-fundamentally-changed">What fundamentally changed</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Concern</th>
+<th>Original system</th>
+<th>Native system</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Authoritative renderer</td>
+<td>p5.js / Canvas2D in WebView</td>
+<td>Rust + wgpu + WGSL</td>
+</tr>
+<tr class="even">
+<td>App shell</td>
+<td>Tauri v1</td>
+<td>Tauri v2</td>
+</tr>
+<tr class="odd">
+<td>Live state</td>
+<td>DOM values queried by draw loop</td>
+<td>Canonical Rust parameter and action state</td>
+</tr>
+<tr class="even">
+<td>Temporal history</td>
+<td>Browser <code>ImageData</code> ring</td>
+<td>GPU texture-array ring</td>
+</tr>
+<tr class="odd">
+<td>Persistent image memory</td>
+<td>Browser <code>gBuf</code></td>
+<td>Native persistent GPU targets</td>
+</tr>
+<tr class="even">
+<td>Draw order</td>
+<td>JavaScript call order</td>
+<td>Explicit render graph and routing vocabulary</td>
+</tr>
+<tr class="odd">
+<td>Output window</td>
+<td>JPEG WebSocket mirror</td>
+<td>Native wgpu surface</td>
+</tr>
+<tr class="even">
+<td>Platform sharing</td>
+<td>Canvas readback → WebSocket → upload</td>
+<td>Native GPU readback → bounded worker → upload</td>
+</tr>
+<tr class="odd">
+<td>Recording</td>
+<td>Browser/live capture model</td>
+<td>Native constant-frame-rate recorder</td>
+</tr>
+<tr class="even">
+<td>Offline video</td>
+<td>Not deterministic</td>
+<td>Fixed-frame private render clock</td>
+</tr>
+<tr class="odd">
+<td>High-resolution output</td>
+<td>Canvas-oriented</td>
+<td>Private export-resolution graph</td>
+</tr>
+<tr class="even">
+<td>Presets/projects</td>
+<td>Local and loosely typed</td>
+<td>Scoped typed state documents</td>
+</tr>
+<tr class="odd">
+<td>MIDI/OSC</td>
+<td>Device/layout-oriented bridges</td>
+<td>Canonical learnable mappings</td>
+</tr>
+<tr class="even">
+<td>Routing</td>
+<td>Hidden fixed pipeline</td>
+<td>Named buses and constrained recipes</td>
+</tr>
+<tr class="odd">
+<td>Diagnostics</td>
+<td>Scattered status and logs</td>
+<td>Production and interop report schemas</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="scale-of-the-migration">Scale of the migration</h2>
+<p>A rough source count, excluding the bundled p5 library, generated
+artifacts, Git metadata, and the large third-party Spout SDK,
+illustrates the change in responsibility:</p>
+<table>
+<colgroup>
+<col style="width: 30%" />
+<col style="width: 40%" />
+<col style="width: 30%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Archive</th>
+<th style="text-align: right;">Approximate nonblank core source
+lines</th>
+<th>Main ownership</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Original Tauri v1/p5 HUFF</td>
+<td style="text-align: right;">~6,900</td>
+<td>JavaScript/HTML render and UI, small Rust relay/bridges</td>
+</tr>
+<tr class="even">
+<td>Milestone 21 native HUFF</td>
+<td style="text-align: right;">~29,100</td>
+<td>~22,900 Rust, plus HTML/JS control surface, WGSL, and Objective-C
+camera glue</td>
+</tr>
+</tbody>
+</table>
+<p>The number is not a quality score. It explains why the native system
+can own more capabilities—and why it now requires stronger boundaries,
+testing, diagnostics, and documentation. The current native core is
+divided across roughly 29 Rust source modules, two WGSL shaders, one
+Objective-C camera bridge, one main frontend JavaScript file, and one
+main control HTML file.</p>
+<hr />
+<h2 id="the-current-system-in-ordinary-language">The current system in
+ordinary language</h2>
+<h3 id="the-control-surface">The control surface</h3>
+<p>The HTML window is the dashboard. It displays sliders, buttons,
+routing choices, state tools, export controls, diagnostics, and research
+panels. It should be thought of as a remote control for the engine, not
+as the place where pixels are produced.</p>
+<h3 id="the-canonical-state">The canonical state</h3>
+<p>Rust keeps the official value of every parameter and action. This
+matters because the UI, MIDI, OSC, presets, automation, projects,
+export, and routing must agree on the same state. At Milestone 21 there
+are 100 canonical parameters, including the 87 preserved legacy
+controls.</p>
+<h3 id="media-ownership">Media ownership</h3>
+<p>Only one primary source is authoritative at a time. Video decoding,
+camera capture, source audio, microphone audio, transport, and recovery
+are supervised native systems rather than side effects of HTML media
+elements.</p>
+<h3 id="gpu-temporal-memory">GPU temporal memory</h3>
+<p>HUFF does not only process the current frame. It keeps recent frames,
+a flying effect buffer, feedback targets, Flow state, and other
+persistent resources. Those memories are explicit GPU objects with
+allocation, reset, update, and health behavior.</p>
+<h3 id="the-render-graph">The render graph</h3>
+<p>The renderer produces clean source textures, samples history, stamps
+glitch tiles, advances clusters, draws scanlines, combines Smoosh
+layers, performs keying and Global Mix, runs Flow and feedback, and
+writes the final Program image. Milestone 19 names the responsibilities
+without exposing an unrestricted graph.</p>
+<h3 id="program-and-monitor">Program and Monitor</h3>
+<p><strong>Program</strong> is the committed image consumed by
+recording, export, Syphon, and Spout. <strong>Monitor</strong> is what
+the local output window inspects. They can be different—for example,
+Program can remain the final HUFF composite while Monitor shows the raw
+Field Store.</p>
+<h3 id="live-recording-versus-offline-export">Live recording versus
+offline export</h3>
+<ul>
+<li><strong>Live recording</strong> captures the performance as it
+happens and keeps a constant output frame rate.</li>
+<li><strong>Offline export</strong> owns a fixed timeline and renders
+every frame deterministically, even when the computer takes longer than
+real time.</li>
+</ul>
+<h3 id="typed-documents">Typed documents</h3>
+<p>The system now distinguishes:</p>
+<ul>
+<li>a <strong>Preset</strong>: a scoped artistic condition;</li>
+<li>a <strong>Snapshot</strong>: a broad machine-state capture;</li>
+<li>a <strong>Sequence</strong>: timed automation and actions;</li>
+<li>a <strong>Project</strong>: selected state, source references,
+mappings, and automation;</li>
+<li>a <strong>Route plan</strong>: named buses and legal pipeline
+choices;</li>
+<li>a <strong>Production report</strong>: runtime health and recovery
+context;</li>
+<li>an <strong>Interop report</strong>: current transfer path and future
+lower-copy candidates.</li>
+</ul>
+<hr />
+<h1 id="complete-milestone-retrospective">Complete milestone
+retrospective</h1>
+<h2 id="milestone-01-native-engine-foundation">Milestone 01 — Native
+Engine Foundation</h2>
+<p><strong>In ordinary language.</strong> HUFF stopped being primarily a
+browser sketch inside a desktop shell and became a real native video
+engine. The HTML interface remained, but it became the control surface
+rather than the place where the final image was created.</p>
+<p><strong>Technical core.</strong> Introduced the Rust-owned wgpu
+device, native render window, media and camera foundations, canonical
+parameter state, transport plumbing, presets, undo, MIDI/OSC entry
+points, diagnostics, and the control-window/output-window division.</p>
+<p><strong>Why it matters.</strong> Every later feature could share one
+authoritative GPU and state system instead of adding more browser
+workarounds.</p>
+<p><strong>Current caveat.</strong> This was infrastructure, not visual
+parity. The first goal was a stable native substrate rather than a
+finished instrument. ## Milestone 02 — Source Ownership and Runtime
+Stability</p>
+<p><strong>In ordinary language.</strong> HUFF learned which source was
+truly in control. Starting the camera no longer left a video decoding
+invisibly, and loading a video no longer depended on stale camera
+frames.</p>
+<p><strong>Technical core.</strong> Made camera and video mutually
+authoritative, retained file position across source changes, paused
+inactive audio/decoders, paced surface timeout and occlusion recovery,
+cleared stale source frames, and corrected redundant decoder starts.
+Milestone 02.1 records the major corrective pass.</p>
+<p><strong>Why it matters.</strong> Source switching became
+understandable, less wasteful, and less likely to create “the transport
+says it is playing but the picture is stuck” behavior.</p>
+<p><strong>Current caveat.</strong> Device-specific camera and
+permission behavior still requires real-machine testing. ## Milestone 03
+— Native GPU Temporal History</p>
+<p><strong>In ordinary language.</strong> Recent frames moved out of
+JavaScript memory and into a bounded stack of textures on the GPU. This
+gave HUFF fast access to the past without asking the browser to hold and
+copy every image.</p>
+<p><strong>Technical core.</strong> Added a texture-array history ring,
+capture pacing, history diagnostics, and first temporal-depth sampling.
+Milestones 03.1 and 03.2 corrected bind-group portability and module
+registration.</p>
+<p><strong>Why it matters.</strong> Historical glitching, frame delays,
+feedback, and deterministic export could be built on a reusable native
+temporal-memory system.</p>
+<p><strong>Current caveat.</strong> The initial full-frame temporal
+preview was only a validation step and was replaced by tile-based
+sampling in Milestone 04. ## Milestone 04 — Historical Glitch and Flying
+Framebuffer</p>
+<p><strong>In ordinary language.</strong> The defining HUFF image
+behavior returned: pieces of older frames are stamped into a persistent
+image that can fly, drift, rotate, scale, fade, and keep influencing
+what comes next.</p>
+<p><strong>Technical core.</strong> Added instanced historical tiles, a
+bounded instance buffer, deterministic tile generation, and a persistent
+effect buffer. Milestone 04.1 corrected the initial generic-overlay
+interpretation and restored the original gBuf-style destination-out
+decay and transform model.</p>
+<p><strong>Why it matters.</strong> This changed the native port from a
+generic glitch effect into something recognizably HUFF-like.</p>
+<p><strong>Current caveat.</strong> Exact visual parity still depends on
+later calibration of noise, timing, color, and parameter response. ##
+Milestone 05 — Cluster Tile Bodies</p>
+<p><strong>In ordinary language.</strong> Glitch tiles gained moving
+group behavior instead of appearing as unrelated random rectangles.
+Clusters can travel, steer, breathe, wrap, bounce, spread, and retain
+momentum.</p>
+<p><strong>Technical core.</strong> Added persistent cluster centers,
+relative tile constellations, velocity, inertia, noise drift, speed
+variance, pulse kicks, coherence, bias, spread, spatial gaps, and
+Bounce/Wrap behavior while reusing the existing glitch instance
+buffer.</p>
+<p><strong>Why it matters.</strong> Clusters became an instrument with
+personality and continuity rather than a one-frame distribution
+option.</p>
+<p><strong>Current caveat.</strong> Motion feel remains a calibration
+topic; persistence also makes reset behavior and source changes
+important. ## Milestone 06 — Scanlines and Layer Priority</p>
+<p><strong>In ordinary language.</strong> Scanlines returned, and HUFF
+stopped relying on accidental drawing order to decide whether glitch or
+scanline material appears on top.</p>
+<p><strong>Technical core.</strong> Added a native scan-band pipeline
+and explicit Scan, Glitch, Neutral, and Pulse priority behavior using
+bounded GPU resources.</p>
+<p><strong>Why it matters.</strong> Layer order became an intentional
+creative choice and prepared the renderer for Flow, Smoosh, keying, and
+routing decisions.</p>
+<p><strong>Current caveat.</strong> This milestone intentionally
+isolated scanline behavior before the larger render graph was assembled.
+## Milestone 07 — Complete Core Render Graph</p>
+<p><strong>In ordinary language.</strong> The major HUFF effect families
+were finally connected into one known order. Glitch, scanlines,
+feedback, clean video, Flow, Smoosh, Luma Key, and Global Mix could
+interact in the same native renderer.</p>
+<p><strong>Technical core.</strong> Added sixteen Canvas-style Smoosh
+blend modes, Luma Key, Global Mix insertion choices, Flow target routing
+and pulse behavior, and explicit compositing stages. Milestone 07.1
+removed a Metal read/write alias hazard; 07.2 added bounded FFmpeg
+reader threads and watchdog restarts.</p>
+<p><strong>Why it matters.</strong> The native port became a complete
+working image instrument instead of a sequence of isolated GPU
+demonstrations.</p>
+<p><strong>Current caveat.</strong> The growing render graph increased
+interaction complexity and made diagnostics, routing vocabulary, and
+long-session tests essential. ## Milestone 08 — Native Syphon and Spout
+Output</p>
+<p><strong>In ordinary language.</strong> The native image could be sent
+to other visual applications. On macOS this means Syphon; on Windows it
+means Spout.</p>
+<p><strong>Technical core.</strong> Added bounded asynchronous GPU
+readback, shared CPU RGBA frames, platform sender workers, and Windows
+adapter/ownership hardening in 08.1.</p>
+<p><strong>Why it matters.</strong> HUFF can participate in VJ,
+projection, recording, and compositing ecosystems instead of being
+limited to its own window.</p>
+<p><strong>Current caveat.</strong> The production path still performs
+GPU-to-CPU-to-platform-texture transfer. Syphon was exercised locally;
+full Spout receiver testing remains a Windows task. ## Milestone 09 —
+Constant-Frame-Rate Live Recording</p>
+<p><strong>In ordinary language.</strong> HUFF gained a dependable
+“record what is happening now” mode. If rendering misses a moment, the
+recorder repeats the latest completed frame instead of producing a
+broken variable-rate file.</p>
+<p><strong>Technical core.</strong> Added 30/60 FPS CFR recording,
+native frame capture, source or microphone audio routing, AAC muxing,
+bounded queues, and safe finalization.</p>
+<p><strong>Why it matters.</strong> Live performances can be captured in
+a broadly compatible MP4 without relying on external screen
+recording.</p>
+<p><strong>Current caveat.</strong> A live recording preserves real-time
+performance timing and any live slowdown. It is not the same as
+deterministic offline rendering. ## Milestone 10 — High-Resolution Still
+Export</p>
+<p><strong>In ordinary language.</strong> A single HUFF frame could be
+saved at native size, 1080p, 4K, 8K, or custom dimensions with choices
+for fitting and pixel sampling.</p>
+<p><strong>Technical core.</strong> Added PNG export, Smooth/Crisp
+sampling, Fit/Crop/Stretch mapping, independent output dimensions, and a
+reproducibility sidecar.</p>
+<p><strong>Why it matters.</strong> HUFF became useful for print,
+artwork, still documentation, and high-resolution frame delivery.</p>
+<p><strong>Current caveat.</strong> At this point the result could still
+be a resampled finished frame rather than the entire temporal graph
+running at the export size. ## Milestone 11 — Deterministic Offline
+Video Export</p>
+<p><strong>In ordinary language.</strong> HUFF learned to render a video
+frame by frame from a fixed clock rather than recording whatever speed
+the live loop happened to achieve.</p>
+<p><strong>Technical core.</strong> Added a private decoder, exact
+24/30/60 FPS timeline, frozen canonical state, temporal reset,
+frame-exact rendering, optional source-audio retiming, cancellation, and
+reproducibility metadata. Milestone 11.1 corrected one invalid method
+call.</p>
+<p><strong>Why it matters.</strong> The same setup can produce
+repeatable output even when rendering is slower than real time.</p>
+<p><strong>Current caveat.</strong> Determinism depends on every random,
+temporal, automation, and source decision being tied to the export
+clock; later milestones completed more of that system. ## Milestone 12 —
+Production Export Profiles and Image Sequences</p>
+<p><strong>In ordinary language.</strong> Offline export stopped being
+only one MP4 option and became a delivery system for previews, editing
+masters, archival files, alpha-capable files, and numbered frames.</p>
+<p><strong>Technical core.</strong> Added H.264, ProRes 422 HQ, ProRes
+4444, FFV1, PNG sequences, profile-specific audio, optional alpha,
+temporary destinations, job manifests, and explicit
+complete/cancelled/failed states.</p>
+<p><strong>Why it matters.</strong> One HUFF performance can be
+delivered to editing, compositing, archive, web, or frame-by-frame
+workflows.</p>
+<p><strong>Current caveat.</strong> Codec availability depends on the
+local FFmpeg build, and alpha is only meaningful when the final graph
+preserves it. ## Milestone 13 — Durable Export Queue</p>
+<p><strong>In ordinary language.</strong> HUFF can remember several
+export jobs, run them one after another, recover unfinished jobs after a
+restart, and retry or repeat a job.</p>
+<p><strong>Technical core.</strong> Added immutable queued job
+descriptions, sequential dispatch, pause/resume, reorder, cancel, retry,
+repeat, persistent history, destination conflict checks, and crash
+recovery.</p>
+<p><strong>Why it matters.</strong> Useful for unattended batches,
+format matrices, long renders, and systematic testing.</p>
+<p><strong>Current caveat.</strong> This is deliberately provisional.
+The user may rarely need it, and the visible queue may later be hidden,
+simplified, or removed from the production branch. ## Milestone 14 —
+Deterministic Automation Replay</p>
+<p><strong>In ordinary language.</strong> Movements and actions can be
+recorded, then replayed by the offline exporter using its exact frame
+clock.</p>
+<p><strong>Technical core.</strong> Added canonical parameter events,
+discrete actions, Step/Linear/Smooth/Ease interpolation, JSON clips,
+looping, export-job freezing, deterministic Flow pulse duration, and
+state restoration after export.</p>
+<p><strong>Why it matters.</strong> A performed gesture can become a
+repeatable rendered sequence rather than a one-time live accident.</p>
+<p><strong>Current caveat.</strong> The current workflow lacks a full
+live Play/Stop/Seek automation transport. The strongest use is currently
+offline export. ## Milestone 15 — True Export-Resolution Render
+Graph</p>
+<p><strong>In ordinary language.</strong> A 4K or 8K export now asks the
+whole HUFF effect system to work at that size instead of merely
+enlarging the final live-resolution picture.</p>
+<p><strong>Technical core.</strong> Creates a private export-resolution
+history ring, persistent buffers, effect passes, compositor, direct
+readback, source mapping, resource estimates, and restoration of the
+live graph.</p>
+<p><strong>Why it matters.</strong> Large exports can contain genuinely
+high-resolution glitch, scanline, flow, feedback, and temporal
+detail.</p>
+<p><strong>Current caveat.</strong> This is one of the highest-risk
+areas. Local testing produced both successes and failures, especially at
+large resolutions and heavy temporal settings. Focused diagnosis remains
+pending. ## Milestone 16 — Legacy Parameter Contract and Parity Lab</p>
+<p><strong>In ordinary language.</strong> HUFF gained a reference sheet
+inside the code that says what every original control was called and how
+it was supposed to range and default.</p>
+<p><strong>Technical core.</strong> Embedded the 87-control legacy
+contract, validates ID/type/default/range/step/options, identifies
+native-only controls, adds isolation profiles, clears temporal state at
+profile boundaries, and exports parity reports.</p>
+<p><strong>Why it matters.</strong> Future edits can be checked against
+the original instrument instead of relying on memory.</p>
+<p><strong>Current caveat.</strong> Matching JSON definitions does not
+prove that pixels or movement look identical. The in-app Parity Lab is a
+calibration scaffold and may be hidden in a streamlined branch. ##
+Milestone 17 — MIDI and OSC Mapping Workflows</p>
+<p><strong>In ordinary language.</strong> Physical controllers and
+network control messages can be learned and assigned directly to real
+HUFF controls and actions.</p>
+<p><strong>Technical core.</strong> Added learn, edit, enable/disable,
+source-conflict warnings, Absolute/Gate/Toggle/Trigger behavior, curves,
+scaling, smoothing, thresholds, portable maps, native dialogs, factory
+maps, and automation recording of mapped changes.</p>
+<p><strong>Why it matters.</strong> HUFF becomes performable with knobs,
+faders, buttons, TouchOSC, Max, and other control software without
+hard-coding one device.</p>
+<p><strong>Current caveat.</strong> Unusual controllers and sender
+conventions may still need device-specific refinement. ## Milestone 18 —
+Presets, Snapshots, Sequences, and Projects</p>
+<p><strong>In ordinary language.</strong> HUFF stopped treating every
+saved state as the same thing. A look, a complete machine state, a timed
+performance, and a project are now different documents.</p>
+<p><strong>Technical core.</strong> Added the huff-state/v1 schema,
+eight recall scopes, scope-intersection loading, source/transport
+references, automation and mapping inclusion, and metadata for all 98
+parameters. Persistent GPU pixels remain separate.</p>
+<p><strong>Why it matters.</strong> A look preset can avoid unexpectedly
+changing the video, transport, output size, or controller map. Projects
+become portable and explainable.</p>
+<p><strong>Current caveat.</strong> The number of state concepts adds UI
+and documentation weight. Persistent visual memory is intentionally not
+embedded, so recalling a project cannot recreate every exact feedback
+pixel. ## Milestone 19 — Constrained Routing and Named Buses</p>
+<p><strong>In ordinary language.</strong> The hidden effect chain gained
+names and safe switches. HUFF can describe Clean, History, Process,
+Field Store, Mask, Program, and Monitor, and can apply pipeline recipes
+without becoming an unrestricted node editor.</p>
+<p><strong>Technical core.</strong> Added huff-routing/v1, Program and
+Monitor selectors, route-plan export, six recipes, legal temporal-cycle
+rules, and two routing-domain parameters, raising the canonical registry
+to 100.</p>
+<p><strong>Why it matters.</strong> New effects can expand the routing
+vocabulary and unlock new recipe families. The user can inspect a raw
+field store locally while external outputs still receive Program.</p>
+<p><strong>Current caveat.</strong> Recipes only use routes the engine
+explicitly supports. They do not dynamically construct arbitrary GPU
+graphs. ## Milestone 20 — Production Verification and Recovery
+Hardening</p>
+<p><strong>In ordinary language.</strong> HUFF gained a transparent
+self-check and a set of recovery buttons so a problem can be observed
+and repaired without resetting the creative setup.</p>
+<p><strong>Technical core.</strong> Added huff-production-report/v1,
+VERIFY UI, backend/adapter/surface/media/audio/output/export/control
+checks, bounded Recover Surface/Source/Outputs/All actions, diagnostics
+bundles, and strict build wrappers.</p>
+<p><strong>Why it matters.</strong> Testing becomes repeatable and
+failure reports become useful instead of “it froze.” Recovery can
+preserve parameters, routing, and temporal state.</p>
+<p><strong>Current caveat.</strong> A report can describe a machine; it
+cannot certify every receiver, driver, installer, device-loss,
+multi-GPU, or long-session scenario without real target testing. ##
+Milestone 21 — Lower-Copy Platform Interoperability Research</p>
+<p><strong>In ordinary language.</strong> HUFF now clearly shows how
+frames reach Syphon or Spout, how much data is being moved, and what
+would be required to remove some copies in the future.</p>
+<p><strong>Technical core.</strong> Added huff-interop-report/v1,
+current-path bandwidth estimates, a bounded CPU copy probe,
+Metal/IOSurface/D3D12/D3D11On12/Vulkan candidate plans, report export,
+and the ExternalOutputFrame transport seam.</p>
+<p><strong>Why it matters.</strong> Future zero-copy work has an honest
+design boundary and fallback requirements instead of an unsupported
+performance claim.</p>
+<p><strong>Current caveat.</strong> No direct texture-sharing path is
+enabled. The safe bounded CPU readback remains the production path until
+a platform-specific proof passes synchronization, adapter, receiver,
+recovery, and fallback tests.</p>
+<hr />
+<h2 id="milestone-quick-reference-table">Milestone quick-reference
+table</h2>
+<table>
+<colgroup>
+<col style="width: 40%" />
+<col style="width: 30%" />
+<col style="width: 30%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: right;">Milestone</th>
+<th>Title</th>
+<th>Plain-language result</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: right;">01</td>
+<td>Native Engine Foundation</td>
+<td>HUFF stopped being primarily a browser sketch inside a desktop shell
+and became a real native video engine. The HTML interface remained, but
+it became the control surface rather than the place where the final
+image was created.</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">02</td>
+<td>Source Ownership and Runtime Stability</td>
+<td>HUFF learned which source was truly in control. Starting the camera
+no longer left a video decoding invisibly, and loading a video no longer
+depended on stale camera frames.</td>
+</tr>
+<tr class="odd">
+<td style="text-align: right;">03</td>
+<td>Native GPU Temporal History</td>
+<td>Recent frames moved out of JavaScript memory and into a bounded
+stack of textures on the GPU. This gave HUFF fast access to the past
+without asking the browser to hold and copy every image.</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">04</td>
+<td>Historical Glitch and Flying Framebuffer</td>
+<td>The defining HUFF image behavior returned: pieces of older frames
+are stamped into a persistent image that can fly, drift, rotate, scale,
+fade, and keep influencing what comes next.</td>
+</tr>
+<tr class="odd">
+<td style="text-align: right;">05</td>
+<td>Cluster Tile Bodies</td>
+<td>Glitch tiles gained moving group behavior instead of appearing as
+unrelated random rectangles. Clusters can travel, steer, breathe, wrap,
+bounce, spread, and retain momentum.</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">06</td>
+<td>Scanlines and Layer Priority</td>
+<td>Scanlines returned, and HUFF stopped relying on accidental drawing
+order to decide whether glitch or scanline material appears on top.</td>
+</tr>
+<tr class="odd">
+<td style="text-align: right;">07</td>
+<td>Complete Core Render Graph</td>
+<td>The major HUFF effect families were finally connected into one known
+order. Glitch, scanlines, feedback, clean video, Flow, Smoosh, Luma Key,
+and Global Mix could interact in the same native renderer.</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">08</td>
+<td>Native Syphon and Spout Output</td>
+<td>The native image could be sent to other visual applications. On
+macOS this means Syphon; on Windows it means Spout.</td>
+</tr>
+<tr class="odd">
+<td style="text-align: right;">09</td>
+<td>Constant-Frame-Rate Live Recording</td>
+<td>HUFF gained a dependable “record what is happening now” mode. If
+rendering misses a moment, the recorder repeats the latest completed
+frame instead of producing a broken variable-rate file.</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">10</td>
+<td>High-Resolution Still Export</td>
+<td>A single HUFF frame could be saved at native size, 1080p, 4K, 8K, or
+custom dimensions with choices for fitting and pixel sampling.</td>
+</tr>
+<tr class="odd">
+<td style="text-align: right;">11</td>
+<td>Deterministic Offline Video Export</td>
+<td>HUFF learned to render a video frame by frame from a fixed clock
+rather than recording whatever speed the live loop happened to
+achieve.</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">12</td>
+<td>Production Export Profiles and Image Sequences</td>
+<td>Offline export stopped being only one MP4 option and became a
+delivery system for previews, editing masters, archival files,
+alpha-capable files, and numbered frames.</td>
+</tr>
+<tr class="odd">
+<td style="text-align: right;">13</td>
+<td>Durable Export Queue</td>
+<td>HUFF can remember several export jobs, run them one after another,
+recover unfinished jobs after a restart, and retry or repeat a job.</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">14</td>
+<td>Deterministic Automation Replay</td>
+<td>Movements and actions can be recorded, then replayed by the offline
+exporter using its exact frame clock.</td>
+</tr>
+<tr class="odd">
+<td style="text-align: right;">15</td>
+<td>True Export-Resolution Render Graph</td>
+<td>A 4K or 8K export now asks the whole HUFF effect system to work at
+that size instead of merely enlarging the final live-resolution
+picture.</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">16</td>
+<td>Legacy Parameter Contract and Parity Lab</td>
+<td>HUFF gained a reference sheet inside the code that says what every
+original control was called and how it was supposed to range and
+default.</td>
+</tr>
+<tr class="odd">
+<td style="text-align: right;">17</td>
+<td>MIDI and OSC Mapping Workflows</td>
+<td>Physical controllers and network control messages can be learned and
+assigned directly to real HUFF controls and actions.</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">18</td>
+<td>Presets, Snapshots, Sequences, and Projects</td>
+<td>HUFF stopped treating every saved state as the same thing. A look, a
+complete machine state, a timed performance, and a project are now
+different documents.</td>
+</tr>
+<tr class="odd">
+<td style="text-align: right;">19</td>
+<td>Constrained Routing and Named Buses</td>
+<td>The hidden effect chain gained names and safe switches. HUFF can
+describe Clean, History, Process, Field Store, Mask, Program, and
+Monitor, and can apply pipeline recipes without becoming an unrestricted
+node editor.</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">20</td>
+<td>Production Verification and Recovery Hardening</td>
+<td>HUFF gained a transparent self-check and a set of recovery buttons
+so a problem can be observed and repaired without resetting the creative
+setup.</td>
+</tr>
+<tr class="odd">
+<td style="text-align: right;">21</td>
+<td>Lower-Copy Platform Interoperability Research</td>
+<td>HUFF now clearly shows how frames reach Syphon or Spout, how much
+data is being moved, and what would be required to remove some copies in
+the future.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="the-architectural-decisions-that-mattered-most">The
+architectural decisions that mattered most</h2>
+<h3 id="preserve-the-instrument-while-replacing-the-implementation">1.
+Preserve the instrument while replacing the implementation</h3>
+<p>The migration did not redesign HUFF into a conventional editor. The
+strange and valuable parts—history sampling, flying memory, feedback,
+layer priority, cluster motion, Flow relationships, and live
+control—were treated as the product identity. The implementation changed
+because the browser architecture limited ownership, timing, output, and
+future expansion.</p>
+<h3 id="make-ownership-explicit">2. Make ownership explicit</h3>
+<p>Many difficult bugs were ownership bugs in disguise:</p>
+<ul>
+<li>Which source is authoritative?</li>
+<li>Which worker owns playback?</li>
+<li>Which texture is being read or written?</li>
+<li>Which side of a ping-pong pair is current?</li>
+<li>Which subsystem owns the export timeline?</li>
+<li>Which output owns a frame after cancellation?</li>
+</ul>
+<p>Milestones 02, 07.1, 07.2, 11, 15, and 20 repeatedly show that
+explicit ownership is more important than adding another effect.</p>
+<h3 id="treat-persistent-pixels-differently-from-parameters">3. Treat
+persistent pixels differently from parameters</h3>
+<p>A feedback image is not the same kind of state as a slider value.
+Presets and projects can reliably store process configuration, but
+embedding every GPU history and feedback pixel would make files huge,
+fragile, and difficult to migrate. Milestone 18 deliberately preserves
+this distinction.</p>
+<h3 id="treat-order-as-topology">4. Treat order as topology</h3>
+<p>“Flow after glitch” is not merely a numeric setting. It changes which
+image Flow receives. “Scan over glitch” changes layer construction.
+“Global Mix early or late” changes the signal model. Milestone 19
+formalizes this as constrained routing and recipes.</p>
+<h3 id="keep-cycles-explicit">5. Keep cycles explicit</h3>
+<p>Feedback is essential, but an arbitrary graph cycle can create
+same-frame read/write hazards and ambiguous timing. HUFF allows
+recursion through named temporal resources rather than allowing any node
+to connect back to anything.</p>
+<h3 id="build-deterministic-export-as-a-separate-owner">6. Build
+deterministic export as a separate owner</h3>
+<p>A live render loop cannot promise every frame when the GPU, decoder,
+or operating system falls behind. The correct solution was not to make
+live recording pretend to be deterministic. Milestones 11 and 15 create
+a private fixed-time renderer with its own resources and restoration
+rules.</p>
+<h3 id="observe-before-claiming-optimization">7. Observe before claiming
+optimization</h3>
+<p>Milestone 21 does not claim zero copy. It documents the current path,
+estimates its cost, creates a typed extension seam, and defines proof
+criteria. This is a stronger engineering position than shipping an
+unsafe native texture path without reliable synchronization and
+fallback.</p>
+<hr />
+<h2 id="historical-design-influence">Historical design influence</h2>
+<p>The later architecture was informed by three different
+traditions:</p>
+<h3 id="fairlight-cvi-video-entertainer">Fairlight CVI / Video
+Entertainer</h3>
+<p>The Fairlight model treats live video, stored images, masks, drawing,
+and temporal updates as one instrument. Its strongest lesson for HUFF is
+that image memory is a playable object and that a stencil can control
+display, processing, and memory updates—not merely transparency.</p>
+<h3 id="snell-wilcox-magic-dave">Snell &amp; Wilcox Magic DaVE</h3>
+<p>Magic DaVE separates sequences, complete memories, effect objects,
+transitions, trail stores, and non-sequenceable setup. Its strongest
+lesson is that an effect can be a structured, repeatable object and that
+timed state should not blindly include every system property.</p>
+<h3 id="grass-valley-indigo">Grass Valley INDIGO</h3>
+<p>INDIGO formalizes buses, Program, Preview, Aux, delegation,
+transitions, and scoped memory recall. Its strongest lesson is
+operational clarity: the user should know what is selected, what is on
+air, what will change, and what a recall is allowed to touch.</p>
+<p>HUFF does not literally reproduce those machines. Milestones 18 and
+19 translate their strongest state and routing concepts into a
+contemporary, constrained instrument architecture.</p>
+<hr />
+<h2 id="current-strengths">Current strengths</h2>
+<h3 id="a-recognizable-instrument-survived-the-port">A recognizable
+instrument survived the port</h3>
+<p>The migration retained the unusual HUFF behavior rather than
+flattening it into a generic shader rack. The 04.1 parity correction is
+particularly important because it restored the persistent flying-buffer
+model instead of accepting a superficially similar overlay.</p>
+<h3 id="the-output-is-native-and-authoritative">The output is native and
+authoritative</h3>
+<p>The final image is no longer dependent on a WebView canvas or JPEG
+mirror. Recording, deterministic export, native output, and platform
+senders all begin from the native Program image.</p>
+<h3 id="temporal-effects-are-first-class-resources">Temporal effects are
+first-class resources</h3>
+<p>History, feedback, Flow, and the Field Store have explicit
+lifecycles. This improves performance potential, diagnostics,
+deterministic behavior, and future recipe design.</p>
+<h3 id="the-system-can-create-professional-deliverables">The system can
+create professional deliverables</h3>
+<p>Live MP4, deterministic H.264, ProRes, FFV1, PNG sequences, stills,
+custom sizes, alpha-capable profiles, sidecars, and manifests make HUFF
+usable beyond real-time performance.</p>
+<h3 id="state-is-reusable-and-safer">State is reusable and safer</h3>
+<p>Canonical parameters, scoped recall, formal documents, controller
+mappings, and automation prevent each subsystem from inventing its own
+representation of the instrument.</p>
+<h3
+id="the-pipeline-can-grow-without-becoming-an-unrestricted-node-graph">The
+pipeline can grow without becoming an unrestricted node graph</h3>
+<p>New modules can declare legal inputs, outputs, insertion points,
+persistence, and cycles. Those capabilities can then generate new recipe
+families. This is a practical middle ground between one hidden chain and
+a fully general graph.</p>
+<h3 id="diagnostics-are-unusually-transparent">Diagnostics are unusually
+transparent</h3>
+<p>VERIFY and INTEROP explain what the application is doing, what it can
+confirm, what it cannot confirm, and how to recover. This is valuable
+for both users and maintainers.</p>
+<h3 id="cross-platform-backend-intent-is-clear">Cross-platform backend
+intent is clear</h3>
+<p>wgpu provides Metal, Direct3D 12, and Vulkan pathways with WGSL as
+the canonical shader language. Platform-specific media and output
+bridges remain isolated around that shared engine.</p>
+<hr />
+<h2 id="current-weaknesses-and-tradeoffs">Current weaknesses and
+tradeoffs</h2>
+<h3 id="the-codebase-is-much-more-complex">The codebase is much more
+complex</h3>
+<p>The native system owns media, GPU resources, state, export, platform
+bridges, and diagnostics. This is the price of capability. The largest
+modules—especially the renderer and application command surface—should
+be watched for further decomposition during refinement.</p>
+<h3
+id="some-features-are-broader-than-the-immediate-artistic-workflow">Some
+features are broader than the immediate artistic workflow</h3>
+<p>The queue, Parity Lab, State Library, VERIFY, and INTEROP panels add
+significant interface surface. They are useful for study, testing, and
+future architecture, but a streamlined production branch may not need
+all of them visible.</p>
+<h3 id="milestone-15-remains-a-focused-risk-area">Milestone 15 remains a
+focused risk area</h3>
+<p>True 4K/8K temporal rendering can allocate very large histories and
+persistent targets. GPU limits, readback pressure, codec throughput,
+source mapping, and restoration behavior need dedicated testing across
+short and long exports.</p>
+<h3 id="automation-lacks-a-complete-live-transport">Automation lacks a
+complete live transport</h3>
+<p>Automation is powerful during deterministic export, but the absence
+of obvious Play, Stop, Seek, and Preview controls makes the feature less
+immediate in normal performance use.</p>
+<h3 id="platform-sharing-still-copies-through-cpu-memory">Platform
+sharing still copies through CPU memory</h3>
+<p>The path is bounded and reliable, but it consumes bandwidth and adds
+latency. Direct Metal or Direct3D sharing remains research until it can
+be synchronized and recovered safely.</p>
+<h3 id="windows-remains-less-exercised-than-macos">Windows remains less
+exercised than macOS</h3>
+<p>Spout, DX12/MSVC packaging, adapter matching, receivers, and
+installer behavior need target-machine testing. A feature being compiled
+into the architecture is not the same as receiver certification.</p>
+<h3 id="formal-state-cannot-reproduce-every-pixel">Formal state cannot
+reproduce every pixel</h3>
+<p>Projects save process state, not the complete contents of temporal
+GPU stores. This is an intentional architectural choice, but users must
+understand that loading a project recreates the instrument configuration
+rather than the exact previous feedback image.</p>
+<h3 id="exact-visual-parity-is-not-proven-by-parameter-parity">Exact
+visual parity is not proven by parameter parity</h3>
+<p>The 87/87 contract confirms control definitions, not final pixels.
+Noise implementation, color conversion, blend behavior, frame pacing,
+source timing, and feedback accumulation still require side-by-side
+visual judgment.</p>
+<h3
+id="documentation-and-schemas-can-become-a-maintenance-burden">Documentation
+and schemas can become a maintenance burden</h3>
+<p>Every schema is useful only if versions, migrations, and parameter
+identifiers remain disciplined. Future refactors must update code,
+validators, docs, examples, and project migration logic together.</p>
+<hr />
+<h2 id="provisional-and-research-features">Provisional and research
+features</h2>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Feature</th>
+<th>Why it exists</th>
+<th>Recommended current treatment</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Export queue</td>
+<td>Batch and recovery infrastructure</td>
+<td>Keep in full study build; consider hiding under Advanced or removing
+visible UI in production branch</td>
+</tr>
+<tr class="even">
+<td>Automation recorder</td>
+<td>Deterministic performance replay</td>
+<td>Keep engine and file schema; add live transport before calling it a
+primary workflow</td>
+</tr>
+<tr class="odd">
+<td>True high-resolution graph</td>
+<td>Genuine large-format rendering</td>
+<td>Keep; make it a top testing and performance priority</td>
+</tr>
+<tr class="even">
+<td>Parity Lab</td>
+<td>Repeatable calibration and legacy contract checks</td>
+<td>Keep validator; consider hiding the in-app UI after calibration</td>
+</tr>
+<tr class="odd">
+<td>Formal State Library</td>
+<td>Safe typed recall and projects</td>
+<td>Keep, but simplify presentation after actual use reveals the
+necessary scopes</td>
+</tr>
+<tr class="even">
+<td>Routing recipes</td>
+<td>Expandable pipeline vocabulary</td>
+<td>Keep; this is strategic architecture with clear future value</td>
+</tr>
+<tr class="odd">
+<td>VERIFY</td>
+<td>Production health and recovery</td>
+<td>Keep; likely valuable in the production build, possibly under
+Diagnostics</td>
+</tr>
+<tr class="even">
+<td>INTEROP Lab</td>
+<td>Research and transfer-path transparency</td>
+<td>Keep in study/developer build; production UI can hide it while
+retaining transport metadata</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="recommended-two-branch-strategy">Recommended two-branch
+strategy</h2>
+<h3 id="branch-a-full-study-observational-build">Branch A — Full study /
+observational build</h3>
+<p>Purpose: preserve every milestone as a complete record of the
+architecture and make all internal systems observable.</p>
+<p>Keep visible:</p>
+<ul>
+<li>Export queue and job history</li>
+<li>Automation recording and clip inspection</li>
+<li>Parity Lab</li>
+<li>Full State Library and scope editor</li>
+<li>Routing recipes and route export</li>
+<li>VERIFY and diagnostics export</li>
+<li>INTEROP analysis and CPU copy probe</li>
+<li>All manifests and sidecars</li>
+</ul>
+<p>This branch is useful for research, architecture experiments,
+troubleshooting, future product extraction, and documenting why
+decisions were made.</p>
+<h3 id="branch-b-streamlined-production-instrument">Branch B —
+Streamlined production instrument</h3>
+<p>Purpose: emphasize immediate video performance, stable source
+handling, visual controls, recording, export, controller mapping, and
+essential recovery.</p>
+<p>Likely keep:</p>
+<ul>
+<li>Native source and render engine</li>
+<li>Core effects and routing recipes</li>
+<li>Program/Monitor selection</li>
+<li>Syphon/Spout</li>
+<li>Live recording</li>
+<li>Simple deterministic export</li>
+<li>Presets/projects after workflow simplification</li>
+<li>MIDI/OSC mappings</li>
+<li>Diagnostics and Recover All, possibly in an Advanced panel</li>
+</ul>
+<p>Candidates to hide, simplify, or remove from the main interface:</p>
+<ul>
+<li>Visible export queue, unless batch use proves valuable</li>
+<li>Parity Lab after the calibration cycle</li>
+<li>INTEROP Lab in release builds</li>
+<li>Rare state scopes that do not prove useful</li>
+<li>Duplicate quick-preset and formal-preset workflows</li>
+<li>Developer-facing report exports from the performance surface</li>
+</ul>
+<p>The best sequence is to <strong>fork after the comprehensive test and
+calibration pass</strong>, because removing features before
+understanding their dependencies could hide important defects or remove
+useful shared infrastructure.</p>
+<hr />
+<h2 id="recommended-comprehensive-test-cycle">Recommended comprehensive
+test cycle</h2>
+<h3 id="stage-1-freeze-and-identify">Stage 1 — Freeze and identify</h3>
+<ul>
+<li>Tag the complete Milestone 21 study build.</li>
+<li>Record the computer, OS, GPU, backend, FFmpeg build, camera, audio
+device, Syphon/Spout receiver, and source files.</li>
+<li>Export a VERIFY diagnostics bundle before testing.</li>
+<li>Create a single issue register with reproducible steps, expected
+behavior, observed behavior, severity, and supporting report files.</li>
+</ul>
+<h3 id="stage-2-core-source-and-transport">Stage 2 — Core source and
+transport</h3>
+<p>Test:</p>
+<ul>
+<li>Startup with no source</li>
+<li>Video load, play, pause, seek, loop, end, and reload</li>
+<li>Camera start/stop and camera↔︎video switching</li>
+<li>Source audio and microphone audio</li>
+<li>Focus loss, window occlusion, sleep/wake, and surface recovery</li>
+<li>Decoder watchdog behavior on intentionally problematic media</li>
+</ul>
+<p>Pass condition: the authoritative source is always obvious; inactive
+systems stop; recovery does not reset the creative setup.</p>
+<h3 id="stage-3-effect-isolation">Stage 3 — Effect isolation</h3>
+<p>Use the Milestone 16 profiles to test separately:</p>
+<ul>
+<li>Glitch/history depth and scatter</li>
+<li>Flying-buffer transforms and decay</li>
+<li>Cluster persistence, steering, wrap, and bounce</li>
+<li>Scanline generation and priority</li>
+<li>Smoosh blend modes</li>
+<li>Luma Key</li>
+<li>Global Mix positions</li>
+<li>Flow targets and pulses</li>
+<li>Feedback at low, medium, and extreme values</li>
+</ul>
+<p>Pass condition: each control has a clear range, no unexpected freezes
+occur, and the result is acceptably close to the intended legacy
+behavior.</p>
+<h3 id="stage-4-interaction-matrix">Stage 4 — Interaction matrix</h3>
+<p>Test the combinations most likely to create hazards:</p>
+<ul>
+<li>Luma Key + Scanlines + feedback</li>
+<li>Flow on glitch versus scan versus final process</li>
+<li>Smoosh with both layer orders</li>
+<li>High corrupt counts + clusters + smear</li>
+<li>Source switch while temporal buffers contain data</li>
+<li>Routing recipe changes during live playback</li>
+<li>Program and Monitor differences while Syphon or recording is
+active</li>
+</ul>
+<p>Pass condition: no same-frame aliasing, device loss, silent stall, or
+unexplained state mutation.</p>
+<h3 id="stage-5-output">Stage 5 — Output</h3>
+<p>Test:</p>
+<ul>
+<li>Native window at various sizes and fullscreen states</li>
+<li>Syphon receiver connection, disconnect, restart, and long
+session</li>
+<li>Spout on Windows with several receivers and adapter conditions</li>
+<li>Live recording at 30 and 60 FPS with source and microphone
+audio</li>
+<li>Still export at every size policy</li>
+<li>Deterministic H.264, ProRes, FFV1, and PNG sequence output</li>
+<li>Cancellation and failure cleanup</li>
+</ul>
+<p>Pass condition: outputs agree on Program, finish cleanly, and do not
+leave ownership stuck.</p>
+<h3 id="stage-6-milestone-15-focus">Stage 6 — Milestone 15 focus</h3>
+<p>Build a matrix across:</p>
+<ul>
+<li>1080p, 4K, and 8K</li>
+<li>Short and long durations</li>
+<li>Small and large history capacities</li>
+<li>Minimal and heavy glitch/cluster counts</li>
+<li>Feedback and Flow off/on</li>
+<li>H.264, ProRes, FFV1, and PNG sequence</li>
+<li>Automation off/on</li>
+</ul>
+<p>Record GPU memory, render speed, readback pressure, encoder speed,
+failure point, and recovery behavior. Establish supported presets rather
+than promising every theoretical custom size.</p>
+<h3 id="stage-7-state-and-control">Stage 7 — State and control</h3>
+<p>Test:</p>
+<ul>
+<li>Preset scope and recall intersection</li>
+<li>Snapshot recovery</li>
+<li>Project source relocation and missing-file warnings</li>
+<li>Sequence import/export and deterministic replay</li>
+<li>MIDI learn/edit/save/load</li>
+<li>OSC argument ranges and triggers</li>
+<li>Mapping conflicts and automation recording from controllers</li>
+<li>Routing recipe storage and recall</li>
+</ul>
+<p>Pass condition: a scoped document never changes an excluded
+domain.</p>
+<h3 id="stage-8-long-session-reliability">Stage 8 — Long-session
+reliability</h3>
+<p>Run representative scenes for:</p>
+<ul>
+<li>30 minutes</li>
+<li>2 hours</li>
+<li>An overnight session</li>
+</ul>
+<p>Track decoder restarts, dropped external-output frames, readback
+pressure, audio underflows, memory growth, surface recovery, and
+receiver reconnects.</p>
+<h3 id="stage-9-production-pruning">Stage 9 — Production pruning</h3>
+<p>After real use, classify every visible feature:</p>
+<ul>
+<li>Core and frequently used</li>
+<li>Advanced but valuable</li>
+<li>Diagnostic/developer only</li>
+<li>Provisional and unused</li>
+<li>Redundant</li>
+<li>Harmful to clarity</li>
+</ul>
+<p>Use this evidence to produce the streamlined branch.</p>
+<hr />
+<h2 id="visual-calibration-plan">Visual calibration plan</h2>
+<p>Parameter parity should be followed by image parity testing with
+controlled sources:</p>
+<ol type="1">
+<li>Use a short CFR reference clip with motion, faces, hard edges,
+gradients, and saturated color.</li>
+<li>Match source dimensions and output frame rate between legacy and
+native builds.</li>
+<li>Reset temporal state before each test.</li>
+<li>Apply one isolation profile at a time.</li>
+<li>Capture matching frames and short motion segments.</li>
+<li>Compare geometry, tile placement, history age, decay, brightness,
+alpha, edge handling, motion speed, and timing.</li>
+<li>Change one implementation constant or response curve at a time.</li>
+<li>Record the reason for every intentional deviation from legacy
+behavior.</li>
+</ol>
+<p>The final goal does not have to be mathematical identity. It should
+be a documented decision between:</p>
+<ul>
+<li>exact legacy preservation;</li>
+<li>intentional modernization;</li>
+<li>performance-driven approximation;</li>
+<li>bug compatibility that should not be preserved.</li>
+</ul>
+<hr />
+<h2 id="product-implications-beyond-huff">Product implications beyond
+HUFF</h2>
+<p>The migration produced reusable ideas that can support a family of
+focused instruments:</p>
+<ul>
+<li>GPU history and persistent stores</li>
+<li>Typed media sources</li>
+<li>Canonical parameters and actions</li>
+<li>MIDI/OSC maps</li>
+<li>Deterministic automation and export</li>
+<li>Scoped state documents</li>
+<li>Named buses and constrained recipes</li>
+<li>Program/Monitor output ownership</li>
+<li>Production verification and recovery</li>
+<li>Typed external-output transports</li>
+</ul>
+<p>This supports the larger strategy described in the Modular Video
+Instrument Architecture memo: standalone Field Store, Trail Store,
+Stencil Painter, DVE Object, Program/Preset Mixer, Sequence Machine,
+Output Mapper, and eventually a master rack/router. HUFF can remain one
+opinionated recipe built from shared native components rather than
+becoming the monolithic application that contains every future tool.</p>
+<hr />
+<h2 id="what-the-project-accomplished">What the project
+accomplished</h2>
+<p>The roadmap transformed HUFF from a browser-owned real-time canvas
+into a documented native video-instrument engine with:</p>
+<ul>
+<li>explicit media and GPU ownership;</li>
+<li>a native temporal and feedback architecture;</li>
+<li>preserved legacy control semantics;</li>
+<li>cross-platform GPU backend intent;</li>
+<li>live and deterministic output systems;</li>
+<li>production codecs and high-resolution rendering;</li>
+<li>controller mapping, automation, and typed state;</li>
+<li>constrained pipeline recipes;</li>
+<li>runtime verification and bounded recovery;</li>
+<li>an honest path toward future lower-copy interoperability.</li>
+</ul>
+<p>The most important success is not the number of features. It is that
+the application can increasingly answer difficult questions about
+itself:</p>
+<ul>
+<li>What source is active?</li>
+<li>What image is Program?</li>
+<li>What is the local window monitoring?</li>
+<li>What owns the current frame?</li>
+<li>What temporal memory exists?</li>
+<li>What will a preset recall?</li>
+<li>What route is active?</li>
+<li>Why did playback stall?</li>
+<li>What can be recovered safely?</li>
+<li>How does an external frame leave the GPU?</li>
+<li>Which claims are verified and which remain research?</li>
+</ul>
+<p>That transparency turns HUFF from a fragile collection of effects
+into an instrument architecture that can be tested, taught, modified,
+forked, and eventually used as a foundation for additional standalone
+products.</p>
+<hr />
+<h2 id="final-assessment">Final assessment</h2>
+<p><strong>The migration is architecturally complete, but the product is
+not yet frozen.</strong></p>
+<p>The current system is an exceptional study build and a strong
+technical foundation. The next work is less glamorous but decisive:
+reproduce failures, calibrate the image, establish supported export
+limits, complete Windows validation, simplify the interface, separate
+study tools from performance tools, and package a production branch that
+feels immediate again.</p>
+<p>The ideal outcome is two honest descendants of the same roadmap:</p>
+<ol type="1">
+<li><strong>A complete HUFF Native Study Build</strong> that preserves
+every milestone and makes the architecture observable.</li>
+<li><strong>A focused HUFF Native Production Instrument</strong> that
+uses the proven engine while exposing only the workflows that strengthen
+performance and creation.</li>
+</ol>
+<p>The 21 milestones make that choice possible without losing the
+history or reasoning behind the system.</p>
+<hr />
+<h2 id="documentation-map">Documentation map</h2>
+<p>This retrospective bundle also includes copies of the authoritative
+supporting documents:</p>
+<ul>
+<li><code>source-docs/MILESTONES.md</code></li>
+<li><code>source-docs/STATE-MODEL.md</code></li>
+<li><code>source-docs/ROUTING-MODEL.md</code></li>
+<li><code>source-docs/CONTROL-MAPPING.md</code></li>
+<li><code>source-docs/PRODUCTION-VERIFICATION.md</code></li>
+<li><code>source-docs/INTEROP-RESEARCH.md</code></li>
+<li><code>source-docs/TESTING.md</code></li>
+<li><code>source-docs/MIGRATION-STATUS.md</code></li>
+<li><code>references/HUFF_VIDEO_INSTRUMENT_REFERENCE_STUDY.md</code></li>
+<li><code>references/MODULAR_VIDEO_INSTRUMENT_ARCHITECTURE.md</code></li>
+</ul>
+<p>Keep the directory structure intact so the relative graph links
+continue to work in Obsidian, GitHub, and ordinary Markdown viewers.</p>
+</body>
+</html>

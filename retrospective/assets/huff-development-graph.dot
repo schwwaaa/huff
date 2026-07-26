@@ -1,0 +1,65 @@
+digraph HUFF {
+  graph [rankdir=TB, bgcolor="transparent", pad=0.25, nodesep=0.24, ranksep=0.45, fontname="Helvetica", fontsize=13, labelloc="t", label="HUFF Native wgpu — Development Path (Milestones 01–21)"];
+  node [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=10, margin="0.12,0.08", color="#4b5563", fillcolor="#f3f4f6", fontcolor="#111827"];
+  edge [color="#6b7280", penwidth=1.4, arrowsize=0.7];
+
+  subgraph cluster_a {
+    label="Phase I — Native substrate"; color="#93c5fd"; style="rounded"; fontname="Helvetica-Bold";
+    m01 [label="01  Native foundation"];
+    m02 [label="02  Source ownership\n02.1 recovery correction"];
+    m03 [label="03  GPU history\n03.1–03.2 portability corrections"];
+    m01 -> m02 -> m03;
+  }
+
+  subgraph cluster_b {
+    label="Phase II — Rebuild the visual instrument"; color="#a7f3d0"; style="rounded"; fontname="Helvetica-Bold";
+    m04 [label="04  Historical glitch + flying buffer\n04.1 parity correction"];
+    m05 [label="05  Cluster bodies"];
+    m06 [label="06  Scanlines + layer priority"];
+    m07 [label="07  Complete core render graph\n07.1 Metal alias fix · 07.2 decoder watchdog"];
+    m04 -> m05 -> m06 -> m07;
+  }
+
+  subgraph cluster_c {
+    label="Phase III — Output and deliverables"; color="#fde68a"; style="rounded"; fontname="Helvetica-Bold";
+    m08 [label="08  Syphon + Spout\n08.1 Windows hardening"];
+    m09 [label="09  Live CFR recording"];
+    m10 [label="10  High-resolution stills"];
+    m11 [label="11  Deterministic video export\n11.1 compile correction"];
+    m12 [label="12  Production codecs + image sequences"];
+    m08 -> m09 -> m10 -> m11 -> m12;
+  }
+
+  subgraph cluster_d {
+    label="Phase IV — Repeatable production"; color="#fdba74"; style="rounded"; fontname="Helvetica-Bold";
+    m13 [label="13  Durable export queue\nPROVISIONAL"];
+    m14 [label="14  Automation replay"];
+    m15 [label="15  True export-resolution graph\nREFINEMENT PENDING"];
+    m13 -> m14 -> m15;
+  }
+
+  subgraph cluster_e {
+    label="Phase V — Formalize the instrument"; color="#d8b4fe"; style="rounded"; fontname="Helvetica-Bold";
+    m16 [label="16  Legacy contract + parity lab"];
+    m17 [label="17  MIDI/OSC mapping workflows"];
+    m18 [label="18  Presets, snapshots, sequences, projects"];
+    m19 [label="19  Named buses + pipeline recipes"];
+    m16 -> m17 -> m18 -> m19;
+  }
+
+  subgraph cluster_f {
+    label="Phase VI — Observe, recover, and prepare"; color="#f9a8d4"; style="rounded"; fontname="Helvetica-Bold";
+    m20 [label="20  Production verification + recovery"];
+    m21 [label="21  Lower-copy interop research"];
+    m20 -> m21;
+  }
+
+  m03 -> m04;
+  m07 -> m08;
+  m12 -> m13;
+  m15 -> m16;
+  m19 -> m20;
+
+  finish [shape=ellipse, label="Roadmap complete\nTesting · calibration · pruning · release", fillcolor="#111827", fontcolor="white", color="#111827", fontsize=11];
+  m21 -> finish [penwidth=2.0];
+}

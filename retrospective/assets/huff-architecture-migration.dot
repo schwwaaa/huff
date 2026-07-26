@@ -1,0 +1,43 @@
+digraph MIGRATION {
+  graph [rankdir=LR, bgcolor="transparent", pad=0.25, nodesep=0.30, ranksep=0.55, fontname="Helvetica", fontsize=13, labelloc="t", label="HUFF Architecture Migration — Browser-Owned Rendering to Native Instrument Engine"];
+  node [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=10, margin="0.14,0.09", color="#4b5563", fillcolor="#f9fafb", fontcolor="#111827"];
+  edge [color="#6b7280", penwidth=1.4, arrowsize=0.75];
+
+  subgraph cluster_old {
+    label="Original HUFF (Tauri v1 + p5.js)"; color="#fca5a5"; style="rounded"; fontname="Helvetica-Bold";
+    old_ui [label="Controls WebView\nDOM values are live state"];
+    old_render [label="p5.js / Canvas2D draw loop\nEffects and feedback in browser"];
+    old_memory [label="ImageData history + gBuf\nBrowser-owned pixel memory"];
+    old_mirror [label="JPEG WebSocket mirror\nSecond canvas window"];
+    old_io [label="getImageData → WebSocket\nSyphon / Spout CPU upload"];
+    old_ui -> old_render -> old_memory;
+    old_memory -> old_mirror;
+    old_memory -> old_io;
+  }
+
+  migration [shape=ellipse, label="21-step native migration", fillcolor="#111827", fontcolor="white", color="#111827", fontsize=11];
+
+  subgraph cluster_new {
+    label="Current HUFF (Tauri v2 + Rust + wgpu)"; color="#86efac"; style="rounded"; fontname="Helvetica-Bold";
+    new_ui [label="HTML control surface\nView and command layer"];
+    new_state [label="Canonical Rust state\n100 typed parameters + actions"];
+    new_media [label="Native media ownership\nFFmpeg video/audio + camera"];
+    new_gpu [label="wgpu render graph\nWGSL passes + explicit resources"];
+    new_memory [label="GPU history + persistent stores\nBounded temporal state"];
+    new_output [label="Native Program output\nMonitor · recording · export"];
+    new_io [label="Bounded async readback\nSyphon / Spout workers"];
+    new_docs [label="State, routing, verification\nand interop schemas"];
+
+    new_ui -> new_state;
+    new_state -> new_media;
+    new_state -> new_gpu;
+    new_media -> new_gpu;
+    new_gpu -> new_memory -> new_output;
+    new_output -> new_io;
+    new_state -> new_docs;
+    new_output -> new_docs;
+  }
+
+  old_render -> migration [ltail=cluster_old];
+  migration -> new_state [lhead=cluster_new];
+}
