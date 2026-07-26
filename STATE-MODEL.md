@@ -72,6 +72,10 @@ Interpolation policies are:
 
 The full machine-readable catalog is available through **Export State Model**.
 
+## Milestone 19 routing extension
+
+The current registry contains **100 canonical parameters**. Milestone 19 adds `routing.program_bus` and `routing.monitor_bus`; both use the existing Routing recall domain and therefore remain compatible with the `huff-state/v1` model. Older documents omit them and receive safe Program defaults.
+
 ## File shape
 
 A state document contains:
@@ -83,7 +87,7 @@ A state document contains:
   "kind": "preset",
   "name": "Example",
   "createdUnixMs": 0,
-  "engineBuild": "HNW-18",
+  "engineBuild": "HNW-19",
   "recallScope": {},
   "parameterValues": {},
   "sourceState": null,

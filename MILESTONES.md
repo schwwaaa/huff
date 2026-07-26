@@ -1,7 +1,7 @@
 # HUFF Native wgpu — Master Milestone Record
 
-**Current build:** `0.18.0 / HNW-18`  
-**Current milestone:** Milestone 18 — Presets, Snapshots, Sequences, and Projects  
+**Current build:** `0.19.0 / HNW-19`  
+**Current milestone:** Milestone 19 — Constrained Routing and Named Buses  
 **Tracking rule:** This file is the authoritative milestone index. It must be carried forward and updated in every complete project archive and every changed-files archive from Milestone 16 onward.
 
 This record describes the purpose of each milestone rather than serving as a detailed changelog. Corrective sub-milestones are listed with the milestone they stabilize. Runtime status is intentionally honest: a feature may be structurally integrated while still awaiting the larger cross-feature refinement and verification cycle.
@@ -86,11 +86,13 @@ Milestone 18 formalizes HUFF state through the `huff-state/v1` document model. P
 
 ---
 
-# Planned Milestones
-
 ## Milestone 19 — Constrained Routing and Named Buses
 
-Milestone 19 will begin replacing hidden draw-order dependencies with explicit named responsibilities such as Clean, Process, History, Field Store, Feedback, Mask, Preview, Program, and Auxiliary buses. The stable fixed HUFF pipeline will remain a valid recipe; the goal is not an unrestricted node graph, but a constrained topology where source ownership, temporal-resource writes, clean-video restoration, Flow targets, and output destinations can be understood and serialized.
+Milestone 19 formalizes the fixed HUFF recipe as a constrained `huff-routing/v1` topology with explicit Clean, History, Process, Field Store, Mask, Program, and Monitor responsibilities. The stable render graph still executes as one known instrument recipe rather than an unrestricted node graph. Program can commit the normal clean/effect composite, direct Clean source, or raw Field Store, while the local native window can independently monitor Program, Clean, or Field Store without changing Syphon, Spout, recording, or export. Existing layer priority, Flow target, Global Mix placement, and Smoosh decisions are now presented as routing controls, validated recipes can be applied as canonical parameter batches, legal cycles are limited to explicit temporal resources, route plans can be exported as JSON, and Routing scope in presets, snapshots, and projects now includes the two new Program and Monitor parameters. The canonical registry increases from 98 to 100 parameters while the legacy 87-control contract remains unchanged.
+
+---
+
+# Planned Milestones
 
 ## Milestone 20 — Cross-Platform Production Verification
 

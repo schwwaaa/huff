@@ -1,6 +1,6 @@
 [package]
 name = "huff_native_wgpu_engine"
-version = "0.18.0"
+version = "0.19.0"
 edition = "2021"
 
 [build-dependencies]

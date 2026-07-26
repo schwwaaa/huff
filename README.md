@@ -1,61 +1,71 @@
-# HUFF Native wgpu · Milestone 18
+# HUFF Native wgpu · Milestone 19
 
-Milestone 18 formalizes HUFF state into four distinct portable document types: **presets, snapshots, sequences, and projects**. Recall is no longer treated as one undifferentiated JSON dump. Every document declares what it captured, and the operator chooses which domains may be restored.
+Milestone 19 introduces a **constrained named-bus routing model** while preserving the complete fixed HUFF render recipe. The goal is not a general node graph. It is to make source ownership, temporal writes, clean restoration, Flow placement, Program output, and local monitoring understandable and serializable.
 
-## State document types
+## Named routing responsibilities
 
-- **Preset** — a reusable artistic condition. By default it captures Look, Temporal, and Routing parameters while leaving source files, transport, render allocation, automation, controller maps, and GPU pixel memory untouched.
-- **Snapshot** — a broad current-state capture. It may include parameters, source and transport references, render/history configuration, and the active automation clip, but recall is still explicitly scoped.
-- **Sequence** — the active canonical automation clip. It stores state changes and actions over time; it is source-independent and is not rendered video.
-- **Project** — a portable container for selected parameter domains, source/transport references, automation, and MIDI/OSC maps.
+HUFF now exposes these architectural buses:
 
-All four use the `huff-state/v1` schema.
+- **Clean** — normalized current source;
+- **History** — bounded GPU frame ring;
+- **Process** — the fixed glitch/scan/Smoosh/luma/Global Mix/Flow path;
+- **Field Store** — persistent flying effect memory;
+- **Mask** — luma-derived region control;
+- **Program** — authoritative external output;
+- **Monitor** — independent local native-window inspection.
 
-## Selective recall
+The fixed HUFF pipeline remains the default **Classic HUFF** recipe.
 
-The State Library exposes explicit domains:
+## Program and Monitor selection
 
-- Look
-- Source
-- Temporal
-- Routing
-- Render
-- Transport
-- Automation
-- MIDI/OSC Maps
-- GPU Pixels
+Program can commit:
 
-A loaded document can restore only the intersection of:
+- the normal Program Composite;
+- the Clean source directly;
+- the raw persistent Field Store.
 
-1. the domains captured by the document; and
-2. the domains currently checked by the operator.
+Syphon, Spout, recording, still export, and deterministic export always consume Program.
 
-This prevents an artistic preset from unexpectedly changing the video file, playback position, output dimensions, history allocation, automation clip, or controller mappings.
+Monitor affects only the native output window. It can inspect Program, Clean, or Field Store without changing external output. This is intentionally a small preview/auxiliary function rather than a full broadcast switcher.
 
-## Persistent image memory is separate
+## Routing recipes
 
-HUFF’s GPU history ring, flying glitch buffer, feedback store, and Flow state are identified in state documents but their pixel contents are **not silently embedded**. Temporal or render recalls clear the relevant persistent runtime buffers when required. This is intentional: a preset is not a still image, a snapshot is not a field-store dump, and a sequence is not a movie.
+The Routing panel includes validated recipes for:
 
-## Parameter state metadata
+- Classic HUFF;
+- Glitch → Flow → Scan;
+- Scan → Flow → Glitch;
+- isolated Smoosh layers;
+- Clean Program bypass;
+- Program output with Field Store monitoring.
 
-Milestone 18 classifies all 98 canonical parameters with:
+Recipes update canonical parameters and are recorded by the automation system when automation recording is active.
 
-- state domain;
-- preset eligibility;
-- snapshot and project scope;
-- sequenceability;
-- interpolation policy;
-- live-safety behavior.
+## State integration
 
-Use **Export State Model** in the State Library, or run:
+The canonical registry now contains **100 parameters**. The two new parameters are:
 
-```bash
-npm run validate:state-model
+```text
+routing.program_bus
+routing.monitor_bus
 ```
 
-## Existing quick presets
+They are classified in the Routing state domain. Presets, snapshots, and projects capture or recall them only when Routing scope is enabled. Older `huff-state/v1` files remain compatible and use safe defaults when these fields are absent.
 
-The earlier local browser-storage preset row remains available for rapid testing and compatibility. The new State Library is the formal native file workflow. The older row may later be simplified or removed in a practical fork after the comprehensive evaluation cycle.
+## Legal temporal cycles
+
+HUFF still permits recursion only through explicit image memory:
+
+```text
+Field Store → Process → Field Store
+History capture → older History read
+```
+
+Same-frame arbitrary texture cycles remain invalid.
+
+## Route-plan export
+
+Press **Export Plan** in the Routing panel to save the active `huff-routing/v1` topology as JSON. The plan records bus ownership, active edges, Program/Monitor selections, Flow target, layer priority, Global Mix position, legal cycles, and warnings.
 
 ## Run
 
@@ -78,21 +88,30 @@ npm run dev:dx12
 
 FFmpeg must be on `PATH` for file playback, recording, and encoded export.
 
+## Validation
+
+```bash
+npm run validate:parity
+npm run validate:control-maps
+npm run validate:state-model
+npm run validate:routing
+```
+
 ## Runtime status
 
-The broader architecture is intentionally being completed before the long refinement pass. State documents are structurally integrated and the application’s static validators pass. Local testing should focus on save/load boundaries, selective recall, missing source files, automation restoration, and MIDI/OSC map restoration.
+The user-confirmed Milestone 18 baseline runs. Milestone 19 is integrated on top of that baseline and should be tested locally for Program selection, Monitor isolation, external-output ownership, state recall, automation recording, and route-plan export. The broader effect and export refinement cycle remains intentionally deferred until all planned milestones are present.
 
 ## Documentation
 
 - `MILESTONES.md` — authoritative complete roadmap
-- `STATE-MODEL.md` — state types, recall domains, metadata, and file behavior
-- `UPGRADE-NOTES-18.md` — implementation details
-- `TESTING.md` — focused Milestone 18 test cycle
-- `MIGRATION-STATUS.md` — current native-port status
+- `ROUTING-MODEL.md` — buses, recipes, cycles, and output ownership
+- `STATE-MODEL.md` — presets, snapshots, sequences, projects, and recall scopes
+- `UPGRADE-NOTES-19.md` — implementation summary
+- `TESTING.md` — focused Milestone 19 test cycle
 - `VALIDATION.md` — packaging-environment checks
-- `CONTROL-MAPPING.md` — Milestone 17 MIDI/OSC map schema
-- `UPGRADE-NOTES-01..17.md` — prior milestone notes
+- `CONTROL-MAPPING.md` — MIDI/OSC mapping model
+- `UPGRADE-NOTES-01..18.md` — prior milestone notes
 
 ## Next milestone
 
-Milestone 19 introduces constrained routing and named buses while preserving the stable fixed HUFF pipeline as a valid instrument recipe.
+Milestone 20 is the broad cross-platform production-verification cycle covering Metal, DX12/MSVC, Spout, Syphon, multi-GPU behavior, long sessions, installers, restart recovery, codec availability, and interaction among the completed systems.

@@ -26,7 +26,7 @@ const requiredUiIds = [
 
 const failures = [];
 if (!stateModel.includes('huff-state/v1')) failures.push('missing huff-state/v1 schema');
-if (uniqueIds.size !== 98) failures.push(`expected 98 canonical parameters, found ${uniqueIds.size}`);
+if (uniqueIds.size !== 100) failures.push(`expected 100 canonical parameters, found ${uniqueIds.size}`);
 for (const domain of requiredDomains) if (!stateModel.includes(`${domain},`)) failures.push(`missing state domain ${domain}`);
 for (const kind of requiredKinds) if (!stateModel.includes(`${kind},`)) failures.push(`missing state document kind ${kind}`);
 for (const command of requiredCommands) {

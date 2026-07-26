@@ -24,6 +24,8 @@ const appState = {
   midiMapSignature: '',
   oscMapSignature: '',
   stateModelCatalog: null,
+  routingCatalog: null,
+  routingPlan: null,
 };
 
 function toast(message, error = false) {
@@ -238,6 +240,88 @@ function configureRegistryControls() {
   if (globalMixGroup) globalMixGroup.title = 'Native clean-source mix with selectable blend mode and BEFORE FB / AFTER FB / AFTER FLOW / FINAL placement.';
   const flowGroup = byId('flowOn')?.closest('.group');
   if (flowGroup) flowGroup.title = 'Native cell-quantized flow warp with target routing, historical pulse source, pull, swirl, turbulence, spread, and bounded carry.';
+}
+
+function routingBusLabel(value) {
+  if (value === 'clean') return 'CLEAN';
+  if (value === 'field_store') return 'FIELD STORE';
+  return 'PROGRAM';
+}
+
+function displayRoutingPlan(plan) {
+  appState.routingPlan = plan || null;
+  const status = byId('routingStatus');
+  if (!status || !plan) return;
+  status.textContent = String(plan.summary || 'ROUTING READY').toUpperCase();
+  status.title = [
+    `Schema: ${plan.schema || 'huff-routing/v1'}`,
+    `Topology: ${plan.topology || 'constrained fixed recipe'}`,
+    ...(Array.isArray(plan.warnings) ? plan.warnings : []),
+  ].join('\n');
+  const path = byId('routingPath');
+  if (path) {
+    path.textContent = `CLEAN → PROCESS → FIELD STORE · PROGRAM ← ${routingBusLabel(plan.programBus)} · HISTORY → PROCESS · MASK → PROCESS · MONITOR ← ${routingBusLabel(plan.monitorBus)}`;
+  }
+  for (const bus of document.querySelectorAll('#routingBusGrid [data-bus]')) {
+    const id = bus.dataset.bus;
+    const active = id === plan.programBus || id === plan.monitorBus
+      || (id === 'program' && plan.programBus === 'program')
+      || id === 'monitor';
+    bus.classList.toggle('active', Boolean(active));
+  }
+}
+
+function displayRoutingFromRenderer(renderer = {}) {
+  if (!byId('routingStatus')) return;
+  const plan = {
+    schema: 'huff-routing/v1',
+    topology: 'constrained_named_bus_fixed_recipe',
+    programBus: renderer.programBus || appState.values['routing.program_bus'] || 'program',
+    monitorBus: renderer.monitorBus || appState.values['routing.monitor_bus'] || 'program',
+    flowTarget: renderer.flowTarget || appState.values['flow.flow_target'] || 'final',
+    layerPriority: renderer.layerPriority || appState.values['layers.layer_priority'] || 'scan',
+    globalMixPosition: renderer.globalMixPosition || appState.values['global_mix.global_mix_pos'] || 'after',
+    warnings: [],
+  };
+  plan.summary = renderer.routingSummary
+    || `Program <- ${routingBusLabel(plan.programBus)} | Monitor <- ${routingBusLabel(plan.monitorBus)} | Flow -> ${String(plan.flowTarget).toUpperCase()}`;
+  if (plan.monitorBus !== 'program') plan.warnings.push('Native window is monitoring a diagnostic bus; external outputs follow Program.');
+  displayRoutingPlan(plan);
+}
+
+async function refreshRoutingPlan(silent = false) {
+  try {
+    const plan = await call('get_routing_plan');
+    displayRoutingPlan(plan);
+    return plan;
+  } catch (error) {
+    if (!silent) toast(`Routing inspection failed: ${error}`, true);
+    return null;
+  }
+}
+
+async function wireRouting() {
+  const catalog = await call('get_routing_catalog');
+  appState.routingCatalog = catalog;
+  const select = byId('routingRecipe');
+  if (select) {
+    select.innerHTML = '<option value="">— routing recipe —</option>'
+      + (catalog.recipes || []).map((recipe) => `<option value="${escapeHtml(recipe.id)}" title="${escapeHtml(recipe.description)}">${escapeHtml(recipe.label)}</option>`).join('');
+  }
+  byId('routingApplyBtn')?.addEventListener('click', async () => {
+    const recipeId = select?.value || '';
+    if (!recipeId) return toast('Choose a routing recipe first', true);
+    const snapshot = await call('apply_routing_recipe', { recipeId });
+    applyStateToDom(snapshot);
+    await refreshRoutingPlan(true);
+    const recipe = (catalog.recipes || []).find((entry) => entry.id === recipeId);
+    toast(`Routing recipe applied · ${recipe?.label || recipeId}`);
+  });
+  byId('routingRefreshBtn')?.addEventListener('click', () => refreshRoutingPlan(false));
+  byId('routingExportBtn')?.addEventListener('click', async () => {
+    const path = await call('export_routing_plan');
+    if (path) toast(`Routing plan exported · ${basename(path)}`);
+  });
 }
 
 function displayParityReport(report) {
@@ -1358,6 +1442,7 @@ function setOptions(select, items, valueOf, labelOf) {
 function displayInfo(info) {
   appState.info = info;
   const renderer = info.renderer || {};
+  displayRoutingFromRenderer(renderer);
   const video = info.video || {};
   const camera = info.camera || {};
   const videoAudio = info.audio?.video || {};
@@ -1382,7 +1467,8 @@ function displayInfo(info) {
 
   const stateText = video.playing ? 'PLAY' : (loaded ? 'PAUSE' : 'IDLE');
   byId('status').textContent = `NATIVE: ${stateText} · ${(renderer.fps || 0).toFixed(0)} fps`;
-  byId('status').title = `${renderer.backend || 'GPU'} · ${renderer.adapter || ''}\nSource: ${info.activeSource || renderer.activeSource || 'automatic'}\nRender ${renderer.width || 0}×${renderer.height || 0}\nSurface ${renderer.surfaceWidth || 0}×${renderer.surfaceHeight || 0}\nGlitch: ${renderer.glitchBaseTiles || 0} tiles · ${renderer.glitchInstances || 0}/${renderer.glitchInstanceCapacity || 0} instances · ${(renderer.glitchGenerationMs || 0).toFixed(2)} ms\nScanlines: ${renderer.scanlinesEnabled ? 'on' : 'off'} · ${renderer.scanBandCount || 0} bands · ${(renderer.scanGenerationMs || 0).toFixed(2)} ms · angle ${(renderer.scanAngle || 0).toFixed(1)}° · layer ${renderer.layerPriority || 'scan'}\nSmoosh: ${renderer.smooshEnabled ? renderer.smooshBlend : 'off'} · Luma: ${renderer.lumaKeyEnabled ? 'on' : 'off'}\nGlobal Mix: ${renderer.globalMixEnabled ? renderer.globalMixPosition : 'off'} · Flow: ${renderer.flowEnabled ? `${renderer.flowTarget} @ ${Number(renderer.flowStrength || 0).toFixed(1)}` : 'off'} · fires ${renderer.flowPulseFires || 0}\nClusters: ${renderer.clusterTilesEnabled ? 'on' : 'off'} · ${renderer.clusterCentersActive || 0} centers · ${renderer.clusterBiasTiles || 0} biased tiles · ${renderer.clusterRerolledOffsets || 0} rerolls · ${renderer.clusterPulses || 0} pulses\nGlitch drops: ${renderer.glitchDroppedInstances || 0}\nVideo decode: ${(video.decodeFps || 0).toFixed(1)} fps · stalls ${video.decoderStalls || 0} · recoveries ${video.watchdogRestarts || 0}\nAudio decode: ${(videoAudio.bufferedMs || 0).toFixed(0)} ms buffered · stalls ${videoAudio.decoderStalls || 0} · recoveries ${videoAudio.watchdogRestarts || 0}\nSurface skips: ${renderer.surfaceSkips || 0} · recoveries: ${renderer.surfaceRecoveries || 0}\nNative output readback: ${renderer.outputReadbacks || 0} frames · ${renderer.outputReadbackDrops || 0} busy drops · ${renderer.outputMapErrors || 0} map errors · ${(renderer.outputCopyMs || 0).toFixed(2)} ms · ${renderer.outputPendingSlots || 0} pending\nClick to focus output`;
+  byId('status').title = `${renderer.backend || 'GPU'} · ${renderer.adapter || ''}\nSource: ${info.activeSource || renderer.activeSource || 'automatic'}\nRender ${renderer.width || 0}×${renderer.height || 0}\nSurface ${renderer.surfaceWidth || 0}×${renderer.surfaceHeight || 0}\nGlitch: ${renderer.glitchBaseTiles || 0} tiles · ${renderer.glitchInstances || 0}/${renderer.glitchInstanceCapacity || 0} instances · ${(renderer.glitchGenerationMs || 0).toFixed(2)} ms\nScanlines: ${renderer.scanlinesEnabled ? 'on' : 'off'} · ${renderer.scanBandCount || 0} bands · ${(renderer.scanGenerationMs || 0).toFixed(2)} ms · angle ${(renderer.scanAngle || 0).toFixed(1)}° · layer ${renderer.layerPriority || 'scan'}\nSmoosh: ${renderer.smooshEnabled ? renderer.smooshBlend : 'off'} · Luma: ${renderer.lumaKeyEnabled ? 'on' : 'off'}\nGlobal Mix: ${renderer.globalMixEnabled ? renderer.globalMixPosition : 'off'} · Flow: ${renderer.flowEnabled ? `${renderer.flowTarget} @ ${Number(renderer.flowStrength || 0).toFixed(1)}` : 'off'} · fires ${renderer.flowPulseFires || 0}
+Routing: ${renderer.routingSummary || 'Program <- PROGRAM | Monitor <- PROGRAM'}\nClusters: ${renderer.clusterTilesEnabled ? 'on' : 'off'} · ${renderer.clusterCentersActive || 0} centers · ${renderer.clusterBiasTiles || 0} biased tiles · ${renderer.clusterRerolledOffsets || 0} rerolls · ${renderer.clusterPulses || 0} pulses\nGlitch drops: ${renderer.glitchDroppedInstances || 0}\nVideo decode: ${(video.decodeFps || 0).toFixed(1)} fps · stalls ${video.decoderStalls || 0} · recoveries ${video.watchdogRestarts || 0}\nAudio decode: ${(videoAudio.bufferedMs || 0).toFixed(0)} ms buffered · stalls ${videoAudio.decoderStalls || 0} · recoveries ${videoAudio.watchdogRestarts || 0}\nSurface skips: ${renderer.surfaceSkips || 0} · recoveries: ${renderer.surfaceRecoveries || 0}\nNative output readback: ${renderer.outputReadbacks || 0} frames · ${renderer.outputReadbackDrops || 0} busy drops · ${renderer.outputMapErrors || 0} map errors · ${(renderer.outputCopyMs || 0).toFixed(2)} ms · ${renderer.outputPendingSlots || 0} pending\nClick to focus output`;
 
   byId('midiPill').textContent = midi.connected ? `MIDI: ${midi.connectedPort}` : 'MIDI: OFF';
   byId('oscPill').textContent = osc.listening ? `OSC :${osc.port}` : 'OSC: OFF';
@@ -1648,16 +1734,18 @@ async function boot() {
   wireNativeActions();
   wirePresets();
   wireStateDocuments();
+  await wireRouting();
   wireMidiOsc();
   await call('set_video_audio_preview', { enabled: true }).catch(() => {});
   await restoreAutomationClip();
   await loadStateModelCatalog();
   await loadCalibrationProfiles();
   await refreshParameterState();
+  await refreshRoutingPlan(true);
   await refreshParityReport(true);
   await poll();
   setInterval(poll, 250);
-  console.info('Huff Native wgpu Milestone 18 loaded', {
+  console.info('Huff Native wgpu Milestone 19 loaded', {
     parameters: appState.registry.length,
     implemented: appState.registry.filter((definition) => definition.implemented).length,
   });

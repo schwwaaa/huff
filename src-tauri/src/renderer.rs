@@ -155,6 +155,9 @@ pub struct RendererInfo {
     pub flow_target: String,
     pub flow_strength: f32,
     pub flow_pulse_fires: u64,
+    pub program_bus: String,
+    pub monitor_bus: String,
+    pub routing_summary: String,
     pub cluster_tiles_enabled: bool,
     pub cluster_centers_active: u32,
     pub cluster_bias_tiles: u32,
@@ -1159,6 +1162,7 @@ struct OffscreenTargets {
     feedback_bind_b_crisp: wgpu::BindGroup,
     present_bind_a: wgpu::BindGroup,
     present_bind_b: wgpu::BindGroup,
+    present_bind_clean: wgpu::BindGroup,
     smoosh_bind_a: wgpu::BindGroup,
     smoosh_bind_b: wgpu::BindGroup,
     scan_bind: wgpu::BindGroup,
@@ -1199,6 +1203,8 @@ struct Renderer {
     effect_prepare_pipeline: wgpu::RenderPipeline,
     feedback_pipeline: wgpu::RenderPipeline,
     output_pipeline: wgpu::RenderPipeline,
+    output_clean_pipeline: wgpu::RenderPipeline,
+    output_field_store_pipeline: wgpu::RenderPipeline,
     present_pipeline: wgpu::RenderPipeline,
     export_pipeline: wgpu::RenderPipeline,
     history_capture_pipeline: wgpu::RenderPipeline,
@@ -1353,6 +1359,8 @@ struct Renderer {
     flow_spread: f32,
     flow_carry: f32,
     flow_target: String,
+    program_bus: String,
+    monitor_bus: String,
     flow_pulse_until: Option<Instant>,
     flow_pulse_fires: u64,
     cluster_tiles_enabled: bool,
@@ -1823,6 +1831,22 @@ impl Renderer {
             "fs_output",
             OUTPUT_FORMAT,
         );
+        let output_clean_pipeline = create_pipeline(
+            &device,
+            &shader,
+            &present_pipeline_layout,
+            "huff named Clean bus output pipeline",
+            "fs_output_clean",
+            OUTPUT_FORMAT,
+        );
+        let output_field_store_pipeline = create_pipeline(
+            &device,
+            &shader,
+            &present_pipeline_layout,
+            "huff named Field Store bus output pipeline",
+            "fs_output_field_store",
+            OUTPUT_FORMAT,
+        );
         let present_pipeline = create_pipeline(
             &device,
             &shader,
@@ -1953,6 +1977,8 @@ impl Renderer {
             effect_prepare_pipeline,
             feedback_pipeline,
             output_pipeline,
+            output_clean_pipeline,
+            output_field_store_pipeline,
             present_pipeline,
             export_pipeline,
             history_capture_pipeline,
@@ -2104,6 +2130,8 @@ impl Renderer {
             flow_spread: 1.0,
             flow_carry: 0.0,
             flow_target: "final".into(),
+            program_bus: "program".into(),
+            monitor_bus: "program".into(),
             flow_pulse_until: None,
             flow_pulse_fires: 0,
             cluster_tiles_enabled: false,
@@ -2235,6 +2263,14 @@ impl Renderer {
             flow_target: self.flow_target.clone(),
             flow_strength: self.flow_strength,
             flow_pulse_fires: self.flow_pulse_fires,
+            program_bus: self.program_bus.clone(),
+            monitor_bus: self.monitor_bus.clone(),
+            routing_summary: format!(
+                "Program <- {} | Monitor <- {} | Flow -> {}",
+                self.program_bus.to_uppercase().replace('_', " "),
+                self.monitor_bus.to_uppercase().replace('_', " "),
+                self.flow_target.to_uppercase(),
+            ),
             cluster_tiles_enabled: self.cluster_tiles_enabled,
             cluster_centers_active: self.cluster_physics.len() as u32,
             cluster_bias_tiles: self.cluster_bias_tiles,
@@ -2594,6 +2630,18 @@ impl Renderer {
         self.flow_spread = snapshot.number("flow.flow_spread", 1.0).clamp(0.25, 4.0) as f32;
         self.flow_carry = snapshot.number("flow.flow_carry", 0.0).clamp(0.0, 2.0) as f32;
         self.flow_target = snapshot.text("flow.flow_target", "final").to_string();
+        self.program_bus = match snapshot.text("routing.program_bus", "program") {
+            "clean" => "clean",
+            "field_store" => "field_store",
+            _ => "program",
+        }
+        .into();
+        self.monitor_bus = match snapshot.text("routing.monitor_bus", "program") {
+            "clean" => "clean",
+            "field_store" => "field_store",
+            _ => "program",
+        }
+        .into();
         self.cluster_tiles_enabled = snapshot.bool_value("clusters.cluster_tiles", false);
         self.cluster_center_count = snapshot.number("clusters.clu_centers", 3.0).round().clamp(1.0, 20.0) as u32;
         self.cluster_spread = snapshot.number("clusters.clu_spread", 80.0).clamp(1.0, 300.0) as f32;
@@ -4693,19 +4741,24 @@ impl Renderer {
             self.effect_seeded = true;
         }
 
-        let present_bind = if current_is_a {
+        let program_pipeline = match self.program_bus.as_str() {
+            "clean" => &self.output_clean_pipeline,
+            "field_store" => &self.output_field_store_pipeline,
+            _ => &self.output_pipeline,
+        };
+        let program_source_bind = if current_is_a {
             &self.targets.present_bind_a
         } else {
             &self.targets.present_bind_b
         };
         begin_fullscreen_pass(
             &mut encoder,
-            "huff authoritative native output pass",
+            "huff authoritative named Program bus pass",
             &self.targets.output_view,
-            &self.output_pipeline,
+            program_pipeline,
             &self.global_bind,
             3,
-            present_bind,
+            program_source_bind,
             wgpu::Color::BLACK,
         );
 
@@ -4742,14 +4795,24 @@ impl Renderer {
         }
 
         if let Some(surface_view) = surface_view.as_ref() {
+            let field_store_bind = if current_is_a {
+                &self.targets.present_bind_a
+            } else {
+                &self.targets.present_bind_b
+            };
+            let monitor_bind = match self.monitor_bus.as_str() {
+                "clean" => &self.targets.present_bind_clean,
+                "field_store" => field_store_bind,
+                _ => &self.targets.output_surface_bind,
+            };
             begin_fullscreen_pass(
                 &mut encoder,
-                "huff surface presentation pass",
+                "huff named Monitor bus surface presentation pass",
                 surface_view,
                 &self.present_pipeline,
                 &self.global_bind,
                 3,
-                &self.targets.output_surface_bind,
+                monitor_bind,
                 wgpu::Color::BLACK,
             );
         }
@@ -5379,6 +5442,14 @@ fn create_targets(
             wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::TextureView(&composite_view) },
         ],
     });
+    let present_bind_clean = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("present bind Clean bus"), layout: present_layout,
+        entries: &[
+            wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&composite_view) },
+            wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::Sampler(sampler) },
+            wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::TextureView(&composite_view) },
+        ],
+    });
     let output_surface_bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: Some("authoritative output surface bind"),
         layout: present_layout,
@@ -5413,6 +5484,7 @@ fn create_targets(
         feedback_bind_b_crisp,
         present_bind_a,
         present_bind_b,
+        present_bind_clean,
         smoosh_bind_a,
         smoosh_bind_b,
         scan_bind,

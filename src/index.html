@@ -1040,6 +1040,29 @@
         }
         #nativeToast.error { color:#ff4040; border-color:#ff4040; }
     </style>
+
+    <style id="huff-native-m19-style">
+        .routing-panel-body { display:flex; flex-direction:column; gap:6px; }
+        .routing-toolbar { display:flex; align-items:center; gap:5px; flex-wrap:wrap; }
+        .routing-toolbar select { font-size:10px; padding:2px 4px; max-width:210px; }
+        #routingStatus { color:var(--term-green); font:11px 'Share Tech Mono',monospace; letter-spacing:.02em; }
+        .routing-bus-grid {
+            display:grid; grid-template-columns:repeat(7,minmax(86px,1fr)); gap:4px;
+            padding:5px; border:1px solid rgba(0,255,0,.2); background:rgba(0,0,0,.32);
+        }
+        .routing-bus {
+            min-height:43px; padding:5px 6px; border:1px solid rgba(0,255,0,.28);
+            background:rgba(0,24,0,.58); color:#9dff9d; font:10px 'Share Tech Mono',monospace;
+        }
+        .routing-bus strong { display:block; color:#00ff00; font-size:11px; margin-bottom:2px; }
+        .routing-bus.persistent { border-color:#f4cf53; color:#ffeaa0; }
+        .routing-bus.output { border-color:#50b7ff; color:#a9dcff; }
+        .routing-bus.active { box-shadow:inset 0 0 0 1px #fff; }
+        .routing-path { color:rgba(255,255,255,.58); font:10px 'Share Tech Mono',monospace; line-height:1.35; }
+        .routing-selects { display:flex; align-items:flex-end; gap:7px; flex-wrap:wrap; }
+        .routing-selects .ctrl { min-width:125px; }
+        @media (max-width:900px) { .routing-bus-grid { grid-template-columns:repeat(3,minmax(86px,1fr)); } }
+    </style>
 </head>
 
 <body>
@@ -1052,11 +1075,11 @@
             <button id="aboutClose">×</button>
             <div class="a-icon"></div>
             <h1 style="font-family:'VT323',monospace;font-weight:normal;letter-spacing:.14em">huff</h1>
-            <div class="build">native engine · milestone 18 · 2026</div>
+            <div class="build">native engine · milestone 19 · 2026</div>
             <p>Huff is being migrated to a native Rust + wgpu media engine. The existing
             control surface is preserved while playback, timing, GPU rendering, and
             output move out of the WebView.</p>
-            <p><strong>Milestone 18:</strong> presets, snapshots, sequences, and projects are now distinct scoped state documents. Recall domains are explicit, parameter sequenceability and live-safety metadata are inspectable, and persistent GPU pixel memory is never silently confused with reusable settings.</p>
+            <p><strong>Milestone 19:</strong> the fixed HUFF render recipe now exposes explicit Clean, History, Process, Field Store, Mask, Program, and Monitor responsibilities. Program and local monitoring can select constrained named buses without introducing an unrestricted node graph.</p>
         </div>
     </div>
 
@@ -1501,10 +1524,57 @@
                     <label><input id="stateScopeTransport" type="checkbox"> Transport</label>
                     <label><input id="stateScopeAutomation" type="checkbox"> Automation</label>
                     <label><input id="stateScopeMaps" type="checkbox"> MIDI/OSC Maps</label>
-                    <label title="Declared but disabled in HNW-18: GPU pixel stores remain separate"><input id="stateScopePixels" type="checkbox" disabled> GPU Pixels</label>
+                    <label title="Declared but disabled in HNW-19: GPU pixel stores remain separate"><input id="stateScopePixels" type="checkbox" disabled> GPU Pixels</label>
                 </div>
                 <div id="stateScopeNote">Preset = reusable artistic condition. Source files, transport, render allocation, automation, maps, and GPU pixels remain untouched.</div>
                 <div id="stateModelStatus">huff-state/v1 · loading parameter metadata…</div>
+            </div>
+        </div>
+        </div>
+
+        <!-- MILESTONE 19 CONSTRAINED ROUTING -->
+        <div class="groups" style="margin-top:0">
+        <div class="group" id="routingPanel">
+            <div class="group-label">Constrained Routing</div>
+            <div class="group-body routing-panel-body">
+                <div class="routing-toolbar">
+                    <select id="routingRecipe" title="Apply a validated routing recipe without exposing an unrestricted graph">
+                        <option value="">— routing recipe —</option>
+                    </select>
+                    <button id="routingApplyBtn" class="btn-dim" type="button">▶ Apply Recipe</button>
+                    <button id="routingRefreshBtn" class="btn-dim" type="button">↻ Inspect</button>
+                    <button id="routingExportBtn" class="btn-dim" type="button">↑ Export Plan</button>
+                    <span id="routingStatus">ROUTING: LOADING</span>
+                </div>
+                <div class="routing-selects">
+                    <div class="ctrl">
+                        <label>PROGRAM BUS</label>
+                        <select id="programBus" title="Authoritative output used by Syphon, Spout, recording, still export, and deterministic export">
+                            <option value="program" selected>Program Composite</option>
+                            <option value="clean">Clean Source</option>
+                            <option value="field_store">Raw Field Store</option>
+                        </select>
+                    </div>
+                    <div class="ctrl">
+                        <label>MONITOR BUS</label>
+                        <select id="monitorBus" title="Local native window only; external output continues to follow Program">
+                            <option value="program" selected>Program</option>
+                            <option value="clean">Clean</option>
+                            <option value="field_store">Field Store</option>
+                        </select>
+                    </div>
+                    <div id="routingPath" class="routing-path">Clean → Process → Field Store → Program · History → Process · Mask → Process</div>
+                </div>
+                <div class="routing-bus-grid" id="routingBusGrid">
+                    <div class="routing-bus" data-bus="clean"><strong>CLEAN</strong>current normalized source</div>
+                    <div class="routing-bus persistent" data-bus="history"><strong>HISTORY</strong>bounded captured frames</div>
+                    <div class="routing-bus" data-bus="process"><strong>PROCESS</strong>fixed HUFF recipe</div>
+                    <div class="routing-bus persistent" data-bus="field_store"><strong>FIELD STORE</strong>legal recursive image memory</div>
+                    <div class="routing-bus" data-bus="mask"><strong>MASK</strong>luma region control</div>
+                    <div class="routing-bus output" data-bus="program"><strong>PROGRAM</strong>external authoritative output</div>
+                    <div class="routing-bus output" data-bus="monitor"><strong>MONITOR</strong>local window inspection</div>
+                </div>
+                <div class="routing-path">Cycles remain legal only through explicit temporal resources. The default fixed HUFF pipeline remains the canonical recipe and can still be observed as a complete study build.</div>
             </div>
         </div>
         </div>

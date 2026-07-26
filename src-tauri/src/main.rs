@@ -21,6 +21,7 @@ mod parameters;
 mod parity;
 mod recording;
 mod renderer;
+mod routing;
 mod source;
 mod spout;
 mod state_documents;
@@ -147,7 +148,7 @@ fn get_app_info(
     source: tauri::State<'_, SourceSelector>,
 ) -> AppInfo {
     AppInfo {
-        build: "HNW-18".into(),
+        build: "HNW-19".into(),
         renderer: renderer.info(),
         camera: camera.status(),
         camera_devices: camera.devices(),
@@ -168,7 +169,7 @@ fn get_app_info(
         gesture: gesture.info(),
         automation: automation.info(),
         parameter_revision: parameters.revision(),
-        native_milestone: "HNW-18".into(),
+        native_milestone: "HNW-19".into(),
         active_source: source.get().label().into(),
     }
 }
@@ -186,6 +187,55 @@ fn get_control_target_catalog() -> Vec<ControlTargetInfo> {
 #[tauri::command]
 fn get_parameter_state(state: tauri::State<'_, ParameterStore>) -> ParameterSnapshot {
     state.snapshot()
+}
+
+#[tauri::command]
+fn get_routing_catalog() -> routing::RoutingCatalog {
+    routing::routing_catalog()
+}
+
+#[tauri::command]
+fn get_routing_plan(state: tauri::State<'_, ParameterStore>) -> routing::RoutingPlan {
+    routing::build_plan(&state.snapshot())
+}
+
+#[tauri::command]
+fn apply_routing_recipe(
+    state: tauri::State<'_, ParameterStore>,
+    automation: tauri::State<'_, AutomationHandle>,
+    recipe_id: String,
+) -> Result<ParameterSnapshot, String> {
+    let values = routing::recipe_values(&recipe_id)?;
+    state.set_many(values.clone())?;
+    automation.record_parameter_batch(values, format!("routing_recipe:{recipe_id}"));
+    Ok(state.snapshot())
+}
+
+#[tauri::command]
+fn export_routing_plan(
+    state: tauri::State<'_, ParameterStore>,
+) -> Result<Option<String>, String> {
+    let Some(mut path) = rfd::FileDialog::new()
+        .add_filter("HUFF routing plan", &["json"])
+        .set_file_name("huff-routing-plan.json")
+        .save_file()
+    else {
+        return Ok(None);
+    };
+    if !path
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(|value| value.eq_ignore_ascii_case("json"))
+        .unwrap_or(false)
+    {
+        path.set_extension("json");
+    }
+    let plan = routing::build_plan(&state.snapshot());
+    let payload = serde_json::to_vec_pretty(&plan)
+        .map_err(|error| format!("could not serialize routing plan: {error}"))?;
+    std::fs::write(&path, payload)
+        .map_err(|error| format!("could not write routing plan {}: {error}", path.display()))?;
+    Ok(Some(path.display().to_string()))
 }
 
 #[tauri::command]
@@ -830,7 +880,7 @@ fn export_still(
         fit_mode: fit_mode.clone(),
     };
     let metadata = StillExportMetadata {
-        engine_build: "HNW-18".into(),
+        engine_build: "HNW-19".into(),
         captured_unix_ms: StillExportMetadata::now_unix_ms(),
         active_source: source.get().label().into(),
         source_file: video_info.file_path,
@@ -1021,7 +1071,7 @@ fn start_offline_export(
         queue_job_id: String::new(),
     };
     let metadata = OfflineExportMetadata {
-        engine_build: "HNW-18".into(),
+        engine_build: "HNW-19".into(),
         created_unix_ms: OfflineExportMetadata::now_unix_ms(),
         source_file: video_info.file_path.clone(),
         source_codec: video_info.codec,
@@ -1879,6 +1929,10 @@ fn main() {
             get_parameter_registry,
             get_control_target_catalog,
             get_parameter_state,
+            get_routing_catalog,
+            get_routing_plan,
+            apply_routing_recipe,
+            export_routing_plan,
             get_calibration_profiles,
             get_parity_report,
             apply_calibration_profile,

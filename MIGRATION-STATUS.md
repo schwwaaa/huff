@@ -1,4 +1,4 @@
-# HUFF native migration status · Milestone 18
+# HUFF native migration status · Milestone 19
 
 ## Proven native foundation
 
@@ -73,10 +73,9 @@ The queue remains installed for later evaluation but is not treated as a settled
 
 ## Remaining ordered product work
 
-1. Constrained routing and named buses
-2. Cross-platform production verification and deferred Milestone 15 failure analysis
-3. Optional lower-copy platform-specific texture interop research
-4. Hands-on visual calibration using the Milestone 16 Parity Lab throughout the refinement cycle
+1. Cross-platform production verification and deferred Milestone 15 failure analysis
+2. Optional lower-copy platform-specific texture interop research
+3. Hands-on visual calibration using the Milestone 16 Parity Lab throughout the refinement cycle
 
 ## Current principle
 
@@ -96,7 +95,20 @@ MIDI and OSC now map directly to canonical Rust parameters and actions instead o
 - scope-intersection recall prevents accidental broad state changes
 - source-file and transport references with missing-file warnings
 - active automation and MIDI/OSC map project storage
-- all 98 canonical parameters classified for preset, snapshot, sequence, interpolation, project, and live safety
+- all 98 Milestone 18 canonical parameters classified for preset, snapshot, sequence, interpolation, project, and live safety
 - persistent GPU pixel stores explicitly remain separate and are not silently embedded
 
 The earlier browser-local quick presets remain available for compatibility and rapid tests. The formal State Library is now the authoritative portable state workflow.
+
+
+## Constrained routing completed in Milestone 19
+
+- `huff-routing/v1` named-bus plan and export
+- Clean, History, Process, Field Store, Mask, Program, and Monitor responsibilities
+- Program selection for normal composite, Clean bypass, or raw Field Store
+- independent local Monitor selection without changing external Program consumers
+- constrained recipes covering existing layer, Flow, Global Mix, and Smoosh decisions
+- legal cycles limited to explicit temporal resources
+- two new Routing-domain canonical parameters, bringing the current registry to 100
+
+The fixed HUFF pipeline remains the default instrument recipe; arbitrary graph patching is intentionally not part of the core application.

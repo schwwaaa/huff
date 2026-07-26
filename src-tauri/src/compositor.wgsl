@@ -592,6 +592,25 @@ fn fs_output(input: VertexOutput) -> @location(0) vec4<f32> {
     return vec4<f32>(compose_final_color(input.uv), 1.0);
 }
 
+// Milestone 19 constrained Program selections. These entry points use the
+// same present bind group as the normal composite, but expose a named bus
+// without rebuilding or bypassing the fixed HUFF processing recipe.
+@fragment
+fn fs_output_clean(input: VertexOutput) -> @location(0) vec4<f32> {
+    var color = textureSample(clean_source, final_sampler, input.uv).rgb;
+    color = color * max(u.controls1.x, 0.0);
+    color = (color - vec3<f32>(0.5)) * max(u.controls1.y, 0.0) + vec3<f32>(0.5);
+    return vec4<f32>(max(color, vec3<f32>(0.0)), 1.0);
+}
+
+@fragment
+fn fs_output_field_store(input: VertexOutput) -> @location(0) vec4<f32> {
+    var color = textureSample(final_effect, final_sampler, input.uv).rgb;
+    color = color * max(u.controls1.x, 0.0);
+    color = (color - vec3<f32>(0.5)) * max(u.controls1.y, 0.0) + vec3<f32>(0.5);
+    return vec4<f32>(max(color, vec3<f32>(0.0)), 1.0);
+}
+
 // Window presentation only. The authoritative RGBA8 output is sampled and
 // letterboxed to the current native surface without changing external output.
 @fragment

@@ -18,7 +18,7 @@ use std::{
 
 pub const STATE_DOCUMENT_SCHEMA: &str = "huff-state/v1";
 pub const STATE_MODEL_VERSION: u32 = 1;
-pub const ENGINE_BUILD: &str = "HNW-18";
+pub const ENGINE_BUILD: &str = "HNW-19";
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -437,7 +437,8 @@ pub fn parameter_domain(id: &str) -> ParameterStateDomain {
         ParameterStateDomain::Source
     } else if id.starts_with("history.") || id.starts_with("feedback.") {
         ParameterStateDomain::Temporal
-    } else if id.starts_with("layers.")
+    } else if id.starts_with("routing.")
+        || id.starts_with("layers.")
         || id == "global_mix.global_mix_pos"
         || id == "flow.flow_target"
         || id == "luma.luma_key_ab"
@@ -472,7 +473,7 @@ pub fn model_catalog() -> StateModelCatalog {
         sequenceable_count: parameters.iter().filter(|metadata| metadata.sequenceable).count(),
         domains,
         default_scopes,
-        persistent_image_policy: "Persistent GPU pixels are intentionally separate from presets, snapshots, sequences, and projects in HNW-18. State documents identify these resources but do not silently embed them.".into(),
+        persistent_image_policy: "Persistent GPU pixels are intentionally separate from presets, snapshots, sequences, and projects in HNW-19. State documents identify these resources but do not silently embed them.".into(),
         parameters,
     }
 }
