@@ -1,6 +1,6 @@
 {
   "name": "huff-native-wgpu",
-  "version": "0.20.0",
+  "version": "0.21.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -18,7 +18,8 @@
     "build:production": "node scripts/build-production.mjs",
     "build:metal": "node scripts/build-production.mjs metal",
     "build:dx12": "node scripts/build-production.mjs dx12",
-    "build:vulkan": "node scripts/build-production.mjs vulkan"
+    "build:vulkan": "node scripts/build-production.mjs vulkan",
+    "validate:interop": "node scripts/validate-interop.mjs"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.11.0"

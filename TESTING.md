@@ -1,8 +1,8 @@
-# HUFF Native Milestone 20 test checklist
+# HUFF Native Milestone 21 test checklist
 
-Milestone 20 is a verification and recovery milestone. Complete the relevant sections on every production machine, then preserve the exported diagnostics folder with the observed results.
+Milestone 21 is an observation and architecture milestone. The pass condition is not “zero-copy works.” The pass condition is that existing Syphon/Spout behavior remains intact, the current copy path is reported honestly, the probe is bounded, and reports can be exported without disrupting HUFF.
 
-## 1. Launch and baseline
+## 1. Launch
 
 ```bash
 npm install
@@ -12,118 +12,98 @@ npm run dev:dx12    # Windows
 
 Confirm:
 
-- the About panel reports Milestone 20;
-- **VERIFY** opens Production Verification;
-- normal Milestone 19 routing and effects still run;
-- the native output continues rendering while the verification window is open.
+- About reports Milestone 21;
+- **VERIFY** still opens Production Verification;
+- **INTEROP** opens the Lower-Copy Interoperability Lab;
+- effects, routing recipes, recording, and export still operate normally.
 
-## 2. Repository production check
+## 2. Static validation
 
 ```bash
+npm run validate:interop
 npm run validate:production
+npm run validate:routing
+npm run validate:state-model
+npm run validate:parity
 ```
 
-On a configured build computer also run:
+On a configured production build computer:
 
 ```bash
 npm run validate:production:strict
 ```
 
-Resolve strict failures before packaging. Warnings should be documented rather than silently ignored.
+## 3. Analysis with no platform output active
 
-## 3. In-app report with video
+1. Open **INTEROP**.
+2. Press **Analyze Current Path**.
+3. Confirm backend, adapter, dimensions, frame bytes, and current transport are populated.
+4. Confirm the current transport is `cpu-readback-upload`.
+5. Confirm native sharing is described as research-only or disabled.
+6. Confirm values use a 60 fps reference when no platform output is active.
 
-1. Load a representative video with audio.
-2. Let it play for at least 30 seconds with Glitch, Scanlines, Feedback, Flow, and Luma Key active.
-3. Open **VERIFY** and run the check.
-4. Confirm GPU, renderer, surface, FFmpeg, FFprobe, encoders, video decoder, audio, and temporary storage appear.
-5. Confirm the report identifies the expected production backend and current adapter.
-6. Review warnings against the detailed text rather than treating every warning as a defect.
+## 4. Syphon test — macOS
 
-## 4. Surface recovery
+1. Start Syphon output at 30 fps.
+2. Confirm a receiver sees the HUFF Program output.
+3. Analyze the path.
+4. Confirm the active output lists Syphon at 30 fps.
+5. Confirm the Metal direct and IOSurface candidates are marked candidate/secondary candidate.
+6. Repeat at 60 fps and confirm estimated per-stage traffic approximately doubles.
+7. Stop Syphon and confirm normal rendering continues.
 
-1. Minimize and restore the native output window, or move it between displays.
-2. Press **Recover Surface**.
-3. Confirm rendering continues and effect buffers are not cleared.
-4. Re-run the report and confirm the surface-recovery count can increase without creating a fatal condition.
+## 5. Spout test — Windows
 
-## 5. Source recovery — video
+1. Select the intended adapter and start Spout.
+2. Confirm a receiver sees the `huff` sender.
+3. Analyze the path.
+4. Confirm the report includes the active adapter and Spout rate.
+5. Confirm D3D12 and D3D11On12 candidates are shown when DX12 is active.
+6. Repeat on another adapter when available and preserve both reports.
 
-1. Leave video playing at a recognizable position.
-2. Press **Restart Source**.
-3. Confirm picture and source audio resume near the same position.
-4. Confirm parameters, automation clip, routing recipe, and persistent effect state are not reset.
-5. Re-run the report and inspect decoder restart/watchdog counters.
+## 6. CPU Copy Probe
 
-## 6. Source recovery — camera
+1. Run the probe at the normal render resolution.
+2. Confirm the interface returns rather than hanging indefinitely.
+3. Record throughput, estimated full-frame copy time, and 60 fps share.
+4. Change render resolution and repeat.
+5. Treat the result only as host memcpy, not end-to-end output latency.
 
-1. Start a camera using the intended profile.
-2. Press **Restart Source**.
-3. Confirm the same device/profile resumes.
-4. Confirm camera permission, dimensions, source format, and capture FPS are represented in the report.
+The probe samples at most 64 MiB per allocation and approximately 512 MiB of total copy work, with bounded iteration limits.
 
-## 7. Syphon — macOS
+## 7. Existing output regression
 
-1. Start Syphon output.
-2. Open a real receiver such as Resolume, VDMX, MadMapper, OBS with Syphon support, or Syphon Simple Client.
-3. Confirm the HUFF Program bus appears and updates.
-4. Run the check while the receiver is active.
-5. Press **Restart Outputs** and confirm the receiver reconnects or the source reappears.
-6. Test at 30 and 60 FPS caps and at the intended render resolution.
+With Syphon or Spout active:
 
-## 8. Spout — Windows
+- run Glitch, Scanlines, Feedback, Flow, and Luma Key;
+- switch routing recipes;
+- switch Program and Monitor buses;
+- run **Restart Outputs** in VERIFY;
+- confirm the receiver returns;
+- confirm no parameter or persistent-state reset is introduced by Milestone 21.
 
-1. Refresh adapters and choose the GPU used by the receiver.
-2. Start Spout output.
-3. Confirm the `huff` sender appears in Resolume, MadMapper, OBS Spout, or Spout Demo Receiver.
-4. Run the check and confirm worker, adapter, initialization, and frame counts.
-5. Press **Restart Outputs** and confirm receiver recovery.
-6. Repeat on integrated and discrete adapters when available.
+## 8. Report export
 
-## 9. Recording and export ownership
+1. Press **Export Report…** in INTEROP.
+2. Confirm JSON and TXT files are written.
+3. Confirm JSON schema is `huff-interop-report/v1`.
+4. Run **Export Diagnostics…** in VERIFY.
+5. Confirm the diagnostics folder contains both interop report files in addition to Milestone 20 files.
 
-1. Start a short live recording and run the check.
-2. Confirm the report identifies recording ownership and does not report simultaneous offline-export ownership.
-3. Stop/finalize recording and inspect the file.
-4. Queue or start a short deterministic export and run the check.
-5. Confirm source recovery is rejected while deterministic export owns the private graph.
-6. Verify completed, failed, and interrupted queue counts are reported honestly.
+## 9. Long-session observation
 
-## 10. MIDI and OSC
+For later refinement, leave a real receiver connected for at least one hour and compare beginning/end reports:
 
-1. Connect the controller or start the OSC listener used in production.
-2. Move controls/send messages.
-3. Run the check and confirm connected/listening state and mapping counts.
-4. Disconnect or stop and confirm the report treats the idle service as nonfatal.
+- renderer frame rate;
+- readback completions and busy drops;
+- map errors;
+- sender frames and rejected frames;
+- last upload time;
+- receiver continuity;
+- system CPU/GPU use observed externally.
 
-## 11. Diagnostics export
+Milestone 21 itself does not modify the production transport, so a regression here should be treated as a bug in the new typed submission seam or metadata changes.
 
-1. Press **Export Diagnostics…**.
-2. Confirm the timestamped folder contains all seven documented files.
-3. Open `production-report.json` and confirm the schema is `huff-production-report/v1`.
-4. Open `app-info.json`, `parameter-state.json`, and `routing-plan.json`.
-5. Review file paths and device names before sharing the folder.
+## 10. Future proof-of-concept gate
 
-## 12. Long-session observation
-
-For the final refinement cycle, run at least one two-hour session per production platform with the intended source, outputs, and effects. Record:
-
-- frame rate and frame-time drift;
-- decoder stalls and watchdog recoveries;
-- surface skips/recoveries;
-- output readback drops/map errors;
-- Syphon/Spout sender continuity;
-- audio underflows;
-- memory behavior observed through the operating system;
-- recording/export success and finalization.
-
-Export a diagnostics folder at the beginning and end.
-
-## 13. Production package
-
-```bash
-npm run build:metal   # macOS
-npm run build:dx12    # Windows
-```
-
-Install or copy the resulting package outside the development tree. Confirm startup, video/audio, camera permission, Syphon/Spout assets, recording, deterministic export, state documents, and diagnostics export from the packaged application.
+Do not promote a native shared-texture path until it passes the acceptance criteria in `INTEROP-RESEARCH.md`, including frame identity, GPU completion, adapter safety, receiver compatibility, recovery, shutdown, and automatic readback fallback.

@@ -13,7 +13,7 @@ use crate::{
         OfflineExportConfig, OfflineExportHandle, OfflineExportMetadata, OfflineExportSession,
     },
     osc::OscSnapshot,
-    output_frame::OutputFrame,
+    output_frame::{ExternalOutputFrame, OutputFrame},
     parameters::{ParameterSnapshot, ParameterStore},
     recording::RecordingHandle,
     source::{ActiveSource, SourceSelector},
@@ -756,11 +756,12 @@ impl OutputReadback {
             self.last_copy_ms = started.elapsed().as_secs_f64() * 1000.0;
             self.readbacks = self.readbacks.wrapping_add(1);
             let frame = OutputFrame::new(width, height, pixels);
+            let external_frame = ExternalOutputFrame::cpu_rgba(frame.clone());
             if targets & OUTPUT_TARGET_SYPHON != 0 {
-                syphon::submit(frame.clone());
+                syphon::submit(external_frame.clone());
             }
             if targets & OUTPUT_TARGET_SPOUT != 0 {
-                spout::submit(frame.clone());
+                spout::submit(external_frame);
             }
             if targets & OUTPUT_TARGET_RECORDING != 0 {
                 recording.submit_video(frame);

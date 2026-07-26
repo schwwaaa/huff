@@ -4,7 +4,7 @@ use serde_json::{json, Value};
 use std::collections::BTreeMap;
 
 pub const ROUTING_SCHEMA: &str = "huff-routing/v1";
-pub const ENGINE_BUILD: &str = "HNW-20";
+pub const ENGINE_BUILD: &str = "HNW-21";
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]

@@ -587,7 +587,7 @@
         /* ═══════════════════════════════════════════════
            MODAL OVERLAYS
         ═══════════════════════════════════════════════ */
-        #aboutOverlay, #productionOverlay, #midiOverlay, #syphonOverlay, #spoutOverlay, #oscOverlay {
+        #aboutOverlay, #productionOverlay, #interopOverlay, #midiOverlay, #syphonOverlay, #spoutOverlay, #oscOverlay {
             display: none; position: fixed; inset: 0; z-index: 1000;
             /* classic Win95 "desktop" tile pattern behind modals */
             background: #008080;
@@ -598,13 +598,13 @@
             );
             align-items: center; justify-content: center;
         }
-        #aboutOverlay.open, #productionOverlay.open, #midiOverlay.open, #syphonOverlay.open,
+        #aboutOverlay.open, #productionOverlay.open, #interopOverlay.open, #midiOverlay.open, #syphonOverlay.open,
         #spoutOverlay.open, #oscOverlay.open { display: flex; }
 
         /* ═══════════════════════════════════════════════
            MODAL BOXES — Win95 dialog windows
         ═══════════════════════════════════════════════ */
-        #aboutBox, #productionBox, #midiBox, #syphonBox, #spoutBox, #oscBox {
+        #aboutBox, #productionBox, #interopBox, #midiBox, #syphonBox, #spoutBox, #oscBox {
             position: relative;
             background: var(--win-bg);
             border-top:    3px solid var(--win-light);
@@ -618,11 +618,12 @@
         /* Title bar on each modal */
         #aboutBox::before  { content: '■  ABOUT HUFF'; }
         #productionBox::before { content: '■  PRODUCTION VERIFICATION'; }
+        #interopBox::before { content: '■  LOWER-COPY INTEROPERABILITY LAB'; }
         #midiBox::before   { content: '■  MIDI CONFIGURATION'; }
         #syphonBox::before { content: '■  SYPHON OUTPUT'; }
         #spoutBox::before  { content: '■  SPOUT OUTPUT'; }
         #oscBox::before    { content: '■  OSC CONFIGURATION'; }
-        #aboutBox::before, #productionBox::before, #midiBox::before, #syphonBox::before,
+        #aboutBox::before, #productionBox::before, #interopBox::before, #midiBox::before, #syphonBox::before,
         #spoutBox::before, #oscBox::before {
             display: block;
             background: linear-gradient(90deg, var(--title-bg) 0%, #ff4647 100%);
@@ -989,6 +990,36 @@
         }
         #stateDocumentStatus { color:var(--term-dgreen); }
         #stateDocumentStatus.warning { color:var(--term-yel); }
+
+        /* ── Milestone 21 interoperability research ── */
+        #interopBox { width:min(980px,96vw); max-height:88vh; overflow:auto; padding-bottom:16px; }
+        #interopBox h2 { margin:20px 18px 2px; color:var(--term-green); font:normal 28px 'VT323',monospace; letter-spacing:.08em; }
+        #interopBox .interop-sub { margin:0 18px 12px; color:rgba(255,255,255,.46); font:10px 'Share Tech Mono',monospace; line-height:1.5; }
+        #interopClose { position:absolute; right:8px; top:5px; width:24px; height:22px; padding:0; font-size:17px; }
+        .interop-toolbar { display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin:0 18px 10px; }
+        .interop-summary, .interop-next, .interop-probe { margin:0 18px 10px; padding:8px 10px; border:1px inset #888; background:#050805; color:#b8ffb8; font:10px 'Share Tech Mono',monospace; line-height:1.5; }
+        .interop-summary { color:#ffe680; border-color:#9f8732; }
+        .interop-metrics { display:grid; grid-template-columns:repeat(4,minmax(110px,1fr)); gap:5px; margin:0 18px 10px; }
+        .interop-metrics div { padding:5px 7px; background:rgba(0,0,0,.45); border:1px solid rgba(255,255,255,.12); font:9px 'Share Tech Mono',monospace; color:#aaa; overflow-wrap:anywhere; }
+        .interop-metrics strong { display:block; color:#d0d0d0; margin-bottom:2px; }
+        .interop-section-label { margin:12px 18px 5px; color:#d8d8d8; font:12px 'VT323',monospace; letter-spacing:.09em; }
+        .interop-path { margin:0 18px 10px; display:grid; grid-template-columns:repeat(3,minmax(130px,1fr)); gap:5px; }
+        .interop-path-stage { min-height:56px; padding:7px; border:1px solid rgba(80,183,255,.45); background:rgba(0,25,45,.35); color:#a9dcff; font:9px 'Share Tech Mono',monospace; line-height:1.4; }
+        .interop-path-stage span { display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; margin-right:6px; border:1px solid #50b7ff; color:#fff; }
+        .interop-candidates { margin:0 18px; display:flex; flex-direction:column; gap:5px; }
+        .interop-candidate { padding:7px 8px; border:1px solid rgba(255,255,255,.13); background:rgba(0,0,0,.34); color:#aaa; font:9px 'Share Tech Mono',monospace; line-height:1.4; }
+        .interop-candidate.candidate, .interop-candidate.secondary-candidate { border-color:#d0a83c; }
+        .interop-candidate.research-only { border-color:#7f72cf; }
+        .interop-candidate-head { display:flex; justify-content:space-between; gap:10px; color:#eee; }
+        .interop-candidate-head span { color:#ffe680; letter-spacing:.08em; }
+        .interop-candidate-meta { color:#78c8ff; margin:2px 0 4px; }
+        .interop-detail { color:#858585; margin-top:3px; }
+        .interop-candidate details { margin-top:5px; }
+        .interop-candidate summary { cursor:pointer; color:#b8ffb8; }
+        @media (max-width:760px) {
+            .interop-metrics { grid-template-columns:repeat(2,minmax(110px,1fr)); }
+            .interop-path { grid-template-columns:1fr; }
+        }
     </style>
 
     <style id="ws-mirror-style">
@@ -1106,11 +1137,11 @@
             <button id="aboutClose">×</button>
             <div class="a-icon"></div>
             <h1 style="font-family:'VT323',monospace;font-weight:normal;letter-spacing:.14em">huff</h1>
-            <div class="build">native engine · milestone 20 · 2026</div>
+            <div class="build">native engine · milestone 21 · 2026</div>
             <p>Huff is being migrated to a native Rust + wgpu media engine. The existing
             control surface is preserved while playback, timing, GPU rendering, and
             output move out of the WebView.</p>
-            <p><strong>Milestone 20:</strong> production verification is now an in-app workflow. HUFF can inspect the active GPU, media tools, sources, audio, Syphon/Spout, recording/export ownership, controller services, and writable storage; run bounded recovery actions; and export a diagnostics bundle for the final cross-platform test cycle.</p>
+            <p><strong>Milestone 21:</strong> the interoperability lab makes the current GPU→CPU→platform-output copy path explicit, estimates its bandwidth, benchmarks bounded host-memory copies, and documents safer Metal, Direct3D, and Vulkan research paths. Native texture sharing remains disabled until a feature-gated proof of concept passes synchronization, adapter, receiver, and fallback tests.</p>
         </div>
     </div>
 
@@ -1132,6 +1163,30 @@
         <div id="productionPlatform" class="production-platform"></div>
         <div id="productionChecks" class="production-checks"></div>
         <div id="productionRecoveryStatus"></div>
+      </div>
+    </div>
+
+    <!-- ═══ Lower-Copy Interoperability Lab ═════════════════ -->
+    <div id="interopOverlay">
+      <div id="interopBox">
+        <button id="interopClose">×</button>
+        <h2>Lower-Copy Interoperability Lab</h2>
+        <div class="interop-sub">Research harness, not a zero-copy claim. The current bounded readback path remains authoritative while HUFF measures its cost and identifies platform-specific alternatives with explicit blockers and fallback requirements.</div>
+        <div class="interop-toolbar">
+          <button id="interopRunBtn" class="btn-dim">▶ Analyze Current Path</button>
+          <button id="interopProbeBtn">Run CPU Copy Probe</button>
+          <button id="interopExportBtn">Export Report…</button>
+        </div>
+        <div id="interopSummary" class="interop-summary">Run the analysis with the output resolution and Syphon/Spout state you intend to use.</div>
+        <div id="interopMetrics" class="interop-metrics"></div>
+        <div class="interop-section-label">CURRENT SAFE FALLBACK</div>
+        <div id="interopPath" class="interop-path"></div>
+        <div class="interop-section-label">HOST COPY BASELINE</div>
+        <div id="interopProbeStatus" class="interop-probe">The probe measures host memcpy only. It does not claim to measure GPU map, driver synchronization, platform texture upload, or receiver latency.</div>
+        <div class="interop-section-label">PLATFORM CANDIDATES</div>
+        <div id="interopCandidates" class="interop-candidates"></div>
+        <div class="interop-section-label">RECOMMENDED NEXT STEP</div>
+        <div id="interopNextStep" class="interop-next">Analyze the current computer first.</div>
       </div>
     </div>
 
@@ -1406,6 +1461,7 @@
             <button id="syphonBtn" class="btn-dim">SYPHON</button>
             <button id="spoutBtn"  class="btn-dim">SPOUT</button>
             <button id="verifyBtn" class="btn-dim">VERIFY</button>
+            <button id="interopBtn" class="btn-dim">INTEROP</button>
             <button id="aboutBtn" class="btn-red">ABOUT</button>
         </div>
 
@@ -1577,7 +1633,7 @@
                     <label><input id="stateScopeTransport" type="checkbox"> Transport</label>
                     <label><input id="stateScopeAutomation" type="checkbox"> Automation</label>
                     <label><input id="stateScopeMaps" type="checkbox"> MIDI/OSC Maps</label>
-                    <label title="Declared but disabled in HNW-20: GPU pixel stores remain separate"><input id="stateScopePixels" type="checkbox" disabled> GPU Pixels</label>
+                    <label title="Declared but disabled in HNW-21: GPU pixel stores remain separate"><input id="stateScopePixels" type="checkbox" disabled> GPU Pixels</label>
                 </div>
                 <div id="stateScopeNote">Preset = reusable artistic condition. Source files, transport, render allocation, automation, maps, and GPU pixels remain untouched.</div>
                 <div id="stateModelStatus">huff-state/v1 · loading parameter metadata…</div>

@@ -1,4 +1,4 @@
-# HUFF native migration status · Milestone 20
+# HUFF native migration status · Milestone 21
 
 ## Proven native foundation
 
@@ -71,11 +71,12 @@ Milestone 15’s full-resolution graph has produced both successful and unsucces
 
 The queue remains installed for later evaluation but is not treated as a settled core HUFF workflow.
 
-## Remaining ordered product work
+## Remaining refinement work after the planned roadmap
 
 1. Cross-platform production verification and deferred Milestone 15 failure analysis
-2. Optional lower-copy platform-specific texture interop research
-3. Hands-on visual calibration using the Milestone 16 Parity Lab throughout the refinement cycle
+2. Hands-on visual calibration using the Milestone 16 Parity Lab
+3. Workflow pruning or branch-specific removal of provisional systems
+4. Optional feature-gated native Metal or Direct3D sharing proof of concept after receiver selection
 
 ## Current principle
 
@@ -117,3 +118,19 @@ The fixed HUFF pipeline remains the default instrument recipe; arbitrary graph p
 ## Production verification completed in Milestone 20
 
 The application now exposes a common runtime report, bounded surface/source/output recovery, diagnostics-folder export, strict production dependency checks, and backend-specific build wrappers. This creates one repeatable process for the final Metal and DX12/MSVC verification cycle without falsely treating static packaging as hardware certification.
+
+
+## Lower-copy interoperability research completed in Milestone 21
+
+- `huff-interop-report/v1` current-path analysis
+- explicit GPU readback, host repack, and platform-upload stages
+- per-stage bandwidth estimates at current dimensions and output rate
+- bounded host-memory copy baseline
+- Metal/Syphon direct and IOSurface bridge candidates
+- D3D12 shared-handle and D3D11On12 Spout candidates
+- Vulkan external-memory constraints tied to real receiver protocols
+- typed `ExternalOutputFrame` submission seam for future feature-gated native resources
+- interop JSON/TXT export and diagnostics-bundle inclusion
+- safe bounded readback retained as the production default
+
+Milestone 21 deliberately completes research and preparation rather than enabling an unverified zero-copy path. Any later native transport must preserve automatic fallback and pass frame-identity, synchronization, adapter, receiver, recovery, and long-session tests.

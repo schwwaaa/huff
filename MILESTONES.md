@@ -1,7 +1,7 @@
 # HUFF Native wgpu — Master Milestone Record
 
-**Current build:** `0.20.0 / HNW-20`  
-**Current milestone:** Milestone 20 — Production Verification Harness and Recovery Hardening  
+**Current build:** `0.21.0 / HNW-21`  
+**Current milestone:** Milestone 21 — Lower-Copy Platform Interoperability Research  
 **Tracking rule:** This file is the authoritative milestone index. It must be carried forward and updated in every complete project archive and every changed-files archive from Milestone 16 onward.
 
 This record describes the purpose of each milestone rather than serving as a detailed changelog. Corrective sub-milestones are listed with the milestone they stabilize. Runtime status is intentionally honest: a feature may be structurally integrated while still awaiting the larger cross-feature refinement and verification cycle.
@@ -98,11 +98,11 @@ Milestone 19 formalizes the fixed HUFF recipe as a constrained `huff-routing/v1`
 
 Milestone 20 turns the final cross-platform test cycle into a repeatable workflow rather than claiming that static packaging checks can certify unavailable hardware. HUFF now produces `huff-production-report/v1` reports covering platform, build identity, wgpu backend and adapter, renderer and surface health, readback pressure, FFmpeg/FFprobe and required encoders, video/camera/audio status, Syphon/Spout state, recording/export ownership, queue recovery state, MIDI/OSC services, and writable temporary storage. A dedicated VERIFY window exposes bounded recovery for the surface, active media source, and active output bridges without clearing parameters or temporal pixels. Diagnostics export writes runtime, parameter, routing, and state-model files into one reviewable folder, while repository and production-build scripts provide normal and strict validation modes for Metal, DX12, and Vulkan targets. Actual receiver compatibility, installer behavior, long-session stability, multi-GPU behavior, and device-loss results remain observations to be collected on every target machine with this common harness.
 
-# Planned Milestone
+# Final Roadmap Milestone Completed
 
 ## Milestone 21 — Lower-Copy Platform Interoperability Research
 
-Milestone 21 will investigate direct or lower-copy texture-sharing paths for Metal, Direct3D 11/12, and Vulkan-compatible environments. The current bounded readback bridges prioritize correctness and portability, but they incur GPU-to-CPU and CPU-to-GPU transfers. This research milestone will determine whether safe shared-texture or external-memory paths can reduce latency and bandwidth without making the core HUFF engine fragile or backend-specific.
+Milestone 21 makes HUFF’s current GPU-to-CPU-to-platform-output path explicit rather than presenting “zero copy” as an unverified promise. The new `huff-interop-report/v1` analysis records backend, adapter, frame size, active output rate, per-stage bandwidth estimates, current bounded readback status, and candidate Metal/Syphon, IOSurface, D3D12/Spout, D3D11On12, and Vulkan external-memory paths with requirements, blockers, risk, and fallback rules. A bounded host-memory copy probe supplies a local baseline while clearly excluding GPU map, driver synchronization, platform upload, and receiver latency. Syphon and Spout now receive a typed `ExternalOutputFrame` submission whose only production variant remains CPU RGBA, creating a controlled seam for future feature-gated native texture tokens without changing the output-worker API. No unsafe direct texture sharing is enabled; bounded asynchronous readback remains authoritative until a platform-specific proof of concept passes frame-identity, synchronization, adapter, receiver, recovery, and automatic-fallback tests.
 
 ---
 

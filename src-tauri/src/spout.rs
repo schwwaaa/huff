@@ -1,9 +1,9 @@
-use crate::output_frame::OutputFrame;
+use crate::output_frame::ExternalOutputFrame;
 use serde::Serialize;
 
 #[cfg(target_os = "windows")]
 mod imp {
-    use super::{OutputFrame, Serialize};
+    use super::{ExternalOutputFrame, Serialize};
     use once_cell::sync::Lazy;
     use std::{
         collections::VecDeque,
@@ -84,7 +84,7 @@ mod imp {
     #[derive(Default)]
     struct WorkerQueue {
         commands: VecDeque<WorkerCommand>,
-        pending_frame: Option<OutputFrame>,
+        pending_frame: Option<ExternalOutputFrame>,
     }
 
     static STATE: Lazy<Mutex<Option<SpoutState>>> = Lazy::new(|| Mutex::new(None));
@@ -121,6 +121,8 @@ mod imp {
         pub rejected_frames: u64,
         pub last_upload_us: u64,
         pub last_frame_age_ms: f64,
+        pub transport: String,
+        pub native_texture_sharing: bool,
         pub last_error: String,
     }
 
@@ -224,7 +226,13 @@ mod imp {
         state.sender_frame = unsafe { spoutdx_get_sender_frame() };
     }
 
-    fn publish(frame: OutputFrame) {
+    fn publish(submission: ExternalOutputFrame) {
+        let transport = submission.transport_id();
+        let Ok(frame) = submission.into_cpu_rgba() else {
+            REJECTED.fetch_add(1, Ordering::Relaxed);
+            set_error(format!("unsupported Spout transport: {transport}"));
+            return;
+        };
         if !frame.is_valid() {
             REJECTED.fetch_add(1, Ordering::Relaxed);
             set_error("invalid RGBA frame received by Spout worker");
@@ -290,7 +298,7 @@ mod imp {
         loop {
             enum Work {
                 Command(WorkerCommand),
-                Frame(OutputFrame),
+                Frame(ExternalOutputFrame),
             }
             let work = {
                 let mut queue = QUEUE.0.lock().expect("Spout queue lock poisoned");
@@ -414,7 +422,7 @@ mod imp {
         let _ = reply_rx.recv_timeout(Duration::from_secs(3));
     }
 
-    pub fn submit(frame: OutputFrame) {
+    pub fn submit(frame: ExternalOutputFrame) {
         if STATE.lock().expect("Spout state lock poisoned").is_none() {
             return;
         }
@@ -452,6 +460,8 @@ mod imp {
             rejected_frames: REJECTED.load(Ordering::Relaxed),
             last_upload_us: LAST_UPLOAD_US.load(Ordering::Relaxed),
             last_frame_age_ms: LAST_FRAME_AGE_US.load(Ordering::Relaxed) as f64 / 1000.0,
+            transport: "cpu-readback-upload".into(),
+            native_texture_sharing: false,
             last_error: LAST_ERROR.lock().expect("Spout error lock poisoned").clone(),
         }
     }
@@ -459,7 +469,7 @@ mod imp {
 
 #[cfg(not(target_os = "windows"))]
 mod imp {
-    use super::{OutputFrame, Serialize};
+    use super::{ExternalOutputFrame, Serialize};
 
     #[derive(Debug, Clone, Serialize)]
     #[serde(rename_all = "camelCase")]
@@ -489,6 +499,8 @@ mod imp {
         pub rejected_frames: u64,
         pub last_upload_us: u64,
         pub last_frame_age_ms: f64,
+        pub transport: String,
+        pub native_texture_sharing: bool,
         pub last_error: String,
     }
 
@@ -500,7 +512,7 @@ mod imp {
         Err("Spout is available only on Windows".into())
     }
     pub fn stop() {}
-    pub fn submit(_frame: OutputFrame) {}
+    pub fn submit(_frame: ExternalOutputFrame) {}
     pub fn info() -> SpoutInfo {
         SpoutInfo {
             available: false,
@@ -521,6 +533,8 @@ mod imp {
             rejected_frames: 0,
             last_upload_us: 0,
             last_frame_age_ms: 0.0,
+            transport: "unavailable".into(),
+            native_texture_sharing: false,
             last_error: "Spout is available only on Windows".into(),
         }
     }

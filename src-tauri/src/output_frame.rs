@@ -33,3 +33,32 @@ impl OutputFrame {
             && self.expected_len() == Some(self.pixels.len())
     }
 }
+
+/// Typed submission boundary for external GPU-sharing systems.
+///
+/// Milestone 21 keeps CPU RGBA readback as the only production transport, but
+/// Syphon and Spout now receive this enum rather than assuming that every future
+/// submission must be CPU pixels. A feature-gated Metal, D3D, or Vulkan token can
+/// be added here later without changing the control surface or output-worker API.
+#[derive(Clone)]
+pub enum ExternalOutputFrame {
+    CpuRgba(OutputFrame),
+}
+
+impl ExternalOutputFrame {
+    pub fn cpu_rgba(frame: OutputFrame) -> Self {
+        Self::CpuRgba(frame)
+    }
+
+    pub fn transport_id(&self) -> &'static str {
+        match self {
+            Self::CpuRgba(_) => "cpu-readback-upload",
+        }
+    }
+
+    pub fn into_cpu_rgba(self) -> Result<OutputFrame, &'static str> {
+        match self {
+            Self::CpuRgba(frame) => Ok(frame),
+        }
+    }
+}

@@ -1,4 +1,4 @@
-use crate::AppInfo;
+use crate::{interop, AppInfo};
 use serde::Serialize;
 use std::{
     env,
@@ -9,7 +9,7 @@ use std::{
 };
 
 pub const PRODUCTION_REPORT_SCHEMA: &str = "huff-production-report/v1";
-pub const ENGINE_BUILD: &str = "HNW-20";
+pub const ENGINE_BUILD: &str = "HNW-21";
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -239,6 +239,20 @@ pub fn build_report(info: &AppInfo) -> ProductionReport {
             info.renderer.output_pending_slots,
             info.renderer.output_copy_ms
         ),
+        "outputs",
+    );
+
+    let interop_report = interop::build_report(info);
+    push(
+        "output.interop_transport",
+        "Output",
+        "Platform interoperability transport",
+        "info",
+        format!(
+            "{} · {:.1} MiB/s per transfer stage",
+            interop_report.current_transport, interop_report.readback_mib_per_second
+        ),
+        "Milestone 21 keeps bounded CPU readback as the production fallback. The INTEROP lab documents Metal, D3D12, D3D11On12, and Vulkan candidates without enabling unsafe native texture sharing.".into(),
         "outputs",
     );
 

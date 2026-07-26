@@ -1,6 +1,6 @@
 # HUFF Production Verification and Recovery
 
-**Build:** `0.20.0 / HNW-20`  
+**Build:** `0.21.0 / HNW-21`  
 **Schema:** `huff-production-report/v1`
 
 Milestone 20 turns production testing into a repeatable application workflow. It does not claim that one computer can certify every supported platform. Instead, the same checks, report format, recovery actions, diagnostics bundle, and build commands can be run on each macOS and Windows test machine.
@@ -62,11 +62,15 @@ Runs the surface, source, and active-output recovery operations together. It rem
 README.txt
 production-report.json
 production-report.txt
+interop-report.json
+interop-report.txt
 app-info.json
 parameter-state.json
 routing-plan.json
 state-model.json
 ```
+
+The interoperability files describe the current bounded readback/upload path and platform candidates; they do not indicate that native texture sharing is enabled.
 
 The bundle intentionally excludes source media and GPU pixel buffers. It may include local file paths, device names, adapter names, and controller configuration. Review it before sharing publicly.
 

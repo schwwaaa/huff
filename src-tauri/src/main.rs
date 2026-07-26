@@ -13,6 +13,7 @@ mod export;
 mod export_queue;
 mod gesture;
 mod history;
+mod interop;
 mod midi;
 mod offline_export;
 mod osc;
@@ -41,6 +42,7 @@ use control_mapping::{target_catalog, ControlActionBus, ControlTargetInfo};
 use export::{ExportHandle, StillExportConfig, StillExportMetadata};
 use export_queue::{ExportQueueHandle, ExportQueueReceipt};
 use gesture::{GestureHandle, GesturePoint};
+use interop::{InteropCopyProbe, InteropReport};
 use midi::{MidiCommand, MidiHandle, MidiMapping};
 use offline_export::{
     profile_codec, profile_container, profile_extension, profile_label,
@@ -149,7 +151,7 @@ fn collect_app_info(
     source: &SourceSelector,
 ) -> AppInfo {
     AppInfo {
-        build: "HNW-20".into(),
+        build: "HNW-21".into(),
         renderer: renderer.info(),
         camera: camera.status(),
         camera_devices: camera.devices(),
@@ -170,7 +172,7 @@ fn collect_app_info(
         gesture: gesture.info(),
         automation: automation.info(),
         parameter_revision: parameters.revision(),
-        native_milestone: "HNW-20".into(),
+        native_milestone: "HNW-21".into(),
         active_source: source.get().label().into(),
     }
 }
@@ -214,6 +216,98 @@ fn get_app_info(
     )
 }
 
+
+#[tauri::command]
+fn run_interop_analysis(
+    renderer: tauri::State<'_, RendererHandle>,
+    camera: tauri::State<'_, CameraHandle>,
+    video: tauri::State<'_, VideoHandle>,
+    microphone_audio: tauri::State<'_, AudioHandle>,
+    video_audio: tauri::State<'_, VideoAudioHandle>,
+    audio_router: tauri::State<'_, AudioRouterHandle>,
+    midi: tauri::State<'_, MidiHandle>,
+    osc: tauri::State<'_, OscHandle>,
+    gesture: tauri::State<'_, GestureHandle>,
+    recording: tauri::State<'_, RecordingHandle>,
+    export: tauri::State<'_, ExportHandle>,
+    offline_export: tauri::State<'_, OfflineExportHandle>,
+    export_queue: tauri::State<'_, ExportQueueHandle>,
+    automation: tauri::State<'_, AutomationHandle>,
+    parameters: tauri::State<'_, ParameterStore>,
+    source: tauri::State<'_, SourceSelector>,
+) -> InteropReport {
+    let info = collect_app_info(
+        renderer.inner(),
+        camera.inner(),
+        video.inner(),
+        microphone_audio.inner(),
+        video_audio.inner(),
+        audio_router.inner(),
+        midi.inner(),
+        osc.inner(),
+        gesture.inner(),
+        recording.inner(),
+        export.inner(),
+        offline_export.inner(),
+        export_queue.inner(),
+        automation.inner(),
+        parameters.inner(),
+        source.inner(),
+    );
+    interop::build_report(&info)
+}
+
+#[tauri::command]
+fn run_interop_copy_probe(
+    renderer: tauri::State<'_, RendererHandle>,
+) -> InteropCopyProbe {
+    let info = renderer.info();
+    interop::run_copy_probe(info.width, info.height)
+}
+
+#[tauri::command]
+fn export_interop_report(
+    renderer: tauri::State<'_, RendererHandle>,
+    camera: tauri::State<'_, CameraHandle>,
+    video: tauri::State<'_, VideoHandle>,
+    microphone_audio: tauri::State<'_, AudioHandle>,
+    video_audio: tauri::State<'_, VideoAudioHandle>,
+    audio_router: tauri::State<'_, AudioRouterHandle>,
+    midi: tauri::State<'_, MidiHandle>,
+    osc: tauri::State<'_, OscHandle>,
+    gesture: tauri::State<'_, GestureHandle>,
+    recording: tauri::State<'_, RecordingHandle>,
+    export: tauri::State<'_, ExportHandle>,
+    offline_export: tauri::State<'_, OfflineExportHandle>,
+    export_queue: tauri::State<'_, ExportQueueHandle>,
+    automation: tauri::State<'_, AutomationHandle>,
+    parameters: tauri::State<'_, ParameterStore>,
+    source: tauri::State<'_, SourceSelector>,
+) -> Result<Option<String>, String> {
+    let Some(path) = rfd::FileDialog::new()
+        .set_title("Export HUFF interoperability report")
+        .add_filter("HUFF interoperability report", &["json"])
+        .set_file_name("huff-interop-report.json")
+        .save_file()
+    else {
+        return Ok(None);
+    };
+    let info = collect_app_info(
+        renderer.inner(), camera.inner(), video.inner(), microphone_audio.inner(),
+        video_audio.inner(), audio_router.inner(), midi.inner(), osc.inner(), gesture.inner(),
+        recording.inner(), export.inner(), offline_export.inner(), export_queue.inner(),
+        automation.inner(), parameters.inner(), source.inner(),
+    );
+    let report = interop::build_report(&info);
+    let bytes = serde_json::to_vec_pretty(&report)
+        .map_err(|error| format!("could not serialize interoperability report: {error}"))?;
+    std::fs::write(&path, bytes)
+        .map_err(|error| format!("could not write {}: {error}", path.display()))?;
+    let text_path = path.with_extension("txt");
+    std::fs::write(&text_path, interop::human_report(&report))
+        .map_err(|error| format!("could not write {}: {error}", text_path.display()))?;
+    Ok(Some(path.display().to_string()))
+}
 
 #[tauri::command]
 fn run_production_check(
@@ -421,7 +515,7 @@ fn export_diagnostics_bundle(
     );
     let report = production::build_report(&info);
     let directory = parent.join(format!(
-        "huff-diagnostics-HNW-20-{}",
+        "huff-diagnostics-HNW-21-{}",
         production::now_unix_ms()
     ));
     std::fs::create_dir_all(&directory)
@@ -436,6 +530,8 @@ fn export_diagnostics_bundle(
     }
 
     write_json(&directory, "production-report.json", &report)?;
+    let interop_report = interop::build_report(&info);
+    write_json(&directory, "interop-report.json", &interop_report)?;
     write_json(&directory, "app-info.json", &info)?;
     write_json(&directory, "parameter-state.json", &parameters.snapshot())?;
     write_json(
@@ -454,8 +550,13 @@ fn export_diagnostics_bundle(
     )
     .map_err(|error| format!("could not write production-report.txt: {error}"))?;
     std::fs::write(
+        directory.join("interop-report.txt"),
+        interop::human_report(&interop_report),
+    )
+    .map_err(|error| format!("could not write interop-report.txt: {error}"))?;
+    std::fs::write(
         directory.join("README.txt"),
-        "HUFF Native HNW-20 diagnostics bundle\n\nThis folder contains runtime status, production checks, canonical parameter state, routing state, and the state-model catalog. Source file paths and device names may be present. Review the files before sharing them publicly. GPU pixel buffers and media files are not included.\n",
+        "HUFF Native HNW-21 diagnostics bundle\n\nThis folder contains runtime status, production checks, lower-copy interoperability analysis, canonical parameter state, routing state, and the state-model catalog. Source file paths and device names may be present. Review the files before sharing them publicly. GPU pixel buffers and media files are not included.\n",
     )
     .map_err(|error| format!("could not write diagnostics README: {error}"))?;
 
@@ -1169,7 +1270,7 @@ fn export_still(
         fit_mode: fit_mode.clone(),
     };
     let metadata = StillExportMetadata {
-        engine_build: "HNW-20".into(),
+        engine_build: "HNW-21".into(),
         captured_unix_ms: StillExportMetadata::now_unix_ms(),
         active_source: source.get().label().into(),
         source_file: video_info.file_path,
@@ -1360,7 +1461,7 @@ fn start_offline_export(
         queue_job_id: String::new(),
     };
     let metadata = OfflineExportMetadata {
-        engine_build: "HNW-20".into(),
+        engine_build: "HNW-21".into(),
         created_unix_ms: OfflineExportMetadata::now_unix_ms(),
         source_file: video_info.file_path.clone(),
         source_codec: video_info.codec,
@@ -2215,6 +2316,9 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             get_app_info,
+            run_interop_analysis,
+            run_interop_copy_probe,
+            export_interop_report,
             run_production_check,
             recover_live_runtime,
             export_diagnostics_bundle,

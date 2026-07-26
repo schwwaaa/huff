@@ -18,7 +18,7 @@ use std::{
 
 pub const STATE_DOCUMENT_SCHEMA: &str = "huff-state/v1";
 pub const STATE_MODEL_VERSION: u32 = 1;
-pub const ENGINE_BUILD: &str = "HNW-20";
+pub const ENGINE_BUILD: &str = "HNW-21";
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -473,7 +473,7 @@ pub fn model_catalog() -> StateModelCatalog {
         sequenceable_count: parameters.iter().filter(|metadata| metadata.sequenceable).count(),
         domains,
         default_scopes,
-        persistent_image_policy: "Persistent GPU pixels are intentionally separate from presets, snapshots, sequences, and projects in HNW-20. State documents identify these resources but do not silently embed them.".into(),
+        persistent_image_policy: "Persistent GPU pixels are intentionally separate from presets, snapshots, sequences, and projects in HNW-21. State documents identify these resources but do not silently embed them.".into(),
         parameters,
     }
 }

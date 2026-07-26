@@ -24,8 +24,8 @@ function command(program, args = []) {
   }
 }
 
-const expectedVersion = '0.20.0';
-const expectedBuild = 'HNW-20';
+const expectedVersion = '0.21.0';
+const expectedBuild = 'HNW-21';
 const packageJson = json('package.json');
 const packageLock = json('package-lock.json');
 const tauriConfig = json('src-tauri/tauri.conf.json');
@@ -52,6 +52,8 @@ for (const path of [
   'src-tauri/src/production.rs',
   'PRODUCTION-VERIFICATION.md',
   'UPGRADE-NOTES-20.md',
+  'UPGRADE-NOTES-21.md',
+  'INTEROP-RESEARCH.md',
   'MILESTONES.md',
   'TESTING.md',
 ]) {
@@ -66,7 +68,7 @@ for (const commandName of ['run_production_check', 'recover_live_runtime', 'expo
     ? pass(`${commandName} wired native ↔ frontend`)
     : fail(`${commandName} is not wired across native and frontend`);
 }
-main.includes(expectedBuild) && app.includes('Milestone 20') && html.includes('milestone 20')
+main.includes(expectedBuild) && app.includes('Milestone 21') && html.includes('milestone 21')
   ? pass(`${expectedBuild} runtime and interface markers present`)
   : fail(`${expectedBuild} runtime/interface markers incomplete`);
 

@@ -27,6 +27,8 @@ const appState = {
   routingCatalog: null,
   routingPlan: null,
   productionReport: null,
+  interopReport: null,
+  interopProbe: null,
 };
 
 function toast(message, error = false) {
@@ -471,6 +473,7 @@ function wireGroupsAndModals() {
   const modalPairs = [
     ['aboutBtn', 'aboutOverlay', 'aboutClose'],
     ['verifyBtn', 'productionOverlay', 'productionClose'],
+    ['interopBtn', 'interopOverlay', 'interopClose'],
     ['midiBtn', 'midiOverlay', 'midiClose'],
     ['midiPill', 'midiOverlay', 'midiClose'],
     ['oscBtn', 'oscOverlay', 'oscClose'],
@@ -603,6 +606,117 @@ function wireProduction() {
   byId('productionExportBtn')?.addEventListener('click', async () => {
     const path = await call('export_diagnostics_bundle');
     if (path) toast(`Diagnostics saved: ${path}`);
+  });
+}
+
+
+function renderInteropReport(report) {
+  appState.interopReport = report;
+  const summary = byId('interopSummary');
+  if (summary) {
+    summary.textContent = report
+      ? `${String(report.currentPathStatus || 'unknown').toUpperCase()} · ${report.width || 0}×${report.height || 0} @ ${report.referenceFps || 0} fps · ${Number(report.readbackMibPerSecond || 0).toFixed(1)} MiB/s for each full-frame transfer stage`
+      : 'Interoperability report unavailable.';
+  }
+
+  const metrics = byId('interopMetrics');
+  if (metrics) {
+    const platform = report?.platform || {};
+    const items = [
+      ['Platform', `${platform.os || 'unknown'} / ${platform.arch || 'unknown'}`],
+      ['Backend', platform.backend || 'unknown'],
+      ['Adapter', platform.adapter || 'unknown'],
+      ['Current transport', report?.currentTransport || 'unknown'],
+      ['Frame bytes', Number(report?.bytesPerFrame || 0).toLocaleString()],
+      ['Reference rate', `${report?.referenceFps || 0} fps`],
+      ['Readback traffic', `${Number(report?.readbackMibPerSecond || 0).toFixed(1)} MiB/s`],
+      ['Native sharing', 'Research only · disabled'],
+    ];
+    metrics.innerHTML = items
+      .map(([label, value]) => `<div><strong>${escapeHtml(label)}</strong>${escapeHtml(value)}</div>`)
+      .join('');
+  }
+
+  const path = byId('interopPath');
+  if (path) {
+    path.innerHTML = (report?.currentCopyPath || [])
+      .map((stage, index) => `<div class="interop-path-stage"><span>${index + 1}</span>${escapeHtml(stage)}</div>`)
+      .join('');
+  }
+
+  const candidates = byId('interopCandidates');
+  if (candidates) {
+    candidates.innerHTML = (report?.candidates || []).map((candidate) => `
+      <div class="interop-candidate ${escapeHtml(candidate.status || 'not-applicable')}">
+        <div class="interop-candidate-head">
+          <strong>${escapeHtml(candidate.label || '')}</strong>
+          <span>${escapeHtml(String(candidate.status || '').toUpperCase())}</span>
+        </div>
+        <div class="interop-candidate-meta">${escapeHtml(candidate.platform || '')} · ${escapeHtml(candidate.backend || '')} · ${escapeHtml(candidate.output || '')}</div>
+        <div>CPU round trips: ${escapeHtml(candidate.cpuRoundTrips || '')} · GPU copies: ${escapeHtml(candidate.gpuCopies || '')} · risk: ${escapeHtml(candidate.risk || '')}</div>
+        <div class="interop-detail">${escapeHtml(candidate.recommendation || '')}</div>
+        <details>
+          <summary>Requirements and blockers</summary>
+          <div class="interop-detail"><strong>Requirements:</strong> ${escapeHtml((candidate.requirements || []).join(' · '))}</div>
+          <div class="interop-detail"><strong>Blockers:</strong> ${escapeHtml((candidate.blockers || []).join(' · '))}</div>
+        </details>
+      </div>
+    `).join('');
+  }
+
+  const next = byId('interopNextStep');
+  if (next) next.textContent = report?.recommendedNextStep || '';
+}
+
+async function runInteropAnalysis() {
+  const button = byId('interopRunBtn');
+  if (button) {
+    button.disabled = true;
+    button.textContent = 'Analyzing…';
+  }
+  try {
+    const report = await call('run_interop_analysis');
+    renderInteropReport(report);
+    return report;
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = '▶ Analyze Current Path';
+    }
+  }
+}
+
+async function runInteropProbe() {
+  const button = byId('interopProbeBtn');
+  const status = byId('interopProbeStatus');
+  if (button) {
+    button.disabled = true;
+    button.textContent = 'Probing…';
+  }
+  if (status) status.textContent = 'Running a bounded host-memory copy probe…';
+  try {
+    const probe = await call('run_interop_copy_probe');
+    appState.interopProbe = probe;
+    if (status) {
+      status.textContent = `${Number(probe.throughputMibPerSecond || 0).toFixed(0)} MiB/s host memcpy · estimated ${Number(probe.estimatedFullFrameCopyMs || 0).toFixed(3)} ms per ${probe.requestedWidth || 0}×${probe.requestedHeight || 0} RGBA frame · ${Number(probe.estimated60FpsCpuSharePercent || 0).toFixed(1)}% of one second at 60 fps. ${probe.note || ''}`;
+    }
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = 'Run CPU Copy Probe';
+    }
+  }
+}
+
+function wireInterop() {
+  byId('interopBtn')?.addEventListener('click', () => {
+    if (!appState.interopReport) runInteropAnalysis().catch(() => {});
+  });
+  byId('interopRunBtn')?.addEventListener('click', () => runInteropAnalysis().catch(() => {}));
+  byId('interopProbeBtn')?.addEventListener('click', () => runInteropProbe().catch(() => {}));
+  byId('interopExportBtn')?.addEventListener('click', async () => {
+    const path = await call('export_interop_report');
+    if (path) toast(`Interop report saved: ${path}`);
   });
 }
 
@@ -1818,6 +1932,7 @@ async function boot() {
   }
   wireGroupsAndModals();
   wireProduction();
+  wireInterop();
   if (!bridgeReady) {
     byId('status').textContent = 'NATIVE: BRIDGE ERROR';
     toast('Tauri bridge unavailable', true);
@@ -1850,7 +1965,7 @@ async function boot() {
   await refreshParityReport(true);
   await poll();
   setInterval(poll, 250);
-  console.info('Huff Native wgpu Milestone 20 loaded', {
+  console.info('Huff Native wgpu Milestone 21 loaded', {
     parameters: appState.registry.length,
     implemented: appState.registry.filter((definition) => definition.implemented).length,
   });
