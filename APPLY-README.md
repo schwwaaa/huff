@@ -1,46 +1,48 @@
-# Apply Huff Native Milestone 15
+# Apply HUFF Native Milestone 16
 
-The complete archive is the preferred upgrade path.
+The complete archive is the safest baseline.
 
-For a changed-files application, copy the supplied files over a clean Milestone 14 tree while preserving paths.
+The changed-files archive is intended for a clean Milestone 15 tree and contains only files added or modified by Milestone 16. Copy it over the project root while preserving directory structure.
 
-New file:
+## New files
 
 ```text
-UPGRADE-NOTES-15.md
+MILESTONES.md
+UPGRADE-NOTES-16.md
+scripts/validate-parity.mjs
+src-tauri/src/parity.rs
+src-tauri/src/legacy_parameter_contract.json
 ```
 
-Major changed files:
+## Modified files
 
 ```text
-src-tauri/src/renderer.rs
-src-tauri/src/compositor.wgsl
-src-tauri/src/offline_export.rs
-src-tauri/src/main.rs
-src-tauri/src/export_queue.rs
-src-tauri/src/automation.rs
+README.md
+TESTING.md
+VALIDATION.md
+MIGRATION-STATUS.md
+APPLY-README.md
+package.json
+package-lock.json
 src/app.js
 src/index.html
 src-tauri/Cargo.toml
 src-tauri/Cargo.lock
 src-tauri/tauri.conf.json
-package.json
-package-lock.json
-README.md
-TESTING.md
-MIGRATION-STATUS.md
-VALIDATION.md
+src-tauri/src/main.rs
+src-tauri/src/offline_export.rs
+src-tauri/src/automation.rs
+src-tauri/src/export_queue.rs
 ```
 
-Run:
+## Required tracking file
+
+`MILESTONES.md` is now mandatory in every future complete and changed-files package. It is the authoritative milestone index and must be updated rather than recreated from memory.
+
+## First check
 
 ```bash
-npm install
-npm run dev:metal
+npm run validate:parity
 ```
 
-FFmpeg must remain available on `PATH`. No new Rust crate dependency was added.
-
-Begin with a short NATIVE or 1080p H.264 job before attempting 4K or 8K. The full local checklist is in `TESTING.md`.
-
-The changed-files archive includes `MILESTONE-15-SHA256SUMS.txt`. The older Milestone 14 checksum file describes only the prior baseline and may be removed after the upgrade.
+Then launch with the normal backend command and verify the PARITY LAB row.

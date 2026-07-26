@@ -1,4 +1,4 @@
-# Huff native migration status · Milestone 15
+# HUFF native migration status · Milestone 16
 
 ## Proven native foundation
 
@@ -7,10 +7,10 @@
 - Native camera input
 - Metal / Vulkan / DX12 wgpu rendering
 - Exclusive camera/video source ownership
-- Existing Huff HTML control surface commanding canonical Rust state
+- Existing HUFF HTML control surface commanding canonical Rust state
 - Native presets, undo, MIDI, OSC, and diagnostics foundations
 
-## Native renderer completed
+## Native renderer integrated
 
 - Independent live render and GPU-history resolutions
 - GPU temporal texture-array history
@@ -22,7 +22,7 @@
 - Non-additive feedback transform
 - Clean base, background, brightness, and contrast
 
-## Live output and capture completed
+## Live output and capture integrated
 
 - Native-window output
 - Syphon on macOS
@@ -33,7 +33,7 @@
 - Safe recording finalization
 - Native through custom-size PNG still export
 
-## Deterministic production export completed
+## Deterministic production export integrated
 
 - Private exact-frame FFmpeg decoder
 - Fixed 24/30/60 FPS simulation timeline
@@ -44,19 +44,22 @@
 - Transactional temporary output and reproducibility metadata
 - Complete/cancelled/failed lifecycle manifests
 - Canonical automation recording, interpolation, looping, actions, and frame-exact replay
+- Private export-resolution graph for history, glitch, clusters, scanlines, feedback, keying, Flow, and final output
 
-## Full-resolution graph execution completed in Milestone 15
+Milestone 15’s full-resolution graph has produced both successful and unsuccessful local tests. It remains integrated, with focused diagnosis deferred until the larger refinement and production-verification cycle.
 
-- Private export-sized working graph for every deterministic job
-- Source FIT/CROP/STRETCH applied before temporal processing
-- SMOOTH/CRISP source sampling applied before the graph
-- Export-relative history dimensions and bounded capacity
-- Full-resolution glitch, clusters, scanlines, Smoosh, feedback, Luma Key, Global Mix, Flow, and final output
-- Direct 1:1 authoritative-output readback with no final export resize
-- Topology guard preventing automation from reverting export dimensions
-- Graph topology and estimated allocation recorded in metadata and diagnostics
-- Explicit maximum-dimension and bounded-memory preflight
-- Restoration of live graph, source sampler, output readback, transport, and deferred resize after every exit path
+## Parameter contract and parity tooling completed in Milestone 16
+
+- Embedded legacy contract extracted from the supplied HUFF web/Tauri interface
+- 87 mapped legacy controls checked for ID, kind, default, range, step, and options
+- 87/87 exact native contract match at packaging time
+- Eleven native-only render, color, and history controls identified separately
+- Reproducible Legacy, Glitch, Cluster, Scanline, Feedback, and Flow calibration profiles
+- Automatic persistent-buffer clearing at profile boundaries
+- Current-state delta reporting against legacy defaults
+- Machine-readable parity report export
+- Standalone `npm run validate:parity` source validator
+- Authoritative `MILESTONES.md` carried forward in all future packages
 
 ## Provisional export queue retained
 
@@ -66,16 +69,17 @@
 - Persistent global queue and adjacent job descriptions
 - Source/destination conflict checks
 
-The queue remains installed for later evaluation but is not treated as a settled core Huff workflow.
+The queue remains installed for later evaluation but is not treated as a settled core HUFF workflow.
 
-## Remaining product work
+## Remaining ordered product work
 
-1. Parameter-by-parameter visual and motion calibration
-2. MIDI and OSC map import/edit workflows
-3. Expanded sequencing, routing, scoped recall, and project-state support
-4. Windows MSVC, Spout receiver, multi-GPU, MSI, and NSIS verification
+1. Complete MIDI and OSC mapping workflows
+2. Formal presets, snapshots, sequences, scoped recall, and projects
+3. Constrained routing and named buses
+4. Cross-platform production verification and deferred Milestone 15 failure analysis
 5. Optional lower-copy platform-specific texture interop research
+6. Hands-on visual calibration using the Milestone 16 Parity Lab throughout the refinement cycle
 
 ## Current principle
 
-The native graph, deterministic timeline, production codecs, automation replay, and independent high-resolution execution are now structurally present. The next phase should tune Huff as an instrument rather than add another broad subsystem before the larger test and calibration cycle.
+The broad native architecture is being completed before a long refinement pass. Milestone 16 makes that strategy safer by preserving the original control semantics and creating repeatable visual test states without pretending that static source comparison can replace hands-on image and motion judgment.

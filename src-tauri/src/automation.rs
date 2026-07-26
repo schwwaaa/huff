@@ -208,7 +208,7 @@ impl AutomationHandle {
         }
         let created = unix_ms();
         let mut draft = AutomationDraft {
-            id: format!("hnw15-auto-{created}-{}", std::process::id()),
+            id: format!("hnw16-auto-{created}-{}", std::process::id()),
             name,
             created_unix_ms: created,
             started: Instant::now(),
@@ -654,7 +654,7 @@ pub fn normalize_clip(mut clip: AutomationClip) -> Result<AutomationClip, String
     }
     clip.name = clean_name(&clip.name);
     if clip.id.trim().is_empty() {
-        clip.id = format!("hnw15-auto-{}-{}", unix_ms(), std::process::id());
+        clip.id = format!("hnw16-auto-{}-{}", unix_ms(), std::process::id());
     }
     if clip.events.len() > MAX_AUTOMATION_EVENTS {
         return Err(format!(

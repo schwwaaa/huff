@@ -1,155 +1,133 @@
-# Huff Native Milestone 15 test checklist
+# HUFF Native Milestone 16 test checklist
 
-Milestone 15 changes GPU allocation and export topology. Begin with short jobs and increase resolution gradually.
+Milestone 16 is primarily a parameter-contract and reproducibility milestone. It does not require the unresolved Milestone 15 export cases to be debugged before continuing.
 
-## Build and launch
+## 1. Static contract validation
+
+From the project root:
 
 ```bash
 npm install
+npm run validate:parity
+```
+
+Expected result:
+
+```text
+HUFF parity contract exact: 87/87
+Native registry parameters: 98
+Native-only parameters: 11
+```
+
+Any mismatch should be treated as an intentional schema change requiring review or as a regression.
+
+## 2. Launch
+
+macOS Metal:
+
+```bash
 npm run dev:metal
 ```
 
-Windows:
+Windows DX12:
 
 ```powershell
 npm run dev:dx12
 ```
 
-Confirm FFmpeg:
+Confirm the About panel shows Milestone 16 and the PARITY LAB row appears between Automation and Export Queue.
 
-```bash
-ffmpeg -version
+## 3. Initial comparison
+
+Click **Compare** before changing controls.
+
+Expected:
+
+- contract score is `87/87`;
+- contract mismatch count is zero;
+- current delta is normally zero after a fresh launch with defaults;
+- the tooltip lists eleven native-only controls.
+
+## 4. Current-value tracking
+
+Move one mapped effect slider and wait briefly.
+
+Expected:
+
+- `CURRENT Δ` increases;
+- no contract error appears;
+- moving the control back to its exact default reduces the delta again.
+
+This confirms that the report distinguishes current artistic state from the static control contract.
+
+## 5. Legacy Defaults
+
+Change several controls, choose **Legacy Defaults**, and click **Apply Profile**.
+
+Expected:
+
+- mapped legacy controls return to their original defaults;
+- the native render-resolution and history settings remain unchanged;
+- persistent buffers clear;
+- the current delta returns to zero.
+
+## 6. Isolation profiles
+
+Apply each profile separately:
+
+```text
+Glitch Isolation
+Cluster Isolation
+Scanline Isolation
+Feedback Reference
+Flow Reference
 ```
 
-## 1. Native-resolution regression
+For each profile:
 
-1. Load a short video with obvious motion.
-2. Enable feedback, glitch, scanlines, and Flow.
-3. Export five seconds using **NATIVE**, H.264, 30 FPS, and STATIC STATE.
-4. Confirm frame count, audio, temporal behavior, and completion metadata.
-5. Confirm the offline tooltip reports `FULL RESOLUTION` and history dimensions/capacity.
+- the expected effect family becomes active;
+- unrelated effect families are disabled;
+- the output begins from a cleared temporal state;
+- applying the same profile twice produces the same parameter state.
 
-This should establish that removing the final resampling pass did not break the normal path.
+Visual equality with the legacy renderer is not required to advance development; record obvious differences for the later refinement cycle.
 
-## 2. Full-resolution proof
+## 7. Report export
 
-1. Set the live render window to a clearly lower resolution such as 960×540.
-2. Create fine spatial content using small glitch regions, narrow scanline bands, or detailed source imagery.
-3. Export the same five-second interval at 1080p and 4K.
-4. Inspect decoded frames at 100% magnification.
-5. Confirm the 4K image contains effect geometry evaluated at 4K rather than a 960×540 composite enlarged to 4K.
+Click **Export Report** and select a destination.
 
-A useful comparison is to downscale the 4K export to the live size and compare edge structure, tile boundaries, and scanline placement.
+Open the JSON and confirm it includes:
 
-## 3. History topology
-
-Repeat a short 4K export for each history setting:
-
-- Full;
-- 75%;
-- 50%;
-- 25%;
-- Custom.
-
-For every job, inspect the offline tooltip and `.huff-offline.json` file. Confirm:
-
-- graph history width and height follow the selected rule;
-- capacity remains within the bounded history memory policy;
-- history effects continue to render when capacity is low;
-- the application does not claim more retained frames than allocated.
-
-## 4. Source mapping before effects
-
-Using a source with a different aspect ratio than the export:
-
-1. Export with FIT and confirm background bars enter history/feedback as part of the graph.
-2. Export with CROP and confirm the centered crop is used by glitch, keying, feedback, and Flow.
-3. Export with STRETCH and confirm the source fills the graph.
-4. Repeat SMOOTH and CRISP with pixel-detailed source material.
-5. Confirm the source mapping is stable across frames and does not occur as a final post-effect resize.
-
-## 5. Static and automated exports
-
-1. Export a short static 4K job.
-2. Record a clip containing parameter changes, one Flow pulse, and one Clear action.
-3. Export the clip at 4K with ACTIVE AUTOMATION.
-4. Confirm automation changes do not cause renderer/history dimensions to return to live size.
-5. Repeat the automated export and compare decoded frame hashes.
-
-## 6. Temporal reset and Clear action
-
-1. Build visible history and feedback before export.
-2. Start an offline export and confirm its first frame begins from reset deterministic state.
-3. Replay an automation clip with Clear in the middle.
-4. Confirm the clear happens on the intended frame without rebuilding the direct readback path or changing output dimensions.
-
-## 7. Live graph restoration
-
-For completion, cancellation, and intentional failure:
-
-1. Note the current live render dimensions, history dimensions/capacity, source position, and play state.
-2. Start a higher-resolution export.
-3. End the job through the selected path.
-4. Confirm the prior live dimensions are restored.
-5. Confirm video returns to the previous position and play/pause state.
-6. Confirm subsequent live feedback/history begins cleanly.
-7. Confirm a new still export and a second offline export can start.
-
-## 8. Deferred window resize
-
-1. Start a 4K deterministic export.
-2. Resize or minimize the live output window while the job is active.
-3. Allow completion or cancel.
-4. Confirm the deferred live surface size is applied after restoration.
-5. Confirm the export itself remains 4K throughout.
-
-## 9. Syphon and Spout regression
-
-On the supported platform:
-
-1. Start Syphon or Spout at the live render size.
-2. Start a high-resolution offline export.
-3. Confirm the deterministic job does not attempt to publish export-sized readback frames.
-4. Complete or cancel the job.
-5. Confirm external output resumes with the restored live dimensions and no stale-size error.
-
-## 10. Profile regression
-
-Run a short 1080p export for:
-
-- H.264 MP4;
-- ProRes 422 HQ;
-- ProRes 4444;
-- FFV1;
-- PNG sequence.
-
-Confirm each path receives the direct full-resolution RGBA frames, commits transactionally, and writes the expected metadata/manifests.
-
-The current final graph is normally opaque; alpha-capable profile plumbing remains available but should not be interpreted as a new alpha-compositing feature in Milestone 15.
-
-## 11. 8K and resource boundary
-
-1. Start with a one-second 8K H.264 or PNG-sequence job.
-2. Observe graph-history capacity and resource estimate.
-3. Confirm unsupported device dimensions are rejected clearly.
-4. Confirm requests above the bounded 3 GiB estimate are rejected before rendering.
-5. If a driver still rejects a permitted allocation, record the adapter, backend, dimensions, history mode, and error; the estimate is not an available-VRAM guarantee.
-
-## 12. Deterministic frame comparison
-
-Export the same short 1080p or 4K job twice. Decode both outputs:
-
-```bash
-mkdir -p /tmp/huff-a /tmp/huff-b
-ffmpeg -i first.mp4 -vsync 0 /tmp/huff-a/%06d.png
-ffmpeg -i second.mp4 -vsync 0 /tmp/huff-b/%06d.png
-shasum -a 256 /tmp/huff-a/*.png | awk '{print $1}' > /tmp/huff-a.txt
-shasum -a 256 /tmp/huff-b/*.png | awk '{print $1}' > /tmp/huff-b.txt
-diff /tmp/huff-a.txt /tmp/huff-b.txt
+```text
+engineBuild = HNW-16
+legacyContractParameters = 87
+nativeRegistryParameters = 98
+exactContractParameters = 87
+contractMismatchFields = 0
+nativeOnlyParameters
+currentDifferences
+profiles
 ```
 
-Container metadata may differ. Decoded frame identity is the relevant comparison.
+## 8. Automation interaction
 
-## Queue note
+Start automation recording, apply one calibration profile, then stop recording.
 
-The Milestone 13 queue remains provisional. For this testing cycle, one job at a time is sufficient. Queue-specific refinement is not required before moving into visual calibration.
+Expected:
+
+- the profile’s parameter changes are stored as a canonical batch;
+- a clear-buffers action is included;
+- the clip can still be selected for deterministic export.
+
+## 9. Regression smoke test
+
+Perform a brief smoke test only:
+
+- load and play a video;
+- start and stop camera input;
+- toggle Glitch and Scanlines;
+- trigger Flow pulse;
+- capture a PNG still;
+- run one short H.264 deterministic export if the current local Milestone 15 path is working.
+
+Do not block continued milestone work on previously observed high-resolution export failures. Preserve logs and failed job manifests for the later production-verification cycle.

@@ -1,97 +1,89 @@
-# Huff Native Milestone 15 validation
+# HUFF Native Milestone 16 validation
 
-## Environment boundary
+## Environment limitation
 
-The packaging environment provides Node.js 22.16.0 and FFmpeg 7.1.3. It does not provide Cargo, rustc, rustfmt, Metal, DX12, Vulkan presentation, or a native Tauri runtime.
+The packaging environment contains Node.js but does not contain Cargo, rustc, Metal, DX12, a native Tauri runtime, or FFmpeg device access. Rust type checking, Tauri command macro expansion, wgpu pipeline creation, native file dialogs, real GPU execution, and cross-platform runtime behavior therefore require local validation.
 
-Rust type/borrow checking, WGSL pipeline creation, real GPU allocation, video decoding into the export graph, and application-level 4K/8K execution must therefore be validated locally before Milestone 15 is considered runtime-proven.
+Milestone 15’s previously observed successful and unsuccessful export cases were not reinterpreted or hidden during this packaging pass.
 
-## Completed static checks
+## Checks completed
 
-- `src/app.js` passes `node --check`.
-- `package.json`, `package-lock.json`, and `src-tauri/tauri.conf.json` parse as JSON.
-- Package, npm lockfile, Cargo manifest, Cargo lockfile project entry, and Tauri configuration identify application version `0.15.0`.
-- Current application, still-export, deterministic-export, queue, repeat, lifecycle, and automation build identifiers use `HNW-15` / `hnw15`.
-- The HTML contains 306 unique IDs with no duplicates.
-- All 120 statically discoverable `byId(...)` frontend references resolve to HTML elements.
-- Every Rust source file passes a lexical delimiter and comment/string termination audit.
-- `compositor.wgsl` and `export.wgsl` pass delimiter/comment termination audits.
-- The Rust and WGSL `Uniforms` structures contain the same 21 `vec4` fields in identical order, including `source_mapping`.
-- The Cargo dependency set is unchanged from Milestone 14; only the project version changed.
+### JavaScript
 
-## Full-resolution graph inspection
+- `node --check src/app.js`
+- `node --check scripts/run-backend.mjs`
+- `node --check scripts/validate-parity.mjs`
 
-Source inspection confirms that deterministic export now:
+All passed.
 
-- calculates output-relative history dimensions before starting;
-- allocates a new bounded `GpuHistoryRing` for the export topology;
-- recreates the complete offscreen target set at output dimensions;
-- protects graph topology from automation snapshot application;
-- selects the requested source sampler for the offline session;
-- maps FIT/CROP/STRETCH in the source-composite shader before history/effects;
-- performs a direct output-texture-to-buffer copy;
-- does not invoke the export scaling pipeline for deterministic video frames;
-- retains the export scaling pipeline for still-image export;
-- reports graph mode, history dimensions/capacity, and estimated graph bytes;
-- restores live topology after completion, cancellation, and failure.
+### Embedded parity contract
 
-The render loop skips live output readback targets while offline export is active, so the old Syphon/Spout/recording readback allocation is not used against the temporary export-sized texture.
-
-## Restoration-path inspection
-
-All deterministic terminal paths call `restore_after_offline_export()` after removing the active session:
-
-- cancellation;
-- rendering/decoder/encoder failure;
-- successful finalization or finalization failure.
-
-The restoration path:
-
-1. releases offline capture and frozen input/automation state;
-2. restores the prior graph or applies a deferred surface resize;
-3. rebuilds the normal live source sampler bind;
-4. reapplies current canonical UI state;
-5. clears reconstructed temporal resources;
-6. restores source position and play/pause state.
-
-## Metadata inspection
-
-`OfflineExportMetadata` includes backward-compatible defaulted fields for:
+`npm run validate:parity` passed with:
 
 ```text
-graphMode
-liveReferenceWidth
-liveReferenceHeight
-graphHistoryWidth
-graphHistoryHeight
-graphHistoryCapacity
-graphEstimatedGpuBytes
+HUFF parity contract exact: 87/87
+Native registry parameters: 98
+Native-only parameters: 11
 ```
 
-The active offline status object exposes graph diagnostics to the frontend tooltip.
+The validator checks mapped legacy identifiers, kinds, defaults, minima, maxima, steps, and select options against `parameters.rs`.
 
-## FFmpeg synthetic profile checks
+### JSON and version synchronization
 
-Four synthetic 64×64 RGBA frames were encoded successfully with the available FFmpeg installation through:
+- Every JSON file in the project parsed successfully.
+- `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, the project entry in `src-tauri/Cargo.lock`, and `src-tauri/tauri.conf.json` identify version `0.16.0`.
+- Current source build identifiers use `HNW-16`.
+- Newly generated export, queue, and automation identifiers use the `hnw16` prefix; previously persisted identifiers remain readable because their prefix is not used as a parser or schema version.
 
-- libx264 / H.264 MP4;
-- prores_ks / ProRes 422 HQ;
-- prores_ks / ProRes 4444 alpha;
-- FFV1 / Matroska;
-- PNG image sequence.
+### Frontend structure
 
-These checks validate local encoder availability only. They do not validate Rust process management, muxing with real source audio, transactional commit, or GPU readback.
+- 312 HTML IDs were scanned with no duplicates.
+- All Parity Lab elements are present.
+- All four new Tauri command names are present in Rust, registered in `generate_handler!`, and invoked from the frontend.
+- `src/app.js` passed syntax validation after the new debounce, profile, compare, apply, and report-export paths were added.
 
-## Required local validation
+### Calibration-profile references
 
-Run the checklist in `TESTING.md`, with particular attention to:
+All canonical IDs referenced by the native calibration profiles exist in the 98-parameter registry. The embedded contract contains exactly 87 entries and reports exactly eleven native-only controls.
 
-- Cargo compilation and WGSL validation;
-- native-resolution regression;
-- proof that 4K/8K effect geometry is independently evaluated;
-- history capacity at large dimensions;
-- automation topology preservation;
-- completion/cancel/failure restoration;
-- deferred surface resizing;
-- Syphon/Spout recovery;
-- GPU allocation behavior across adapters.
+### Rust lexical structure
+
+A comment/string-aware delimiter scan was run across all 24 Rust source files. Parentheses, brackets, and braces were balanced, including the new `parity.rs` module and command additions in `main.rs`.
+
+This is not a substitute for `cargo check`.
+
+### Milestone tracking
+
+`MILESTONES.md` contains the current Milestone 16 record, titles and explanatory paragraphs for completed and planned milestones, and the rule requiring it in every future complete and changed-files archive.
+
+## Required local checks
+
+Run locally:
+
+```bash
+npm install
+npm run validate:parity
+npm run dev:metal
+```
+
+or on Windows:
+
+```powershell
+npm install
+npm run validate:parity
+npm run dev:dx12
+```
+
+Then verify:
+
+1. Parity Lab loads its six profiles.
+2. Compare reports `87/87` with zero contract mismatch fields.
+3. Applying Legacy Defaults preserves native render/history settings.
+4. Applying a profile clears feedback/history state.
+5. Export Report opens a native save dialog and writes valid JSON.
+6. Applying a profile while recording automation produces a parameter batch and clear-buffers action.
+7. Existing playback, effects, still export, automation, and currently working deterministic export paths remain operational.
+
+## Packaging status
+
+Static source and archive validation can mark Milestone 16 as structurally packaged. It cannot mark the Rust/Tauri/wgpu runtime as compiled or the visual calibration as complete.

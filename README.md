@@ -1,25 +1,36 @@
-# Huff Native wgpu · Milestone 15
+# HUFF Native wgpu · Milestone 16
 
-Milestone 15 adds **true independent high-resolution deterministic rendering**.
+Milestone 16 adds a **parameter-contract and parity-calibration framework** without forcing subjective visual retuning before the larger hands-on test cycle.
 
-Deterministic exports no longer render Huff at the live window resolution and enlarge the finished frame. For every export job, Huff now creates a private render graph at the requested output size and executes the complete native image pipeline there:
+The supplied legacy web/Tauri HUFF interface is now represented by an embedded, machine-readable contract. The native registry is checked against that source for:
 
-- source mapping and sampling;
-- clean-source composition;
-- GPU temporal history;
-- historical glitch tiles and clusters;
-- scanline bands;
-- Smoosh and layer priority;
-- persistent feedback;
-- Luma Key and Global Mix;
-- Flow and pulse routing;
-- final output composition.
+- canonical and legacy identifiers;
+- control kinds;
+- default values;
+- minimum and maximum values;
+- steps;
+- select options.
 
-A 4K export therefore performs the image-memory and effect work at 3840×2160. An 8K export performs it at 7680×4320, subject to the GPU's texture limits and available memory.
+The current build matches all **87 mapped legacy controls** exactly. Eleven additional native controls cover render resolution, brightness/contrast, and GPU-history configuration and are reported separately rather than being misclassified as legacy mismatches.
+
+## Parity Lab
+
+The control window now includes a compact **PARITY LAB** row.
+
+- **Legacy Defaults** restores the mapped legacy controls while preserving native-only render and history configuration.
+- **Glitch Isolation** enables historical glitch tiles with the other effect families disabled.
+- **Cluster Isolation** enables moving clustered glitch bodies with reproducible values.
+- **Scanline Isolation** isolates the native scanline-band system.
+- **Feedback Reference** isolates feedback transform, persistence, and decay.
+- **Flow Reference** feeds a bounded feedback image into the default Flow path.
+- **Compare** checks the embedded contract and shows how many current controls differ from legacy defaults.
+- **Export Report** writes the full contract, mismatch list, native-only list, current-value differences, and profile inventory as JSON.
+
+Applying a calibration profile clears persistent feedback and temporal effect state so comparisons begin from a known boundary. Profile applications are recorded as canonical parameter batches when automation recording is active.
 
 ## Included systems
 
-The application now includes:
+The application currently includes:
 
 - native FFmpeg video and synchronized audio playback;
 - native camera capture;
@@ -28,12 +39,13 @@ The application now includes:
 - native history, feedback, glitch, clusters, scanlines, Smoosh, Luma Key, Global Mix, and Flow;
 - Syphon output on macOS and SpoutDX output on Windows;
 - synchronized 30/60 FPS live MP4 recording;
-- native through custom-size PNG still export;
+- custom-size PNG still export;
 - deterministic 24/30/60 FPS offline export;
 - H.264, ProRes, FFV1, and PNG-sequence profiles;
-- canonical automation recording and frame-exact replay;
-- the provisional durable export queue from Milestone 13;
-- full-resolution offline graph execution from Milestone 15.
+- deterministic automation recording and export replay;
+- the provisional durable export queue;
+- private full-resolution render graphs for deterministic export;
+- embedded legacy parameter-contract validation and reproducible calibration profiles.
 
 ## Run
 
@@ -54,90 +66,31 @@ Windows DX12:
 npm run dev:dx12
 ```
 
-FFmpeg must be available on `PATH`.
+FFmpeg must be available on `PATH` for video playback, recording, and encoded export.
 
-## What changed in export
+## Static parity validation
 
-### Before Milestone 15
+The embedded legacy contract can be checked without launching the application:
 
-```text
-live-sized render graph
-        ↓
-completed RGBA frame
-        ↓
-final resize to export dimensions
-        ↓
-encoder
+```bash
+npm run validate:parity
 ```
 
-### Milestone 15
+A successful result reports the exact legacy contract count, total native registry count, and native-only controls. The command exits with an error if a later code change alters a mapped legacy default, range, step, kind, option list, or identifier without updating the contract intentionally.
 
-```text
-source frame
-        ↓
-fit / crop / stretch at export dimensions
-        ↓
-complete export-sized render graph
-        ↓
-1:1 RGBA readback
-        ↓
-encoder
-```
+## Milestone 15 runtime status
 
-The last export-only scaling pass has been removed from deterministic video export. Still-image export retains its independent scaler.
-
-## Source aspect and sampling
-
-The deterministic export controls now affect the source before temporal processing:
-
-- **FIT** places the entire source inside the export frame and creates black letterbox regions;
-- **CROP** fills the export frame and crops the source around its center;
-- **STRETCH** maps the source directly to the output dimensions;
-- **SMOOTH** uses linear source sampling;
-- **CRISP** uses nearest-neighbor source sampling.
-
-Because this happens before history, feedback, glitch, and Flow, those systems operate on the correctly mapped image rather than on a later resized composite.
-
-## History behavior
-
-History resolution is derived from the queued parameter snapshot relative to the export graph:
-
-- Full history follows the output dimensions;
-- 75%, 50%, and 25% scale from the output dimensions;
-- Custom history retains its explicit dimensions.
-
-The existing 192 MiB history budget remains active. Large exports can therefore contain fewer retained history frames. The current history dimensions and capacity are shown in the offline-export status tooltip and written to deterministic metadata.
-
-## GPU resource boundary
-
-Huff estimates the minimum graph allocation before starting the job. Exports requiring more than the current 3 GiB bounded graph limit are rejected with an explicit error instead of starting an obviously unsafe allocation.
-
-This estimate is a lower bound, not a guarantee that a GPU has enough practical free memory. Driver allocations, source textures, command resources, and platform overhead also consume memory.
-
-## Live-state restoration
-
-The export graph is temporary. On completion, cancellation, or failure, Huff restores:
-
-- the prior live render dimensions;
-- the prior live history dimensions and capacity;
-- normal live source sampling;
-- live video position and play/pause state;
-- current UI parameter state;
-- normal output readback for recording, Syphon, and Spout.
-
-Parameter and automation updates during an export cannot collapse the private graph back to live resolution.
-
-## Queue status
-
-Milestone 13's export queue remains provisional infrastructure. A single queued job still behaves as the normal deterministic-export workflow. The queue can be simplified, hidden, or removed after the larger product testing cycle without removing the Milestone 15 graph architecture.
+Milestone 15’s export-resolution graph remains integrated. Initial local testing produced successful and unsuccessful cases, and detailed investigation is intentionally deferred until the broader feature set is assembled. Milestone 16 does not hide or reinterpret those results; it adds reproducible states and reports that will make the later refinement cycle easier to conduct.
 
 ## Documentation
 
-- `UPGRADE-NOTES-15.md` — full-resolution graph architecture and compatibility notes
-- `TESTING.md` — focused local runtime tests
-- `MIGRATION-STATUS.md` — completed and remaining systems
-- `VALIDATION.md` — checks possible in the packaging environment
+- `MILESTONES.md` — authoritative master roadmap; carried in every future full and changed-files package
+- `UPGRADE-NOTES-16.md` — Milestone 16 architecture and usage
+- `TESTING.md` — focused Parity Lab checks and deferred runtime notes
+- `MIGRATION-STATUS.md` — current native-port status
+- `VALIDATION.md` — checks completed in the packaging environment
+- `UPGRADE-NOTES-01..15` — prior milestone notes retained in the project
 
 ## Next milestone
 
-Milestone 16 is the parameter-by-parameter visual and motion calibration pass. The structural render and export systems are now in place; the next phase can compare native behavior against the intended Huff response and tune ranges, timing, motion, compositing, and effect relationships.
+Milestone 17 will build complete MIDI and OSC mapping workflows on top of the existing native control foundation. Detailed visual calibration remains intentionally available through the Parity Lab rather than blocking continued architecture work.

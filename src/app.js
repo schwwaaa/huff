@@ -18,6 +18,8 @@ const appState = {
   offlineCompleted: 0,
   queueStatuses: new Map(),
   queueInitialized: false,
+  parityReport: null,
+  parityRefreshTimer: 0,
 };
 
 function toast(message, error = false) {
@@ -38,6 +40,14 @@ async function call(command, args = {}) {
     toast(`${command}: ${error}`, true);
     throw error;
   }
+}
+
+function scheduleParityRefresh(delay = 320) {
+  if (!bridgeReady || !byId('parityStatus')) return;
+  clearTimeout(appState.parityRefreshTimer);
+  appState.parityRefreshTimer = setTimeout(() => {
+    refreshParityReport(true).catch(() => {});
+  }, delay);
 }
 
 function basename(path) {
@@ -124,6 +134,7 @@ async function setParameter(definition, value, recordUndo = true) {
   const revision = await call('set_parameter', { id: definition.id, value });
   appState.values[definition.id] = value;
   appState.revision = revision;
+  scheduleParityRefresh();
 }
 
 async function setBatch(values, recordUndo = true, automationLabel = '') {
@@ -134,6 +145,7 @@ async function setBatch(values, recordUndo = true, automationLabel = '') {
   });
   Object.assign(appState.values, values);
   appState.revision = revision;
+  scheduleParityRefresh();
 }
 
 function applyStateToDom(snapshot) {
@@ -222,6 +234,78 @@ function configureRegistryControls() {
   if (globalMixGroup) globalMixGroup.title = 'Native clean-source mix with selectable blend mode and BEFORE FB / AFTER FB / AFTER FLOW / FINAL placement.';
   const flowGroup = byId('flowOn')?.closest('.group');
   if (flowGroup) flowGroup.title = 'Native cell-quantized flow warp with target routing, historical pulse source, pull, swirl, turbulence, spread, and bounded carry.';
+}
+
+function displayParityReport(report) {
+  appState.parityReport = report;
+  const status = byId('parityStatus');
+  if (!status || !report) return;
+  const exact = Number(report.exactContractParameters || 0);
+  const contract = Number(report.legacyContractParameters || 0);
+  const mismatchFields = Number(report.contractMismatchFields || 0);
+  const changed = Number(report.currentValuesDifferentFromLegacyDefaults || 0);
+  status.textContent = mismatchFields
+    ? `CONTRACT ERROR: ${exact}/${contract} · ${mismatchFields} fields`
+    : `CONTRACT ${exact}/${contract} · CURRENT Δ ${changed}`;
+  status.classList.toggle('error', mismatchFields > 0);
+  status.classList.toggle('warn', mismatchFields === 0 && changed > 0);
+  const nativeOnly = Array.isArray(report.nativeOnlyParameters) ? report.nativeOnlyParameters : [];
+  const differences = Array.isArray(report.currentDifferences) ? report.currentDifferences : [];
+  status.title = [
+    `Legacy contract: ${exact}/${contract} exact parameters`,
+    `Native registry: ${report.nativeRegistryParameters || 0}`,
+    `Native-only: ${nativeOnly.length}${nativeOnly.length ? ` · ${nativeOnly.join(', ')}` : ''}`,
+    `Current values away from legacy defaults: ${changed}`,
+    differences.length ? `Changed: ${differences.slice(0, 18).map((entry) => entry.legacyId).join(', ')}${differences.length > 18 ? '…' : ''}` : 'Current mapped controls equal legacy defaults',
+  ].join('\n');
+}
+
+async function refreshParityReport(silent = false) {
+  const report = await call('get_parity_report');
+  displayParityReport(report);
+  if (!silent) {
+    const mismatchFields = Number(report.contractMismatchFields || 0);
+    const changed = Number(report.currentValuesDifferentFromLegacyDefaults || 0);
+    toast(mismatchFields
+      ? `Parity contract has ${mismatchFields} mismatched fields`
+      : `Legacy contract exact · ${changed} current value${changed === 1 ? '' : 's'} changed`, mismatchFields > 0);
+  }
+  return report;
+}
+
+async function loadCalibrationProfiles() {
+  const select = byId('calibrationProfile');
+  if (!select) return;
+  const profiles = await call('get_calibration_profiles');
+  select.replaceChildren();
+  for (const profile of profiles) {
+    const option = new Option(profile.title, profile.id);
+    option.title = profile.description || '';
+    select.append(option);
+  }
+  if (profiles.some((profile) => profile.id === 'legacy-defaults')) select.value = 'legacy-defaults';
+  select.title = profiles.map((profile) => `${profile.title}: ${profile.description}`).join('\n\n');
+}
+
+function wireParity() {
+  byId('calibrationApplyBtn')?.addEventListener('click', async () => {
+    const profileId = byId('calibrationProfile')?.value;
+    if (!profileId) return;
+    try {
+      const snapshot = await call('apply_calibration_profile', { profileId });
+      applyStateToDom(snapshot);
+      const title = byId('calibrationProfile')?.selectedOptions?.[0]?.textContent || profileId;
+      toast(`${title} applied · persistent buffers cleared`);
+      await refreshParityReport(true);
+    } catch (_) {}
+  });
+  byId('parityCompareBtn')?.addEventListener('click', () => refreshParityReport(false).catch(() => {}));
+  byId('parityExportBtn')?.addEventListener('click', async () => {
+    try {
+      const path = await call('export_parity_report');
+      if (path) toast(`Parity report saved · ${basename(path)}`);
+    } catch (_) {}
+  });
 }
 
 function updateConditionalInputs() {
@@ -1272,16 +1356,19 @@ async function boot() {
   wireExport();
   wireOfflineExport();
   wireAutomation();
+  wireParity();
   wireCamera();
   wireNativeActions();
   wirePresets();
   wireMidiOsc();
   await call('set_video_audio_preview', { enabled: true }).catch(() => {});
   await restoreAutomationClip();
+  await loadCalibrationProfiles();
   await refreshParameterState();
+  await refreshParityReport(true);
   await poll();
   setInterval(poll, 250);
-  console.info('Huff Native wgpu Milestone 15 loaded', {
+  console.info('Huff Native wgpu Milestone 16 loaded', {
     parameters: appState.registry.length,
     implemented: appState.registry.filter((definition) => definition.implemented).length,
   });

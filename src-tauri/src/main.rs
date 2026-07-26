@@ -17,6 +17,7 @@ mod offline_export;
 mod osc;
 mod output_frame;
 mod parameters;
+mod parity;
 mod recording;
 mod renderer;
 mod source;
@@ -110,7 +111,7 @@ fn get_app_info(
     source: tauri::State<'_, SourceSelector>,
 ) -> AppInfo {
     AppInfo {
-        build: "HNW-15".into(),
+        build: "HNW-16".into(),
         renderer: renderer.info(),
         camera: camera.status(),
         camera_devices: camera.devices(),
@@ -131,7 +132,7 @@ fn get_app_info(
         gesture: gesture.info(),
         automation: automation.info(),
         parameter_revision: parameters.revision(),
-        native_milestone: "HNW-15".into(),
+        native_milestone: "HNW-16".into(),
         active_source: source.get().label().into(),
     }
 }
@@ -144,6 +145,58 @@ fn get_parameter_registry() -> Vec<ParameterDefinition> {
 #[tauri::command]
 fn get_parameter_state(state: tauri::State<'_, ParameterStore>) -> ParameterSnapshot {
     state.snapshot()
+}
+
+#[tauri::command]
+fn get_calibration_profiles() -> Vec<parity::CalibrationProfileSummary> {
+    parity::calibration_profiles()
+}
+
+#[tauri::command]
+fn get_parity_report(state: tauri::State<'_, ParameterStore>) -> parity::ParityReport {
+    parity::build_report(state.inner())
+}
+
+#[tauri::command]
+fn apply_calibration_profile(
+    state: tauri::State<'_, ParameterStore>,
+    renderer: tauri::State<'_, RendererHandle>,
+    automation: tauri::State<'_, AutomationHandle>,
+    profile_id: String,
+) -> Result<ParameterSnapshot, String> {
+    let values = parity::calibration_profile_values(&profile_id)?;
+    state.set_many(values.clone())?;
+    renderer.send(RenderCommand::ClearFeedback);
+    automation.record_parameter_batch(values, format!("calibration_profile:{profile_id}"));
+    automation.record_action(ACTION_CLEAR_BUFFERS);
+    Ok(state.snapshot())
+}
+
+#[tauri::command]
+fn export_parity_report(
+    state: tauri::State<'_, ParameterStore>,
+) -> Result<Option<String>, String> {
+    let Some(mut path) = rfd::FileDialog::new()
+        .add_filter("HUFF parity report", &["json"])
+        .set_file_name("huff-parity-report.json")
+        .save_file()
+    else {
+        return Ok(None);
+    };
+    if !path
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(|value| value.eq_ignore_ascii_case("json"))
+        .unwrap_or(false)
+    {
+        path.set_extension("json");
+    }
+    let report = parity::build_report(state.inner());
+    let payload = serde_json::to_vec_pretty(&report)
+        .map_err(|error| format!("could not serialize parity report: {error}"))?;
+    std::fs::write(&path, payload)
+        .map_err(|error| format!("could not write parity report {}: {error}", path.display()))?;
+    Ok(Some(path.display().to_string()))
 }
 
 #[tauri::command]
@@ -484,7 +537,7 @@ fn export_still(
         fit_mode: fit_mode.clone(),
     };
     let metadata = StillExportMetadata {
-        engine_build: "HNW-15".into(),
+        engine_build: "HNW-16".into(),
         captured_unix_ms: StillExportMetadata::now_unix_ms(),
         active_source: source.get().label().into(),
         source_file: video_info.file_path,
@@ -675,7 +728,7 @@ fn start_offline_export(
         queue_job_id: String::new(),
     };
     let metadata = OfflineExportMetadata {
-        engine_build: "HNW-15".into(),
+        engine_build: "HNW-16".into(),
         created_unix_ms: OfflineExportMetadata::now_unix_ms(),
         source_file: video_info.file_path.clone(),
         source_codec: video_info.codec,
@@ -1347,6 +1400,10 @@ fn main() {
             get_app_info,
             get_parameter_registry,
             get_parameter_state,
+            get_calibration_profiles,
+            get_parity_report,
+            apply_calibration_profile,
+            export_parity_report,
             set_parameter,
             set_parameter_batch,
             reset_parameters,

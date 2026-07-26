@@ -212,6 +212,29 @@
             padding: 2px 5px;
             min-width: 160px;
         }
+        .parity-panel {
+            display: flex; align-items: center; gap: 5px; flex-wrap: wrap;
+            padding: 3px 5px 4px;
+            background: #080a10;
+            border-bottom: 1px solid var(--win-mid);
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 10px;
+            color: #91a8c7;
+        }
+        .parity-panel strong {
+            color: var(--term-cyan);
+            font-weight: normal;
+            letter-spacing: .08em;
+        }
+        #parityStatus {
+            color: #b9e8ff;
+            border: 1px solid #31536b;
+            background: #02070b;
+            padding: 2px 5px;
+            min-width: 190px;
+        }
+        #parityStatus.warn { color:#ffd27a; border-color:#806020; }
+        #parityStatus.error { color:#ff8c8c; border-color:#8a3030; }
         .export-queue-panel {
             background: #101010;
             border-bottom: 1px solid var(--win-mid);
@@ -981,11 +1004,11 @@
             <button id="aboutClose">×</button>
             <div class="a-icon"></div>
             <h1 style="font-family:'VT323',monospace;font-weight:normal;letter-spacing:.14em">huff</h1>
-            <div class="build">native engine · milestone 15 · 2026</div>
+            <div class="build">native engine · milestone 16 · 2026</div>
             <p>Huff is being migrated to a native Rust + wgpu media engine. The existing
             control surface is preserved while playback, timing, GPU rendering, and
             output move out of the WebView.</p>
-            <p><strong>Milestone 15:</strong> deterministic video export now rebuilds the complete native render graph at the requested output size. History, glitch tiles, clusters, scanlines, feedback, Flow, keying, and final compositing execute at 1080p, 4K, 8K, or custom resolution instead of enlarging a completed live-resolution frame.</p>
+            <p><strong>Milestone 16:</strong> the Parity Lab embeds the exact legacy control contract, verifies native defaults/ranges/steps/options, supplies reproducible effect-isolation profiles, and exports a machine-readable report for the later visual calibration cycle.</p>
         </div>
     </div>
 
@@ -1334,6 +1357,17 @@
             <span id="automationStatus">NO ACTIVE CLIP</span>
         </div>
         <input id="automationLoadInput" type="file" accept=".json,application/json" style="display:none">
+
+        <div class="parity-panel" id="parityPanel">
+            <strong>PARITY LAB</strong>
+            <select id="calibrationProfile" title="Reproducible parameter state for legacy/native comparison" style="font-size:10px;padding:1px 2px">
+                <option value="">LOADING PROFILES…</option>
+            </select>
+            <button id="calibrationApplyBtn" title="Apply the selected calibration profile and clear persistent native buffers">▶ Apply Profile</button>
+            <button id="parityCompareBtn" title="Compare the native parameter registry and current values with the embedded legacy HUFF contract">≋ Compare</button>
+            <button id="parityExportBtn" title="Save the complete parity report as JSON">↑ Export Report</button>
+            <span id="parityStatus">PARITY: LOADING</span>
+        </div>
 
         <div class="export-queue-panel" id="exportQueuePanel">
             <div class="export-queue-toolbar">
