@@ -1,6 +1,6 @@
 {
   "name": "huff-native-wgpu",
-  "version": "0.19.0",
+  "version": "0.20.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -12,7 +12,13 @@
     "validate:parity": "node scripts/validate-parity.mjs",
     "validate:control-maps": "node scripts/validate-control-maps.mjs",
     "validate:state-model": "node scripts/validate-state-model.mjs",
-    "validate:routing": "node scripts/validate-routing.mjs"
+    "validate:routing": "node scripts/validate-routing.mjs",
+    "validate:production": "node scripts/validate-production.mjs",
+    "validate:production:strict": "node scripts/validate-production.mjs --strict",
+    "build:production": "node scripts/build-production.mjs",
+    "build:metal": "node scripts/build-production.mjs metal",
+    "build:dx12": "node scripts/build-production.mjs dx12",
+    "build:vulkan": "node scripts/build-production.mjs vulkan"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.11.0"

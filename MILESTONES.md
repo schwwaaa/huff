@@ -1,7 +1,7 @@
 # HUFF Native wgpu — Master Milestone Record
 
-**Current build:** `0.19.0 / HNW-19`  
-**Current milestone:** Milestone 19 — Constrained Routing and Named Buses  
+**Current build:** `0.20.0 / HNW-20`  
+**Current milestone:** Milestone 20 — Production Verification Harness and Recovery Hardening  
 **Tracking rule:** This file is the authoritative milestone index. It must be carried forward and updated in every complete project archive and every changed-files archive from Milestone 16 onward.
 
 This record describes the purpose of each milestone rather than serving as a detailed changelog. Corrective sub-milestones are listed with the milestone they stabilize. Runtime status is intentionally honest: a feature may be structurally integrated while still awaiting the larger cross-feature refinement and verification cycle.
@@ -92,11 +92,13 @@ Milestone 19 formalizes the fixed HUFF recipe as a constrained `huff-routing/v1`
 
 ---
 
-# Planned Milestones
+# Completed Milestones Continued
 
-## Milestone 20 — Cross-Platform Production Verification
+## Milestone 20 — Production Verification Harness and Recovery Hardening
 
-Milestone 20 will perform the broad validation that cannot be completed through static packaging checks alone. It will cover macOS Metal, Windows DX12/MSVC, Spout receiver testing, Syphon clients, multi-GPU adapter behavior, long playback and export sessions, installer generation, restart recovery, codec availability, device-loss paths, and the interaction of recording, output sharing, automation, and deterministic export under real production conditions.
+Milestone 20 turns the final cross-platform test cycle into a repeatable workflow rather than claiming that static packaging checks can certify unavailable hardware. HUFF now produces `huff-production-report/v1` reports covering platform, build identity, wgpu backend and adapter, renderer and surface health, readback pressure, FFmpeg/FFprobe and required encoders, video/camera/audio status, Syphon/Spout state, recording/export ownership, queue recovery state, MIDI/OSC services, and writable temporary storage. A dedicated VERIFY window exposes bounded recovery for the surface, active media source, and active output bridges without clearing parameters or temporal pixels. Diagnostics export writes runtime, parameter, routing, and state-model files into one reviewable folder, while repository and production-build scripts provide normal and strict validation modes for Metal, DX12, and Vulkan targets. Actual receiver compatibility, installer behavior, long-session stability, multi-GPU behavior, and device-loss results remain observations to be collected on every target machine with this common harness.
+
+# Planned Milestone
 
 ## Milestone 21 — Lower-Copy Platform Interoperability Research
 

@@ -26,6 +26,7 @@ const appState = {
   stateModelCatalog: null,
   routingCatalog: null,
   routingPlan: null,
+  productionReport: null,
 };
 
 function toast(message, error = false) {
@@ -469,6 +470,7 @@ function wireGroupsAndModals() {
   }
   const modalPairs = [
     ['aboutBtn', 'aboutOverlay', 'aboutClose'],
+    ['verifyBtn', 'productionOverlay', 'productionClose'],
     ['midiBtn', 'midiOverlay', 'midiClose'],
     ['midiPill', 'midiOverlay', 'midiClose'],
     ['oscBtn', 'oscOverlay', 'oscClose'],
@@ -500,6 +502,108 @@ function wireGroupsAndModals() {
       undo().catch(() => {});
     }
   }, true);
+}
+
+
+function renderProductionReport(report) {
+  appState.productionReport = report;
+  const summary = byId('productionSummary');
+  const status = report?.overallStatus || 'unknown';
+  if (summary) {
+    summary.className = `production-summary ${status === 'pass' ? '' : status}`.trim();
+    summary.textContent = report
+      ? `${status.toUpperCase()} · ${report.passed || 0} passed · ${report.warnings || 0} warning(s) · ${report.failures || 0} failure(s) · ${report.informational || 0} informational`
+      : 'Production report unavailable.';
+  }
+
+  const platform = report?.platform || {};
+  const platformBox = byId('productionPlatform');
+  if (platformBox) {
+    const items = [
+      ['Platform', `${platform.os || 'unknown'} / ${platform.arch || 'unknown'}`],
+      ['Backend target', platform.expectedBackend || 'unknown'],
+      ['Application', `${platform.engineBuild || '—'} / ${platform.appVersion || '—'}`],
+      ['Build', platform.debugBuild ? 'Debug' : 'Release'],
+      ['Requested backend', platform.requestedBackend || 'Automatic'],
+      ['Requested adapter', platform.requestedAdapter || 'Automatic'],
+      ['FFmpeg', platform.ffmpegVersion || 'Unavailable'],
+      ['FFprobe', platform.ffprobeVersion || 'Unavailable'],
+    ];
+    platformBox.innerHTML = items
+      .map(([label, value]) => `<div><strong>${escapeHtml(label)}</strong>${escapeHtml(value)}</div>`)
+      .join('');
+  }
+
+  const checks = byId('productionChecks');
+  if (checks) {
+    checks.innerHTML = (report?.checks || []).map((check) => `
+      <div class="production-check ${escapeHtml(check.status || 'info')}">
+        <div class="status">${escapeHtml(String(check.status || 'info').toUpperCase())}</div>
+        <div class="category">${escapeHtml(check.category || '')}</div>
+        <div class="label">${escapeHtml(check.label || '')}</div>
+        <div class="result">
+          <div>${escapeHtml(check.summary || '')}</div>
+          <div class="detail">${escapeHtml(check.detail || '')}</div>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  const verify = byId('verifyBtn');
+  if (verify) {
+    verify.textContent = status === 'pass' ? 'VERIFY ✓' : status === 'fail' ? 'VERIFY !' : 'VERIFY △';
+    verify.title = report ? `${report.passed || 0} pass · ${report.warnings || 0} warnings · ${report.failures || 0} failures` : 'Production verification';
+  }
+}
+
+async function runProductionCheck() {
+  const button = byId('productionRunBtn');
+  if (button) {
+    button.disabled = true;
+    button.textContent = 'Checking…';
+  }
+  try {
+    const report = await call('run_production_check');
+    renderProductionReport(report);
+    return report;
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = '▶ Run Check';
+    }
+  }
+}
+
+async function recoverProduction(scope) {
+  const status = byId('productionRecoveryStatus');
+  if (status) status.textContent = `Recovery ${scope}: working…`;
+  const receipt = await call('recover_live_runtime', { scope });
+  const actions = receipt?.actions || [];
+  const warnings = receipt?.warnings || [];
+  if (status) {
+    status.textContent = [
+      ...actions.map((line) => `✓ ${line}`),
+      ...warnings.map((line) => `△ ${line}`),
+    ].join('\n') || 'No recovery action was required.';
+  }
+  toast(actions.length ? `Recovery requested: ${scope}` : `Recovery check: ${scope}`);
+  await new Promise((resolve) => setTimeout(resolve, 450));
+  await runProductionCheck();
+}
+
+function wireProduction() {
+  byId('verifyBtn')?.addEventListener('click', () => {
+    if (!appState.productionReport) runProductionCheck().catch(() => {});
+  });
+  byId('productionRunBtn')?.addEventListener('click', () => runProductionCheck().catch(() => {}));
+  byId('productionRecoverSurfaceBtn')?.addEventListener('click', () => recoverProduction('surface').catch(() => {}));
+  byId('productionRecoverSourceBtn')?.addEventListener('click', () => recoverProduction('source').catch(() => {}));
+  byId('productionRecoverOutputsBtn')?.addEventListener('click', () => recoverProduction('outputs').catch(() => {}));
+  byId('productionRecoverAllBtn')?.addEventListener('click', () => recoverProduction('all').catch(() => {}));
+  byId('productionExportBtn')?.addEventListener('click', async () => {
+    const path = await call('export_diagnostics_bundle');
+    if (path) toast(`Diagnostics saved: ${path}`);
+  });
 }
 
 function wireTransport() {
@@ -1713,6 +1817,7 @@ async function boot() {
     });
   }
   wireGroupsAndModals();
+  wireProduction();
   if (!bridgeReady) {
     byId('status').textContent = 'NATIVE: BRIDGE ERROR';
     toast('Tauri bridge unavailable', true);
@@ -1745,7 +1850,7 @@ async function boot() {
   await refreshParityReport(true);
   await poll();
   setInterval(poll, 250);
-  console.info('Huff Native wgpu Milestone 19 loaded', {
+  console.info('Huff Native wgpu Milestone 20 loaded', {
     parameters: appState.registry.length,
     implemented: appState.registry.filter((definition) => definition.implemented).length,
   });

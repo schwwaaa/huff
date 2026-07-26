@@ -1,88 +1,129 @@
-# HUFF Native Milestone 19 test checklist
+# HUFF Native Milestone 20 test checklist
 
-The goal is to verify named-bus ownership and constrained routing without beginning the larger visual-refinement cycle.
+Milestone 20 is a verification and recovery milestone. Complete the relevant sections on every production machine, then preserve the exported diagnostics folder with the observed results.
 
-## 1. Launch
+## 1. Launch and baseline
 
 ```bash
 npm install
-npm run dev:metal
+npm run dev:metal   # macOS
+npm run dev:dx12    # Windows
 ```
 
-Confirm the About panel reports Milestone 19 and the Constrained Routing panel appears above the main parameter groups.
+Confirm:
 
-## 2. Classic recipe
+- the About panel reports Milestone 20;
+- **VERIFY** opens Production Verification;
+- normal Milestone 19 routing and effects still run;
+- the native output continues rendering while the verification window is open.
 
-1. Choose **Classic HUFF**.
-2. Press **Apply Recipe**.
-3. Confirm Program Bus and Monitor Bus both show Program.
-4. Enable glitch, scanlines, feedback, and Flow.
-5. Confirm the normal HUFF output remains visually consistent with Milestone 18.
+## 2. Repository production check
 
-## 3. Program Clean bypass
+```bash
+npm run validate:production
+```
 
-1. Build a recognizable feedback or glitch image.
-2. Change Program Bus to **Clean Source**.
-3. Confirm the native window, Syphon/Spout, recording, and export all receive clean video.
-4. Return Program Bus to **Program Composite**.
-5. Confirm the persistent effect image continued running and returns rather than being cleared.
+On a configured build computer also run:
 
-## 4. Raw Field Store Program
+```bash
+npm run validate:production:strict
+```
 
-1. Enable feedback and glitch.
-2. Set Program Bus to **Raw Field Store**.
-3. Confirm the output shows persistent effect pixels against black rather than the final clean/effect composite.
-4. Return to Program Composite.
+Resolve strict failures before packaging. Warnings should be documented rather than silently ignored.
 
-## 5. Independent Monitor bus
+## 3. In-app report with video
 
-1. Leave Program Bus on Program Composite.
-2. Set Monitor Bus to Clean.
-3. Confirm only the local native output window shows Clean.
-4. Verify Syphon, Spout, recording, or a short export still follows Program Composite.
-5. Repeat with Monitor Bus set to Field Store.
+1. Load a representative video with audio.
+2. Let it play for at least 30 seconds with Glitch, Scanlines, Feedback, Flow, and Luma Key active.
+3. Open **VERIFY** and run the check.
+4. Confirm GPU, renderer, surface, FFmpeg, FFprobe, encoders, video decoder, audio, and temporary storage appear.
+5. Confirm the report identifies the expected production backend and current adapter.
+6. Review warnings against the detailed text rather than treating every warning as a defect.
 
-## 6. Flow insertion recipes
+## 4. Surface recovery
 
-1. Enable glitch, scanlines, and Flow.
-2. Apply **Glitch → Flow → Scan** and observe the result.
-3. Apply **Scan → Flow → Glitch** and observe the result.
-4. Apply **Isolated Smoosh Layers** and confirm Smoosh becomes enabled and Flow resolves to the final stage.
-5. Do not tune visual parity yet; only confirm the routes execute and the app remains stable.
+1. Minimize and restore the native output window, or move it between displays.
+2. Press **Recover Surface**.
+3. Confirm rendering continues and effect buffers are not cleared.
+4. Re-run the report and confirm the surface-recovery count can increase without creating a fatal condition.
 
-## 7. State-document routing scope
+## 5. Source recovery — video
 
-1. Save a preset with Routing enabled while Program is Clean and Monitor is Field Store.
-2. Change both buses back to Program.
-3. Load the preset with Routing checked and confirm both selections return.
-4. Load it again with Routing unchecked and confirm they do not change.
+1. Leave video playing at a recognizable position.
+2. Press **Restart Source**.
+3. Confirm picture and source audio resume near the same position.
+4. Confirm parameters, automation clip, routing recipe, and persistent effect state are not reset.
+5. Re-run the report and inspect decoder restart/watchdog counters.
 
-## 8. Automation
+## 6. Source recovery — camera
 
-1. Start automation recording.
-2. Change Program and Monitor buses or apply a routing recipe.
-3. Stop recording.
-4. Confirm the clip contains step-based routing parameter events.
-5. Use the clip in deterministic export only if time permits; detailed automation refinement remains deferred.
+1. Start a camera using the intended profile.
+2. Press **Restart Source**.
+3. Confirm the same device/profile resumes.
+4. Confirm camera permission, dimensions, source format, and capture FPS are represented in the report.
 
-## 9. Route-plan export
+## 7. Syphon — macOS
 
-1. Press **Inspect** and review the current routing summary.
-2. Press **Export Plan**.
-3. Confirm the JSON uses `huff-routing/v1` and contains seven buses, active edges, Program/Monitor selections, legal temporal cycles, and warnings when monitoring a diagnostic bus.
+1. Start Syphon output.
+2. Open a real receiver such as Resolume, VDMX, MadMapper, OBS with Syphon support, or Syphon Simple Client.
+3. Confirm the HUFF Program bus appears and updates.
+4. Run the check while the receiver is active.
+5. Press **Restart Outputs** and confirm the receiver reconnects or the source reappears.
+6. Test at 30 and 60 FPS caps and at the intended render resolution.
 
-## 10. Regression smoke test
+## 8. Spout — Windows
 
-Confirm the following still launch or operate:
+1. Refresh adapters and choose the GPU used by the receiver.
+2. Start Spout output.
+3. Confirm the `huff` sender appears in Resolume, MadMapper, OBS Spout, or Spout Demo Receiver.
+4. Run the check and confirm worker, adapter, initialization, and frame counts.
+5. Press **Restart Outputs** and confirm receiver recovery.
+6. Repeat on integrated and discrete adapters when available.
 
-- video playback and audio;
-- camera source;
-- presets and state documents;
-- MIDI/OSC mappings;
-- live recording;
-- deterministic export;
-- Syphon or Spout where available.
+## 9. Recording and export ownership
 
-## Deferred refinement
+1. Start a short live recording and run the check.
+2. Confirm the report identifies recording ownership and does not report simultaneous offline-export ownership.
+3. Stop/finalize recording and inspect the file.
+4. Queue or start a short deterministic export and run the check.
+5. Confirm source recovery is rejected while deterministic export owns the private graph.
+6. Verify completed, failed, and interrupted queue counts are reported honestly.
 
-Multiple independent process chains, physical auxiliary outputs, preview/take switching, arbitrary user patching, general masks, and cross-application routing belong to later instruments or the master suite. Milestone 19 only proves explicit responsibilities inside the current HUFF recipe.
+## 10. MIDI and OSC
+
+1. Connect the controller or start the OSC listener used in production.
+2. Move controls/send messages.
+3. Run the check and confirm connected/listening state and mapping counts.
+4. Disconnect or stop and confirm the report treats the idle service as nonfatal.
+
+## 11. Diagnostics export
+
+1. Press **Export Diagnostics…**.
+2. Confirm the timestamped folder contains all seven documented files.
+3. Open `production-report.json` and confirm the schema is `huff-production-report/v1`.
+4. Open `app-info.json`, `parameter-state.json`, and `routing-plan.json`.
+5. Review file paths and device names before sharing the folder.
+
+## 12. Long-session observation
+
+For the final refinement cycle, run at least one two-hour session per production platform with the intended source, outputs, and effects. Record:
+
+- frame rate and frame-time drift;
+- decoder stalls and watchdog recoveries;
+- surface skips/recoveries;
+- output readback drops/map errors;
+- Syphon/Spout sender continuity;
+- audio underflows;
+- memory behavior observed through the operating system;
+- recording/export success and finalization.
+
+Export a diagnostics folder at the beginning and end.
+
+## 13. Production package
+
+```bash
+npm run build:metal   # macOS
+npm run build:dx12    # Windows
+```
+
+Install or copy the resulting package outside the development tree. Confirm startup, video/audio, camera permission, Syphon/Spout assets, recording, deterministic export, state documents, and diagnostics export from the packaged application.

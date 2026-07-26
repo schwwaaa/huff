@@ -587,7 +587,7 @@
         /* ═══════════════════════════════════════════════
            MODAL OVERLAYS
         ═══════════════════════════════════════════════ */
-        #aboutOverlay, #midiOverlay, #syphonOverlay, #spoutOverlay, #oscOverlay {
+        #aboutOverlay, #productionOverlay, #midiOverlay, #syphonOverlay, #spoutOverlay, #oscOverlay {
             display: none; position: fixed; inset: 0; z-index: 1000;
             /* classic Win95 "desktop" tile pattern behind modals */
             background: #008080;
@@ -598,13 +598,13 @@
             );
             align-items: center; justify-content: center;
         }
-        #aboutOverlay.open, #midiOverlay.open, #syphonOverlay.open,
+        #aboutOverlay.open, #productionOverlay.open, #midiOverlay.open, #syphonOverlay.open,
         #spoutOverlay.open, #oscOverlay.open { display: flex; }
 
         /* ═══════════════════════════════════════════════
            MODAL BOXES — Win95 dialog windows
         ═══════════════════════════════════════════════ */
-        #aboutBox, #midiBox, #syphonBox, #spoutBox, #oscBox {
+        #aboutBox, #productionBox, #midiBox, #syphonBox, #spoutBox, #oscBox {
             position: relative;
             background: var(--win-bg);
             border-top:    3px solid var(--win-light);
@@ -617,11 +617,12 @@
         }
         /* Title bar on each modal */
         #aboutBox::before  { content: '■  ABOUT HUFF'; }
+        #productionBox::before { content: '■  PRODUCTION VERIFICATION'; }
         #midiBox::before   { content: '■  MIDI CONFIGURATION'; }
         #syphonBox::before { content: '■  SYPHON OUTPUT'; }
         #spoutBox::before  { content: '■  SPOUT OUTPUT'; }
         #oscBox::before    { content: '■  OSC CONFIGURATION'; }
-        #aboutBox::before, #midiBox::before, #syphonBox::before,
+        #aboutBox::before, #productionBox::before, #midiBox::before, #syphonBox::before,
         #spoutBox::before, #oscBox::before {
             display: block;
             background: linear-gradient(90deg, var(--title-bg) 0%, #ff4647 100%);
@@ -1063,6 +1064,36 @@
         .routing-selects .ctrl { min-width:125px; }
         @media (max-width:900px) { .routing-bus-grid { grid-template-columns:repeat(3,minmax(86px,1fr)); } }
     </style>
+
+    <style id="huff-native-m20-style">
+        #productionBox { width:min(980px,96vw); max-height:88vh; overflow:auto; padding-bottom:16px; }
+        #productionBox h2 { margin:20px 18px 2px; color:var(--term-green); font:normal 28px 'VT323',monospace; letter-spacing:.08em; }
+        #productionBox .production-sub { margin:0 18px 12px; color:rgba(255,255,255,.42); font:10px 'Share Tech Mono',monospace; line-height:1.45; }
+        #productionClose { position:absolute; right:8px; top:5px; width:24px; height:22px; padding:0; font-size:17px; }
+        .production-toolbar { display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin:0 18px 10px; }
+        .production-summary { margin:0 18px 10px; padding:8px 10px; border:1px inset #888; background:#050805; color:#b8ffb8; font:11px 'Share Tech Mono',monospace; line-height:1.5; }
+        .production-summary.warning { color:#ffe680; border-color:#b99c31; }
+        .production-summary.fail { color:#ff7c7c; border-color:#b83b3b; }
+        .production-platform { display:grid; grid-template-columns:repeat(4,minmax(110px,1fr)); gap:5px; margin:0 18px 10px; }
+        .production-platform div { padding:5px 7px; background:rgba(0,0,0,.45); border:1px solid rgba(255,255,255,.12); font:9px 'Share Tech Mono',monospace; color:#aaa; }
+        .production-platform strong { display:block; color:#d0d0d0; margin-bottom:2px; }
+        .production-checks { margin:0 18px; display:flex; flex-direction:column; gap:4px; }
+        .production-check { display:grid; grid-template-columns:72px 100px 165px minmax(180px,1fr); gap:6px; padding:6px 7px; border:1px solid rgba(255,255,255,.1); background:rgba(0,0,0,.34); font:9px 'Share Tech Mono',monospace; align-items:start; }
+        .production-check .status { font-weight:bold; letter-spacing:.08em; }
+        .production-check.pass .status { color:var(--term-green); }
+        .production-check.warning .status { color:var(--term-yel); }
+        .production-check.fail .status { color:var(--term-red); }
+        .production-check.info .status { color:#78c8ff; }
+        .production-check .category { color:#888; text-transform:uppercase; }
+        .production-check .label { color:#ddd; }
+        .production-check .detail { color:#8a8a8a; margin-top:2px; line-height:1.35; }
+        #productionRecoveryStatus { margin:8px 18px 0; color:#9b9b9b; font:9px 'Share Tech Mono',monospace; white-space:pre-line; }
+        @media (max-width:760px) {
+            .production-platform { grid-template-columns:repeat(2,minmax(110px,1fr)); }
+            .production-check { grid-template-columns:64px 78px 1fr; }
+            .production-check .result { grid-column:1 / -1; }
+        }
+    </style>
 </head>
 
 <body>
@@ -1075,12 +1106,33 @@
             <button id="aboutClose">×</button>
             <div class="a-icon"></div>
             <h1 style="font-family:'VT323',monospace;font-weight:normal;letter-spacing:.14em">huff</h1>
-            <div class="build">native engine · milestone 19 · 2026</div>
+            <div class="build">native engine · milestone 20 · 2026</div>
             <p>Huff is being migrated to a native Rust + wgpu media engine. The existing
             control surface is preserved while playback, timing, GPU rendering, and
             output move out of the WebView.</p>
-            <p><strong>Milestone 19:</strong> the fixed HUFF render recipe now exposes explicit Clean, History, Process, Field Store, Mask, Program, and Monitor responsibilities. Program and local monitoring can select constrained named buses without introducing an unrestricted node graph.</p>
+            <p><strong>Milestone 20:</strong> production verification is now an in-app workflow. HUFF can inspect the active GPU, media tools, sources, audio, Syphon/Spout, recording/export ownership, controller services, and writable storage; run bounded recovery actions; and export a diagnostics bundle for the final cross-platform test cycle.</p>
         </div>
+    </div>
+
+    <!-- ═══ Production Verification Modal ═════════════════════ -->
+    <div id="productionOverlay">
+      <div id="productionBox">
+        <button id="productionClose">×</button>
+        <h2>Production Verification</h2>
+        <div class="production-sub">Non-destructive runtime inspection · bounded recovery · shareable diagnostics folder. A passing report verifies this running computer; it does not substitute for tests on the other operating system.</div>
+        <div class="production-toolbar">
+          <button id="productionRunBtn" class="btn-dim">▶ Run Check</button>
+          <button id="productionRecoverSurfaceBtn">Recover Surface</button>
+          <button id="productionRecoverSourceBtn">Restart Source</button>
+          <button id="productionRecoverOutputsBtn">Restart Outputs</button>
+          <button id="productionRecoverAllBtn">Recover All</button>
+          <button id="productionExportBtn">Export Diagnostics…</button>
+        </div>
+        <div id="productionSummary" class="production-summary">Run the production check after the source and outputs you intend to use are active.</div>
+        <div id="productionPlatform" class="production-platform"></div>
+        <div id="productionChecks" class="production-checks"></div>
+        <div id="productionRecoveryStatus"></div>
+      </div>
     </div>
 
     <!-- MIDI learn toast removed — replaced by MIDI modal below -->
@@ -1353,6 +1405,7 @@
             <button id="oscBtn"    class="btn-dim">OSC</button>
             <button id="syphonBtn" class="btn-dim">SYPHON</button>
             <button id="spoutBtn"  class="btn-dim">SPOUT</button>
+            <button id="verifyBtn" class="btn-dim">VERIFY</button>
             <button id="aboutBtn" class="btn-red">ABOUT</button>
         </div>
 
@@ -1524,7 +1577,7 @@
                     <label><input id="stateScopeTransport" type="checkbox"> Transport</label>
                     <label><input id="stateScopeAutomation" type="checkbox"> Automation</label>
                     <label><input id="stateScopeMaps" type="checkbox"> MIDI/OSC Maps</label>
-                    <label title="Declared but disabled in HNW-19: GPU pixel stores remain separate"><input id="stateScopePixels" type="checkbox" disabled> GPU Pixels</label>
+                    <label title="Declared but disabled in HNW-20: GPU pixel stores remain separate"><input id="stateScopePixels" type="checkbox" disabled> GPU Pixels</label>
                 </div>
                 <div id="stateScopeNote">Preset = reusable artistic condition. Source files, transport, render allocation, automation, maps, and GPU pixels remain untouched.</div>
                 <div id="stateModelStatus">huff-state/v1 · loading parameter metadata…</div>

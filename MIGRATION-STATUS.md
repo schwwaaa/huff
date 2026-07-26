@@ -1,4 +1,4 @@
-# HUFF native migration status · Milestone 19
+# HUFF native migration status · Milestone 20
 
 ## Proven native foundation
 
@@ -112,3 +112,8 @@ The earlier browser-local quick presets remain available for compatibility and r
 - two new Routing-domain canonical parameters, bringing the current registry to 100
 
 The fixed HUFF pipeline remains the default instrument recipe; arbitrary graph patching is intentionally not part of the core application.
+
+
+## Production verification completed in Milestone 20
+
+The application now exposes a common runtime report, bounded surface/source/output recovery, diagnostics-folder export, strict production dependency checks, and backend-specific build wrappers. This creates one repeatable process for the final Metal and DX12/MSVC verification cycle without falsely treating static packaging as hardware certification.

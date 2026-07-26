@@ -1,7 +1,7 @@
-# Apply HUFF Native Milestone 19
+# Apply HUFF Native Milestone 20
 
-The changed-files archive is intended for a clean Milestone 18 tree. Copy it over the project root while preserving directory structure.
+The changed-files archive is intended for a clean Milestone 19 tree. Copy it over the project root while preserving directory structure.
 
-Milestone 19 adds `routing.rs`, the `huff-routing/v1` model, Program and Monitor bus parameters, constrained route recipes, direct Clean and Field Store Program outputs, local bus monitoring, route-plan export, routing validation, version metadata, and documentation.
+Milestone 20 adds `production.rs`, the `huff-production-report/v1` runtime report, the VERIFY window, bounded surface/source/output recovery, diagnostics-folder export, production dependency validation, backend-specific production-build wrappers, version metadata, and verification documentation.
 
-The complete archive is safer when the Milestone 18 tree contains local modifications or when file additions are uncertain.
+The complete archive is safer when the Milestone 19 tree contains local modifications or when file additions are uncertain.

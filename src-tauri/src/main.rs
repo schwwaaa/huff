@@ -19,6 +19,7 @@ mod osc;
 mod output_frame;
 mod parameters;
 mod parity;
+mod production;
 mod recording;
 mod renderer;
 mod routing;
@@ -49,6 +50,7 @@ use offline_export::{
 };
 use osc::{OscCommand, OscHandle, OscMapping};
 use parameters::{ParameterDefinition, ParameterSnapshot, ParameterStore};
+use production::{ProductionReport, RecoveryReceipt};
 use recording::{RecordingAudioSource, RecordingHandle, RecordingStartConfig};
 use renderer::{RenderCommand, RendererHandle};
 use source::{ActiveSource, SourceSelector};
@@ -98,34 +100,79 @@ struct ControlMapFileResult {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct AudioSystemInfo {
-    router: audio_router::AudioRouterInfo,
-    microphone: audio::AudioInfo,
-    video: video_audio::VideoAudioInfo,
+pub(crate) struct AudioSystemInfo {
+    pub(crate) router: audio_router::AudioRouterInfo,
+    pub(crate) microphone: audio::AudioInfo,
+    pub(crate) video: video_audio::VideoAudioInfo,
 }
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct AppInfo {
-    build: String,
-    renderer: renderer::RendererInfo,
-    camera: camera::CameraStatus,
-    camera_devices: Vec<CameraDevice>,
-    video: video::VideoStatus,
-    audio: AudioSystemInfo,
-    midi: midi::MidiInfo,
-    osc: osc::OscInfo,
-    syphon: syphon::SyphonInfo,
-    spout: spout::SpoutInfo,
-    recording: recording::RecordingInfo,
-    export: export::ExportInfo,
-    offline_export: offline_export::OfflineExportInfo,
-    export_queue: export_queue::ExportQueueInfo,
-    gesture: gesture::GestureInfo,
-    automation: automation::AutomationInfo,
-    parameter_revision: u64,
-    native_milestone: String,
-    active_source: String,
+pub(crate) struct AppInfo {
+    pub(crate) build: String,
+    pub(crate) renderer: renderer::RendererInfo,
+    pub(crate) camera: camera::CameraStatus,
+    pub(crate) camera_devices: Vec<CameraDevice>,
+    pub(crate) video: video::VideoStatus,
+    pub(crate) audio: AudioSystemInfo,
+    pub(crate) midi: midi::MidiInfo,
+    pub(crate) osc: osc::OscInfo,
+    pub(crate) syphon: syphon::SyphonInfo,
+    pub(crate) spout: spout::SpoutInfo,
+    pub(crate) recording: recording::RecordingInfo,
+    pub(crate) export: export::ExportInfo,
+    pub(crate) offline_export: offline_export::OfflineExportInfo,
+    pub(crate) export_queue: export_queue::ExportQueueInfo,
+    pub(crate) gesture: gesture::GestureInfo,
+    pub(crate) automation: automation::AutomationInfo,
+    pub(crate) parameter_revision: u64,
+    pub(crate) native_milestone: String,
+    pub(crate) active_source: String,
+}
+
+fn collect_app_info(
+    renderer: &RendererHandle,
+    camera: &CameraHandle,
+    video: &VideoHandle,
+    microphone_audio: &AudioHandle,
+    video_audio: &VideoAudioHandle,
+    audio_router: &AudioRouterHandle,
+    midi: &MidiHandle,
+    osc: &OscHandle,
+    gesture: &GestureHandle,
+    recording: &RecordingHandle,
+    export: &ExportHandle,
+    offline_export: &OfflineExportHandle,
+    export_queue: &ExportQueueHandle,
+    automation: &AutomationHandle,
+    parameters: &ParameterStore,
+    source: &SourceSelector,
+) -> AppInfo {
+    AppInfo {
+        build: "HNW-20".into(),
+        renderer: renderer.info(),
+        camera: camera.status(),
+        camera_devices: camera.devices(),
+        video: video.status(),
+        audio: AudioSystemInfo {
+            router: audio_router.info(),
+            microphone: microphone_audio.info(),
+            video: video_audio.info(),
+        },
+        midi: midi.info(),
+        osc: osc.info(),
+        syphon: syphon::info(),
+        spout: spout::info(),
+        recording: recording.info(),
+        export: export.info(),
+        offline_export: offline_export.info(),
+        export_queue: export_queue.info(),
+        gesture: gesture.info(),
+        automation: automation.info(),
+        parameter_revision: parameters.revision(),
+        native_milestone: "HNW-20".into(),
+        active_source: source.get().label().into(),
+    }
 }
 
 #[tauri::command]
@@ -147,32 +194,274 @@ fn get_app_info(
     parameters: tauri::State<'_, ParameterStore>,
     source: tauri::State<'_, SourceSelector>,
 ) -> AppInfo {
-    AppInfo {
-        build: "HNW-19".into(),
-        renderer: renderer.info(),
-        camera: camera.status(),
-        camera_devices: camera.devices(),
-        video: video.status(),
-        audio: AudioSystemInfo {
-            router: audio_router.info(),
-            microphone: microphone_audio.info(),
-            video: video_audio.info(),
-        },
-        midi: midi.info(),
-        osc: osc.info(),
-        syphon: syphon::info(),
-        spout: spout::info(),
-        recording: recording.info(),
-        export: export.info(),
-        offline_export: offline_export.info(),
-        export_queue: export_queue.info(),
-        gesture: gesture.info(),
-        automation: automation.info(),
-        parameter_revision: parameters.revision(),
-        native_milestone: "HNW-19".into(),
-        active_source: source.get().label().into(),
-    }
+    collect_app_info(
+        renderer.inner(),
+        camera.inner(),
+        video.inner(),
+        microphone_audio.inner(),
+        video_audio.inner(),
+        audio_router.inner(),
+        midi.inner(),
+        osc.inner(),
+        gesture.inner(),
+        recording.inner(),
+        export.inner(),
+        offline_export.inner(),
+        export_queue.inner(),
+        automation.inner(),
+        parameters.inner(),
+        source.inner(),
+    )
 }
+
+
+#[tauri::command]
+fn run_production_check(
+    renderer: tauri::State<'_, RendererHandle>,
+    camera: tauri::State<'_, CameraHandle>,
+    video: tauri::State<'_, VideoHandle>,
+    microphone_audio: tauri::State<'_, AudioHandle>,
+    video_audio: tauri::State<'_, VideoAudioHandle>,
+    audio_router: tauri::State<'_, AudioRouterHandle>,
+    midi: tauri::State<'_, MidiHandle>,
+    osc: tauri::State<'_, OscHandle>,
+    gesture: tauri::State<'_, GestureHandle>,
+    recording: tauri::State<'_, RecordingHandle>,
+    export: tauri::State<'_, ExportHandle>,
+    offline_export: tauri::State<'_, OfflineExportHandle>,
+    export_queue: tauri::State<'_, ExportQueueHandle>,
+    automation: tauri::State<'_, AutomationHandle>,
+    parameters: tauri::State<'_, ParameterStore>,
+    source: tauri::State<'_, SourceSelector>,
+) -> ProductionReport {
+    let info = collect_app_info(
+        renderer.inner(),
+        camera.inner(),
+        video.inner(),
+        microphone_audio.inner(),
+        video_audio.inner(),
+        audio_router.inner(),
+        midi.inner(),
+        osc.inner(),
+        gesture.inner(),
+        recording.inner(),
+        export.inner(),
+        offline_export.inner(),
+        export_queue.inner(),
+        automation.inner(),
+        parameters.inner(),
+        source.inner(),
+    );
+    production::build_report(&info)
+}
+
+#[tauri::command]
+fn recover_live_runtime(
+    renderer: tauri::State<'_, RendererHandle>,
+    camera: tauri::State<'_, CameraHandle>,
+    video: tauri::State<'_, VideoHandle>,
+    video_audio: tauri::State<'_, VideoAudioHandle>,
+    microphone_audio: tauri::State<'_, AudioHandle>,
+    recording: tauri::State<'_, RecordingHandle>,
+    offline_export: tauri::State<'_, OfflineExportHandle>,
+    source: tauri::State<'_, SourceSelector>,
+    scope: String,
+) -> Result<RecoveryReceipt, String> {
+    if !matches!(scope.as_str(), "surface" | "source" | "outputs" | "all") {
+        return Err("recovery scope must be surface, source, outputs, or all".into());
+    }
+
+    let mut actions = Vec::new();
+    let mut warnings = Vec::new();
+    let recover_surface = matches!(scope.as_str(), "surface" | "all");
+    let recover_source = matches!(scope.as_str(), "source" | "all");
+    let recover_outputs = matches!(scope.as_str(), "outputs" | "all");
+
+    if recover_surface {
+        renderer.send(RenderCommand::RecoverSurface);
+        actions.push("Requested native wgpu surface recovery".into());
+    }
+
+    if recover_source {
+        if recording.info().active
+            || recording.info().finalizing
+            || offline_export.info().active
+        {
+            return Err("source recovery is disabled while recording or deterministic export owns the pipeline".into());
+        }
+        camera.refresh();
+        microphone_audio.send(AudioCommand::RefreshDevices);
+        actions.push("Refreshed camera and microphone device lists".into());
+
+        let selected_source = match source.get() {
+            ActiveSource::Automatic if camera.status().streaming => ActiveSource::Camera,
+            ActiveSource::Automatic if video.status().loaded => ActiveSource::Video,
+            selected => selected,
+        };
+        match selected_source {
+            ActiveSource::Video => {
+                let status = video.status();
+                if status.loaded {
+                    video_audio.send(VideoAudioCommand::Seek {
+                        seconds: status.position_seconds,
+                        playing: status.playing,
+                    });
+                    video.seek(status.position_seconds);
+                    actions.push(format!(
+                        "Restarted video and source-audio decoders at {:.3} seconds",
+                        status.position_seconds
+                    ));
+                } else {
+                    warnings.push("Video is selected but no file is loaded".into());
+                }
+            }
+            ActiveSource::Camera => {
+                let status = camera.status();
+                if status.streaming {
+                    if let Some(slot) = status.selected_slot {
+                        camera.stop_camera();
+                        std::thread::sleep(std::time::Duration::from_millis(120));
+                        camera.start_camera(slot, status.profile.clone());
+                        actions.push(format!("Restarted camera {}", status.selected_name));
+                    } else {
+                        warnings.push("Camera is streaming without a selected device slot".into());
+                    }
+                } else {
+                    warnings.push("Camera source is selected but capture is not active".into());
+                }
+            }
+            ActiveSource::Automatic | ActiveSource::None => {
+                warnings.push("No active media source to recover".into())
+            }
+        }
+    }
+
+    if recover_outputs {
+        let mut output_restarted = false;
+        let syphon_info = syphon::info();
+        if syphon_info.active {
+            renderer.stop_syphon();
+            std::thread::sleep(std::time::Duration::from_millis(120));
+            renderer.start_syphon(syphon_info.fps)?;
+            actions.push(format!("Restarted Syphon at {} fps", syphon_info.fps));
+            output_restarted = true;
+        } else if syphon_info.available {
+            warnings.push("Syphon is available but was not active".into());
+        }
+
+        let spout_info = spout::info();
+        if spout_info.active {
+            renderer.stop_spout();
+            std::thread::sleep(std::time::Duration::from_millis(120));
+            renderer.start_spout(spout_info.fps, spout_info.adapter_index)?;
+            actions.push(format!(
+                "Restarted Spout at {} fps on adapter {}",
+                spout_info.fps, spout_info.adapter_index
+            ));
+            output_restarted = true;
+        } else if spout_info.available {
+            warnings.push("Spout is available but was not active".into());
+        }
+
+        if !output_restarted {
+            warnings.push("No active platform output bridge required recovery".into());
+        }
+    }
+
+    Ok(RecoveryReceipt {
+        scope,
+        actions,
+        warnings,
+    })
+}
+
+#[tauri::command]
+fn export_diagnostics_bundle(
+    renderer: tauri::State<'_, RendererHandle>,
+    camera: tauri::State<'_, CameraHandle>,
+    video: tauri::State<'_, VideoHandle>,
+    microphone_audio: tauri::State<'_, AudioHandle>,
+    video_audio: tauri::State<'_, VideoAudioHandle>,
+    audio_router: tauri::State<'_, AudioRouterHandle>,
+    midi: tauri::State<'_, MidiHandle>,
+    osc: tauri::State<'_, OscHandle>,
+    gesture: tauri::State<'_, GestureHandle>,
+    recording: tauri::State<'_, RecordingHandle>,
+    export: tauri::State<'_, ExportHandle>,
+    offline_export: tauri::State<'_, OfflineExportHandle>,
+    export_queue: tauri::State<'_, ExportQueueHandle>,
+    automation: tauri::State<'_, AutomationHandle>,
+    parameters: tauri::State<'_, ParameterStore>,
+    source: tauri::State<'_, SourceSelector>,
+) -> Result<Option<String>, String> {
+    let Some(parent) = rfd::FileDialog::new()
+        .set_title("Choose a folder for the HUFF diagnostics bundle")
+        .pick_folder()
+    else {
+        return Ok(None);
+    };
+
+    let info = collect_app_info(
+        renderer.inner(),
+        camera.inner(),
+        video.inner(),
+        microphone_audio.inner(),
+        video_audio.inner(),
+        audio_router.inner(),
+        midi.inner(),
+        osc.inner(),
+        gesture.inner(),
+        recording.inner(),
+        export.inner(),
+        offline_export.inner(),
+        export_queue.inner(),
+        automation.inner(),
+        parameters.inner(),
+        source.inner(),
+    );
+    let report = production::build_report(&info);
+    let directory = parent.join(format!(
+        "huff-diagnostics-HNW-20-{}",
+        production::now_unix_ms()
+    ));
+    std::fs::create_dir_all(&directory)
+        .map_err(|error| format!("could not create {}: {error}", directory.display()))?;
+
+    fn write_json<T: Serialize>(directory: &std::path::Path, name: &str, value: &T) -> Result<(), String> {
+        let path = directory.join(name);
+        let bytes = serde_json::to_vec_pretty(value)
+            .map_err(|error| format!("could not serialize {name}: {error}"))?;
+        std::fs::write(&path, bytes)
+            .map_err(|error| format!("could not write {}: {error}", path.display()))
+    }
+
+    write_json(&directory, "production-report.json", &report)?;
+    write_json(&directory, "app-info.json", &info)?;
+    write_json(&directory, "parameter-state.json", &parameters.snapshot())?;
+    write_json(
+        &directory,
+        "routing-plan.json",
+        &routing::build_plan(&parameters.snapshot()),
+    )?;
+    write_json(
+        &directory,
+        "state-model.json",
+        &state_documents::model_catalog(),
+    )?;
+    std::fs::write(
+        directory.join("production-report.txt"),
+        production::human_report(&report),
+    )
+    .map_err(|error| format!("could not write production-report.txt: {error}"))?;
+    std::fs::write(
+        directory.join("README.txt"),
+        "HUFF Native HNW-20 diagnostics bundle\n\nThis folder contains runtime status, production checks, canonical parameter state, routing state, and the state-model catalog. Source file paths and device names may be present. Review the files before sharing them publicly. GPU pixel buffers and media files are not included.\n",
+    )
+    .map_err(|error| format!("could not write diagnostics README: {error}"))?;
+
+    Ok(Some(directory.display().to_string()))
+}
+
 
 #[tauri::command]
 fn get_parameter_registry() -> Vec<ParameterDefinition> {
@@ -880,7 +1169,7 @@ fn export_still(
         fit_mode: fit_mode.clone(),
     };
     let metadata = StillExportMetadata {
-        engine_build: "HNW-19".into(),
+        engine_build: "HNW-20".into(),
         captured_unix_ms: StillExportMetadata::now_unix_ms(),
         active_source: source.get().label().into(),
         source_file: video_info.file_path,
@@ -1071,7 +1360,7 @@ fn start_offline_export(
         queue_job_id: String::new(),
     };
     let metadata = OfflineExportMetadata {
-        engine_build: "HNW-19".into(),
+        engine_build: "HNW-20".into(),
         created_unix_ms: OfflineExportMetadata::now_unix_ms(),
         source_file: video_info.file_path.clone(),
         source_codec: video_info.codec,
@@ -1926,6 +2215,9 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             get_app_info,
+            run_production_check,
+            recover_live_runtime,
+            export_diagnostics_bundle,
             get_parameter_registry,
             get_control_target_catalog,
             get_parameter_state,

@@ -1,7 +1,7 @@
 # HUFF Constrained Routing Model
 
 **Schema:** `huff-routing/v1`  
-**Build:** `0.19.0 / HNW-19`
+**Build:** `0.20.0 / HNW-20`
 
 Milestone 19 does not replace HUFF with an unrestricted node graph. The established render order remains the canonical **Classic HUFF recipe**, while the responsibilities previously hidden inside draw order are now named, inspectable, selectable at defined boundaries, and serializable through canonical parameters.
 
