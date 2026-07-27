@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width,initial-scale=1" name="viewport"/>
+<title>Export Queue — HUFF native docs</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=VT323&amp;family=Share+Tech+Mono&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/docs.css" rel="stylesheet">
+</link></head>
+<body>
+<div class="taskbar">
+<a class="taskbar-brand" href="../index.html">■ HUFF</a>
+<a class="taskbar-btn raised-sm" href="how-it-works.html">Overview</a>
+<a class="taskbar-btn raised-sm" href="feature-index.html">Features</a>
+<a class="taskbar-btn raised-sm" href="architecture.html">Architecture</a>
+<a class="taskbar-btn raised-sm" href="visual-guide.html">Visual Guide</a>
+<a class="taskbar-btn raised-sm" href="troubleshooting.html">Help</a>
+<div class="taskbar-clock raised-sm" id="clock">--:--:--</div>
+</div>
+<div class="site-shell">
+<aside class="sidebar raised">
+<div class="sidebar-title">■ DOCUMENTATION</div>
+<input aria-label="Search documentation pages" class="searchbox" id="docSearch" placeholder="Search pages…" type="search"/>
+<div class="search-results" id="searchResults"></div>
+<div class="nav-group"><div class="nav-group-title">Start Here</div><ul class="doc-nav"><li><a href="how-it-works.html">Native HUFF Overview</a></li><li><a href="feature-index.html">Feature Index</a></li><li><a href="visual-guide.html">Visual Guide &amp; Image Needs</a></li><li><a href="installation.html">Installation &amp; Builds</a></li><li><a href="interface.html">Interface Tour</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Media &amp; Image</div><ul class="doc-nav"><li><a href="sources.html">Sources &amp; Transport</a></li><li><a href="effects.html">Effects &amp; Compositing</a></li><li><a href="temporal-memory.html">Temporal Memory</a></li><li><a href="routing.html">Routing &amp; Recipes</a></li></ul></div><div class="nav-group"><div class="nav-group-title">State &amp; Control</div><ul class="doc-nav"><li><a href="state.html">Presets, Snapshots &amp; Projects</a></li><li><a href="automation.html">Automation &amp; Sequences</a></li><li><a href="midi.html">MIDI Mapping</a></li><li><a href="osc.html">OSC Mapping</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Output &amp; Export</div><ul class="doc-nav"><li><a href="recording.html">Live Recording</a></li><li><a href="export.html">Still &amp; Offline Export</a></li><li><a class="active" href="export-queue.html">Export Queue</a></li><li><a href="output.html">Syphon &amp; Spout</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Operations</div><ul class="doc-nav"><li><a href="verification.html">Verification &amp; Recovery</a></li><li><a href="parity.html">Parity &amp; Calibration</a></li><li><a href="interop.html">Interop Research</a></li><li><a href="testing.html">Testing Strategy</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Reference</div><ul class="doc-nav"><li><a href="parameter-reference.html">Parameter Reference</a></li><li><a href="architecture.html">Architecture</a></li><li><a href="caveats.html">Caveats &amp; Tradeoffs</a></li><li><a href="troubleshooting.html">Troubleshooting</a></li><li><a href="glossary.html">Glossary</a></li></ul></div>
+<div class="sidebar-note">Build documented: <strong>0.21.0 / HNW-21</strong><br/>The incoming legacy docs are preserved under <code>archive/original-docs/</code>.</div>
+</aside>
+<main>
+<details class="mobile-nav raised"><summary>Documentation navigation</summary><div class="nav-group"><div class="nav-group-title">Start Here</div><ul class="doc-nav"><li><a href="how-it-works.html">Native HUFF Overview</a></li><li><a href="feature-index.html">Feature Index</a></li><li><a href="visual-guide.html">Visual Guide &amp; Image Needs</a></li><li><a href="installation.html">Installation &amp; Builds</a></li><li><a href="interface.html">Interface Tour</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Media &amp; Image</div><ul class="doc-nav"><li><a href="sources.html">Sources &amp; Transport</a></li><li><a href="effects.html">Effects &amp; Compositing</a></li><li><a href="temporal-memory.html">Temporal Memory</a></li><li><a href="routing.html">Routing &amp; Recipes</a></li></ul></div><div class="nav-group"><div class="nav-group-title">State &amp; Control</div><ul class="doc-nav"><li><a href="state.html">Presets, Snapshots &amp; Projects</a></li><li><a href="automation.html">Automation &amp; Sequences</a></li><li><a href="midi.html">MIDI Mapping</a></li><li><a href="osc.html">OSC Mapping</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Output &amp; Export</div><ul class="doc-nav"><li><a href="recording.html">Live Recording</a></li><li><a href="export.html">Still &amp; Offline Export</a></li><li><a class="active" href="export-queue.html">Export Queue</a></li><li><a href="output.html">Syphon &amp; Spout</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Operations</div><ul class="doc-nav"><li><a href="verification.html">Verification &amp; Recovery</a></li><li><a href="parity.html">Parity &amp; Calibration</a></li><li><a href="interop.html">Interop Research</a></li><li><a href="testing.html">Testing Strategy</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Reference</div><ul class="doc-nav"><li><a href="parameter-reference.html">Parameter Reference</a></li><li><a href="architecture.html">Architecture</a></li><li><a href="caveats.html">Caveats &amp; Tradeoffs</a></li><li><a href="troubleshooting.html">Troubleshooting</a></li><li><a href="glossary.html">Glossary</a></li></ul></div></details>
+<article class="window">
+<div class="win-titlebar"><span class="win-titlebar-title">Export Queue</span><div class="win-controls"><div class="win-btn">_</div><div class="win-btn">□</div><div class="win-btn">✕</div></div></div>
+<div class="win-body doc-content">
+<div class="breadcrumb"><a href="../index.html">HUFF docs</a> / Output &amp; Export / Export Queue</div>
+<div class="page-meta"><span class="badge provisional">PROVISIONAL</span><span class="badge">0.21.0 / HNW-21</span></div>
+<p class="page-lead">The export queue turns deterministic export into a persistent batch-job system. It is intentionally marked provisional because the core user may prefer a simple Start Export workflow.</p>
+<div class="page-toc" id="pageToc"><div class="page-toc-title">ON THIS PAGE</div></div>
+<h2>What it adds</h2><ul><li>Sequential waiting jobs.</li><li>Immutable capture of parameters, source, timeline, profile, seed, and automation when queued.</li><li>Pause/resume dispatch without interrupting the active job.</li><li>Reorder waiting jobs.</li><li>Cancel waiting or active jobs.</li><li>Retry failed/cancelled/interrupted jobs from frame zero.</li><li>Repeat completed jobs to a new destination.</li><li>Persistent history and restart recovery.</li><li>Destination conflict and duplicate protection.</li></ul>
+<h2>One-job interpretation</h2><pre>Click + Queue
+  → choose destination
+  → job becomes Active automatically
+  → completed output is recorded in history</pre><p>With one job, the queue behaves almost like a Start Export button. The terminology is more complicated than the basic workflow.</p>
+<h2>Why it was built</h2><p>High-resolution deterministic renders can take longer than real time. A queue supports unattended multi-format or multi-variation export and gives later automation/high-resolution features a reliable job boundary.</p>
+<h2>Why it may be removed or hidden</h2><ul><li>The primary HUFF workflow may not need batch exports.</li><li>The UI adds conceptual weight.</li><li>A simple direct export may be clearer for artists.</li><li>Long-term maintenance includes persistence, recovery, destination rules, and history states.</li></ul>
+<h2>Safe removal boundary</h2><p>The deterministic exporter can remain even if the queue UI and persistence layer are removed. A production branch could expose <strong>Export Video</strong> and move batch jobs to an Advanced panel or separate utility.</p><div class="callout remove"><strong>Preserve these ideas even if removed:</strong> immutable job specifications, safe temporary outputs, explicit completion state, destination conflict protection, and reproducibility metadata.</div>
+<div class="source-list"><strong>Knowledge sources</strong><br/><a href="../reference/UPGRADE-NOTES-13.md">UPGRADE-NOTES-13.md</a> · <a href="../reference/FULL-RETROSPECTIVE.md">FULL-RETROSPECTIVE.md</a></div>
+</div>
+</article>
+</main>
+</div>
+<div class="footer raised">HUFF native documentation · static HTML · current architecture preserved before production pruning</div>
+<script src="../assets/search-index.js"></script><script src="../assets/docs.js"></script>
+</body></html>

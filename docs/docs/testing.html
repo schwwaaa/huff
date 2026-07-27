@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width,initial-scale=1" name="viewport"/>
+<title>Testing Strategy — HUFF native docs</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=VT323&amp;family=Share+Tech+Mono&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/docs.css" rel="stylesheet">
+</link></head>
+<body>
+<div class="taskbar">
+<a class="taskbar-brand" href="../index.html">■ HUFF</a>
+<a class="taskbar-btn raised-sm" href="how-it-works.html">Overview</a>
+<a class="taskbar-btn raised-sm" href="feature-index.html">Features</a>
+<a class="taskbar-btn raised-sm" href="architecture.html">Architecture</a>
+<a class="taskbar-btn raised-sm" href="visual-guide.html">Visual Guide</a>
+<a class="taskbar-btn raised-sm" href="troubleshooting.html">Help</a>
+<div class="taskbar-clock raised-sm" id="clock">--:--:--</div>
+</div>
+<div class="site-shell">
+<aside class="sidebar raised">
+<div class="sidebar-title">■ DOCUMENTATION</div>
+<input aria-label="Search documentation pages" class="searchbox" id="docSearch" placeholder="Search pages…" type="search"/>
+<div class="search-results" id="searchResults"></div>
+<div class="nav-group"><div class="nav-group-title">Start Here</div><ul class="doc-nav"><li><a href="how-it-works.html">Native HUFF Overview</a></li><li><a href="feature-index.html">Feature Index</a></li><li><a href="visual-guide.html">Visual Guide &amp; Image Needs</a></li><li><a href="installation.html">Installation &amp; Builds</a></li><li><a href="interface.html">Interface Tour</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Media &amp; Image</div><ul class="doc-nav"><li><a href="sources.html">Sources &amp; Transport</a></li><li><a href="effects.html">Effects &amp; Compositing</a></li><li><a href="temporal-memory.html">Temporal Memory</a></li><li><a href="routing.html">Routing &amp; Recipes</a></li></ul></div><div class="nav-group"><div class="nav-group-title">State &amp; Control</div><ul class="doc-nav"><li><a href="state.html">Presets, Snapshots &amp; Projects</a></li><li><a href="automation.html">Automation &amp; Sequences</a></li><li><a href="midi.html">MIDI Mapping</a></li><li><a href="osc.html">OSC Mapping</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Output &amp; Export</div><ul class="doc-nav"><li><a href="recording.html">Live Recording</a></li><li><a href="export.html">Still &amp; Offline Export</a></li><li><a href="export-queue.html">Export Queue</a></li><li><a href="output.html">Syphon &amp; Spout</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Operations</div><ul class="doc-nav"><li><a href="verification.html">Verification &amp; Recovery</a></li><li><a href="parity.html">Parity &amp; Calibration</a></li><li><a href="interop.html">Interop Research</a></li><li><a class="active" href="testing.html">Testing Strategy</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Reference</div><ul class="doc-nav"><li><a href="parameter-reference.html">Parameter Reference</a></li><li><a href="architecture.html">Architecture</a></li><li><a href="caveats.html">Caveats &amp; Tradeoffs</a></li><li><a href="troubleshooting.html">Troubleshooting</a></li><li><a href="glossary.html">Glossary</a></li></ul></div>
+<div class="sidebar-note">Build documented: <strong>0.21.0 / HNW-21</strong><br/>The incoming legacy docs are preserved under <code>archive/original-docs/</code>.</div>
+</aside>
+<main>
+<details class="mobile-nav raised"><summary>Documentation navigation</summary><div class="nav-group"><div class="nav-group-title">Start Here</div><ul class="doc-nav"><li><a href="how-it-works.html">Native HUFF Overview</a></li><li><a href="feature-index.html">Feature Index</a></li><li><a href="visual-guide.html">Visual Guide &amp; Image Needs</a></li><li><a href="installation.html">Installation &amp; Builds</a></li><li><a href="interface.html">Interface Tour</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Media &amp; Image</div><ul class="doc-nav"><li><a href="sources.html">Sources &amp; Transport</a></li><li><a href="effects.html">Effects &amp; Compositing</a></li><li><a href="temporal-memory.html">Temporal Memory</a></li><li><a href="routing.html">Routing &amp; Recipes</a></li></ul></div><div class="nav-group"><div class="nav-group-title">State &amp; Control</div><ul class="doc-nav"><li><a href="state.html">Presets, Snapshots &amp; Projects</a></li><li><a href="automation.html">Automation &amp; Sequences</a></li><li><a href="midi.html">MIDI Mapping</a></li><li><a href="osc.html">OSC Mapping</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Output &amp; Export</div><ul class="doc-nav"><li><a href="recording.html">Live Recording</a></li><li><a href="export.html">Still &amp; Offline Export</a></li><li><a href="export-queue.html">Export Queue</a></li><li><a href="output.html">Syphon &amp; Spout</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Operations</div><ul class="doc-nav"><li><a href="verification.html">Verification &amp; Recovery</a></li><li><a href="parity.html">Parity &amp; Calibration</a></li><li><a href="interop.html">Interop Research</a></li><li><a class="active" href="testing.html">Testing Strategy</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Reference</div><ul class="doc-nav"><li><a href="parameter-reference.html">Parameter Reference</a></li><li><a href="architecture.html">Architecture</a></li><li><a href="caveats.html">Caveats &amp; Tradeoffs</a></li><li><a href="troubleshooting.html">Troubleshooting</a></li><li><a href="glossary.html">Glossary</a></li></ul></div></details>
+<article class="window">
+<div class="win-titlebar"><span class="win-titlebar-title">Testing Strategy</span><div class="win-controls"><div class="win-btn">_</div><div class="win-btn">□</div><div class="win-btn">✕</div></div></div>
+<div class="win-body doc-content">
+<div class="breadcrumb"><a href="../index.html">HUFF docs</a> / Operations / Testing Strategy</div>
+<div class="page-meta"><span class="badge">INTEGRATED PLAN; TESTING ONGOING</span><span class="badge">0.21.0 / HNW-21</span></div>
+<p class="page-lead">The conversion is complete, but production confidence comes from systematic testing rather than milestone count. The recommended test cycle separates subsystem tests, combinations, long sessions, state recovery, and output formats.</p>
+<div class="page-toc" id="pageToc"><div class="page-toc-title">ON THIS PAGE</div></div>
+<h2>Test order</h2><ol class="steps"><li>Freeze/tag Milestone 21 and create full-study, production, and effects-lab branches.</li><li>Verify launch, local video, camera, audio, and basic rendering independently.</li><li>Test each effect family in isolation.</li><li>Test known high-risk combinations.</li><li>Test Program/Monitor and routing recipes.</li><li>Test each output independently, then in combinations.</li><li>Test save/load, restart, recovery, and diagnostics.</li><li>Run 30-minute, 2-hour, then 6–8-hour sessions.</li><li>Calibrate visual behavior after crashes, stalls, and leaks are under control.</li></ol>
+<h2>Effect matrix</h2><pre>Glitch only
+Clusters only
+Scanlines only
+Feedback only
+Flow only
+Luma Key only
+Smoosh only
+Global Mix only
+
+Glitch + Feedback
+Glitch + Flow
+Scanlines + Luma Key
+Flow + Feedback
+Glitch + Scanlines + Flow
+Everything enabled</pre>
+<h2>Output matrix</h2><div class="table-wrap"><table class="win-table"><thead><tr><th>Output</th><th>Minimum useful test</th></tr></thead><tbody><tr><td>Local window</td><td>Resize, minimize/restore, occlusion, monitor bus changes.</td></tr><tr><td>Syphon</td><td>Receiver connect/disconnect, restart sender, 15/24/30/60 FPS.</td></tr><tr><td>Spout</td><td>Windows receiver matrix, adapter selection, multi-GPU.</td></tr><tr><td>Live recording</td><td>30/60 FPS, video audio, mic, silent, safe stop.</td></tr><tr><td>Still PNG</td><td>Native/1080p/4K/custom; Fit/Crop/Stretch; Smooth/Crisp.</td></tr><tr><td>Offline H.264</td><td>Short deterministic repeat; compare decoded frames.</td></tr><tr><td>ProRes / FFV1</td><td>Codec availability, alpha, audio, cancellation.</td></tr><tr><td>PNG sequence</td><td>Numbering, alpha, audio WAV, interrupted directory cleanup.</td></tr></tbody></table></div>
+<h2>Long-session observations</h2><ul><li>Memory growth.</li><li>GPU allocation changes.</li><li>Decoder watchdog restarts.</li><li>Audio underflows.</li><li>Effects silently stopping.</li><li>Transport advancing while video stalls.</li><li>Syphon/Spout disconnects.</li><li>Frame pacing degradation.</li><li>Queue ownership stuck after failure.</li></ul>
+<h2>Visual calibration records</h2><p>For each effect family, save Legacy Reference, Native Corrected, Expanded Native, and Stress-Test presets. Document minimum, maximum, useful range, default, response curve, and interaction with other stages.</p>
+<h2>Evidence bundle</h2><p>When a failure occurs, export Production Verification diagnostics and retain the source file, route plan, parameter state, automation clip, output profile, and exact reproduction steps.</p><div class="callout warn"><strong>Stop condition.</strong> Do not chase subjective parity while the engine still leaks, stalls, loses state, or fails to recover. Reliability problems should be separated from artistic calibration.</div>
+<div class="source-list"><strong>Knowledge sources</strong><br/><a href="../reference/TESTING.md">TESTING.md</a> · <a href="../reference/PRODUCTION-VERIFICATION.md">PRODUCTION-VERIFICATION.md</a> · <a href="../reference/FULL-RETROSPECTIVE.md">FULL-RETROSPECTIVE.md</a></div>
+</div>
+</article>
+</main>
+</div>
+<div class="footer raised">HUFF native documentation · static HTML · current architecture preserved before production pruning</div>
+<script src="../assets/search-index.js"></script><script src="../assets/docs.js"></script>
+</body></html>

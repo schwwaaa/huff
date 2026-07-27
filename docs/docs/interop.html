@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width,initial-scale=1" name="viewport"/>
+<title>Interop Research — HUFF native docs</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=VT323&amp;family=Share+Tech+Mono&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/docs.css" rel="stylesheet">
+</link></head>
+<body>
+<div class="taskbar">
+<a class="taskbar-brand" href="../index.html">■ HUFF</a>
+<a class="taskbar-btn raised-sm" href="how-it-works.html">Overview</a>
+<a class="taskbar-btn raised-sm" href="feature-index.html">Features</a>
+<a class="taskbar-btn raised-sm" href="architecture.html">Architecture</a>
+<a class="taskbar-btn raised-sm" href="visual-guide.html">Visual Guide</a>
+<a class="taskbar-btn raised-sm" href="troubleshooting.html">Help</a>
+<div class="taskbar-clock raised-sm" id="clock">--:--:--</div>
+</div>
+<div class="site-shell">
+<aside class="sidebar raised">
+<div class="sidebar-title">■ DOCUMENTATION</div>
+<input aria-label="Search documentation pages" class="searchbox" id="docSearch" placeholder="Search pages…" type="search"/>
+<div class="search-results" id="searchResults"></div>
+<div class="nav-group"><div class="nav-group-title">Start Here</div><ul class="doc-nav"><li><a href="how-it-works.html">Native HUFF Overview</a></li><li><a href="feature-index.html">Feature Index</a></li><li><a href="visual-guide.html">Visual Guide &amp; Image Needs</a></li><li><a href="installation.html">Installation &amp; Builds</a></li><li><a href="interface.html">Interface Tour</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Media &amp; Image</div><ul class="doc-nav"><li><a href="sources.html">Sources &amp; Transport</a></li><li><a href="effects.html">Effects &amp; Compositing</a></li><li><a href="temporal-memory.html">Temporal Memory</a></li><li><a href="routing.html">Routing &amp; Recipes</a></li></ul></div><div class="nav-group"><div class="nav-group-title">State &amp; Control</div><ul class="doc-nav"><li><a href="state.html">Presets, Snapshots &amp; Projects</a></li><li><a href="automation.html">Automation &amp; Sequences</a></li><li><a href="midi.html">MIDI Mapping</a></li><li><a href="osc.html">OSC Mapping</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Output &amp; Export</div><ul class="doc-nav"><li><a href="recording.html">Live Recording</a></li><li><a href="export.html">Still &amp; Offline Export</a></li><li><a href="export-queue.html">Export Queue</a></li><li><a href="output.html">Syphon &amp; Spout</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Operations</div><ul class="doc-nav"><li><a href="verification.html">Verification &amp; Recovery</a></li><li><a href="parity.html">Parity &amp; Calibration</a></li><li><a class="active" href="interop.html">Interop Research</a></li><li><a href="testing.html">Testing Strategy</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Reference</div><ul class="doc-nav"><li><a href="parameter-reference.html">Parameter Reference</a></li><li><a href="architecture.html">Architecture</a></li><li><a href="caveats.html">Caveats &amp; Tradeoffs</a></li><li><a href="troubleshooting.html">Troubleshooting</a></li><li><a href="glossary.html">Glossary</a></li></ul></div>
+<div class="sidebar-note">Build documented: <strong>0.21.0 / HNW-21</strong><br/>The incoming legacy docs are preserved under <code>archive/original-docs/</code>.</div>
+</aside>
+<main>
+<details class="mobile-nav raised"><summary>Documentation navigation</summary><div class="nav-group"><div class="nav-group-title">Start Here</div><ul class="doc-nav"><li><a href="how-it-works.html">Native HUFF Overview</a></li><li><a href="feature-index.html">Feature Index</a></li><li><a href="visual-guide.html">Visual Guide &amp; Image Needs</a></li><li><a href="installation.html">Installation &amp; Builds</a></li><li><a href="interface.html">Interface Tour</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Media &amp; Image</div><ul class="doc-nav"><li><a href="sources.html">Sources &amp; Transport</a></li><li><a href="effects.html">Effects &amp; Compositing</a></li><li><a href="temporal-memory.html">Temporal Memory</a></li><li><a href="routing.html">Routing &amp; Recipes</a></li></ul></div><div class="nav-group"><div class="nav-group-title">State &amp; Control</div><ul class="doc-nav"><li><a href="state.html">Presets, Snapshots &amp; Projects</a></li><li><a href="automation.html">Automation &amp; Sequences</a></li><li><a href="midi.html">MIDI Mapping</a></li><li><a href="osc.html">OSC Mapping</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Output &amp; Export</div><ul class="doc-nav"><li><a href="recording.html">Live Recording</a></li><li><a href="export.html">Still &amp; Offline Export</a></li><li><a href="export-queue.html">Export Queue</a></li><li><a href="output.html">Syphon &amp; Spout</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Operations</div><ul class="doc-nav"><li><a href="verification.html">Verification &amp; Recovery</a></li><li><a href="parity.html">Parity &amp; Calibration</a></li><li><a class="active" href="interop.html">Interop Research</a></li><li><a href="testing.html">Testing Strategy</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Reference</div><ul class="doc-nav"><li><a href="parameter-reference.html">Parameter Reference</a></li><li><a href="architecture.html">Architecture</a></li><li><a href="caveats.html">Caveats &amp; Tradeoffs</a></li><li><a href="troubleshooting.html">Troubleshooting</a></li><li><a href="glossary.html">Glossary</a></li></ul></div></details>
+<article class="window">
+<div class="win-titlebar"><span class="win-titlebar-title">Interop Research</span><div class="win-controls"><div class="win-btn">_</div><div class="win-btn">□</div><div class="win-btn">✕</div></div></div>
+<div class="win-body doc-content">
+<div class="breadcrumb"><a href="../index.html">HUFF docs</a> / Operations / Interop Research</div>
+<div class="page-meta"><span class="badge research">RESEARCH</span><span class="badge">0.21.0 / HNW-21</span></div>
+<p class="page-lead">The Interop Lab documents and measures the current external-output copy path and records realistic lower-copy candidates. It deliberately does not claim that zero-copy is complete.</p>
+<div class="page-toc" id="pageToc"><div class="page-toc-title">ON THIS PAGE</div></div>
+<h2>What Analyze Current Path reports</h2><ul><li>OS, architecture, wgpu backend, adapter, driver, surface format.</li><li>Render dimensions and reference output rate.</li><li>Bytes per RGBA frame.</li><li>GPU readback, host repack, and platform upload stages.</li><li>Estimated MiB/s for each full-frame stage.</li><li>Current Syphon/Spout state.</li><li>Candidate Metal, Direct3D, and Vulkan transports.</li><li>The recommended next proof-of-concept for the platform.</li></ul>
+<h2>CPU Copy Probe</h2><p>The probe measures a bounded host-memory memcpy baseline and estimates the cost of one current-resolution RGBA copy. It does <strong>not</strong> measure GPU readback latency, map synchronization, Metal/DX upload, receiver latency, or total end-to-end delay.</p>
+<h2>Candidate paths</h2><div class="table-wrap"><table class="win-table"><thead><tr><th>Platform</th><th>Candidate</th><th>Main blocker/risk</th></tr></thead><tbody><tr><td>macOS</td><td>Direct Metal texture publication to Syphon</td><td>Accessing compatible native Metal texture ownership and synchronization through wgpu.</td></tr><tr><td>macOS</td><td>IOSurface-backed bridge texture</td><td>Format, lifetime, cross-process synchronization, and fallback complexity.</td></tr><tr><td>Windows</td><td>D3D12 shared-handle Spout path</td><td>Receiver expectations, adapter identity, fences, and API compatibility.</td></tr><tr><td>Windows</td><td>D3D11On12 bridge</td><td>Extra translation layer, synchronization, and driver variability.</td></tr><tr><td>Vulkan</td><td>External-memory transport</td><td>Platform-specific handles and no single universal receiver ecosystem.</td></tr></tbody></table></div>
+<h2>Typed output boundary</h2><p>Syphon and Spout accept <code>ExternalOutputFrame</code>. The only production variant is currently <code>CpuRgba(OutputFrame)</code>. A future feature-gated Metal/D3D/Vulkan token can be added without redesigning the sender-worker API.</p>
+<h2>Fallback rule</h2><p>Any lower-copy path must automatically fall back to the bounded CPU transport when adapter matching, texture sharing, synchronization, receiver compatibility, or recovery tests fail.</p>
+<h2>Why the Lab may not belong in production</h2><p>It is useful for research, performance analysis, and future engine extraction, but ordinary HUFF users do not need a bandwidth-analysis panel during performance. The report and typed boundary can survive even when the UI is removed.</p><div class="callout research"><strong>Research boundary.</strong> “Lower-copy candidate” is not “implemented zero-copy.” The current safe path remains the production source of truth.</div>
+<div class="source-list"><strong>Knowledge sources</strong><br/><a href="../reference/INTEROP-RESEARCH.md">INTEROP-RESEARCH.md</a> · <a href="../reference/UPGRADE-NOTES-21.md">UPGRADE-NOTES-21.md</a></div>
+</div>
+</article>
+</main>
+</div>
+<div class="footer raised">HUFF native documentation · static HTML · current architecture preserved before production pruning</div>
+<script src="../assets/search-index.js"></script><script src="../assets/docs.js"></script>
+</body></html>

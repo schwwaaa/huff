@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width,initial-scale=1" name="viewport"/>
+<title>Visual Guide & Image Needs — HUFF native docs</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=VT323&amp;family=Share+Tech+Mono&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/docs.css" rel="stylesheet"/>
+</head>
+<body>
+<div class="taskbar">
+<a class="taskbar-brand" href="../index.html">■ HUFF</a>
+<a class="taskbar-btn raised-sm" href="how-it-works.html">Overview</a>
+<a class="taskbar-btn raised-sm" href="feature-index.html">Features</a>
+<a class="taskbar-btn raised-sm" href="visual-guide.html">Visual Guide</a>
+<a class="taskbar-btn raised-sm" href="architecture.html">Architecture</a>
+<a class="taskbar-btn raised-sm" href="troubleshooting.html">Help</a>
+<div class="taskbar-clock raised-sm" id="clock">--:--:--</div>
+</div>
+<div class="site-shell">
+<aside class="sidebar raised">
+<div class="sidebar-title">■ DOCUMENTATION</div>
+<input aria-label="Search documentation pages" class="searchbox" id="docSearch" placeholder="Search pages…" type="search"/>
+<div class="search-results" id="searchResults"></div>
+<div class="nav-group"><div class="nav-group-title">Start Here</div><ul class="doc-nav"><li><a href="how-it-works.html">Native HUFF Overview</a></li><li><a href="feature-index.html">Feature Index</a></li><li><a class="active" href="visual-guide.html">Visual Guide &amp; Image Needs</a></li><li><a href="installation.html">Installation &amp; Builds</a></li><li><a href="interface.html">Interface Tour</a></li></ul></div>
+<div class="nav-group"><div class="nav-group-title">Media &amp; Image</div><ul class="doc-nav"><li><a href="sources.html">Sources &amp; Transport</a></li><li><a href="effects.html">Effects &amp; Compositing</a></li><li><a href="temporal-memory.html">Temporal Memory</a></li><li><a href="routing.html">Routing &amp; Recipes</a></li></ul></div>
+<div class="nav-group"><div class="nav-group-title">State &amp; Control</div><ul class="doc-nav"><li><a href="state.html">Presets, Snapshots &amp; Projects</a></li><li><a href="automation.html">Automation &amp; Sequences</a></li><li><a href="midi.html">MIDI Mapping</a></li><li><a href="osc.html">OSC Mapping</a></li></ul></div>
+<div class="nav-group"><div class="nav-group-title">Output &amp; Export</div><ul class="doc-nav"><li><a href="recording.html">Live Recording</a></li><li><a href="export.html">Still &amp; Offline Export</a></li><li><a href="export-queue.html">Export Queue</a></li><li><a href="output.html">Syphon &amp; Spout</a></li></ul></div>
+<div class="nav-group"><div class="nav-group-title">Operations</div><ul class="doc-nav"><li><a href="verification.html">Verification &amp; Recovery</a></li><li><a href="parity.html">Parity &amp; Calibration</a></li><li><a href="interop.html">Interop Research</a></li><li><a href="testing.html">Testing Strategy</a></li></ul></div>
+<div class="nav-group"><div class="nav-group-title">Reference</div><ul class="doc-nav"><li><a href="parameter-reference.html">Parameter Reference</a></li><li><a href="architecture.html">Architecture</a></li><li><a href="caveats.html">Caveats &amp; Tradeoffs</a></li><li><a href="troubleshooting.html">Troubleshooting</a></li><li><a href="glossary.html">Glossary</a></li></ul></div>
+<div class="sidebar-note">Use this page as the documentation art-direction checklist. It tells you where a diagram is enough and where a true UI screenshot is necessary.</div>
+</aside>
+<main>
+<details class="mobile-nav"><summary>Documentation navigation</summary><div class="nav-group"><div class="nav-group-title">Start Here</div><ul class="doc-nav"><li><a href="how-it-works.html">Native HUFF Overview</a></li><li><a href="feature-index.html">Feature Index</a></li><li><a class="active" href="visual-guide.html">Visual Guide &amp; Image Needs</a></li><li><a href="installation.html">Installation &amp; Builds</a></li><li><a href="interface.html">Interface Tour</a></li></ul></div></details>
+<article class="window">
+<div class="win-titlebar"><span class="win-titlebar-title">Visual Guide &amp; Image Needs</span><div class="win-controls"><div class="win-btn">_</div><div class="win-btn">□</div><div class="win-btn">✕</div></div></div>
+<div class="win-body doc-content">
+<div class="breadcrumb"><a href="../index.html">HUFF docs</a> / Start Here / Visual Guide &amp; Image Needs</div>
+<div class="page-meta"><span class="badge">INTEGRATED</span><span class="badge">DESIGN CHECKLIST</span></div>
+<p class="page-lead">This page translates the documentation into a media plan. For each page, it identifies whether the reader needs a <strong>diagram</strong>, a <strong>true UI screenshot</strong>, or an <strong>output example</strong>. The goal is to make the site easier for new people without filling every page with redundant images.</p>
+<div class="page-toc" id="pageToc"><div class="page-toc-title">ON THIS PAGE</div></div>
+<h2>How to use this checklist</h2>
+<ul>
+<li><strong>Diagram</strong> means a conceptual drawing is enough; it explains structure better than a screenshot.</li>
+<li><strong>UI screenshot</strong> means the reader needs to see a real panel, overlay, or control layout.</li>
+<li><strong>Output example</strong> means the page benefits from one or more still frames produced by HUFF.</li>
+<li><strong>Priority</strong> tells you what to capture first if time is limited.</li>
+</ul>
+<div class="callout note"><strong>Best first capture set.</strong> If you only gather a few images now, start with: the full control window, the output window, the VERIFY overlay, the INTEROP overlay, the routing/recipe controls, the export overlay, and four strong output stills showing different visual looks.</div>
+<h2>Recommended gallery sets</h2>
+<div class="table-wrap"><table class="win-table"><thead><tr><th>Gallery</th><th>What it should contain</th><th>Why it matters</th></tr></thead><tbody>
+<tr><td>Project Gallery</td><td>4–8 final HUFF output stills or short loop thumbnails</td><td>Shows what the instrument makes before the reader learns how it works.</td></tr>
+<tr><td>Interface Gallery</td><td>Control window, output window, VERIFY, INTEROP, export panel, MIDI/OSC mapping windows</td><td>Shows that HUFF is a real application and not just an abstract architecture.</td></tr>
+<tr><td>Diagram Gallery</td><td>Native effect pipeline, render buses, temporal memory, output paths, verification flow</td><td>Gives newcomers a mental model before they dive into details.</td></tr>
+</tbody></table></div>
+<h2>Page-by-page image requirements</h2>
+<div class="table-wrap"><table class="win-table"><thead><tr><th>Page</th><th>Needed visual</th><th>Priority</th><th>What to show</th></tr></thead><tbody>
+<tr><td>Native HUFF Overview</td><td><span class="checklist-tag">diagram</span><span class="checklist-tag">output example</span></td><td>High</td><td>One native system overview diagram and one finished output still. This page should orient new readers fast.</td></tr>
+<tr><td>Feature Index</td><td><span class="checklist-tag">none required</span></td><td>Low</td><td>Can remain mostly textual because it is an index page.</td></tr>
+<tr><td>Installation &amp; Builds</td><td><span class="checklist-tag">diagram optional</span></td><td>Low</td><td>A small install flow diagram is enough; screenshots are not essential.</td></tr>
+<tr><td>Interface Tour</td><td><span class="checklist-tag">UI screenshot</span></td><td>Highest</td><td>Full control window and output window, annotated if possible.</td></tr>
+<tr><td>Sources &amp; Transport</td><td><span class="checklist-tag">UI screenshot</span><span class="checklist-tag">diagram</span></td><td>High</td><td>Source-selection section of the UI plus a simple ownership diagram for video file vs camera.</td></tr>
+<tr><td>Effects &amp; Compositing</td><td><span class="checklist-tag">diagram</span><span class="checklist-tag">output example</span></td><td>Highest</td><td>Updated native effect pipeline diagram plus multiple output stills that isolate Glitch, Flow, Scanlines, and Feedback.</td></tr>
+<tr><td>Temporal Memory</td><td><span class="checklist-tag">diagram</span></td><td>High</td><td>Render-bus or temporal-memory diagram is better than a screenshot. Optional screenshot of Clear Buffers controls.</td></tr>
+<tr><td>Routing &amp; Recipes</td><td><span class="checklist-tag">diagram</span><span class="checklist-tag">UI screenshot</span></td><td>Highest</td><td>Recipe expansion diagram plus a screenshot of the routing controls so the concept feels real.</td></tr>
+<tr><td>Presets, Snapshots &amp; Projects</td><td><span class="checklist-tag">UI screenshot</span><span class="checklist-tag">diagram optional</span></td><td>Medium</td><td>State save/load UI. A diagram helps only if the state model feels confusing.</td></tr>
+<tr><td>Automation &amp; Sequences</td><td><span class="checklist-tag">UI screenshot</span><span class="checklist-tag">diagram</span></td><td>Medium</td><td>Show the automation controls. A small timeline-style diagram can explain deterministic replay.</td></tr>
+<tr><td>MIDI Mapping</td><td><span class="checklist-tag">UI screenshot</span></td><td>High</td><td>The mapping editor should be shown directly. A screenshot is more useful than a diagram here.</td></tr>
+<tr><td>OSC Mapping</td><td><span class="checklist-tag">UI screenshot</span></td><td>High</td><td>Show OSC mapping and test controls. Readers need to see actual fields and addresses.</td></tr>
+<tr><td>Live Recording</td><td><span class="checklist-tag">UI screenshot</span></td><td>Medium</td><td>Recording controls are enough. No special diagram is required.</td></tr>
+<tr><td>Still &amp; Offline Export</td><td><span class="checklist-tag">UI screenshot</span><span class="checklist-tag">diagram</span></td><td>Highest</td><td>Export controls plus a small diagram of deterministic export versus live recording.</td></tr>
+<tr><td>Export Queue</td><td><span class="checklist-tag">UI screenshot if retained</span></td><td>Medium</td><td>If the queue remains visible, it needs a screenshot. If hidden later, the current text may be enough.</td></tr>
+<tr><td>Syphon &amp; Spout</td><td><span class="checklist-tag">diagram</span><span class="checklist-tag">UI screenshot optional</span></td><td>Medium</td><td>The output-path diagram is primary. A sender-control screenshot is useful but not mandatory.</td></tr>
+<tr><td>Verification &amp; Recovery</td><td><span class="checklist-tag">UI screenshot</span><span class="checklist-tag">diagram</span></td><td>Highest</td><td>VERIFY overlay and verification-recovery diagram. This is one of the clearest new native-only features.</td></tr>
+<tr><td>Parity &amp; Calibration</td><td><span class="checklist-tag">UI screenshot optional</span></td><td>Low</td><td>Mostly conceptual. A screenshot is helpful only if you keep the Parity Lab visible in production.</td></tr>
+<tr><td>Interop Research</td><td><span class="checklist-tag">UI screenshot</span><span class="checklist-tag">diagram</span></td><td>High</td><td>INTEROP overlay plus the output-copy-path diagram.</td></tr>
+<tr><td>Testing Strategy</td><td><span class="checklist-tag">none required</span></td><td>Low</td><td>This page can remain mostly text and tables.</td></tr>
+<tr><td>Parameter Reference</td><td><span class="checklist-tag">none required</span></td><td>Low</td><td>Reference table only; screenshots would add noise.</td></tr>
+<tr><td>Architecture</td><td><span class="checklist-tag">diagram</span></td><td>Highest</td><td>Multiple diagrams are appropriate. This is an architecture page, not a screenshot page.</td></tr>
+<tr><td>Caveats &amp; Tradeoffs</td><td><span class="checklist-tag">none required</span></td><td>Low</td><td>Text is the right format here.</td></tr>
+<tr><td>Troubleshooting</td><td><span class="checklist-tag">UI screenshot optional</span></td><td>Low</td><td>Only add screenshots if they directly help identify a control or warning state.</td></tr>
+<tr><td>Glossary</td><td><span class="checklist-tag">none required</span></td><td>Low</td><td>Pure reference page.</td></tr>
+</tbody></table></div>
+<h2>Immediate capture priorities</h2>
+<ol class="steps">
+<li>Capture one clean full-window screenshot of the control surface.</li>
+<li>Capture one screenshot of the output window showing a strong visual state.</li>
+<li>Capture VERIFY and INTEROP overlays.</li>
+<li>Capture the routing/recipe controls and the export controls.</li>
+<li>Render 4–8 good output stills for the public-facing gallery.</li>
+<li>Only after that, capture secondary screens such as MIDI, OSC, presets, and queue.</li>
+</ol>
+<h2>What can stay diagram-only</h2>
+<p>Architecture, temporal memory, routing concepts, and output paths are best communicated by diagrams. Screenshots do not explain these relationships well enough on their own.</p>
+<h2>What absolutely needs real screenshots</h2>
+<p>Interface Tour, MIDI, OSC, Verification, Interop, and export controls should show the actual UI. Those pages describe concrete operator workflows, so diagrams alone would feel too abstract.</p>
+<div class="source-list"><strong>Related documentation</strong><br/><a href="interface.html">Interface Tour</a> · <a href="effects.html">Effects &amp; Compositing</a> · <a href="routing.html">Routing &amp; Recipes</a> · <a href="verification.html">Verification &amp; Recovery</a> · <a href="interop.html">Interop Research</a></div>
+</div>
+</article>
+</main>
+</div>
+<div class="footer raised">HUFF native documentation · media planning checklist for future screenshots and diagrams</div>
+<script src="../assets/search-index.js"></script><script src="../assets/docs.js"></script>
+</body>
+</html>

@@ -1,348 +1,48 @@
 <!DOCTYPE html>
+
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1"/>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css"/>
-<link href="https://fonts.googleapis.com/css2?family=VT323&family=Share+Tech+Mono&display=swap" rel="stylesheet">
-<title>Parameter Reference — huff docs</title>
-
-<style>
-:root {
-  --gray:  #C0C0C0; --light: #FFFFFF; --mid: #808080; --dark: #404040;
-  --red:   #ff4647; --black: #000000; --green: #00FF00; --dgreen: #00CC00;
-  --teal:  #008080;
-}
-*,*::before,*::after{box-sizing:border-box;}
-body {
-  background:var(--teal);
-  background-image:repeating-linear-gradient(45deg,rgba(0,0,0,.06) 0px,rgba(0,0,0,.06) 1px,transparent 1px,transparent 5px);
-  font-family:'VT323','Courier New',monospace;
-  color:#000; min-height:100vh; padding-bottom:40px;
-}
-.raised    {border-top:2px solid var(--light);border-left:2px solid var(--light);border-bottom:2px solid var(--dark);border-right:2px solid var(--dark);}
-.inset     {border-top:2px solid var(--dark);border-left:2px solid var(--dark);border-bottom:2px solid var(--light);border-right:2px solid var(--light);}
-.raised-sm {border-top:1px solid var(--light);border-left:1px solid var(--light);border-bottom:1px solid var(--dark);border-right:1px solid var(--dark);}
-/* Taskbar */
-.taskbar {
-  position:sticky;top:0;z-index:1000;
-  background:var(--gray);
-  border-top:2px solid var(--light);border-bottom:2px solid var(--dark);
-  padding:3px 8px;display:flex;align-items:center;gap:4px;flex-wrap:wrap;
-}
-.taskbar-brand {
-  background:linear-gradient(90deg,var(--red),#cc2222);color:#fff;
-  font-size:16px;padding:2px 12px;letter-spacing:.08em;
-  border-top:2px solid #ff9999;border-left:2px solid #ff9999;
-  border-bottom:2px solid #770000;border-right:2px solid #770000;
-  white-space:nowrap;text-decoration:none;
-}
-.taskbar-btn {
-  background:var(--gray);color:#000;font-family:'VT323',monospace;
-  font-size:14px;padding:2px 10px;text-decoration:none;
-  white-space:nowrap;display:inline-block;
-}
-.taskbar-btn:hover{background:#D4D0C8;color:#000;}
-.taskbar-clock{margin-left:auto;font-family:'Share Tech Mono',monospace;font-size:13px;padding:2px 10px;}
-/* Window */
-.window{background:var(--gray);border-top:3px solid var(--light);border-left:3px solid var(--light);border-bottom:3px solid var(--dark);border-right:3px solid var(--dark);}
-.win-titlebar{background:linear-gradient(90deg,var(--red),#cc2222);color:#fff;font-size:15px;padding:3px 8px;display:flex;align-items:center;justify-content:space-between;letter-spacing:.06em;user-select:none;}
-.win-titlebar-title::before{content:'■ ';font-size:10px;}
-.win-controls{display:flex;gap:2px;}
-.win-btn{background:var(--gray);color:#000;font-family:'VT323',monospace;font-size:12px;border-top:1px solid var(--light);border-left:1px solid var(--light);border-bottom:1px solid var(--dark);border-right:1px solid var(--dark);width:18px;height:16px;display:flex;align-items:center;justify-content:center;}
-.win-body{padding:14px 16px;}
-/* Sidebar nav */
-.doc-nav {
-  background:var(--gray);
-  border-top:2px solid var(--light);border-left:2px solid var(--light);
-  border-bottom:2px solid var(--dark);border-right:2px solid var(--dark);
-}
-.doc-nav .nav-title {
-  background:linear-gradient(90deg,var(--red),#cc2222);
-  color:#fff;font-size:13px;padding:3px 8px;letter-spacing:.08em;
-}
-.doc-nav-list{list-style:none;margin:0;padding:4px 0;}
-.doc-nav-list li a {
-  display:block;padding:3px 10px;font-size:14px;letter-spacing:.05em;
-  color:#000;text-decoration:none;
-}
-.doc-nav-list li a:hover{background:#D4D0C8;}
-.doc-nav-list li a.active{background:var(--black);color:var(--green);}
-.doc-nav-sep{height:1px;background:var(--mid);margin:3px 6px;}
-/* Term */
-.term{background:var(--black);border-top:2px solid var(--dark);border-left:2px solid var(--dark);border-bottom:2px solid var(--light);border-right:2px solid var(--light);padding:10px 14px;font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--green);line-height:1.65;overflow-x:auto;}
-.term .comment{color:#006600;}
-.term .dim{color:#009900;}
-/* Section label */
-.section-label{font-size:13px;font-weight:bold;letter-spacing:.18em;text-transform:uppercase;color:var(--red);border-bottom:2px solid var(--mid);padding-bottom:3px;margin-bottom:10px;}
-/* Tables */
-.win-table{width:100%;border-collapse:collapse;font-family:'Share Tech Mono',monospace;font-size:12px;}
-.win-table th{background:var(--gray);text-align:left;font-family:'VT323',monospace;font-size:13px;letter-spacing:.1em;color:var(--red);padding:3px 8px;border-bottom:2px solid var(--mid);}
-.win-table td{padding:4px 8px;border-bottom:1px solid #B8B8B8;color:#222;vertical-align:top;}
-.win-table tr:nth-child(even) td{background:#D4D0C8;}
-.win-table td:first-child{font-weight:bold;white-space:nowrap;}
-.win-table code{font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--black);}
-/* Callout */
-.callout{background:var(--black);border-left:3px solid var(--red);border-top:1px solid var(--dark);border-bottom:1px solid var(--light);border-right:1px solid var(--light);padding:8px 12px;font-family:'Share Tech Mono',monospace;font-size:12px;color:#AAAAAA;line-height:1.6;}
-.callout strong{color:var(--green);}
-.callout.warn{border-left-color:#FFFF00;}
-.callout.warn strong{color:#FFFF00;}
-.callout.note{border-left-color:var(--green);}
-/* Breadcrumb */
-.breadcrumb-win{font-size:12px;font-family:'Share Tech Mono',monospace;color:#555;padding:4px 0 8px;letter-spacing:.04em;}
-.breadcrumb-win a{color:var(--red);text-decoration:none;}
-.breadcrumb-win a:hover{text-decoration:underline;}
-/* Back btn */
-.back-btn{font-family:'VT323',monospace;font-size:14px;padding:2px 10px;background:var(--gray);color:#000;text-decoration:none;display:inline-block;border-top:2px solid var(--light);border-left:2px solid var(--light);border-bottom:2px solid var(--dark);border-right:2px solid var(--dark);}
-.back-btn:hover{background:#D4D0C8;color:#000;}
-/* Content typography */
-.doc-content h2{font-size:20px;font-weight:bold;letter-spacing:.1em;color:var(--red);margin:20px 0 8px;text-transform:uppercase;}
-.doc-content h3{font-size:16px;font-weight:bold;letter-spacing:.08em;color:#333;margin:14px 0 6px;text-transform:uppercase;}
-.doc-content p{font-family:'Share Tech Mono',monospace;font-size:12px;line-height:1.7;margin-bottom:10px;color:#222;}
-.doc-content ul,.doc-content ol{font-family:'Share Tech Mono',monospace;font-size:12px;line-height:1.8;padding-left:20px;margin-bottom:10px;color:#222;}
-.doc-content li{margin-bottom:2px;}
-.doc-content code{font-family:'Share Tech Mono',monospace;font-size:11px;background:#D4D0C8;padding:1px 4px;color:#000;}
-.doc-content strong{color:#000;}
-.doc-content a{color:var(--red);}
-.doc-content a:hover{color:#cc0000;}
-.doc-content hr{border:none;border-top:2px solid var(--mid);margin:16px 0;}
-/* Mobile */
-@media(max-width:767px){
-  .taskbar-btn{font-size:12px;padding:2px 6px;}
-  .win-titlebar{font-size:13px;}
-  .term{font-size:11px;}
-  .doc-nav{margin-bottom:10px;}
-}
-</style>
-</head>
+<meta content="width=device-width,initial-scale=1" name="viewport"/>
+<title>Parameter Reference — HUFF native docs</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=VT323&amp;family=Share+Tech+Mono&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/docs.css" rel="stylesheet">
+</link></head>
 <body>
 <div class="taskbar">
-  <a class="taskbar-brand" href="../index.html">■ huff</a>
-  <a class="taskbar-btn raised-sm" href="../index.html">Home</a>
-  <a class="taskbar-btn raised-sm" href="how-it-works.html">How It Works</a>
-  <a class="taskbar-btn raised-sm" href="installation.html">Install</a>
-  <a class="taskbar-btn raised-sm" href="interface.html">Interface</a>
-  <a class="taskbar-btn raised-sm" href="midi.html">MIDI</a>
-  <a class="taskbar-btn raised-sm" href="osc.html">OSC</a>
-  <a class="taskbar-btn raised-sm" href="output.html">Output</a>
-  <div class="taskbar-clock raised-sm" id="clock">--:--:--</div>
+<a class="taskbar-brand" href="../index.html">■ HUFF</a>
+<a class="taskbar-btn raised-sm" href="how-it-works.html">Overview</a>
+<a class="taskbar-btn raised-sm" href="feature-index.html">Features</a>
+<a class="taskbar-btn raised-sm" href="architecture.html">Architecture</a>
+<a class="taskbar-btn raised-sm" href="visual-guide.html">Visual Guide</a>
+<a class="taskbar-btn raised-sm" href="troubleshooting.html">Help</a>
+<div class="taskbar-clock raised-sm" id="clock">--:--:--</div>
 </div>
-<div class="container-fluid px-2 px-md-3 mt-3">
-  <div class="row g-3">
-    <div class="col-12 col-md-3 col-lg-2">
-      <div class="doc-nav">
-  <div class="nav-title">■ DOCUMENTATION</div>
-  <ul class="doc-nav-list">
-    <li><a href="../index.html">← Back to huff</a></li>
-    <li><div class="doc-nav-sep"></div></li>
-    <li><a href="how-it-works.html">How It Works</a></li>
-<li><a href="installation.html">Installation</a></li>
-<li><a href="interface.html">The Interface</a></li>
-<li><a href="midi.html">MIDI</a></li>
-<li><a href="osc.html">OSC</a></li>
-<li><a href="output.html">Video Output</a></li>
-<li><a href="parameter-reference.html" class="active">Parameter Reference</a></li>
-<li><a href="architecture.html">Architecture</a></li>
-<li><a href="caveats.html">Caveats</a></li>
-<li><a href="troubleshooting.html">Troubleshooting</a></li>
-
-  </ul>
+<div class="site-shell">
+<aside class="sidebar raised">
+<div class="sidebar-title">■ DOCUMENTATION</div>
+<input aria-label="Search documentation pages" class="searchbox" id="docSearch" placeholder="Search pages…" type="search"/>
+<div class="search-results" id="searchResults"></div>
+<div class="nav-group"><div class="nav-group-title">Start Here</div><ul class="doc-nav"><li><a href="how-it-works.html">Native HUFF Overview</a></li><li><a href="feature-index.html">Feature Index</a></li><li><a href="visual-guide.html">Visual Guide &amp; Image Needs</a></li><li><a href="installation.html">Installation &amp; Builds</a></li><li><a href="interface.html">Interface Tour</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Media &amp; Image</div><ul class="doc-nav"><li><a href="sources.html">Sources &amp; Transport</a></li><li><a href="effects.html">Effects &amp; Compositing</a></li><li><a href="temporal-memory.html">Temporal Memory</a></li><li><a href="routing.html">Routing &amp; Recipes</a></li></ul></div><div class="nav-group"><div class="nav-group-title">State &amp; Control</div><ul class="doc-nav"><li><a href="state.html">Presets, Snapshots &amp; Projects</a></li><li><a href="automation.html">Automation &amp; Sequences</a></li><li><a href="midi.html">MIDI Mapping</a></li><li><a href="osc.html">OSC Mapping</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Output &amp; Export</div><ul class="doc-nav"><li><a href="recording.html">Live Recording</a></li><li><a href="export.html">Still &amp; Offline Export</a></li><li><a href="export-queue.html">Export Queue</a></li><li><a href="output.html">Syphon &amp; Spout</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Operations</div><ul class="doc-nav"><li><a href="verification.html">Verification &amp; Recovery</a></li><li><a href="parity.html">Parity &amp; Calibration</a></li><li><a href="interop.html">Interop Research</a></li><li><a href="testing.html">Testing Strategy</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Reference</div><ul class="doc-nav"><li><a class="active" href="parameter-reference.html">Parameter Reference</a></li><li><a href="architecture.html">Architecture</a></li><li><a href="caveats.html">Caveats &amp; Tradeoffs</a></li><li><a href="troubleshooting.html">Troubleshooting</a></li><li><a href="glossary.html">Glossary</a></li></ul></div>
+<div class="sidebar-note">Build documented: <strong>0.21.0 / HNW-21</strong><br/>The incoming legacy docs are preserved under <code>archive/original-docs/</code>.</div>
+</aside>
+<main>
+<details class="mobile-nav raised"><summary>Documentation navigation</summary><div class="nav-group"><div class="nav-group-title">Start Here</div><ul class="doc-nav"><li><a href="how-it-works.html">Native HUFF Overview</a></li><li><a href="feature-index.html">Feature Index</a></li><li><a href="visual-guide.html">Visual Guide &amp; Image Needs</a></li><li><a href="installation.html">Installation &amp; Builds</a></li><li><a href="interface.html">Interface Tour</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Media &amp; Image</div><ul class="doc-nav"><li><a href="sources.html">Sources &amp; Transport</a></li><li><a href="effects.html">Effects &amp; Compositing</a></li><li><a href="temporal-memory.html">Temporal Memory</a></li><li><a href="routing.html">Routing &amp; Recipes</a></li></ul></div><div class="nav-group"><div class="nav-group-title">State &amp; Control</div><ul class="doc-nav"><li><a href="state.html">Presets, Snapshots &amp; Projects</a></li><li><a href="automation.html">Automation &amp; Sequences</a></li><li><a href="midi.html">MIDI Mapping</a></li><li><a href="osc.html">OSC Mapping</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Output &amp; Export</div><ul class="doc-nav"><li><a href="recording.html">Live Recording</a></li><li><a href="export.html">Still &amp; Offline Export</a></li><li><a href="export-queue.html">Export Queue</a></li><li><a href="output.html">Syphon &amp; Spout</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Operations</div><ul class="doc-nav"><li><a href="verification.html">Verification &amp; Recovery</a></li><li><a href="parity.html">Parity &amp; Calibration</a></li><li><a href="interop.html">Interop Research</a></li><li><a href="testing.html">Testing Strategy</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Reference</div><ul class="doc-nav"><li><a class="active" href="parameter-reference.html">Parameter Reference</a></li><li><a href="architecture.html">Architecture</a></li><li><a href="caveats.html">Caveats &amp; Tradeoffs</a></li><li><a href="troubleshooting.html">Troubleshooting</a></li><li><a href="glossary.html">Glossary</a></li></ul></div></details>
+<article class="window">
+<div class="win-titlebar"><span class="win-titlebar-title">Parameter Reference</span><div class="win-controls"><div class="win-btn">_</div><div class="win-btn">□</div><div class="win-btn">✕</div></div></div>
+<div class="win-body doc-content">
+<div class="breadcrumb"><a href="../index.html">HUFF docs</a> / Reference / Parameter Reference</div>
+<div class="page-meta"><span class="badge">INTEGRATED</span><span class="badge">0.21.0 / HNW-21</span></div>
+<p class="page-lead">The Milestone 21 registry contains 100 canonical parameters across Source, Frame History, Feedback, Glitch, Clusters, Layer Priority, Smoosh, Luma Key, Scanlines, Global Mix, Flow, and Routing.</p>
+<div class="page-toc" id="pageToc"><div class="page-toc-title">ON THIS PAGE</div></div>
+<h2>How to read the registry</h2><p>The canonical ID is the stable engine-facing name. The legacy ID preserves compatibility with the earlier HTML/JavaScript controls. Range and options are validated by Rust. “Implemented: No” means the definition is preserved but the behavior is not currently active.</p><h2>Source</h2><div class="table-wrap"><table class="win-table"><thead><tr><th>Label</th><th>Canonical ID</th><th>Legacy ID</th><th>Kind</th><th>Default</th><th>Range / options</th><th>Implemented</th><th>Milestone</th></tr></thead><tbody><tr><td>BASE ON</td><td><code>source.base_enabled</code></td><td><code>baseOn</code></td><td>Bool</td><td>true</td><td>true / false</td><td><span class="status-yes">Yes</span></td><td>02</td></tr><tr><td>BASE MIX</td><td><code>source.base_mix</code></td><td><code>baseMix</code></td><td>Number</td><td>1</td><td>0.0 … 1.0; step 0.05</td><td><span class="status-yes">Yes</span></td><td>02</td></tr><tr><td>BG MODE</td><td><code>source.background</code></td><td><code>bgMode</code></td><td>Select</td><td>black</td><td>black / green / blue / white</td><td><span class="status-yes">Yes</span></td><td>02</td></tr><tr><td>SEED ON LOAD</td><td><code>source.seed_on_load</code></td><td><code>seedOnLoad</code></td><td>Bool</td><td>true</td><td>true / false</td><td><span class="status-no">No</span></td><td>future</td></tr><tr><td>SEED</td><td><code>source.seed</code></td><td><code>seed</code></td><td>Number</td><td>912831</td><td>— … —; step 1.0</td><td><span class="status-yes">Yes</span></td><td>04</td></tr><tr><td>QUALITY</td><td><code>render.quality</code></td><td><code>quality</code></td><td>Number</td><td>1</td><td>0.0 … 3.0; step 0.05</td><td><span class="status-yes">Yes</span></td><td>03</td></tr><tr><td>RENDER RESOLUTION</td><td><code>render.resolution_mode</code></td><td><code>renderResolution</code></td><td>Select</td><td>match</td><td>match / 640x360 / 960x540 / 1280x720 / 1920x1080 / custom</td><td><span class="status-yes">Yes</span></td><td>02</td></tr><tr><td>BRIGHTNESS</td><td><code>color.brightness</code></td><td><code>brightness</code></td><td>Number</td><td>1</td><td>0.0 … 2.0; step 0.01</td><td><span class="status-yes">Yes</span></td><td>02</td></tr><tr><td>CONTRAST</td><td><code>color.contrast</code></td><td><code>contrast</code></td><td>Number</td><td>1</td><td>0.0 … 2.0; step 0.01</td><td><span class="status-yes">Yes</span></td><td>02</td></tr><tr><td>RENDER CUSTOM W</td><td><code>render.custom_width</code></td><td><code>renderCustomW</code></td><td>Number</td><td>1280</td><td>160.0 … 3840.0; step 1.0</td><td><span class="status-yes">Yes</span></td><td>02</td></tr><tr><td>RENDER CUSTOM H</td><td><code>render.custom_height</code></td><td><code>renderCustomH</code></td><td>Number</td><td>720</td><td>160.0 … 2160.0; step 1.0</td><td><span class="status-yes">Yes</span></td><td>02</td></tr></tbody></table></div><h2>Frame History</h2><div class="table-wrap"><table class="win-table"><thead><tr><th>Label</th><th>Canonical ID</th><th>Legacy ID</th><th>Kind</th><th>Default</th><th>Range / options</th><th>Implemented</th><th>Milestone</th></tr></thead><tbody><tr><td>HISTORY PRESET</td><td><code>history.preset</code></td><td><code>historyPreset</code></td><td>Select</td><td>maximum</td><td>maximum / balanced / performance / custom</td><td><span class="status-yes">Yes</span></td><td>02</td></tr><tr><td>HISTORY RESOLUTION</td><td><code>history.resolution</code></td><td><code>historyResolution</code></td><td>Select</td><td>full</td><td>full / 75 / 50 / 25 / custom</td><td><span class="status-yes">Yes</span></td><td>02</td></tr><tr><td>HISTORY CUSTOM W</td><td><code>history.custom_width</code></td><td><code>historyCustomW</code></td><td>Number</td><td>960</td><td>64.0 … 3840.0; step 1.0</td><td><span class="status-yes">Yes</span></td><td>02</td></tr><tr><td>HISTORY CUSTOM H</td><td><code>history.custom_height</code></td><td><code>historyCustomH</code></td><td>Number</td><td>540</td><td>64.0 … 2160.0; step 1.0</td><td><span class="status-yes">Yes</span></td><td>02</td></tr><tr><td>HISTORY CAPTURE RATE</td><td><code>history.capture_rate</code></td><td><code>historyCaptureRate</code></td><td>Select</td><td>every</td><td>every / 30 / 24 / 15 / 10</td><td><span class="status-yes">Yes</span></td><td>02</td></tr><tr><td>HISTORY SAMPLING</td><td><code>history.sampling</code></td><td><code>historySampling</code></td><td>Select</td><td>smooth</td><td>smooth / crisp</td><td><span class="status-yes">Yes</span></td><td>02</td></tr></tbody></table></div><h2>Feedback</h2><div class="table-wrap"><table class="win-table"><thead><tr><th>Label</th><th>Canonical ID</th><th>Legacy ID</th><th>Kind</th><th>Default</th><th>Range / options</th><th>Implemented</th><th>Milestone</th></tr></thead><tbody><tr><td>FEEDBACK</td><td><code>feedback.amount</code></td><td><code>feedback</code></td><td>Number</td><td>0.6</td><td>0.0 … 3.0; step 0.05</td><td><span class="status-yes">Yes</span></td><td>02</td></tr><tr><td>PERSISTENCE</td><td><code>feedback.persistence</code></td><td><code>persistence</code></td><td>Number</td><td>0.7</td><td>0.0 … 10.0; step 0.05</td><td><span class="status-yes">Yes</span></td><td>02</td></tr><tr><td>FB X</td><td><code>feedback.translate_x</code></td><td><code>fbX</code></td><td>Number</td><td>1</td><td>-1.0 … 1.0; step 0.001</td><td><span class="status-yes">Yes</span></td><td>02</td></tr><tr><td>FB Y</td><td><code>feedback.translate_y</code></td><td><code>fbY</code></td><td>Number</td><td>1</td><td>-1.0 … 1.0; step 0.001</td><td><span class="status-yes">Yes</span></td><td>02</td></tr><tr><td>FB Z</td><td><code>feedback.scale</code></td><td><code>fbZ</code></td><td>Number</td><td>1</td><td>0.98 … 1.03; step 0.005</td><td><span class="status-yes">Yes</span></td><td>02</td></tr><tr><td>FB THETA</td><td><code>feedback.rotation</code></td><td><code>fbTheta</code></td><td>Number</td><td>0.01</td><td>-2.0 … 2.0; step 0.005</td><td><span class="status-yes">Yes</span></td><td>02</td></tr></tbody></table></div><h2>Glitch</h2><div class="table-wrap"><table class="win-table"><thead><tr><th>Label</th><th>Canonical ID</th><th>Legacy ID</th><th>Kind</th><th>Default</th><th>Range / options</th><th>Implemented</th><th>Milestone</th></tr></thead><tbody><tr><td>CORRUPT ON</td><td><code>glitch.corrupt_on</code></td><td><code>corruptOn</code></td><td>Bool</td><td>false</td><td>true / false</td><td><span class="status-yes">Yes</span></td><td>03</td></tr><tr><td>DEPTH</td><td><code>glitch.depth</code></td><td><code>depth</code></td><td>Number</td><td>0.5</td><td>0.0 … 0.5; step 0.01</td><td><span class="status-yes">Yes</span></td><td>03</td></tr><tr><td>DEPTH SCATTER</td><td><code>glitch.depth_scatter</code></td><td><code>depthScatter</code></td><td>Number</td><td>1</td><td>0.0 … 1.0; step 0.01</td><td><span class="status-yes">Yes</span></td><td>04</td></tr><tr><td>CORRUPT</td><td><code>glitch.corrupt</code></td><td><code>corrupt</code></td><td>Number</td><td>0.3</td><td>0.0 … 7.0; step 0.01</td><td><span class="status-yes">Yes</span></td><td>03</td></tr><tr><td>CORRUPT DRIFT</td><td><code>glitch.corrupt_drift</code></td><td><code>corruptDrift</code></td><td>Number</td><td>0</td><td>0.0 … 1.0; step 0.01</td><td><span class="status-yes">Yes</span></td><td>04</td></tr><tr><td>BLOCK</td><td><code>glitch.block</code></td><td><code>block</code></td><td>Number</td><td>1000</td><td>150.0 … 2000.0; step 2.0</td><td><span class="status-yes">Yes</span></td><td>04</td></tr><tr><td>GLITCH SIZE</td><td><code>glitch.glitch_size</code></td><td><code>glitchSize</code></td><td>Number</td><td>10</td><td>1.0 … 60.0; step 0.01</td><td><span class="status-yes">Yes</span></td><td>04</td></tr><tr><td>GLITCH ALPHA</td><td><code>glitch.glitch_alpha</code></td><td><code>glitchAlpha</code></td><td>Number</td><td>1</td><td>0.0 … 1.0; step 0.01</td><td><span class="status-yes">Yes</span></td><td>03</td></tr><tr><td>GLITCH JITTER</td><td><code>glitch.glitch_jitter</code></td><td><code>glitchJitter</code></td><td>Number</td><td>1</td><td>0.0 … 1.0; step 0.01</td><td><span class="status-yes">Yes</span></td><td>04</td></tr><tr><td>GLITCH SMEAR</td><td><code>glitch.glitch_smear</code></td><td><code>glitchSmear</code></td><td>Number</td><td>6</td><td>0.0 … 200.0; step 0.01</td><td><span class="status-yes">Yes</span></td><td>04</td></tr><tr><td>GLITCH SMEAR ANGLE</td><td><code>glitch.glitch_smear_angle</code></td><td><code>glitchSmearAngle</code></td><td>Number</td><td>0</td><td>0.0 … 360.0; step 1.0</td><td><span class="status-yes">Yes</span></td><td>04</td></tr><tr><td>GLITCH SPEED</td><td><code>glitch.glitch_speed</code></td><td><code>glitchSpeed</code></td><td>Number</td><td>0.8</td><td>0.0 … 5.0; step 0.005</td><td><span class="status-yes">Yes</span></td><td>04</td></tr><tr><td>GLITCH SPEED FINE</td><td><code>glitch.glitch_speed_fine</code></td><td><code>glitchSpeedFine</code></td><td>Number</td><td>1</td><td>0.0 … 10.0; step 0.001</td><td><span class="status-yes">Yes</span></td><td>04</td></tr><tr><td>GLITCH SPEED MUL</td><td><code>glitch.glitch_speed_mul</code></td><td><code>glitchSpeedMul</code></td><td>Number</td><td>1</td><td>0.0 … 10.0; step 0.1</td><td><span class="status-yes">Yes</span></td><td>04</td></tr><tr><td>GLITCH BASE X</td><td><code>glitch.glitch_base_x</code></td><td><code>glitchBaseX</code></td><td>Number</td><td>0</td><td>-1000.0 … 1000.0; step 1.0</td><td><span class="status-yes">Yes</span></td><td>04</td></tr><tr><td>GLITCH BASE Y</td><td><code>glitch.glitch_base_y</code></td><td><code>glitchBaseY</code></td><td>Number</td><td>0</td><td>-1000.0 … 1000.0; step 1.0</td><td><span class="status-yes">Yes</span></td><td>04</td></tr></tbody></table></div><h2>Clusters</h2><div class="table-wrap"><table class="win-table"><thead><tr><th>Label</th><th>Canonical ID</th><th>Legacy ID</th><th>Kind</th><th>Default</th><th>Range / options</th><th>Implemented</th><th>Milestone</th></tr></thead><tbody><tr><td>CLUSTER TILES</td><td><code>clusters.cluster_tiles</code></td><td><code>clusterTiles</code></td><td>Bool</td><td>false</td><td>true / false</td><td><span class="status-yes">Yes</span></td><td>05</td></tr><tr><td>CLU CENTERS</td><td><code>clusters.clu_centers</code></td><td><code>cluCenters</code></td><td>Number</td><td>3</td><td>1.0 … 20.0; step 1.0</td><td><span class="status-yes">Yes</span></td><td>05</td></tr><tr><td>CLU SPREAD</td><td><code>clusters.clu_spread</code></td><td><code>cluSpread</code></td><td>Number</td><td>80</td><td>1.0 … 300.0; step 1.0</td><td><span class="status-yes">Yes</span></td><td>05</td></tr><tr><td>CLU MIN SPREAD</td><td><code>clusters.clu_min_spread</code></td><td><code>cluMinSpread</code></td><td>Number</td><td>0</td><td>0.0 … 150.0; step 1.0</td><td><span class="status-yes">Yes</span></td><td>05</td></tr><tr><td>SPATIAL GAP</td><td><code>clusters.spatial_gap</code></td><td><code>spatialGap</code></td><td>Number</td><td>40</td><td>0.0 … 200.0; step 1.0</td><td><span class="status-yes">Yes</span></td><td>04.1</td></tr><tr><td>CLU BIAS</td><td><code>clusters.clu_bias</code></td><td><code>cluBias</code></td><td>Number</td><td>0.85</td><td>0.0 … 1.0; step 0.01</td><td><span class="status-yes">Yes</span></td><td>05</td></tr><tr><td>CLU DRIFT</td><td><code>clusters.clu_drift</code></td><td><code>cluDrift</code></td><td>Number</td><td>0</td><td>0.0 … 5.0; step 0.01</td><td><span class="status-yes">Yes</span></td><td>05</td></tr><tr><td>CLU SPEED</td><td><code>clusters.clu_speed</code></td><td><code>cluSpeed</code></td><td>Number</td><td>0</td><td>0.0 … 10.0; step 0.01</td><td><span class="status-yes">Yes</span></td><td>05</td></tr><tr><td>CLU STEER</td><td><code>clusters.clu_steer</code></td><td><code>cluSteer</code></td><td>Number</td><td>1</td><td>0.0 … 10.0; step 0.01</td><td><span class="status-yes">Yes</span></td><td>05</td></tr><tr><td>CLU SPEED VAR</td><td><code>clusters.clu_speed_var</code></td><td><code>cluSpeedVar</code></td><td>Number</td><td>0</td><td>0.0 … 2.0; step 0.01</td><td><span class="status-yes">Yes</span></td><td>05</td></tr><tr><td>CLU PULSE</td><td><code>clusters.clu_pulse</code></td><td><code>cluPulse</code></td><td>Number</td><td>0</td><td>0.0 … 10.0; step 0.1</td><td><span class="status-yes">Yes</span></td><td>05</td></tr><tr><td>CLU INERTIA</td><td><code>clusters.clu_inertia</code></td><td><code>cluInertia</code></td><td>Number</td><td>0.92</td><td>0.01 … 0.99; step 0.01</td><td><span class="status-yes">Yes</span></td><td>05</td></tr><tr><td>CLU COHERE</td><td><code>clusters.clu_cohere</code></td><td><code>cluCohere</code></td><td>Number</td><td>0.8</td><td>0.0 … 1.0; step 0.01</td><td><span class="status-yes">Yes</span></td><td>05</td></tr><tr><td>CLU BREATHE</td><td><code>clusters.clu_breathe</code></td><td><code>cluBreathe</code></td><td>Number</td><td>0</td><td>0.0 … 0.9; step 0.01</td><td><span class="status-yes">Yes</span></td><td>05</td></tr><tr><td>CLU BOUNDS</td><td><code>clusters.clu_bounds</code></td><td><code>cluBounds</code></td><td>Select</td><td>bounce</td><td>bounce / wrap</td><td><span class="status-yes">Yes</span></td><td>05</td></tr></tbody></table></div><h2>Layer Priority</h2><div class="table-wrap"><table class="win-table"><thead><tr><th>Label</th><th>Canonical ID</th><th>Legacy ID</th><th>Kind</th><th>Default</th><th>Range / options</th><th>Implemented</th><th>Milestone</th></tr></thead><tbody><tr><td>LAYER PRIORITY</td><td><code>layers.layer_priority</code></td><td><code>layerPriority</code></td><td>Select</td><td>scan</td><td>scan / glitch / neutral / pulse</td><td><span class="status-yes">Yes</span></td><td>06</td></tr><tr><td>LAYER PULSE SPEED</td><td><code>layers.layer_pulse_speed</code></td><td><code>layerPulseSpeed</code></td><td>Number</td><td>2</td><td>0.2 … 12.0; step 0.1</td><td><span class="status-yes">Yes</span></td><td>06</td></tr></tbody></table></div><h2>Smoosh</h2><div class="table-wrap"><table class="win-table"><thead><tr><th>Label</th><th>Canonical ID</th><th>Legacy ID</th><th>Kind</th><th>Default</th><th>Range / options</th><th>Implemented</th><th>Milestone</th></tr></thead><tbody><tr><td>SMOOSH ON</td><td><code>smoosh.smoosh_on</code></td><td><code>smooshOn</code></td><td>Bool</td><td>false</td><td>true / false</td><td><span class="status-yes">Yes</span></td><td>07</td></tr><tr><td>SMOOSH BLEND</td><td><code>smoosh.smoosh_blend</code></td><td><code>smooshBlend</code></td><td>Select</td><td>screen</td><td>screen / lighter / lighten / color-dodge / multiply / darken / color-burn / overlay / soft-light / hard-light / difference / exclusion / hue / saturation / color / luminosity</td><td><span class="status-yes">Yes</span></td><td>07</td></tr><tr><td>SMOOSH AMT</td><td><code>smoosh.smoosh_amt</code></td><td><code>smooshAmt</code></td><td>Number</td><td>1</td><td>0.0 … 1.0; step 0.01</td><td><span class="status-yes">Yes</span></td><td>07</td></tr><tr><td>SMOOSH INVERT</td><td><code>smoosh.smoosh_invert</code></td><td><code>smooshInvert</code></td><td>Bool</td><td>false</td><td>true / false</td><td><span class="status-yes">Yes</span></td><td>07</td></tr></tbody></table></div><h2>Luma Key</h2><div class="table-wrap"><table class="win-table"><thead><tr><th>Label</th><th>Canonical ID</th><th>Legacy ID</th><th>Kind</th><th>Default</th><th>Range / options</th><th>Implemented</th><th>Milestone</th></tr></thead><tbody><tr><td>LUMA KEY ON</td><td><code>luma.luma_key_on</code></td><td><code>lumaKeyOn</code></td><td>Bool</td><td>false</td><td>true / false</td><td><span class="status-yes">Yes</span></td><td>07</td></tr><tr><td>LUMA KEY AB</td><td><code>luma.luma_key_ab</code></td><td><code>lumaKeyAB</code></td><td>Number</td><td>0.5</td><td>0.0 … 1.0; step 0.01</td><td><span class="status-yes">Yes</span></td><td>07</td></tr><tr><td>LUMA KEY MIX</td><td><code>luma.luma_key_mix</code></td><td><code>lumaKeyMix</code></td><td>Number</td><td>0</td><td>0.0 … 1.0; step 0.01</td><td><span class="status-yes">Yes</span></td><td>07</td></tr><tr><td>LUMA KEY INVERT</td><td><code>luma.luma_key_invert</code></td><td><code>lumaKeyInvert</code></td><td>Bool</td><td>false</td><td>true / false</td><td><span class="status-yes">Yes</span></td><td>07</td></tr></tbody></table></div><h2>Scanlines</h2><div class="table-wrap"><table class="win-table"><thead><tr><th>Label</th><th>Canonical ID</th><th>Legacy ID</th><th>Kind</th><th>Default</th><th>Range / options</th><th>Implemented</th><th>Milestone</th></tr></thead><tbody><tr><td>CLUSTERS</td><td><code>scanlines.clusters</code></td><td><code>clusters</code></td><td>Bool</td><td>false</td><td>true / false</td><td><span class="status-yes">Yes</span></td><td>06</td></tr><tr><td>SCAN ANGLE</td><td><code>scanlines.scan_angle</code></td><td><code>scanAngle</code></td><td>Number</td><td>0</td><td>-180.0 … 180.0; step 1.0</td><td><span class="status-yes">Yes</span></td><td>06</td></tr><tr><td>SCAN SPIN LEFT</td><td><code>scanlines.scan_spin_left</code></td><td><code>scanSpinLeft</code></td><td>Bool</td><td>false</td><td>true / false</td><td><span class="status-yes">Yes</span></td><td>06</td></tr><tr><td>SCAN SPIN RIGHT</td><td><code>scanlines.scan_spin_right</code></td><td><code>scanSpinRight</code></td><td>Bool</td><td>false</td><td>true / false</td><td><span class="status-yes">Yes</span></td><td>06</td></tr><tr><td>SCAN SPIN SPEED</td><td><code>scanlines.scan_spin_speed</code></td><td><code>scanSpinSpeed</code></td><td>Number</td><td>1</td><td>0.1 … 10.0; step 0.1</td><td><span class="status-yes">Yes</span></td><td>06</td></tr><tr><td>CLUSTER COUNT</td><td><code>scanlines.cluster_count</code></td><td><code>clusterCount</code></td><td>Number</td><td>3</td><td>1.0 … 50.0; step 1.0</td><td><span class="status-yes">Yes</span></td><td>06</td></tr><tr><td>CLUSTER RADIUS</td><td><code>scanlines.cluster_radius</code></td><td><code>clusterRadius</code></td><td>Number</td><td>10</td><td>1.0 … 120.0; step 1.0</td><td><span class="status-yes">Yes</span></td><td>06</td></tr><tr><td>SCAN FOCUS</td><td><code>scanlines.scan_focus</code></td><td><code>scanFocus</code></td><td>Number</td><td>0.5</td><td>0.0 … 2.0; step 0.01</td><td><span class="status-yes">Yes</span></td><td>06</td></tr><tr><td>SCAN SHIFT</td><td><code>scanlines.scan_shift</code></td><td><code>scanShift</code></td><td>Number</td><td>0.12</td><td>-4.0 … 4.0; step 0.01</td><td><span class="status-yes">Yes</span></td><td>06</td></tr><tr><td>SCAN SKEW</td><td><code>scanlines.scan_skew</code></td><td><code>scanSkew</code></td><td>Number</td><td>0</td><td>-3.0 … 3.0; step 0.01</td><td><span class="status-yes">Yes</span></td><td>06</td></tr><tr><td>SCAN DRIFT</td><td><code>scanlines.scan_drift</code></td><td><code>scanDrift</code></td><td>Number</td><td>0.5</td><td>0.0 … 5.0; step 0.01</td><td><span class="status-yes">Yes</span></td><td>06</td></tr><tr><td>SCAN PLACE X</td><td><code>scanlines.scan_place_x</code></td><td><code>scanPlaceX</code></td><td>Number</td><td>0</td><td>-1.0 … 1.0; step 0.01</td><td><span class="status-yes">Yes</span></td><td>06</td></tr><tr><td>SCAN PLACE Y</td><td><code>scanlines.scan_place_y</code></td><td><code>scanPlaceY</code></td><td>Number</td><td>0</td><td>-1.0 … 1.0; step 0.01</td><td><span class="status-yes">Yes</span></td><td>06</td></tr><tr><td>SCAN ZOOM</td><td><code>scanlines.scan_zoom</code></td><td><code>scanZoom</code></td><td>Number</td><td>1</td><td>0.25 … 6.0; step 0.01</td><td><span class="status-yes">Yes</span></td><td>06</td></tr><tr><td>SCAN ZOOM MODE</td><td><code>scanlines.scan_zoom_mode</code></td><td><code>scanZoomMode</code></td><td>Select</td><td>content</td><td>content / pattern / both</td><td><span class="status-yes">Yes</span></td><td>06</td></tr><tr><td>SCAN SPEED</td><td><code>scanlines.scan_speed</code></td><td><code>scanSpeed</code></td><td>Number</td><td>1</td><td>0.0 … 5.0; step 0.01</td><td><span class="status-yes">Yes</span></td><td>06</td></tr><tr><td>SCAN GAP</td><td><code>scanlines.scan_gap</code></td><td><code>scanGap</code></td><td>Number</td><td>0</td><td>0.0 … 200.0; step 1.0</td><td><span class="status-yes">Yes</span></td><td>06</td></tr><tr><td>SCAN ALPHA</td><td><code>scanlines.scan_alpha</code></td><td><code>scanAlpha</code></td><td>Number</td><td>0.86</td><td>0.0 … 1.0; step 0.01</td><td><span class="status-yes">Yes</span></td><td>06</td></tr></tbody></table></div><h2>Global Mix</h2><div class="table-wrap"><table class="win-table"><thead><tr><th>Label</th><th>Canonical ID</th><th>Legacy ID</th><th>Kind</th><th>Default</th><th>Range / options</th><th>Implemented</th><th>Milestone</th></tr></thead><tbody><tr><td>GLOBAL MIX ON</td><td><code>global_mix.global_mix_on</code></td><td><code>globalMixOn</code></td><td>Bool</td><td>false</td><td>true / false</td><td><span class="status-yes">Yes</span></td><td>07</td></tr><tr><td>GLOBAL MIX BLEND</td><td><code>global_mix.global_mix_blend</code></td><td><code>globalMixBlend</code></td><td>Select</td><td>screen</td><td>screen / lighter / lighten / color-dodge / multiply / darken / color-burn / overlay / soft-light / hard-light / difference / exclusion / hue / saturation / color / luminosity / source-over</td><td><span class="status-yes">Yes</span></td><td>07</td></tr><tr><td>GLOBAL MIX AMT</td><td><code>global_mix.global_mix_amt</code></td><td><code>globalMixAmt</code></td><td>Number</td><td>0</td><td>0.0 … 1.0; step 0.01</td><td><span class="status-yes">Yes</span></td><td>07</td></tr><tr><td>GLOBAL MIX POS</td><td><code>global_mix.global_mix_pos</code></td><td><code>globalMixPos</code></td><td>Select</td><td>after</td><td>before / after / afterflow / final</td><td><span class="status-yes">Yes</span></td><td>07</td></tr></tbody></table></div><h2>Flow</h2><div class="table-wrap"><table class="win-table"><thead><tr><th>Label</th><th>Canonical ID</th><th>Legacy ID</th><th>Kind</th><th>Default</th><th>Range / options</th><th>Implemented</th><th>Milestone</th></tr></thead><tbody><tr><td>FLOW ON</td><td><code>flow.flow_on</code></td><td><code>flowOn</code></td><td>Bool</td><td>false</td><td>true / false</td><td><span class="status-yes">Yes</span></td><td>07</td></tr><tr><td>FLOW STRENGTH</td><td><code>flow.flow_strength</code></td><td><code>flowStrength</code></td><td>Number</td><td>6</td><td>0.0 … 20.0; step 1.0</td><td><span class="status-yes">Yes</span></td><td>07</td></tr><tr><td>FLOW SCALE</td><td><code>flow.flow_scale</code></td><td><code>flowScale</code></td><td>Number</td><td>80</td><td>40.0 … 200.0; step 1.0</td><td><span class="status-yes">Yes</span></td><td>07</td></tr><tr><td>FLOW SPEED</td><td><code>flow.flow_speed</code></td><td><code>flowSpeed</code></td><td>Number</td><td>1</td><td>0.0 … 6.0; step 0.01</td><td><span class="status-yes">Yes</span></td><td>07</td></tr><tr><td>FLOW PULSE</td><td><code>flow.flow_pulse</code></td><td><code>flowPulse</code></td><td>Number</td><td>0</td><td>0.0 … 200.0; step 1.0</td><td><span class="status-yes">Yes</span></td><td>07</td></tr><tr><td>FLOW PULSE TRIG</td><td><code>flow.flow_pulse_trig</code></td><td><code>flowPulseTrig</code></td><td>Bool</td><td>false</td><td>true / false</td><td><span class="status-yes">Yes</span></td><td>07</td></tr><tr><td>FLOW IMPL</td><td><code>flow.flow_impl</code></td><td><code>flowImpl</code></td><td>Number</td><td>0</td><td>-5.0 … 5.0; step 0.01</td><td><span class="status-yes">Yes</span></td><td>07</td></tr><tr><td>FLOW SWIRL</td><td><code>flow.flow_swirl</code></td><td><code>flowSwirl</code></td><td>Number</td><td>0</td><td>-2.0 … 2.0; step 0.01</td><td><span class="status-yes">Yes</span></td><td>07</td></tr><tr><td>FLOW TURB</td><td><code>flow.flow_turb</code></td><td><code>flowTurb</code></td><td>Number</td><td>0</td><td>0.0 … 1.0; step 0.01</td><td><span class="status-yes">Yes</span></td><td>07</td></tr><tr><td>FLOW SPREAD</td><td><code>flow.flow_spread</code></td><td><code>flowSpread</code></td><td>Number</td><td>1</td><td>0.25 … 4.0; step 0.01</td><td><span class="status-yes">Yes</span></td><td>07</td></tr><tr><td>FLOW CARRY</td><td><code>flow.flow_carry</code></td><td><code>flowCarry</code></td><td>Number</td><td>0</td><td>0.0 … 2.0; step 0.01</td><td><span class="status-yes">Yes</span></td><td>07</td></tr><tr><td>FLOW TARGET</td><td><code>flow.flow_target</code></td><td><code>flowTarget</code></td><td>Select</td><td>final</td><td>final / glitch / scan</td><td><span class="status-yes">Yes</span></td><td>07</td></tr></tbody></table></div><h2>Routing</h2><div class="table-wrap"><table class="win-table"><thead><tr><th>Label</th><th>Canonical ID</th><th>Legacy ID</th><th>Kind</th><th>Default</th><th>Range / options</th><th>Implemented</th><th>Milestone</th></tr></thead><tbody><tr><td>PROGRAM BUS</td><td><code>routing.program_bus</code></td><td><code>programBus</code></td><td>Select</td><td>program</td><td>program / clean / field_store</td><td><span class="status-yes">Yes</span></td><td>19</td></tr><tr><td>MONITOR BUS</td><td><code>routing.monitor_bus</code></td><td><code>monitorBus</code></td><td>Select</td><td>program</td><td>program / clean / field_store</td><td><span class="status-yes">Yes</span></td><td>19</td></tr></tbody></table></div><div class="callout warn"><strong>Parity limit.</strong> The registry can prove that IDs, types, ranges, defaults, steps, and options match the preserved contract. It cannot prove that two renderers produce visually identical pixels.</div>
+<div class="source-list"><strong>Knowledge sources</strong><br/><a href="../reference/STATE-MODEL.md">STATE-MODEL.md</a> · <a href="../reference/MILESTONES.md">MILESTONES.md</a></div>
 </div>
-    </div>
-    <div class="col-12 col-md-9 col-lg-10">
-      <div class="window">
-        <div class="win-titlebar">
-          <span class="win-titlebar-title">Parameter Reference</span>
-          <div class="win-controls"><div class="win-btn">_</div><div class="win-btn">□</div><div class="win-btn">✕</div></div>
-        </div>
-        <div class="win-body doc-content">
-          
-<p>Complete list of all mappable parameter IDs for use in MIDI and OSC map files. The <code>param</code> field in any map entry must match an ID in this table exactly.</p>
-<hr/>
-
-<p>Complete list of all mappable parameter IDs for use in MIDI and OSC map files. The <code>param</code> field in any map entry must match an ID in this table exactly.</p>
-<hr/>
-
-<h2>Range Parameters</h2>
-<div class="table-responsive"><table class="win-table">
-  <thead><tr><th>ID</th><th>Label</th><th>Min</th><th>Max</th><th>Notes</th></tr></thead>
-  <tbody>
-    <tr><td>baseMix</td><td>Base Mix</td><td>0</td><td>1</td><td></td></tr>
-    <tr><td>seed</td><td>Seed</td><td>1</td><td>99999</td><td>Randomisation seed. Same seed = same output</td></tr>
-    <tr><td>quality</td><td>Quality</td><td>0</td><td>3</td><td>Scales ring depth + performance</td></tr>
-    <tr><td>feedback</td><td>Feedback</td><td>0</td><td>3</td><td>Values &gt; 1 over-expose</td></tr>
-    <tr><td>persistence</td><td>Persistence</td><td>0</td><td>10</td><td></td></tr>
-    <tr><td>fbX</td><td>FB X</td><td>-1</td><td>1</td><td></td></tr>
-    <tr><td>fbY</td><td>FB Y</td><td>-1</td><td>1</td><td></td></tr>
-    <tr><td>fbZ</td><td>FB Z</td><td>0.98</td><td>1.03</td><td>1.0 = no zoom</td></tr>
-    <tr><td>fbTheta</td><td>FB θ</td><td>-2</td><td>2</td><td>degrees/frame</td></tr>
-    <tr><td>depth</td><td>Depth</td><td>0</td><td>0.5</td><td></td></tr>
-    <tr><td>depthScatter</td><td>Scatter</td><td>0</td><td>1</td><td></td></tr>
-    <tr><td>corrupt</td><td>Corrupt %</td><td>0</td><td>7</td><td></td></tr>
-    <tr><td>corruptDrift</td><td>Corrupt Drift</td><td>0</td><td>1</td><td></td></tr>
-    <tr><td>block</td><td>Pixel Size</td><td>150</td><td>2000</td><td></td></tr>
-    <tr><td>glitchSize</td><td>Glitch Size</td><td>1</td><td>60</td><td></td></tr>
-    <tr><td>glitchAlpha</td><td>Tile Opacity</td><td>0</td><td>1</td><td></td></tr>
-    <tr><td>glitchJitter</td><td>Jitter</td><td>0</td><td>1</td><td></td></tr>
-    <tr><td>glitchSmear</td><td>Smear</td><td>0</td><td>200</td><td></td></tr>
-    <tr><td>glitchSmearAngle</td><td>Smear Angle</td><td>0</td><td>360</td><td>0 = noise-driven</td></tr>
-    <tr><td>glitchSpeed</td><td>Glitch Speed</td><td>0</td><td>5</td><td></td></tr>
-    <tr><td>glitchSpeedFine</td><td>Fine Speed</td><td>0</td><td>10</td><td></td></tr>
-    <tr><td>glitchSpeedMul</td><td>Speed Mult</td><td>0</td><td>10</td><td></td></tr>
-    <tr><td>glitchBaseX</td><td>Glitch X</td><td>-1000</td><td>1000</td><td></td></tr>
-    <tr><td>glitchBaseY</td><td>Glitch Y</td><td>-1000</td><td>1000</td><td></td></tr>
-    <tr><td>abMix</td><td>A/B Mix</td><td>0</td><td>1</td><td>0 = Glitch priority, 1 = Scanlines priority. Recessive side floors at 0.35</td></tr>
-    <tr><td>lumaKeyAB</td><td>Luma Key A/B</td><td>0</td><td>1</td><td>0 = clean dominant, 1 = glitch dominant. Floors at 0.35</td></tr>
-    <tr><td>lumaKeyMix</td><td>Luma Key Mix</td><td>0</td><td>1</td><td>Overall strength of the pipeline luma key</td></tr>
-    <tr><td>trailLayers</td><td>Trail Layers</td><td>0</td><td>4</td><td></td></tr>
-    <tr><td>trailDepth</td><td>Trail Depth</td><td>0</td><td>1</td><td></td></tr>
-    <tr><td>trailLumaKey</td><td>Trail Luma Key</td><td>0</td><td>1</td><td>0 = off</td></tr>
-    <tr><td>symPos</td><td>Sym Position</td><td>0</td><td>1</td><td>0.5 = centre</td></tr>
-    <tr><td>scanAngle</td><td>Scan Angle</td><td>-180</td><td>180</td><td>degrees, step 0.5. 0 = horizontal, ±90 = vertical</td></tr>
-    <tr><td>scanFocus</td><td>Scan Focus</td><td>0</td><td>1</td><td>Biases band distribution along the rotated span. 0.5 = even</td></tr>
-    <tr><td>scanRoll</td><td>Scan Roll</td><td>-2</td><td>2</td><td>Continuous scroll of bands, independent of Drift</td></tr>
-    <tr><td>scanSpinSpeed</td><td>Scan Spin Speed</td><td>0.1</td><td>10</td><td>Only active when Spin L or Spin R is on</td></tr>
-    <tr><td>scanShift</td><td>Scan Shift</td><td>0</td><td>0.5</td><td></td></tr>
-    <tr><td>scanDrift</td><td>Scan Drift</td><td>0</td><td>3</td><td>Dual-frequency: slow wander + fast jitter</td></tr>
-    <tr><td>scanSpeed</td><td>Scan Speed</td><td>0</td><td>5</td><td>Independent of glitch speed</td></tr>
-    <tr><td>scanGap</td><td>Scan Gap</td><td>0</td><td>200</td><td></td></tr>
-    <tr><td>scanSkew</td><td>Scan Skew</td><td>-1</td><td>1</td><td></td></tr>
-    <tr><td>scanAlpha</td><td>Scan Opacity</td><td>0</td><td>1</td><td></td></tr>
-    <tr><td>clusterCount</td><td>Scan Bands</td><td>1</td><td>50</td><td>Displaces current frame — no ring sampling</td></tr>
-    <tr><td>clusterRadius</td><td>Band Size</td><td>1</td><td>120</td><td></td></tr>
-    <tr><td>cluCenters</td><td>Clu Centers</td><td>1</td><td>20</td><td></td></tr>
-    <tr><td>cluSpread</td><td>Clu Spread</td><td>1</td><td>300</td><td></td></tr>
-    <tr><td>cluMinSpread</td><td>Clu Min Rad</td><td>0</td><td>150</td><td></td></tr>
-    <tr><td>spatialGap</td><td>Spatial Gap</td><td>0</td><td>200</td><td></td></tr>
-    <tr><td>cluBias</td><td>Clu Bias</td><td>0</td><td>1</td><td></td></tr>
-    <tr><td>cluDrift</td><td>Clu Drift</td><td>0</td><td>5</td><td></td></tr>
-    <tr><td>cluSpeed</td><td>Clu Speed</td><td>0</td><td>10</td><td>Step 0.01. 0 = centres glide to a stop and hold</td></tr>
-    <tr><td>cluSpeedVar</td><td>Clu Spd Var</td><td>0</td><td>2</td><td>Per-centre speed multiplier variance</td></tr>
-    <tr><td>cluPulse</td><td>Clu Pulse</td><td>0</td><td>10</td><td>Periodic velocity burst frequency</td></tr>
-    <tr><td>cluInertia</td><td>Clu Inertia</td><td>0.01</td><td>0.99</td><td></td></tr>
-    <tr><td>globalMixAmt</td><td>Global Mix Amount</td><td>0</td><td>1</td><td>Opacity of base video in the blend</td></tr>
-    <tr><td>solarizeThresh</td><td>Sol Thresh</td><td>0</td><td>1</td><td></td></tr>
-    <tr><td>solarizeAmt</td><td>Sol Amount</td><td>0</td><td>1</td><td></td></tr>
-    <tr><td>solarizeR</td><td>Sol R</td><td>0</td><td>2</td><td></td></tr>
-    <tr><td>solarizeG</td><td>Sol G</td><td>0</td><td>2</td><td></td></tr>
-    <tr><td>solarizeB</td><td>Sol B</td><td>0</td><td>2</td><td></td></tr>
-    <tr><td>flowStrength</td><td>Flow Strength</td><td>0</td><td>20</td><td></td></tr>
-    <tr><td>flowScale</td><td>Flow Scale</td><td>40</td><td>200</td><td></td></tr>
-    <tr><td>flowSpeed</td><td>Flow Speed</td><td>0</td><td>4</td><td>0 = noise field frozen</td></tr>
-    <tr><td>flowPulse</td><td>Flow Pulse</td><td>0</td><td>200</td><td>frames back</td></tr>
-    <tr><td>flowImpl</td><td>Flow Pull</td><td>-1</td><td>1</td><td>Positive = implode toward centre, negative = explode outward</td></tr>
-    <tr><td>flowSwirl</td><td>Flow Swirl</td><td>-2</td><td>2</td><td>Vortex rotation of displacement vectors</td></tr>
-    <tr><td>flowTurb</td><td>Flow Turbulence</td><td>0</td><td>1</td><td>Blends in a second, higher-frequency noise octave</td></tr>
-  </tbody>
-</table></div>
-<hr/>
-
-<h2>Toggle Parameters</h2>
-<p>Use <code>type: "toggle"</code>. Value &gt; 0.5 = ON, value ≤ 0.5 = OFF.</p>
-<div class="table-responsive"><table class="win-table">
-  <thead><tr><th>ID</th><th>Label</th></tr></thead>
-  <tbody>
-    <tr><td>corruptOn</td><td>Glitch On</td></tr>
-    <tr><td>baseOn</td><td>Base Video</td></tr>
-    <tr><td>seedOnLoad</td><td>Seed on Load</td></tr>
-    <tr><td>symOn</td><td>Symmetry On</td></tr>
-    <tr><td>clusters</td><td>Scanlines On</td></tr>
-    <tr><td>clusterTiles</td><td>Cluster Tiles On</td></tr>
-    <tr><td>scanSpinLeft</td><td>Scan Spin Left</td></tr>
-    <tr><td>scanSpinRight</td><td>Scan Spin Right</td></tr>
-    <tr><td>lumaKeyOn</td><td>Luma Key On</td></tr>
-    <tr><td>lumaKeyInvert</td><td>Luma Key Invert</td></tr>
-    <tr><td>globalMixOn</td><td>Global Mix On</td></tr>
-    <tr><td>solarizeOn</td><td>Solarize On</td></tr>
-    <tr><td>flowOn</td><td>Flow Warp On</td></tr>
-    <tr><td>trailOn</td><td>Trails On</td></tr>
-    <tr><td>loopToggle</td><td>Loop Video</td></tr>
-  </tbody>
-</table></div>
-<hr/>
-
-<h2>Select Parameters</h2>
-<p>Use <code>type: "select"</code>. Value must be one of the listed options exactly.</p>
-<div class="table-responsive"><table class="win-table">
-  <thead><tr><th>ID</th><th>Label</th><th>Options</th></tr></thead>
-  <tbody>
-    <tr><td>globalMixBlend</td><td>Global Mix Blend</td><td>screen, multiply, overlay, difference, hard-light, lighter</td></tr>
-    <tr><td>symMode</td><td>Symmetry Mode</td><td>v, h, hv</td></tr>
-    <tr><td>bgMode</td><td>Background</td><td>black, white, green, blue</td></tr>
-  </tbody>
-</table></div>
-<hr/>
-
-<h2>Trigger Parameters</h2>
-<p>Use <code>type: "trigger"</code>. Any value &gt; 0 fires the click.</p>
-<div class="table-responsive"><table class="win-table">
-  <thead><tr><th>ID</th><th>Action</th></tr></thead>
-  <tbody>
-    <tr><td>refreshBtn</td><td>Re-seed glitch randomisation</td></tr>
-    <tr><td>resetMotionBtn</td><td>Reset FB X/Y/Z/θ to neutral</td></tr>
-    <tr><td>resetBtn</td><td>Reset all parameters to defaults</td></tr>
-    <tr><td>clearBufBtn</td><td>Wipe the frame ring and all internal buffers instantly, without resetting parameters</td></tr>
-    <tr><td>scanAngleReset</td><td>Set Scan Angle to 0°</td></tr>
-    <tr><td>scanAngle90n</td><td>Set Scan Angle to -90°</td></tr>
-    <tr><td>scanAngle90p</td><td>Set Scan Angle to 90°</td></tr>
-  </tbody>
-</table></div>
-<hr/>
-
-<h2>Transport &amp; Preset Controls</h2>
-<p>The dispatch code in <code>index.html</code> resolves <code>param</code> by <code>document.getElementById()</code> generically — any element with an ID can be targeted, not just the effect groups. The transport bar and preset toolbar are valid targets under the same <code>type</code> rules, with the caveats below.</p>
-<h3>Mappable as Trigger</h3>
-<p>Use <code>type: "trigger"</code>. All are <code>&lt;button&gt;</code> elements — <code>.click()</code> fires their existing handler.</p>
-<div class="table-responsive"><table class="win-table">
-  <thead><tr><th>ID</th><th>Action</th></tr></thead>
-  <tbody>
-    <tr><td>playBtn</td><td>▶ Play</td></tr>
-    <tr><td>pauseBtn</td><td>⏸ Pause</td></tr>
-    <tr><td>camStartBtn</td><td>⬤ Cam — start the selected camera</td></tr>
-    <tr><td>camStopBtn</td><td>✕ Cam — stop the camera</td></tr>
-    <tr><td>camRefreshBtn</td><td>↻ — rescan camera devices</td></tr>
-    <tr><td>presetSaveBtn</td><td>💾 Save — save current snapshot under the name in presetName</td></tr>
-    <tr><td>presetLoadBtn</td><td>▶ Load — load the preset selected in presetList</td></tr>
-    <tr><td>presetDeleteBtn</td><td>✕ Delete — delete the preset selected in presetList</td></tr>
-    <tr><td>presetExportBtn</td><td>↑ Export JSON — download all saved presets</td></tr>
-    <tr><td>presetImportBtn</td><td>↓ Import JSON — open the import file picker</td></tr>
-  </tbody>
-</table></div>
-<h3>Mappable as Range</h3>
-<div class="table-responsive"><table class="win-table">
-  <thead><tr><th>ID</th><th>Label</th><th>Min</th><th>Max</th><th>Notes</th></tr></thead>
-  <tbody>
-    <tr><td>volumeSlider</td><td>Volume</td><td>0</td><td>1</td><td>Routed through a dedicated Web Audio GainNode</td></tr>
-    <tr><td>seekBar</td><td>Seek Position</td><td>0</td><td>1000</td><td>Position as a fraction of total duration ×1000. Dispatching <code>input</code> seeks the loaded video immediately</td></tr>
-  </tbody>
-</table></div>
-<h3>Not Practically Mappable</h3>
-<div class="callout warn">
-<strong>playbackRate</strong>, <strong>cams</strong>, and <strong>presetList</strong> are <code>&lt;select&gt;</code> elements, and <strong>presetName</strong> is a text input. None have a numeric <code>min</code>/<code>max</code>, so the range-dispatch code (which computes <code>el.min</code>/<code>el.max</code>) resolves both to 0 and writes <code>value = "0"</code> — not a valid option for any of these. There is no <code>select</code> mapping type. These four are not usable MIDI/OSC targets with the current dispatch logic; they're operated from the controls UI only.<br/><br/>
-<strong>timeDisplay</strong> is a read-only <code>&lt;span&gt;</code> showing <code>M:SS / M:SS</code> — it is not a control and has no <code>param</code> use.
+</article>
+</main>
 </div>
-<hr/>
-
-<h2>Notes on Ranges</h2>
-<div class="callout">
-<strong>MIDI maps</strong> use cc: 0–127, mapped linearly to the parameter's min–max. You do not specify the output range in a MIDI map.<br/><br/>
-<strong>OSC maps</strong> use inputMin/inputMax to tell huff what range your sender outputs. TouchOSC faders: inputMin: 0, inputMax: 1. MIDI-to-OSC bridges: inputMin: 0, inputMax: 127.<br/><br/>
-<strong>fbZ</strong> has a narrow range (0.98–1.03) because zoom is applied multiplicatively every frame. Even 1.005 produces dramatic zoom over a few seconds of feedback.<br/><br/>
-<strong>quality</strong> range is 0–3 but 0–1 is the practical working range. Values &gt; 1 increase ring depth beyond 60 frames and can cause memory pressure at high resolutions.<br/><br/>
-<strong>clusterCount (Scan Bands)</strong> displaces the <em>current</em> video frame spatially — it does not sample from the ring buffer. There is no temporal artifact; bands are smooth even with fast camera movement.<br/><br/>
-<strong>abMix</strong> and <strong>lumaKeyAB</strong> are layer-priority mixes, not crossfades — the recessive side never drops below a 0.35 floor, so both contributors always remain visible.<br/><br/>
-<strong>scanSpinSpeed</strong> only has an effect while <strong>scanSpinLeft</strong> or <strong>scanSpinRight</strong> is on; otherwise the static <strong>scanAngle</strong> slider is used.<br/><br/>
-<strong>cluSpeedVar</strong> and <strong>cluPulse</strong> are not mappable via trigger type — use range (0–2 and 0–10 respectively).
-</div>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js"></script>
-<script>
-function tick(){document.getElementById('clock').textContent=new Date().toLocaleTimeString('en-US',{hour12:false});}
-tick();setInterval(tick,1000);
-</script>
-</body>
-</html>
+<div class="footer raised">HUFF native documentation · static HTML · current architecture preserved before production pruning</div>
+<script src="../assets/search-index.js"></script><script src="../assets/docs.js"></script>
+</body></html>

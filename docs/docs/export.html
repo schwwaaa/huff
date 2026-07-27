@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width,initial-scale=1" name="viewport"/>
+<title>Still &amp; Offline Export — HUFF native docs</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=VT323&amp;family=Share+Tech+Mono&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/docs.css" rel="stylesheet">
+</link></head>
+<body>
+<div class="taskbar">
+<a class="taskbar-brand" href="../index.html">■ HUFF</a>
+<a class="taskbar-btn raised-sm" href="how-it-works.html">Overview</a>
+<a class="taskbar-btn raised-sm" href="feature-index.html">Features</a>
+<a class="taskbar-btn raised-sm" href="architecture.html">Architecture</a>
+<a class="taskbar-btn raised-sm" href="visual-guide.html">Visual Guide</a>
+<a class="taskbar-btn raised-sm" href="troubleshooting.html">Help</a>
+<div class="taskbar-clock raised-sm" id="clock">--:--:--</div>
+</div>
+<div class="site-shell">
+<aside class="sidebar raised">
+<div class="sidebar-title">■ DOCUMENTATION</div>
+<input aria-label="Search documentation pages" class="searchbox" id="docSearch" placeholder="Search pages…" type="search"/>
+<div class="search-results" id="searchResults"></div>
+<div class="nav-group"><div class="nav-group-title">Start Here</div><ul class="doc-nav"><li><a href="how-it-works.html">Native HUFF Overview</a></li><li><a href="feature-index.html">Feature Index</a></li><li><a href="visual-guide.html">Visual Guide &amp; Image Needs</a></li><li><a href="installation.html">Installation &amp; Builds</a></li><li><a href="interface.html">Interface Tour</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Media &amp; Image</div><ul class="doc-nav"><li><a href="sources.html">Sources &amp; Transport</a></li><li><a href="effects.html">Effects &amp; Compositing</a></li><li><a href="temporal-memory.html">Temporal Memory</a></li><li><a href="routing.html">Routing &amp; Recipes</a></li></ul></div><div class="nav-group"><div class="nav-group-title">State &amp; Control</div><ul class="doc-nav"><li><a href="state.html">Presets, Snapshots &amp; Projects</a></li><li><a href="automation.html">Automation &amp; Sequences</a></li><li><a href="midi.html">MIDI Mapping</a></li><li><a href="osc.html">OSC Mapping</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Output &amp; Export</div><ul class="doc-nav"><li><a href="recording.html">Live Recording</a></li><li><a class="active" href="export.html">Still &amp; Offline Export</a></li><li><a href="export-queue.html">Export Queue</a></li><li><a href="output.html">Syphon &amp; Spout</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Operations</div><ul class="doc-nav"><li><a href="verification.html">Verification &amp; Recovery</a></li><li><a href="parity.html">Parity &amp; Calibration</a></li><li><a href="interop.html">Interop Research</a></li><li><a href="testing.html">Testing Strategy</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Reference</div><ul class="doc-nav"><li><a href="parameter-reference.html">Parameter Reference</a></li><li><a href="architecture.html">Architecture</a></li><li><a href="caveats.html">Caveats &amp; Tradeoffs</a></li><li><a href="troubleshooting.html">Troubleshooting</a></li><li><a href="glossary.html">Glossary</a></li></ul></div>
+<div class="sidebar-note">Build documented: <strong>0.21.0 / HNW-21</strong><br/>The incoming legacy docs are preserved under <code>archive/original-docs/</code>.</div>
+</aside>
+<main>
+<details class="mobile-nav raised"><summary>Documentation navigation</summary><div class="nav-group"><div class="nav-group-title">Start Here</div><ul class="doc-nav"><li><a href="how-it-works.html">Native HUFF Overview</a></li><li><a href="feature-index.html">Feature Index</a></li><li><a href="visual-guide.html">Visual Guide &amp; Image Needs</a></li><li><a href="installation.html">Installation &amp; Builds</a></li><li><a href="interface.html">Interface Tour</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Media &amp; Image</div><ul class="doc-nav"><li><a href="sources.html">Sources &amp; Transport</a></li><li><a href="effects.html">Effects &amp; Compositing</a></li><li><a href="temporal-memory.html">Temporal Memory</a></li><li><a href="routing.html">Routing &amp; Recipes</a></li></ul></div><div class="nav-group"><div class="nav-group-title">State &amp; Control</div><ul class="doc-nav"><li><a href="state.html">Presets, Snapshots &amp; Projects</a></li><li><a href="automation.html">Automation &amp; Sequences</a></li><li><a href="midi.html">MIDI Mapping</a></li><li><a href="osc.html">OSC Mapping</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Output &amp; Export</div><ul class="doc-nav"><li><a href="recording.html">Live Recording</a></li><li><a class="active" href="export.html">Still &amp; Offline Export</a></li><li><a href="export-queue.html">Export Queue</a></li><li><a href="output.html">Syphon &amp; Spout</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Operations</div><ul class="doc-nav"><li><a href="verification.html">Verification &amp; Recovery</a></li><li><a href="parity.html">Parity &amp; Calibration</a></li><li><a href="interop.html">Interop Research</a></li><li><a href="testing.html">Testing Strategy</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Reference</div><ul class="doc-nav"><li><a href="parameter-reference.html">Parameter Reference</a></li><li><a href="architecture.html">Architecture</a></li><li><a href="caveats.html">Caveats &amp; Tradeoffs</a></li><li><a href="troubleshooting.html">Troubleshooting</a></li><li><a href="glossary.html">Glossary</a></li></ul></div></details>
+<article class="window">
+<div class="win-titlebar"><span class="win-titlebar-title">Still &amp; Offline Export</span><div class="win-controls"><div class="win-btn">_</div><div class="win-btn">□</div><div class="win-btn">✕</div></div></div>
+<div class="win-body doc-content">
+<div class="breadcrumb"><a href="../index.html">HUFF docs</a> / Output &amp; Export / Still &amp; Offline Export</div>
+<div class="page-meta"><span class="badge">INTEGRATED, REFINEMENT PENDING</span><span class="badge">0.21.0 / HNW-21</span></div>
+<p class="page-lead">HUFF has three distinct export systems: one-frame PNG stills, deterministic video/image-sequence rendering, and live recording. This page covers stills and deterministic offline rendering.</p>
+<div class="page-toc" id="pageToc"><div class="page-toc-title">ON THIS PAGE</div></div>
+<h2>Still export</h2><p>Still export writes PNG at Native, 1080p, 4K, 8K, or Custom dimensions. Smooth/Crisp choose sampling; Fit/Crop/Stretch determine how the source is placed. A sidecar records settings for reproducibility.</p>
+<h2>Deterministic offline export</h2><p>The exporter uses a private exact-frame decoder and a fixed timeline. It freezes canonical state, resets private temporal resources, advances source time and automation by frame number, renders every requested frame, and sends the result to the selected encoder.</p>
+<h3>Why this differs from recording</h3><pre>LIVE RECORDING
+wall clock → take latest completed frame → repeat if late
+
+OFFLINE EXPORT
+frame 0 → exact source time → render
+frame 1 → exact source time → render
+...
+computer may run slower than real time, but no simulation frame is skipped</pre>
+<h2>Production profiles</h2><div class="table-wrap"><table class="win-table"><thead><tr><th>Profile</th><th>Container / codec</th><th>Audio</th><th>Alpha</th></tr></thead><tbody><tr><td>H.264 MP4</td><td>MP4 / libx264, CRF-oriented distribution profile</td><td>AAC</td><td>No</td></tr><tr><td>ProRes 422 HQ</td><td>MOV / 10-bit 4:2:2</td><td>24-bit PCM</td><td>No</td></tr><tr><td>ProRes 4444</td><td>MOV / 4:4:4:4</td><td>24-bit PCM</td><td>Optional</td></tr><tr><td>FFV1 Lossless</td><td>MKV / lossless FFV1</td><td>FLAC</td><td>Optional</td></tr><tr><td>PNG Sequence</td><td>Numbered PNG files</td><td>Optional separate WAV</td><td>Optional RGBA</td></tr></tbody></table></div>
+<h2>Full-resolution graph</h2><p>Milestone 15 creates a private render graph at the export dimensions. History, glitch, clusters, scanlines, Smoosh, feedback, Luma Key, Global Mix, Flow, and final compositing are run at that resolution rather than merely enlarging the live output.</p>
+<h2>Resource limits</h2><p>History remains bounded by its budget, and the exporter estimates total graph allocation. Very large graphs can be rejected rather than silently exhausting GPU memory. 8K is therefore a capability subject to device limits, not a guarantee on every machine.</p>
+<h2>Metadata and transaction safety</h2><p>Exports use temporary destinations and explicit completed/cancelled/failed states. Sidecars record profile, codec, pixel format, alpha, source/timeline, render dimensions, graph/history topology, automation, and artifact lists.</p>
+<h2>Current refinement status</h2><p>The system has run with some successful and some unsuccessful tests. The architecture is preserved, but codec/profile combinations, audio retiming, cancellation, large-resolution behavior, and visual parity need a structured local test matrix.</p><div class="callout remove"><strong>Knowledge to retain.</strong> Even if only H.264 and PNG remain in a streamlined UI, preserve the deterministic clock, private decoder, private render graph, transaction model, metadata schema, and profile abstraction.</div>
+<div class="source-list"><strong>Knowledge sources</strong><br/><a href="../reference/UPGRADE-NOTES-10.md">UPGRADE-NOTES-10.md</a> · <a href="../reference/UPGRADE-NOTES-11.md">UPGRADE-NOTES-11.md</a> · <a href="../reference/UPGRADE-NOTES-12.md">UPGRADE-NOTES-12.md</a> · <a href="../reference/UPGRADE-NOTES-15.md">UPGRADE-NOTES-15.md</a> · <a href="../reference/TESTING.md">TESTING.md</a></div>
+</div>
+</article>
+</main>
+</div>
+<div class="footer raised">HUFF native documentation · static HTML · current architecture preserved before production pruning</div>
+<script src="../assets/search-index.js"></script><script src="../assets/docs.js"></script>
+</body></html>

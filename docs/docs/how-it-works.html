@@ -2,247 +2,94 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1"/>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css"/>
-<link href="https://fonts.googleapis.com/css2?family=VT323&family=Share+Tech+Mono&display=swap" rel="stylesheet">
-<title>How It Works — huff docs</title>
-
-<style>
-:root {
-  --gray:  #C0C0C0; --light: #FFFFFF; --mid: #808080; --dark: #404040;
-  --red:   #ff4647; --black: #000000; --green: #00FF00; --dgreen: #00CC00;
-  --teal:  #008080;
-}
-*,*::before,*::after{box-sizing:border-box;}
-body {
-  background:var(--teal);
-  background-image:repeating-linear-gradient(45deg,rgba(0,0,0,.06) 0px,rgba(0,0,0,.06) 1px,transparent 1px,transparent 5px);
-  font-family:'VT323','Courier New',monospace;
-  color:#000; min-height:100vh; padding-bottom:40px;
-}
-.raised    {border-top:2px solid var(--light);border-left:2px solid var(--light);border-bottom:2px solid var(--dark);border-right:2px solid var(--dark);}
-.inset     {border-top:2px solid var(--dark);border-left:2px solid var(--dark);border-bottom:2px solid var(--light);border-right:2px solid var(--light);}
-.raised-sm {border-top:1px solid var(--light);border-left:1px solid var(--light);border-bottom:1px solid var(--dark);border-right:1px solid var(--dark);}
-/* Taskbar */
-.taskbar {
-  position:sticky;top:0;z-index:1000;
-  background:var(--gray);
-  border-top:2px solid var(--light);border-bottom:2px solid var(--dark);
-  padding:3px 8px;display:flex;align-items:center;gap:4px;flex-wrap:wrap;
-}
-.taskbar-brand {
-  background:linear-gradient(90deg,var(--red),#cc2222);color:#fff;
-  font-size:16px;padding:2px 12px;letter-spacing:.08em;
-  border-top:2px solid #ff9999;border-left:2px solid #ff9999;
-  border-bottom:2px solid #770000;border-right:2px solid #770000;
-  white-space:nowrap;text-decoration:none;
-}
-.taskbar-btn {
-  background:var(--gray);color:#000;font-family:'VT323',monospace;
-  font-size:14px;padding:2px 10px;text-decoration:none;
-  white-space:nowrap;display:inline-block;
-}
-.taskbar-btn:hover{background:#D4D0C8;color:#000;}
-.taskbar-clock{margin-left:auto;font-family:'Share Tech Mono',monospace;font-size:13px;padding:2px 10px;}
-/* Window */
-.window{background:var(--gray);border-top:3px solid var(--light);border-left:3px solid var(--light);border-bottom:3px solid var(--dark);border-right:3px solid var(--dark);}
-.win-titlebar{background:linear-gradient(90deg,var(--red),#cc2222);color:#fff;font-size:15px;padding:3px 8px;display:flex;align-items:center;justify-content:space-between;letter-spacing:.06em;user-select:none;}
-.win-titlebar-title::before{content:'■ ';font-size:10px;}
-.win-controls{display:flex;gap:2px;}
-.win-btn{background:var(--gray);color:#000;font-family:'VT323',monospace;font-size:12px;border-top:1px solid var(--light);border-left:1px solid var(--light);border-bottom:1px solid var(--dark);border-right:1px solid var(--dark);width:18px;height:16px;display:flex;align-items:center;justify-content:center;}
-.win-body{padding:14px 16px;}
-/* Sidebar nav */
-.doc-nav {
-  background:var(--gray);
-  border-top:2px solid var(--light);border-left:2px solid var(--light);
-  border-bottom:2px solid var(--dark);border-right:2px solid var(--dark);
-}
-.doc-nav .nav-title {
-  background:linear-gradient(90deg,var(--red),#cc2222);
-  color:#fff;font-size:13px;padding:3px 8px;letter-spacing:.08em;
-}
-.doc-nav-list{list-style:none;margin:0;padding:4px 0;}
-.doc-nav-list li a {
-  display:block;padding:3px 10px;font-size:14px;letter-spacing:.05em;
-  color:#000;text-decoration:none;
-}
-.doc-nav-list li a:hover{background:#D4D0C8;}
-.doc-nav-list li a.active{background:var(--black);color:var(--green);}
-.doc-nav-sep{height:1px;background:var(--mid);margin:3px 6px;}
-/* Term */
-.term{background:var(--black);border-top:2px solid var(--dark);border-left:2px solid var(--dark);border-bottom:2px solid var(--light);border-right:2px solid var(--light);padding:10px 14px;font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--green);line-height:1.65;overflow-x:auto;}
-.term .comment{color:#006600;}
-.term .dim{color:#009900;}
-/* Section label */
-.section-label{font-size:13px;font-weight:bold;letter-spacing:.18em;text-transform:uppercase;color:var(--red);border-bottom:2px solid var(--mid);padding-bottom:3px;margin-bottom:10px;}
-/* Tables */
-.win-table{width:100%;border-collapse:collapse;font-family:'Share Tech Mono',monospace;font-size:12px;}
-.win-table th{background:var(--gray);text-align:left;font-family:'VT323',monospace;font-size:13px;letter-spacing:.1em;color:var(--red);padding:3px 8px;border-bottom:2px solid var(--mid);}
-.win-table td{padding:4px 8px;border-bottom:1px solid #B8B8B8;color:#222;vertical-align:top;}
-.win-table tr:nth-child(even) td{background:#D4D0C8;}
-.win-table td:first-child{font-weight:bold;white-space:nowrap;}
-.win-table code{font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--black);}
-/* Callout */
-.callout{background:var(--black);border-left:3px solid var(--red);border-top:1px solid var(--dark);border-bottom:1px solid var(--light);border-right:1px solid var(--light);padding:8px 12px;font-family:'Share Tech Mono',monospace;font-size:12px;color:#AAAAAA;line-height:1.6;}
-.callout strong{color:var(--green);}
-.callout.warn{border-left-color:#FFFF00;}
-.callout.warn strong{color:#FFFF00;}
-.callout.note{border-left-color:var(--green);}
-/* Breadcrumb */
-.breadcrumb-win{font-size:12px;font-family:'Share Tech Mono',monospace;color:#555;padding:4px 0 8px;letter-spacing:.04em;}
-.breadcrumb-win a{color:var(--red);text-decoration:none;}
-.breadcrumb-win a:hover{text-decoration:underline;}
-/* Back btn */
-.back-btn{font-family:'VT323',monospace;font-size:14px;padding:2px 10px;background:var(--gray);color:#000;text-decoration:none;display:inline-block;border-top:2px solid var(--light);border-left:2px solid var(--light);border-bottom:2px solid var(--dark);border-right:2px solid var(--dark);}
-.back-btn:hover{background:#D4D0C8;color:#000;}
-/* Content typography */
-.doc-content h2{font-size:20px;font-weight:bold;letter-spacing:.1em;color:var(--red);margin:20px 0 8px;text-transform:uppercase;}
-.doc-content h3{font-size:16px;font-weight:bold;letter-spacing:.08em;color:#333;margin:14px 0 6px;text-transform:uppercase;}
-.doc-content p{font-family:'Share Tech Mono',monospace;font-size:12px;line-height:1.7;margin-bottom:10px;color:#222;}
-.doc-content ul,.doc-content ol{font-family:'Share Tech Mono',monospace;font-size:12px;line-height:1.8;padding-left:20px;margin-bottom:10px;color:#222;}
-.doc-content li{margin-bottom:2px;}
-.doc-content code{font-family:'Share Tech Mono',monospace;font-size:11px;background:#D4D0C8;padding:1px 4px;color:#000;}
-.doc-content strong{color:#000;}
-.doc-content a{color:var(--red);}
-.doc-content a:hover{color:#cc0000;}
-.doc-content hr{border:none;border-top:2px solid var(--mid);margin:16px 0;}
-/* Mobile */
-@media(max-width:767px){
-  .taskbar-btn{font-size:12px;padding:2px 6px;}
-  .win-titlebar{font-size:13px;}
-  .term{font-size:11px;}
-  .doc-nav{margin-bottom:10px;}
-}
-</style>
+<meta content="width=device-width,initial-scale=1" name="viewport"/>
+<title>Native HUFF Overview — HUFF native docs</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=VT323&amp;family=Share+Tech+Mono&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/docs.css" rel="stylesheet"/>
 </head>
 <body>
 <div class="taskbar">
-  <a class="taskbar-brand" href="../index.html">■ huff</a>
-  <a class="taskbar-btn raised-sm" href="../index.html">Home</a>
-  <a class="taskbar-btn raised-sm" href="how-it-works.html">How It Works</a>
-  <a class="taskbar-btn raised-sm" href="installation.html">Install</a>
-  <a class="taskbar-btn raised-sm" href="interface.html">Interface</a>
-  <a class="taskbar-btn raised-sm" href="midi.html">MIDI</a>
-  <a class="taskbar-btn raised-sm" href="osc.html">OSC</a>
-  <a class="taskbar-btn raised-sm" href="output.html">Output</a>
-  <div class="taskbar-clock raised-sm" id="clock">--:--:--</div>
+<a class="taskbar-brand" href="../index.html">■ HUFF</a>
+<a class="taskbar-btn raised-sm" href="how-it-works.html">Overview</a>
+<a class="taskbar-btn raised-sm" href="feature-index.html">Features</a>
+<a class="taskbar-btn raised-sm" href="visual-guide.html">Visual Guide</a>
+<a class="taskbar-btn raised-sm" href="architecture.html">Architecture</a>
+<a class="taskbar-btn raised-sm" href="troubleshooting.html">Help</a>
+<div class="taskbar-clock raised-sm" id="clock">--:--:--</div>
 </div>
-<div class="container-fluid px-2 px-md-3 mt-3">
-  <div class="row g-3">
-    <div class="col-12 col-md-3 col-lg-2">
-      <div class="doc-nav">
-  <div class="nav-title">■ DOCUMENTATION</div>
-  <ul class="doc-nav-list">
-    <li><a href="../index.html">← Back to huff</a></li>
-    <li><div class="doc-nav-sep"></div></li>
-    <li><a href="how-it-works.html" class="active">How It Works</a></li>
-<li><a href="installation.html">Installation</a></li>
-<li><a href="interface.html">The Interface</a></li>
-<li><a href="midi.html">MIDI</a></li>
-<li><a href="osc.html">OSC</a></li>
-<li><a href="output.html">Video Output</a></li>
-<li><a href="parameter-reference.html">Parameter Reference</a></li>
-<li><a href="architecture.html">Architecture</a></li>
-<li><a href="caveats.html">Caveats</a></li>
-<li><a href="troubleshooting.html">Troubleshooting</a></li>
-
-  </ul>
+<div class="site-shell">
+<aside class="sidebar raised">
+<div class="sidebar-title">■ DOCUMENTATION</div>
+<input aria-label="Search documentation pages" class="searchbox" id="docSearch" placeholder="Search pages…" type="search"/>
+<div class="search-results" id="searchResults"></div>
+<div class="nav-group"><div class="nav-group-title">Start Here</div><ul class="doc-nav"><li><a class="active" href="how-it-works.html">Native HUFF Overview</a></li><li><a href="feature-index.html">Feature Index</a></li><li><a href="visual-guide.html">Visual Guide &amp; Image Needs</a></li><li><a href="installation.html">Installation &amp; Builds</a></li><li><a href="interface.html">Interface Tour</a></li></ul></div>
+<div class="nav-group"><div class="nav-group-title">Media &amp; Image</div><ul class="doc-nav"><li><a href="sources.html">Sources &amp; Transport</a></li><li><a href="effects.html">Effects &amp; Compositing</a></li><li><a href="temporal-memory.html">Temporal Memory</a></li><li><a href="routing.html">Routing &amp; Recipes</a></li></ul></div>
+<div class="nav-group"><div class="nav-group-title">State &amp; Control</div><ul class="doc-nav"><li><a href="state.html">Presets, Snapshots &amp; Projects</a></li><li><a href="automation.html">Automation &amp; Sequences</a></li><li><a href="midi.html">MIDI Mapping</a></li><li><a href="osc.html">OSC Mapping</a></li></ul></div>
+<div class="nav-group"><div class="nav-group-title">Output &amp; Export</div><ul class="doc-nav"><li><a href="recording.html">Live Recording</a></li><li><a href="export.html">Still &amp; Offline Export</a></li><li><a href="export-queue.html">Export Queue</a></li><li><a href="output.html">Syphon &amp; Spout</a></li></ul></div>
+<div class="nav-group"><div class="nav-group-title">Operations</div><ul class="doc-nav"><li><a href="verification.html">Verification &amp; Recovery</a></li><li><a href="parity.html">Parity &amp; Calibration</a></li><li><a href="interop.html">Interop Research</a></li><li><a href="testing.html">Testing Strategy</a></li></ul></div>
+<div class="nav-group"><div class="nav-group-title">Reference</div><ul class="doc-nav"><li><a href="parameter-reference.html">Parameter Reference</a></li><li><a href="architecture.html">Architecture</a></li><li><a href="caveats.html">Caveats &amp; Tradeoffs</a></li><li><a href="troubleshooting.html">Troubleshooting</a></li><li><a href="glossary.html">Glossary</a></li></ul></div>
+<div class="sidebar-note">This page now assumes the reader has never seen the older version of HUFF. It explains the native application on its own terms.</div>
+</aside>
+<main>
+<details class="mobile-nav"><summary>Documentation navigation</summary><div class="nav-group"><div class="nav-group-title">Start Here</div><ul class="doc-nav"><li><a class="active" href="how-it-works.html">Native HUFF Overview</a></li><li><a href="feature-index.html">Feature Index</a></li><li><a href="visual-guide.html">Visual Guide &amp; Image Needs</a></li><li><a href="installation.html">Installation &amp; Builds</a></li><li><a href="interface.html">Interface Tour</a></li></ul></div></details>
+<article class="window">
+<div class="win-titlebar"><span class="win-titlebar-title">Native HUFF Overview</span><div class="win-controls"><div class="win-btn">_</div><div class="win-btn">□</div><div class="win-btn">✕</div></div></div>
+<div class="win-body doc-content">
+<div class="breadcrumb"><a href="../index.html">HUFF docs</a> / Start Here / Native HUFF Overview</div>
+<div class="page-meta"><span class="badge">INTEGRATED</span><span class="badge">0.21.0 / HNW-21</span></div>
+<p class="page-lead">HUFF is a native video instrument. The HTML window is the control surface, Rust owns the state and media systems, and wgpu owns the image that ultimately feeds the screen, recording, export, and external outputs.</p>
+<div class="page-toc" id="pageToc"><div class="page-toc-title">ON THIS PAGE</div></div>
+<h2>What HUFF is</h2>
+<p>At the highest level, HUFF takes one authoritative visual source, transforms it through a chain of glitch, temporal, and compositing operations, and produces a committed final image called <strong>Program</strong>. That Program image is what other subsystems trust. It can be recorded, exported, or published to Syphon or Spout.</p>
+<figure class="diagram"><img alt="Native system overview showing control surface, canonical state, native source ownership, wgpu rendering, and Program outputs" src="../media/native-system-overview.svg"/><figcaption>For a new reader, this is the simplest mental model: the UI controls native systems; native systems render the image; Program feeds the outside world.</figcaption></figure>
+<h2>The current system in plain language</h2>
+<h3>Control surface</h3>
+<p>The HTML interface is a remote control. Sliders, toggles, and overlay panels send commands into Rust. The interface itself is not the renderer.</p>
+<h3>Canonical state</h3>
+<p>Every major feature—UI, automation, presets, MIDI, OSC, routing, recording, and export—refers to the same canonical parameter registry. That registry is the official source of truth for value, default, range, and type.</p>
+<h3>Source ownership</h3>
+<p>HUFF always knows which live source is active. A file source and a camera source do not compete invisibly. Transport, decoder progress, audio, and recovery are native responsibilities, not browser assumptions.</p>
+<h3>Temporal memory</h3>
+<p>Several HUFF effects rely on time, not just the current frame. Native HUFF therefore owns real temporal image resources: a history ring, a persistent Field Store, feedback targets, and Flow-related resources.</p>
+<h3>Program and Monitor</h3>
+<p><strong>Program</strong> is the authoritative final image. <strong>Monitor</strong> is what the local output window displays. They are related but not identical. Monitor can inspect Program, Clean, or Field Store while external outputs continue using Program.</p>
+<h2>The native image pipeline</h2>
+<p>The current engine is not a free-form node editor. It is a stable pipeline with named responsibilities and constrained recipe switches. That keeps HUFF readable, saveable, and predictable while still allowing multiple internal routes.</p>
+<figure class="diagram"><img alt="Updated native HUFF effect pipeline diagram" src="../media/native-effect-pipeline.svg"/><figcaption>This updated diagram replaces the older browser-era pipeline view. It shows the major stages, the named buses, and where Program becomes authoritative.</figcaption></figure>
+<div class="callout note"><strong>Quick intuition.</strong> If you only remember three things, remember these: HUFF has a current source, HUFF has temporal image memory, and HUFF ends in a Program image that downstream systems trust.</div>
+<h2>What a newcomer should understand first</h2>
+<ol class="steps">
+<li><strong>Source</strong> is the current incoming file or camera image.</li>
+<li><strong>Effects</strong> transform that source through glitch, scanline, flow, feedback, and compositing stages.</li>
+<li><strong>Temporal memory</strong> gives those effects access to previous frames and persistent image stores.</li>
+<li><strong>Program</strong> is the final committed image.</li>
+<li><strong>Outputs</strong> such as recording, export, Syphon, and Spout are downstream of Program.</li>
+</ol>
+<h2>What is complete and what is still provisional</h2>
+<div class="table-wrap"><table class="win-table"><thead><tr><th>Area</th><th>Status</th><th>How to read that status</th></tr></thead><tbody>
+<tr><td>Native rendering, sources, core effects</td><td>Integrated</td><td>The migration is structurally complete. The application runs as a native instrument.</td></tr>
+<tr><td>Live recording, still export, deterministic export</td><td>Integrated</td><td>The systems exist and work, but still benefit from broader local test coverage.</td></tr>
+<tr><td>Routing recipes</td><td>Integrated</td><td>Recipes already alter legal paths inside the engine and can expand with future features.</td></tr>
+<tr><td>MIDI, OSC, projects, presets, automation</td><td>Integrated</td><td>These form a real control/state workflow, not just a prototype shell.</td></tr>
+<tr><td>Export queue</td><td>Provisional</td><td>Useful infrastructure, but still subject to future keep/hide/remove decisions.</td></tr>
+<tr><td>Parity Lab</td><td>Calibration scaffold</td><td>Helpful for reference and testing, but not a public-facing artistic feature.</td></tr>
+<tr><td>Interop Lab</td><td>Research</td><td>Explains and measures the current copy path; it does not claim zero-copy output.</td></tr>
+</tbody></table></div>
+<h2>Where to go next</h2>
+<ul>
+<li>Read <a href="interface.html">Interface Tour</a> if you want a guided walkthrough of the application windows and overlays.</li>
+<li>Read <a href="effects.html">Effects &amp; Compositing</a> if you want to understand the image vocabulary.</li>
+<li>Read <a href="temporal-memory.html">Temporal Memory</a> if you want to understand why HUFF feels different from a simple filter stack.</li>
+<li>Read <a href="routing.html">Routing &amp; Recipes</a> if you want to understand the expandable pipeline concept.</li>
+</ul>
+<div class="source-list"><strong>Related reference material</strong><br/><a href="architecture.html">Architecture</a> · <a href="effects.html">Effects &amp; Compositing</a> · <a href="temporal-memory.html">Temporal Memory</a> · <a href="routing.html">Routing &amp; Recipes</a></div>
 </div>
-    </div>
-    <div class="col-12 col-md-9 col-lg-10">
-      <div class="window">
-        <div class="win-titlebar">
-          <span class="win-titlebar-title">How It Works</span>
-          <div class="win-controls"><div class="win-btn">_</div><div class="win-btn">□</div><div class="win-btn">✕</div></div>
-        </div>
-        <div class="win-body doc-content">
-          
-<p>huff processes video through a sequential chain of effect passes each frame. Understanding the order helps predict how parameter changes interact.</p>
-<hr/>
-
-<h2>Effect Pipeline</h2>
-<!-- <div class="term" style="line-height:2">
-  <div>  SOURCE (video / webcam)</div>
-  <div>    ↓</div>
-  <div>  [1] TRAILS          — ghost frame blend from ring</div>
-  <div>  [2] GLITCH / DATAMOSH — tile displacement from ring buffer</div>
-  <div>  [3] LUMA KEY        — A/B luma composite of glitch output vs clean source (if ON)</div>
-  <div>  [4] SCANLINES       — spatial band displacement, angle/spin</div>
-  <div>  [5] GLOBAL MIX      — blend-mode composite of base video over effects (if ON)</div>
-  <div>  [6] FEEDBACK        — previous frame zoomed/rotated back</div>
-  <div>  [7] FLOW WARP       — noise-field UV distortion</div>
-  <div>  [8] SYMMETRY        — axis mirror</div>
-  <div>  [9] SOLARISE        — luminance-threshold inversion</div>
-  <div>    ↓</div>
-  <div>  DISPLAY COMPOSITE   — base video mixed in per BASE MIX</div>
-  <div>    ↓</div>
-  <div>  RING BUFFER UPDATE  — clean source frame written to ring for next pass</div>
-  <div>    ↓</div>
-  <div>  OUTPUT → WebSocket relay → Canvas / Syphon / Spout</div>
-</div> -->
-<div class="callout mt-2">
-Each pass is independently toggleable. Disabled passes are completely skipped — no bleed-through. GLITCH and SCANLINES are also weighted against each other by the <strong>A/B Mix</strong> layer-priority slider: the recessive effect's opacity floors at 35% rather than reaching zero, so both remain visible at any position. The ring stores the clean source frame each cycle — passes that sample the ring (GLITCH, TRAILS, FLOW WARP with PULSE) always read <em>previous</em> frames, never the one being assembled.
+</article>
+</main>
 </div>
-<div style="text-align:center;margin-top:14px">
-  <img src="../media/huff-effect-pipeline.jpg" alt="huff effect pipeline diagram — full per-frame processing order from Source through Trails, Glitch, Luma Key, Scanlines, Global Mix, Feedback, Flow Warp, Symmetry, Solarize, to Output" style="max-width:100%;border:2px solid var(--mid);box-shadow:3px 3px 0 rgba(0,0,0,.3)"/>
-</div>
-<hr/>
-
-<h2>UI → Effect Data Flow</h2>
-<p>All parameter control — sliders, MIDI CC, OSC messages — converges on the same DOM element values. The p5.js draw loop reads these values directly on every frame.</p>
-<div class="callout">
-<strong>No debounce, no interpolation layer, no intermediate state object.</strong> Moving a slider and receiving a MIDI CC produce identical results — both write the same DOM element. There is no latency between a MIDI CC and it affecting the output; the next draw() frame picks it up.
-</div>
-<hr/>
-
-<h2>Frame Ring Buffer</h2>
-<p>The ring buffer stores raw ImageData objects — RGBA pixel arrays at canvas resolution. It is the shared memory between passes.</p>
-<div class="table-responsive">
-<table class="win-table">
-  <thead><tr><th>Parameter</th><th>Effect on ring</th></tr></thead>
-  <tbody>
-    <tr><td>QUALITY</td><td>Controls ring depth: 0 → 4 frames, 1 → 60 frames</td></tr>
-    <tr><td>DEPTH</td><td>How far back effects sample into the ring (0–50% of ring depth)</td></tr>
-    <tr><td>DEPTH SCATTER</td><td>Per-tile randomisation of the back index</td></tr>
-    <tr><td>192 MB cap</td><td>Ring depth also capped by pixel budget: at 1080p (~8 MB/frame) max ≈ 23 frames regardless of quality</td></tr>
-  </tbody>
-</table>
-</div>
-<div class="table-responsive mt-2">
-<table class="win-table">
-  <thead><tr><th>Resolution</th><th>Bytes/frame</th><th>Max frames (quality=1)</th></tr></thead>
-  <tbody>
-    <tr><td>720p (1280×720)</td><td>~3.7 MB</td><td>51 frames</td></tr>
-    <tr><td>1080p (1920×1080)</td><td>~8.3 MB</td><td>23 frames</td></tr>
-    <tr><td>1440p (2560×1440)</td><td>~14.7 MB</td><td>13 frames</td></tr>
-    <tr><td>4K (3840×2160)</td><td>~33.2 MB</td><td>5 frames</td></tr>
-  </tbody>
-</table>
-</div>
-<div class="callout warn mt-2"><strong>720p or 1080p is the practical sweet spot.</strong> At 4K the ring holds only 5 frames — DEPTH and temporal effects lose most of their range.</div>
-
-<h2>Frame Output Pipeline</h2>
-<p>At the end of each draw() call, huff routes the composited output frame to one or more destinations. Syphon and Spout use a magic-byte prefix on the same WebSocket connection as the canvas mirror — Rust inspects the first bytes and routes accordingly.</p>
-<div class="term" style="font-size:11px;line-height:1.8">
-  <div>canvas.getImageData()</div>
-  <div>  → raw RGBA bytes</div>
-  <div>  → magic prefix (HUFFSYPH / HUFFSPOUT) + dimensions + pixels</div>
-  <div>  → binary WebSocket to port 8787</div>
-  <div>  → Rust relay inspects prefix</div>
-  <div>      HUFFSYPH  → syphon::push_frame() → MTLTexture → Syphon clients</div>
-  <div>      HUFFSPOUT → spout::push_frame()  → D3D11 texture → Spout receivers</div>
-  <div>      (none)    → forwarded to canvas role clients as JPEG frames</div>
-</div>
-
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js"></script>
-<script>
-function tick(){document.getElementById('clock').textContent=new Date().toLocaleTimeString('en-US',{hour12:false});}
-tick();setInterval(tick,1000);
-</script>
+<div class="footer raised">HUFF native documentation · overview rewritten for new readers and updated with the native pipeline diagram</div>
+<script src="../assets/search-index.js"></script><script src="../assets/docs.js"></script>
 </body>
 </html>

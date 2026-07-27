@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width,initial-scale=1" name="viewport"/>
+<title>Parity &amp; Calibration — HUFF native docs</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=VT323&amp;family=Share+Tech+Mono&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/docs.css" rel="stylesheet"/>
+</head>
+<body>
+<div class="taskbar">
+<a class="taskbar-brand" href="../index.html">■ HUFF</a>
+<a class="taskbar-btn raised-sm" href="how-it-works.html">Overview</a>
+<a class="taskbar-btn raised-sm" href="feature-index.html">Features</a>
+<a class="taskbar-btn raised-sm" href="architecture.html">Architecture</a>
+<a class="taskbar-btn raised-sm" href="visual-guide.html">Visual Guide</a>
+<a class="taskbar-btn raised-sm" href="troubleshooting.html">Help</a>
+<div class="taskbar-clock raised-sm" id="clock">--:--:--</div>
+</div>
+<div class="site-shell">
+<aside class="sidebar raised">
+<div class="sidebar-title">■ DOCUMENTATION</div>
+<input aria-label="Search documentation pages" class="searchbox" id="docSearch" placeholder="Search pages…" type="search"/>
+<div class="search-results" id="searchResults"></div>
+<div class="nav-group"><div class="nav-group-title">Start Here</div><ul class="doc-nav"><li><a href="how-it-works.html">Native HUFF Overview</a></li><li><a href="feature-index.html">Feature Index</a></li><li><a href="visual-guide.html">Visual Guide &amp; Image Needs</a></li><li><a href="installation.html">Installation &amp; Builds</a></li><li><a href="interface.html">Interface Tour</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Media &amp; Image</div><ul class="doc-nav"><li><a href="sources.html">Sources &amp; Transport</a></li><li><a href="effects.html">Effects &amp; Compositing</a></li><li><a href="temporal-memory.html">Temporal Memory</a></li><li><a href="routing.html">Routing &amp; Recipes</a></li></ul></div><div class="nav-group"><div class="nav-group-title">State &amp; Control</div><ul class="doc-nav"><li><a href="state.html">Presets, Snapshots &amp; Projects</a></li><li><a href="automation.html">Automation &amp; Sequences</a></li><li><a href="midi.html">MIDI Mapping</a></li><li><a href="osc.html">OSC Mapping</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Output &amp; Export</div><ul class="doc-nav"><li><a href="recording.html">Live Recording</a></li><li><a href="export.html">Still &amp; Offline Export</a></li><li><a href="export-queue.html">Export Queue</a></li><li><a href="output.html">Syphon &amp; Spout</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Operations</div><ul class="doc-nav"><li><a href="verification.html">Verification &amp; Recovery</a></li><li><a class="active" href="parity.html">Parity &amp; Calibration</a></li><li><a href="interop.html">Interop Research</a></li><li><a href="testing.html">Testing Strategy</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Reference</div><ul class="doc-nav"><li><a href="parameter-reference.html">Parameter Reference</a></li><li><a href="architecture.html">Architecture</a></li><li><a href="caveats.html">Caveats &amp; Tradeoffs</a></li><li><a href="troubleshooting.html">Troubleshooting</a></li><li><a href="glossary.html">Glossary</a></li></ul></div>
+<div class="sidebar-note">Build documented: <strong>0.21.0 / HNW-21</strong><br/>The incoming legacy docs are preserved under <code>archive/original-docs/</code>.</div>
+</aside>
+<main>
+<details class="mobile-nav raised"><summary>Documentation navigation</summary><div class="nav-group"><div class="nav-group-title">Start Here</div><ul class="doc-nav"><li><a href="how-it-works.html">Native HUFF Overview</a></li><li><a href="feature-index.html">Feature Index</a></li><li><a href="visual-guide.html">Visual Guide &amp; Image Needs</a></li><li><a href="installation.html">Installation &amp; Builds</a></li><li><a href="interface.html">Interface Tour</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Media &amp; Image</div><ul class="doc-nav"><li><a href="sources.html">Sources &amp; Transport</a></li><li><a href="effects.html">Effects &amp; Compositing</a></li><li><a href="temporal-memory.html">Temporal Memory</a></li><li><a href="routing.html">Routing &amp; Recipes</a></li></ul></div><div class="nav-group"><div class="nav-group-title">State &amp; Control</div><ul class="doc-nav"><li><a href="state.html">Presets, Snapshots &amp; Projects</a></li><li><a href="automation.html">Automation &amp; Sequences</a></li><li><a href="midi.html">MIDI Mapping</a></li><li><a href="osc.html">OSC Mapping</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Output &amp; Export</div><ul class="doc-nav"><li><a href="recording.html">Live Recording</a></li><li><a href="export.html">Still &amp; Offline Export</a></li><li><a href="export-queue.html">Export Queue</a></li><li><a href="output.html">Syphon &amp; Spout</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Operations</div><ul class="doc-nav"><li><a href="verification.html">Verification &amp; Recovery</a></li><li><a class="active" href="parity.html">Parity &amp; Calibration</a></li><li><a href="interop.html">Interop Research</a></li><li><a href="testing.html">Testing Strategy</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Reference</div><ul class="doc-nav"><li><a href="parameter-reference.html">Parameter Reference</a></li><li><a href="architecture.html">Architecture</a></li><li><a href="caveats.html">Caveats &amp; Tradeoffs</a></li><li><a href="troubleshooting.html">Troubleshooting</a></li><li><a href="glossary.html">Glossary</a></li></ul></div></details>
+<article class="window">
+<div class="win-titlebar"><span class="win-titlebar-title">Parity &amp; Calibration</span><div class="win-controls"><div class="win-btn">_</div><div class="win-btn">□</div><div class="win-btn">✕</div></div></div>
+<div class="win-body doc-content">
+<div class="breadcrumb"><a href="../index.html">HUFF docs</a> / Operations / Parity &amp; Calibration</div>
+<div class="page-meta"><span class="badge provisional">PROVISIONAL SCAFFOLD</span><span class="badge">0.21.0 / HNW-21</span></div>
+<p class="page-lead">The Parity Lab preserves the legacy control contract and creates repeatable reference setups for visual calibration. It is a measurement scaffold, not proof that the native image is pixel-identical to the original browser renderer.</p>
+<div class="page-toc" id="pageToc"><div class="page-toc-title">ON THIS PAGE</div></div>
+<h2>What the contract preserves</h2>
+<p>The embedded legacy contract records 87 original controls and compares their identifiers, types, defaults, minimums, maximums, steps, and selection options with the native canonical registry.</p>
+<h2>Reference profiles</h2>
+<div class="table-wrap"><table class="win-table"><thead><tr><th>Profile</th><th>Purpose</th></tr></thead><tbody>
+<tr><td>Legacy Defaults</td><td>Return the mapped legacy control set to the preserved defaults.</td></tr>
+<tr><td>Glitch Isolation</td><td>Disable competing systems so historical tile behavior can be judged.</td></tr>
+<tr><td>Cluster Isolation</td><td>Expose cluster motion, spread, inertia, and boundary behavior.</td></tr>
+<tr><td>Scanline Isolation</td><td>Expose scan geometry and movement without glitch interference.</td></tr>
+<tr><td>Feedback Reference</td><td>Create a repeatable recursive-transform test.</td></tr>
+<tr><td>Flow Reference</td><td>Create a repeatable warp/advection test.</td></tr>
+</tbody></table></div>
+<h2>Compare and report</h2>
+<p>Compare checks the current native definitions and values against the preserved contract. Export Report writes machine-readable evidence that can be kept with a test build or visual-calibration session.</p>
+<h2>What it proves</h2>
+<ul><li>A parameter still exists under the expected legacy/canonical identity.</li><li>Its declared type, range, step, default, and options have not drifted.</li><li>A reference profile only uses known canonical parameters.</li></ul>
+<h2>What it does not prove</h2>
+<ul><li>That WGSL and p5/WebGL blend math are identical.</li><li>That noise, random distribution, timing, sampling, or color space match.</li><li>That the same numeric value feels equally useful.</li><li>That effect interactions are visually correct.</li></ul>
+<h2>Recommended calibration record</h2>
+<p>For every effect family, retain Legacy Reference, Native Corrected, Expanded Native, and Stress-Test presets plus screenshots/video, source media, routing recipe, render/history settings, and diagnostics.</p>
+<h2>Production treatment</h2>
+<p>The command-line/static validator and frozen legacy contract are valuable even if the in-app Parity Lab is removed. The panel may be better placed under Research or Developer Tools after calibration is complete.</p>
+<div class="callout warn"><strong>Honest label.</strong> Milestone 16 is a legacy parameter contract and calibration scaffold. Visual parity remains a human-guided artistic and technical test cycle.</div>
+<div class="source-list"><strong>Knowledge sources</strong><br/><a href="../reference/UPGRADE-NOTES-16.md">UPGRADE-NOTES-16.md</a> · <a href="../reference/MILESTONES.md">MILESTONES.md</a> · <a href="../reference/FULL-RETROSPECTIVE.md">FULL-RETROSPECTIVE.md</a></div>
+</div>
+</article>
+</main>
+</div>
+<div class="footer raised">HUFF native documentation · static HTML · current architecture preserved before production pruning</div>
+<script src="../assets/search-index.js"></script><script src="../assets/docs.js"></script>
+</body></html>

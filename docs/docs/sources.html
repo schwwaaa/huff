@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width,initial-scale=1" name="viewport"/>
+<title>Sources &amp; Transport — HUFF native docs</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=VT323&amp;family=Share+Tech+Mono&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/docs.css" rel="stylesheet">
+</link></head>
+<body>
+<div class="taskbar">
+<a class="taskbar-brand" href="../index.html">■ HUFF</a>
+<a class="taskbar-btn raised-sm" href="how-it-works.html">Overview</a>
+<a class="taskbar-btn raised-sm" href="feature-index.html">Features</a>
+<a class="taskbar-btn raised-sm" href="architecture.html">Architecture</a>
+<a class="taskbar-btn raised-sm" href="visual-guide.html">Visual Guide</a>
+<a class="taskbar-btn raised-sm" href="troubleshooting.html">Help</a>
+<div class="taskbar-clock raised-sm" id="clock">--:--:--</div>
+</div>
+<div class="site-shell">
+<aside class="sidebar raised">
+<div class="sidebar-title">■ DOCUMENTATION</div>
+<input aria-label="Search documentation pages" class="searchbox" id="docSearch" placeholder="Search pages…" type="search"/>
+<div class="search-results" id="searchResults"></div>
+<div class="nav-group"><div class="nav-group-title">Start Here</div><ul class="doc-nav"><li><a href="how-it-works.html">Native HUFF Overview</a></li><li><a href="feature-index.html">Feature Index</a></li><li><a href="visual-guide.html">Visual Guide &amp; Image Needs</a></li><li><a href="installation.html">Installation &amp; Builds</a></li><li><a href="interface.html">Interface Tour</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Media &amp; Image</div><ul class="doc-nav"><li><a class="active" href="sources.html">Sources &amp; Transport</a></li><li><a href="effects.html">Effects &amp; Compositing</a></li><li><a href="temporal-memory.html">Temporal Memory</a></li><li><a href="routing.html">Routing &amp; Recipes</a></li></ul></div><div class="nav-group"><div class="nav-group-title">State &amp; Control</div><ul class="doc-nav"><li><a href="state.html">Presets, Snapshots &amp; Projects</a></li><li><a href="automation.html">Automation &amp; Sequences</a></li><li><a href="midi.html">MIDI Mapping</a></li><li><a href="osc.html">OSC Mapping</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Output &amp; Export</div><ul class="doc-nav"><li><a href="recording.html">Live Recording</a></li><li><a href="export.html">Still &amp; Offline Export</a></li><li><a href="export-queue.html">Export Queue</a></li><li><a href="output.html">Syphon &amp; Spout</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Operations</div><ul class="doc-nav"><li><a href="verification.html">Verification &amp; Recovery</a></li><li><a href="parity.html">Parity &amp; Calibration</a></li><li><a href="interop.html">Interop Research</a></li><li><a href="testing.html">Testing Strategy</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Reference</div><ul class="doc-nav"><li><a href="parameter-reference.html">Parameter Reference</a></li><li><a href="architecture.html">Architecture</a></li><li><a href="caveats.html">Caveats &amp; Tradeoffs</a></li><li><a href="troubleshooting.html">Troubleshooting</a></li><li><a href="glossary.html">Glossary</a></li></ul></div>
+<div class="sidebar-note">Build documented: <strong>0.21.0 / HNW-21</strong><br/>The incoming legacy docs are preserved under <code>archive/original-docs/</code>.</div>
+</aside>
+<main>
+<details class="mobile-nav raised"><summary>Documentation navigation</summary><div class="nav-group"><div class="nav-group-title">Start Here</div><ul class="doc-nav"><li><a href="how-it-works.html">Native HUFF Overview</a></li><li><a href="feature-index.html">Feature Index</a></li><li><a href="visual-guide.html">Visual Guide &amp; Image Needs</a></li><li><a href="installation.html">Installation &amp; Builds</a></li><li><a href="interface.html">Interface Tour</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Media &amp; Image</div><ul class="doc-nav"><li><a class="active" href="sources.html">Sources &amp; Transport</a></li><li><a href="effects.html">Effects &amp; Compositing</a></li><li><a href="temporal-memory.html">Temporal Memory</a></li><li><a href="routing.html">Routing &amp; Recipes</a></li></ul></div><div class="nav-group"><div class="nav-group-title">State &amp; Control</div><ul class="doc-nav"><li><a href="state.html">Presets, Snapshots &amp; Projects</a></li><li><a href="automation.html">Automation &amp; Sequences</a></li><li><a href="midi.html">MIDI Mapping</a></li><li><a href="osc.html">OSC Mapping</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Output &amp; Export</div><ul class="doc-nav"><li><a href="recording.html">Live Recording</a></li><li><a href="export.html">Still &amp; Offline Export</a></li><li><a href="export-queue.html">Export Queue</a></li><li><a href="output.html">Syphon &amp; Spout</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Operations</div><ul class="doc-nav"><li><a href="verification.html">Verification &amp; Recovery</a></li><li><a href="parity.html">Parity &amp; Calibration</a></li><li><a href="interop.html">Interop Research</a></li><li><a href="testing.html">Testing Strategy</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Reference</div><ul class="doc-nav"><li><a href="parameter-reference.html">Parameter Reference</a></li><li><a href="architecture.html">Architecture</a></li><li><a href="caveats.html">Caveats &amp; Tradeoffs</a></li><li><a href="troubleshooting.html">Troubleshooting</a></li><li><a href="glossary.html">Glossary</a></li></ul></div></details>
+<article class="window">
+<div class="win-titlebar"><span class="win-titlebar-title">Sources &amp; Transport</span><div class="win-controls"><div class="win-btn">_</div><div class="win-btn">□</div><div class="win-btn">✕</div></div></div>
+<div class="win-body doc-content">
+<div class="breadcrumb"><a href="../index.html">HUFF docs</a> / Media &amp; Image / Sources &amp; Transport</div>
+<div class="page-meta"><span class="badge">INTEGRATED</span><span class="badge">0.21.0 / HNW-21</span></div>
+<p class="page-lead">HUFF treats file playback, camera capture, video audio, and microphone audio as supervised native resources. The central rule is that one visual source is authoritative at a time.</p>
+<div class="page-toc" id="pageToc"><div class="page-toc-title">ON THIS PAGE</div></div>
+<h2>File playback</h2><p>Choosing a file starts the native decode path. The transport maintains play/pause, seek position, loop policy, and playback rate. Source audio is routed independently of the GPU render loop so visual load does not directly control audio delivery.</p>
+<h2>Camera capture</h2><p>Starting a camera makes the selected camera authoritative. On macOS, the project includes an AVFoundation bridge; a cross-platform camera path also exists. Camera availability, permission, requested format, frame rate, and errors appear in Production Verification.</p>
+<h2>Mutual authority</h2><pre>FILE ACTIVE   → camera work is stopped or inactive
+CAMERA ACTIVE → file decode/audio do not remain hidden owners
+SOURCE CHANGE → stale frames are cleared and the selected source takes authority</pre>
+<p>This boundary prevents the classic failure where the transport says “playing” while an old camera or decoder still owns the frame path.</p>
+<h2>Decoder watchdog</h2><p>Milestone 07.2 added bounded FFmpeg reader threads and watchdog recovery. If decode progress stops while playback should be advancing, the source can be restarted rather than leaving the application in a silent half-running state.</p>
+<h2>Audio ownership</h2><div class="table-wrap"><table class="win-table"><thead><tr><th>Audio source</th><th>Use</th><th>Notes</th></tr></thead><tbody><tr><td>Video audio</td><td>Playback and recording from the loaded file.</td><td>Can be selected explicitly or through automatic recording policy.</td></tr><tr><td>Microphone</td><td>Live input for recording.</td><td>Device state, buffering, and underflows appear in verification.</td></tr><tr><td>Silent</td><td>No audio in the recording/export.</td><td>Useful for external sound workflows.</td></tr><tr><td>Retimed source audio</td><td>Offline deterministic export.</td><td>The export timeline is authoritative; audio is prepared to match it.</td></tr></tbody></table></div>
+<h2>Recovery behavior</h2><p><strong>Restart Source</strong> attempts to restart the current file near its current position or restart the selected camera/profile. It is blocked while recording or deterministic export owns the source pipeline. Recovery should preserve parameters, routing, and project state.</p>
+<h2>Known risks</h2><ul><li>Camera permissions and device formats are platform-specific.</li><li>Some codecs and files expose seek, duration, or audio-layout edge cases.</li><li>Long-session source stalls need real-world testing.</li><li>Source restarts can create a brief temporal discontinuity even when the creative state remains intact.</li></ul><div class="callout remove"><strong>Knowledge to retain.</strong> Even if camera support is removed from a streamlined build, keep the explicit source-authority model, decoder watchdog, source health reporting, and recovery contract.</div>
+<div class="source-list"><strong>Knowledge sources</strong><br/><a href="../reference/MILESTONES.md">MILESTONES.md</a> · <a href="../reference/PRODUCTION-VERIFICATION.md">PRODUCTION-VERIFICATION.md</a> · <a href="../reference/UPGRADE-NOTES-02.1.md">UPGRADE-NOTES-02.1.md</a> · <a href="../reference/UPGRADE-NOTES-07.2.md">UPGRADE-NOTES-07.2.md</a></div>
+</div>
+</article>
+</main>
+</div>
+<div class="footer raised">HUFF native documentation · static HTML · current architecture preserved before production pruning</div>
+<script src="../assets/search-index.js"></script><script src="../assets/docs.js"></script>
+</body></html>

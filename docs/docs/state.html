@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width,initial-scale=1" name="viewport"/>
+<title>Presets, Snapshots &amp; Projects — HUFF native docs</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=VT323&amp;family=Share+Tech+Mono&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/docs.css" rel="stylesheet">
+</link></head>
+<body>
+<div class="taskbar">
+<a class="taskbar-brand" href="../index.html">■ HUFF</a>
+<a class="taskbar-btn raised-sm" href="how-it-works.html">Overview</a>
+<a class="taskbar-btn raised-sm" href="feature-index.html">Features</a>
+<a class="taskbar-btn raised-sm" href="architecture.html">Architecture</a>
+<a class="taskbar-btn raised-sm" href="visual-guide.html">Visual Guide</a>
+<a class="taskbar-btn raised-sm" href="troubleshooting.html">Help</a>
+<div class="taskbar-clock raised-sm" id="clock">--:--:--</div>
+</div>
+<div class="site-shell">
+<aside class="sidebar raised">
+<div class="sidebar-title">■ DOCUMENTATION</div>
+<input aria-label="Search documentation pages" class="searchbox" id="docSearch" placeholder="Search pages…" type="search"/>
+<div class="search-results" id="searchResults"></div>
+<div class="nav-group"><div class="nav-group-title">Start Here</div><ul class="doc-nav"><li><a href="how-it-works.html">Native HUFF Overview</a></li><li><a href="feature-index.html">Feature Index</a></li><li><a href="visual-guide.html">Visual Guide &amp; Image Needs</a></li><li><a href="installation.html">Installation &amp; Builds</a></li><li><a href="interface.html">Interface Tour</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Media &amp; Image</div><ul class="doc-nav"><li><a href="sources.html">Sources &amp; Transport</a></li><li><a href="effects.html">Effects &amp; Compositing</a></li><li><a href="temporal-memory.html">Temporal Memory</a></li><li><a href="routing.html">Routing &amp; Recipes</a></li></ul></div><div class="nav-group"><div class="nav-group-title">State &amp; Control</div><ul class="doc-nav"><li><a class="active" href="state.html">Presets, Snapshots &amp; Projects</a></li><li><a href="automation.html">Automation &amp; Sequences</a></li><li><a href="midi.html">MIDI Mapping</a></li><li><a href="osc.html">OSC Mapping</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Output &amp; Export</div><ul class="doc-nav"><li><a href="recording.html">Live Recording</a></li><li><a href="export.html">Still &amp; Offline Export</a></li><li><a href="export-queue.html">Export Queue</a></li><li><a href="output.html">Syphon &amp; Spout</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Operations</div><ul class="doc-nav"><li><a href="verification.html">Verification &amp; Recovery</a></li><li><a href="parity.html">Parity &amp; Calibration</a></li><li><a href="interop.html">Interop Research</a></li><li><a href="testing.html">Testing Strategy</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Reference</div><ul class="doc-nav"><li><a href="parameter-reference.html">Parameter Reference</a></li><li><a href="architecture.html">Architecture</a></li><li><a href="caveats.html">Caveats &amp; Tradeoffs</a></li><li><a href="troubleshooting.html">Troubleshooting</a></li><li><a href="glossary.html">Glossary</a></li></ul></div>
+<div class="sidebar-note">Build documented: <strong>0.21.0 / HNW-21</strong><br/>The incoming legacy docs are preserved under <code>archive/original-docs/</code>.</div>
+</aside>
+<main>
+<details class="mobile-nav raised"><summary>Documentation navigation</summary><div class="nav-group"><div class="nav-group-title">Start Here</div><ul class="doc-nav"><li><a href="how-it-works.html">Native HUFF Overview</a></li><li><a href="feature-index.html">Feature Index</a></li><li><a href="visual-guide.html">Visual Guide &amp; Image Needs</a></li><li><a href="installation.html">Installation &amp; Builds</a></li><li><a href="interface.html">Interface Tour</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Media &amp; Image</div><ul class="doc-nav"><li><a href="sources.html">Sources &amp; Transport</a></li><li><a href="effects.html">Effects &amp; Compositing</a></li><li><a href="temporal-memory.html">Temporal Memory</a></li><li><a href="routing.html">Routing &amp; Recipes</a></li></ul></div><div class="nav-group"><div class="nav-group-title">State &amp; Control</div><ul class="doc-nav"><li><a class="active" href="state.html">Presets, Snapshots &amp; Projects</a></li><li><a href="automation.html">Automation &amp; Sequences</a></li><li><a href="midi.html">MIDI Mapping</a></li><li><a href="osc.html">OSC Mapping</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Output &amp; Export</div><ul class="doc-nav"><li><a href="recording.html">Live Recording</a></li><li><a href="export.html">Still &amp; Offline Export</a></li><li><a href="export-queue.html">Export Queue</a></li><li><a href="output.html">Syphon &amp; Spout</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Operations</div><ul class="doc-nav"><li><a href="verification.html">Verification &amp; Recovery</a></li><li><a href="parity.html">Parity &amp; Calibration</a></li><li><a href="interop.html">Interop Research</a></li><li><a href="testing.html">Testing Strategy</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Reference</div><ul class="doc-nav"><li><a href="parameter-reference.html">Parameter Reference</a></li><li><a href="architecture.html">Architecture</a></li><li><a href="caveats.html">Caveats &amp; Tradeoffs</a></li><li><a href="troubleshooting.html">Troubleshooting</a></li><li><a href="glossary.html">Glossary</a></li></ul></div></details>
+<article class="window">
+<div class="win-titlebar"><span class="win-titlebar-title">Presets, Snapshots &amp; Projects</span><div class="win-controls"><div class="win-btn">_</div><div class="win-btn">□</div><div class="win-btn">✕</div></div></div>
+<div class="win-body doc-content">
+<div class="breadcrumb"><a href="../index.html">HUFF docs</a> / State &amp; Control / Presets, Snapshots &amp; Projects</div>
+<div class="page-meta"><span class="badge">INTEGRATED</span><span class="badge">0.21.0 / HNW-21</span></div>
+<p class="page-lead">HUFF separates four state-document types so an artistic look, a complete recovery state, a timed performance, and a whole project are not confused with one another.</p>
+<div class="page-toc" id="pageToc"><div class="page-toc-title">ON THIS PAGE</div></div>
+<h2>The four document types</h2><figure class="diagram"><img alt="Diagram comparing Preset, Snapshot, Sequence, and Project documents and their scopes" src="../media/state-model.svg"/><figcaption>Each document type has a different promise. Recall scope prevents an artistic preset from unexpectedly changing devices, transport, mappings, or render configuration.</figcaption></figure><div class="table-wrap"><table class="win-table"><thead><tr><th>Type</th><th>Plain-language meaning</th><th>Typical contents</th><th>Should not silently include</th></tr></thead><tbody><tr><td>Preset</td><td>A reusable artistic condition.</td><td>Selected look/effect parameters and optional routing.</td><td>Devices, output resolution, transport, or giant GPU pixel stores unless explicitly scoped.</td></tr><tr><td>Snapshot</td><td>A broad machine-state capture.</td><td>Most current operating state for recovery or comparison.</td><td>Unbounded hidden resources.</td></tr><tr><td>Sequence</td><td>A source-independent timed performance.</td><td>Automation events, actions, interpolation, duration.</td><td>Unsafe device and allocation changes.</td></tr><tr><td>Project</td><td>A portable working context.</td><td>Selected parameters, source references, transport, automation, mappings, routing, notes.</td><td>Implicit platform-specific assumptions without metadata.</td></tr></tbody></table></div>
+<h2>Recall scopes</h2><p>When saving and loading, the operator can include Look, Source, Temporal, Routing, Render, Transport, Automation, MIDI/OSC Maps, and GPU Pixels. Loading uses the intersection of the document’s saved scope and the operator’s chosen recall scope.</p>
+<h2>Persistent pixels</h2><p>Milestone 18 identifies history, feedback, flying-buffer, and Flow pixels as persistent image state, but the normal documents do not embed those potentially enormous GPU resources. Documents preserve how the instrument operates; they do not automatically turn every project into a multi-gigabyte pixel dump.</p>
+<h2>Quick presets versus typed documents</h2><p>The original quick/local preset system remains for compatibility and observational comparison. The typed document system is the long-term architecture because it states what kind of object is being saved and which domains are allowed to change.</p>
+<h2>Why scope matters</h2><ul><li>A look preset should not stop playback.</li><li>A routing preset should not change output resolution.</li><li>A source preset should not erase controller mappings.</li><li>A sequence should not switch GPU adapters or codecs.</li><li>A project should declare references rather than hiding live device assumptions.</li></ul>
+<div class="callout remove"><strong>Knowledge to retain.</strong> Even if the production UI only exposes “Preset” and “Project,” preserve the distinctions among Preset, Snapshot, Sequence, Still, and Project in the schema and documentation.</div>
+<div class="source-list"><strong>Knowledge sources</strong><br/><a href="../reference/STATE-MODEL.md">STATE-MODEL.md</a> · <a href="../reference/UPGRADE-NOTES-18.md">UPGRADE-NOTES-18.md</a> · <a href="../reference/HUFF_VIDEO_INSTRUMENT_REFERENCE_STUDY.md">HUFF_VIDEO_INSTRUMENT_REFERENCE_STUDY.md</a></div>
+</div>
+</article>
+</main>
+</div>
+<div class="footer raised">HUFF native documentation · static HTML · current architecture preserved before production pruning</div>
+<script src="../assets/search-index.js"></script><script src="../assets/docs.js"></script>
+</body></html>

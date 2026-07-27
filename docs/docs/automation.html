@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width,initial-scale=1" name="viewport"/>
+<title>Automation &amp; Sequences — HUFF native docs</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=VT323&amp;family=Share+Tech+Mono&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/docs.css" rel="stylesheet">
+</link></head>
+<body>
+<div class="taskbar">
+<a class="taskbar-brand" href="../index.html">■ HUFF</a>
+<a class="taskbar-btn raised-sm" href="how-it-works.html">Overview</a>
+<a class="taskbar-btn raised-sm" href="feature-index.html">Features</a>
+<a class="taskbar-btn raised-sm" href="architecture.html">Architecture</a>
+<a class="taskbar-btn raised-sm" href="visual-guide.html">Visual Guide</a>
+<a class="taskbar-btn raised-sm" href="troubleshooting.html">Help</a>
+<div class="taskbar-clock raised-sm" id="clock">--:--:--</div>
+</div>
+<div class="site-shell">
+<aside class="sidebar raised">
+<div class="sidebar-title">■ DOCUMENTATION</div>
+<input aria-label="Search documentation pages" class="searchbox" id="docSearch" placeholder="Search pages…" type="search"/>
+<div class="search-results" id="searchResults"></div>
+<div class="nav-group"><div class="nav-group-title">Start Here</div><ul class="doc-nav"><li><a href="how-it-works.html">Native HUFF Overview</a></li><li><a href="feature-index.html">Feature Index</a></li><li><a href="visual-guide.html">Visual Guide &amp; Image Needs</a></li><li><a href="installation.html">Installation &amp; Builds</a></li><li><a href="interface.html">Interface Tour</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Media &amp; Image</div><ul class="doc-nav"><li><a href="sources.html">Sources &amp; Transport</a></li><li><a href="effects.html">Effects &amp; Compositing</a></li><li><a href="temporal-memory.html">Temporal Memory</a></li><li><a href="routing.html">Routing &amp; Recipes</a></li></ul></div><div class="nav-group"><div class="nav-group-title">State &amp; Control</div><ul class="doc-nav"><li><a href="state.html">Presets, Snapshots &amp; Projects</a></li><li><a class="active" href="automation.html">Automation &amp; Sequences</a></li><li><a href="midi.html">MIDI Mapping</a></li><li><a href="osc.html">OSC Mapping</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Output &amp; Export</div><ul class="doc-nav"><li><a href="recording.html">Live Recording</a></li><li><a href="export.html">Still &amp; Offline Export</a></li><li><a href="export-queue.html">Export Queue</a></li><li><a href="output.html">Syphon &amp; Spout</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Operations</div><ul class="doc-nav"><li><a href="verification.html">Verification &amp; Recovery</a></li><li><a href="parity.html">Parity &amp; Calibration</a></li><li><a href="interop.html">Interop Research</a></li><li><a href="testing.html">Testing Strategy</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Reference</div><ul class="doc-nav"><li><a href="parameter-reference.html">Parameter Reference</a></li><li><a href="architecture.html">Architecture</a></li><li><a href="caveats.html">Caveats &amp; Tradeoffs</a></li><li><a href="troubleshooting.html">Troubleshooting</a></li><li><a href="glossary.html">Glossary</a></li></ul></div>
+<div class="sidebar-note">Build documented: <strong>0.21.0 / HNW-21</strong><br/>The incoming legacy docs are preserved under <code>archive/original-docs/</code>.</div>
+</aside>
+<main>
+<details class="mobile-nav raised"><summary>Documentation navigation</summary><div class="nav-group"><div class="nav-group-title">Start Here</div><ul class="doc-nav"><li><a href="how-it-works.html">Native HUFF Overview</a></li><li><a href="feature-index.html">Feature Index</a></li><li><a href="visual-guide.html">Visual Guide &amp; Image Needs</a></li><li><a href="installation.html">Installation &amp; Builds</a></li><li><a href="interface.html">Interface Tour</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Media &amp; Image</div><ul class="doc-nav"><li><a href="sources.html">Sources &amp; Transport</a></li><li><a href="effects.html">Effects &amp; Compositing</a></li><li><a href="temporal-memory.html">Temporal Memory</a></li><li><a href="routing.html">Routing &amp; Recipes</a></li></ul></div><div class="nav-group"><div class="nav-group-title">State &amp; Control</div><ul class="doc-nav"><li><a href="state.html">Presets, Snapshots &amp; Projects</a></li><li><a class="active" href="automation.html">Automation &amp; Sequences</a></li><li><a href="midi.html">MIDI Mapping</a></li><li><a href="osc.html">OSC Mapping</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Output &amp; Export</div><ul class="doc-nav"><li><a href="recording.html">Live Recording</a></li><li><a href="export.html">Still &amp; Offline Export</a></li><li><a href="export-queue.html">Export Queue</a></li><li><a href="output.html">Syphon &amp; Spout</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Operations</div><ul class="doc-nav"><li><a href="verification.html">Verification &amp; Recovery</a></li><li><a href="parity.html">Parity &amp; Calibration</a></li><li><a href="interop.html">Interop Research</a></li><li><a href="testing.html">Testing Strategy</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Reference</div><ul class="doc-nav"><li><a href="parameter-reference.html">Parameter Reference</a></li><li><a href="architecture.html">Architecture</a></li><li><a href="caveats.html">Caveats &amp; Tradeoffs</a></li><li><a href="troubleshooting.html">Troubleshooting</a></li><li><a href="glossary.html">Glossary</a></li></ul></div></details>
+<article class="window">
+<div class="win-titlebar"><span class="win-titlebar-title">Automation &amp; Sequences</span><div class="win-controls"><div class="win-btn">_</div><div class="win-btn">□</div><div class="win-btn">✕</div></div></div>
+<div class="win-body doc-content">
+<div class="breadcrumb"><a href="../index.html">HUFF docs</a> / State &amp; Control / Automation &amp; Sequences</div>
+<div class="page-meta"><span class="badge">INTEGRATED, LIMITED UI</span><span class="badge">0.21.0 / HNW-21</span></div>
+<p class="page-lead">Automation records canonical parameter changes and actions, then replays them against the deterministic export clock. The event model is valuable; the current live-performance interface is intentionally incomplete.</p>
+<div class="page-toc" id="pageToc"><div class="page-toc-title">ON THIS PAGE</div></div>
+<h2>What is recorded</h2><ul><li>Eligible canonical number, boolean, and selection parameters.</li><li>Parameter batches such as the initial state or preset/reset operations.</li><li>Actions including Clear Buffers and Flow Pulse.</li><li>Controller-driven changes when MIDI/OSC mapping is active.</li></ul>
+<h2>Interpolation</h2><div class="table-wrap"><table class="win-table"><thead><tr><th>Mode</th><th>Behavior</th><th>Best for</th></tr></thead><tbody><tr><td>Step</td><td>Hold the prior value until the next event.</td><td>Booleans, selections, hard cuts.</td></tr><tr><td>Linear</td><td>Constant-rate transition.</td><td>Straight parameter ramps.</td></tr><tr><td>Smooth</td><td>Smoothed transition curve.</td><td>General performance gestures.</td></tr><tr><td>Ease In</td><td>Slow start, faster finish.</td><td>Building motion.</td></tr><tr><td>Ease Out</td><td>Fast start, slow finish.</td><td>Settling motion.</td></tr></tbody></table></div>
+<p>Boolean and selection parameters automatically use Step because interpolating between two labels or true/false states has no meaningful continuous value.</p>
+<h2>How it is triggered today</h2><ol class="steps"><li>Press <strong>Record</strong> in the Automation section.</li><li>Move parameters or trigger recordable actions.</li><li>Press <strong>Stop</strong>; the clip becomes the active automation.</li><li>In Offline Export, select <strong>Active Automation</strong>.</li><li>Queue/start the export. The fixed export timeline replays the clip.</li></ol>
+<p>There is no polished live Play/Pause/Rewind automation transport or visible timeline in Milestone 21. The automation is primarily an offline-render input.</p>
+<h2>Loop behavior</h2><p>Looping repeats events, but persistent image memory does not automatically reset at the loop boundary. Record a Clear Buffers action at the desired boundary when every loop must begin from clean temporal state.</p>
+<h2>Determinism</h2><p>Offline replay evaluates parameters at export time rather than wall-clock time. Actions fire when frame time crosses their timestamps. The automation clip is frozen into the export job and metadata so later UI changes do not alter the queued render.</p>
+<h2>Limits</h2><ul><li>Maximum event count and duration are bounded.</li><li>Not every system setting is sequenceable.</li><li>Live automation preview remains a future usability feature.</li><li>Persistent resources need explicit reset actions for exact loop repetition.</li></ul><div class="callout remove"><strong>Removal guidance.</strong> The current Automation panel can be replaced later, but keep the canonical event format, interpolation rules, action registry, sequenceability metadata, and deterministic evaluator.</div>
+<div class="source-list"><strong>Knowledge sources</strong><br/><a href="../reference/UPGRADE-NOTES-14.md">UPGRADE-NOTES-14.md</a> · <a href="../reference/STATE-MODEL.md">STATE-MODEL.md</a> · <a href="../reference/FULL-RETROSPECTIVE.md">FULL-RETROSPECTIVE.md</a></div>
+</div>
+</article>
+</main>
+</div>
+<div class="footer raised">HUFF native documentation · static HTML · current architecture preserved before production pruning</div>
+<script src="../assets/search-index.js"></script><script src="../assets/docs.js"></script>
+</body></html>

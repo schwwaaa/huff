@@ -1,0 +1,158 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="1740" viewBox="0 0 1400 1740">
+  <defs>
+    <style>
+      .bg { fill:#001010; }
+      .header { fill:#ff4647; }
+      .box { fill:#1b1b1b; stroke:#c0c0c0; stroke-width:2; }
+      .greenBox { fill:#1b1b1b; stroke:#00ff00; stroke-width:2; }
+      .cyanBox { fill:#1b1b1b; stroke:#00ffff; stroke-width:2; }
+      .dashBox { fill:none; stroke:#ffe700; stroke-width:2; stroke-dasharray:8 6; }
+      .outputBox { fill:#1b1b1b; stroke:#ff4647; stroke-width:2; }
+      .num { fill:#ff4647; }
+      .white { fill:#f7f7f7; font-family: 'Share Tech Mono', monospace; font-size: 28px; letter-spacing: 3px; }
+      .title { fill:#fff; font-family:'Share Tech Mono', monospace; font-size:48px; letter-spacing:8px; font-weight:700; }
+      .sub { fill:#ffe7e7; font-family:'Share Tech Mono', monospace; font-size:18px; letter-spacing:4px; }
+      .green { fill:#00ff00; font-family:'Share Tech Mono', monospace; font-size:32px; letter-spacing:4px; font-weight:700; }
+      .body { fill:#cfcfcf; font-family:'Share Tech Mono', monospace; font-size:18px; }
+      .tiny { fill:#8a8a8a; font-family:'Share Tech Mono', monospace; font-size:16px; }
+      .sideTitle { fill:#fff; font-family:'Share Tech Mono', monospace; font-size:22px; letter-spacing:4px; font-weight:700; }
+      .sideBody { fill:#d0d0d0; font-family:'Share Tech Mono', monospace; font-size:16px; }
+      .yellow { fill:#ffe700; font-family:'Share Tech Mono', monospace; font-size:16px; }
+      .arrow { stroke:#00ff00; stroke-width:6; marker-end:url(#m); }
+    </style>
+    <marker id="m" markerWidth="10" markerHeight="10" refX="5" refY="5" orient="auto">
+      <polygon points="0,0 10,5 0,10" fill="#00ff00"/>
+    </marker>
+  </defs>
+  <rect class="bg" x="0" y="0" width="1400" height="1740"/>
+  <rect class="header" x="0" y="0" width="1400" height="74"/>
+  <text class="title" x="700" y="42" text-anchor="middle">HUFF — NATIVE EFFECT PIPELINE</text>
+  <text class="sub" x="700" y="64" text-anchor="middle">PROGRAM / MONITOR MODEL · NAMED BUSES · FIXED LEGAL ROUTES</text>
+
+  <rect class="greenBox" x="160" y="110" width="680" height="62"/>
+  <text class="green" x="500" y="145" text-anchor="middle">SOURCE + CLEAN BUS</text>
+  <text class="tiny" x="500" y="163" text-anchor="middle">video file or camera · authoritative current source · transport + audio</text>
+
+  <line class="arrow" x1="500" y1="172" x2="500" y2="208"/>
+  <rect class="greenBox" x="160" y="208" width="680" height="74"/>
+  <text class="green" x="500" y="245" text-anchor="middle">HISTORY BUS</text>
+  <text class="tiny" x="500" y="263" text-anchor="middle">bounded GPU ring of previous clean frames · sampled by trails / glitch / flow pulse</text>
+
+  <line class="arrow" x1="500" y1="282" x2="500" y2="320"/>
+  <rect class="box" x="160" y="320" width="680" height="104"/>
+  <rect class="num" x="160" y="320" width="46" height="104"/>
+  <text class="white" x="183" y="380" text-anchor="middle">1</text>
+  <text class="white" x="500" y="362" text-anchor="middle">TRAILS / HISTORY COMPOSITE</text>
+  <text class="body" x="500" y="388" text-anchor="middle">ghost-frame blend from history ring</text>
+  <text class="tiny" x="500" y="409" text-anchor="middle">composites sampled earlier frames into the working image</text>
+
+  <rect class="dashBox" x="160" y="446" width="680" height="50"/>
+  <text class="yellow" x="500" y="476" text-anchor="middle">ROUTING RECIPE MAY CHOOSE GLITCH-FIRST OR SCAN-FIRST ORDER</text>
+
+  <line class="arrow" x1="500" y1="496" x2="500" y2="530"/>
+  <rect class="box" x="160" y="530" width="680" height="112"/>
+  <rect class="num" x="160" y="530" width="46" height="112"/>
+  <text class="white" x="183" y="594" text-anchor="middle">2</text>
+  <text class="white" x="500" y="572" text-anchor="middle">GLITCH / DATAMOSH + CLUSTERS</text>
+  <text class="body" x="500" y="598" text-anchor="middle">tile displacement from history · cluster-biased motion and jitter</text>
+  <text class="tiny" x="500" y="619" text-anchor="middle">corrupt, depth, pixel size, smear, clusters, opacity</text>
+
+  <line class="arrow" x1="500" y1="642" x2="500" y2="676"/>
+  <rect class="box" x="160" y="676" width="680" height="102"/>
+  <rect class="num" x="160" y="676" width="46" height="102"/>
+  <text class="white" x="183" y="735" text-anchor="middle">3</text>
+  <text class="white" x="500" y="714" text-anchor="middle">LUMA KEY / RESTORE</text>
+  <text class="body" x="500" y="739" text-anchor="middle">composites processed image against clean source</text>
+  <text class="tiny" x="500" y="760" text-anchor="middle">threshold, mix, invert, clean-under/clean-over relationships</text>
+
+  <line class="arrow" x1="500" y1="778" x2="500" y2="812"/>
+  <rect class="box" x="160" y="812" width="680" height="112"/>
+  <rect class="num" x="160" y="812" width="46" height="112"/>
+  <text class="white" x="183" y="876" text-anchor="middle">4</text>
+  <text class="white" x="500" y="853" text-anchor="middle">SCANLINES + SMOOSH</text>
+  <text class="body" x="500" y="879" text-anchor="middle">spatial band displacement, skew, gap, angle, drift, focus</text>
+  <text class="tiny" x="500" y="900" text-anchor="middle">recipe can isolate or combine scanlines and glitch before later stages</text>
+
+  <line class="arrow" x1="500" y1="924" x2="500" y2="958"/>
+  <rect class="box" x="160" y="958" width="680" height="100"/>
+  <rect class="num" x="160" y="958" width="46" height="100"/>
+  <text class="white" x="183" y="1016" text-anchor="middle">5</text>
+  <text class="white" x="500" y="996" text-anchor="middle">GLOBAL MIX</text>
+  <text class="body" x="500" y="1020" text-anchor="middle">blend base video against the processed chain</text>
+  <text class="tiny" x="500" y="1040" text-anchor="middle">screen, multiply, overlay, difference, hard light, add</text>
+
+  <line class="arrow" x1="500" y1="1058" x2="500" y2="1092"/>
+  <rect class="box" x="160" y="1092" width="680" height="114"/>
+  <rect class="num" x="160" y="1092" width="46" height="114"/>
+  <text class="white" x="183" y="1158" text-anchor="middle">6</text>
+  <text class="white" x="500" y="1136" text-anchor="middle">FIELD STORE + FEEDBACK</text>
+  <text class="body" x="500" y="1162" text-anchor="middle">persistent flying framebuffer and previous composite fed back into itself</text>
+  <text class="tiny" x="500" y="1184" text-anchor="middle">translate, zoom, rotate, decay, clear buffers · owns persistent temporal memory</text>
+
+  <line class="arrow" x1="500" y1="1206" x2="500" y2="1240"/>
+  <rect class="box" x="160" y="1240" width="680" height="108"/>
+  <rect class="num" x="160" y="1240" width="46" height="108"/>
+  <text class="white" x="183" y="1302" text-anchor="middle">7</text>
+  <text class="white" x="500" y="1281" text-anchor="middle">FLOW WARP</text>
+  <text class="body" x="500" y="1306" text-anchor="middle">noise-field UV displacement over the current processed image</text>
+  <text class="tiny" x="500" y="1327" text-anchor="middle">strength, scale, speed, swirl, pull, turbulence, pulse</text>
+
+  <line class="arrow" x1="500" y1="1348" x2="500" y2="1382"/>
+  <rect class="cyanBox" x="160" y="1382" width="680" height="82"/>
+  <text class="green" x="500" y="1425" text-anchor="middle">PROGRAM BUS</text>
+  <text class="tiny" x="500" y="1446" text-anchor="middle">authoritative final image used by recording, deterministic export, Syphon, and Spout</text>
+
+  <line class="arrow" x1="500" y1="1464" x2="500" y2="1498"/>
+  <rect class="greenBox" x="160" y="1498" width="680" height="72"/>
+  <text class="green" x="500" y="1537" text-anchor="middle">MONITOR SELECTION</text>
+  <text class="tiny" x="500" y="1558" text-anchor="middle">local window may inspect Program, Clean, or Field Store independently</text>
+
+  <line class="arrow" x1="500" y1="1570" x2="500" y2="1606"/>
+  <rect class="outputBox" x="160" y="1606" width="680" height="82"/>
+  <text class="white" x="500" y="1649" text-anchor="middle">OUTPUTS</text>
+  <text class="tiny" x="500" y="1670" text-anchor="middle">native output window · live MP4 recording · still export · deterministic export · Syphon / Spout</text>
+
+  <rect class="box" x="890" y="110" width="360" height="118"/>
+  <text class="sideTitle" x="1070" y="148" text-anchor="middle">CORE IDEA</text>
+  <text class="sideBody" x="910" y="178">• Recipes do not build arbitrary node graphs.</text>
+  <text class="sideBody" x="910" y="202">• They flip legal switches inside a fixed engine.</text>
+  <text class="sideBody" x="910" y="226">• Program and Monitor can diverge safely.</text>
+
+  <rect class="box" x="890" y="258" width="360" height="160"/>
+  <text class="sideTitle" x="1070" y="296" text-anchor="middle">NAMED BUSES</text>
+  <text class="sideBody" x="910" y="326">Clean Bus — current normalized source</text>
+  <text class="sideBody" x="910" y="350">History Bus — bounded previous frames</text>
+  <text class="sideBody" x="910" y="374">Process Bus — the active effect chain</text>
+  <text class="sideBody" x="910" y="398">Field Store — persistent flying framebuffer</text>
+
+  <rect class="box" x="890" y="442" width="360" height="172"/>
+  <text class="sideTitle" x="1070" y="480" text-anchor="middle">STANDARD RECIPES</text>
+  <text class="sideBody" x="910" y="510">Classic HUFF</text>
+  <text class="sideBody" x="910" y="534">Glitch → Flow → Scan</text>
+  <text class="sideBody" x="910" y="558">Scan → Flow → Glitch</text>
+  <text class="sideBody" x="910" y="582">Isolated Smoosh Layers</text>
+  <text class="sideBody" x="910" y="606">Clean Program Bypass</text>
+
+  <rect class="box" x="890" y="640" width="360" height="156"/>
+  <text class="sideTitle" x="1070" y="678" text-anchor="middle">DIFFERENCE FROM LEGACY</text>
+  <text class="sideBody" x="910" y="708">Legacy HUFF ended in a browser canvas.</text>
+  <text class="sideBody" x="910" y="732">Native HUFF ends in a Program texture.</text>
+  <text class="sideBody" x="910" y="756">That texture feeds recording, export, and interop.</text>
+
+  <rect class="box" x="890" y="824" width="360" height="192"/>
+  <text class="sideTitle" x="1070" y="862" text-anchor="middle">WHAT TO SHOW NEW USERS</text>
+  <text class="sideBody" x="910" y="892">1. Source → Program path</text>
+  <text class="sideBody" x="910" y="916">2. Temporal memory in History + Field Store</text>
+  <text class="sideBody" x="910" y="940">3. Program vs Monitor</text>
+  <text class="sideBody" x="910" y="964">4. Recipes as pipeline presets</text>
+  <text class="sideBody" x="910" y="988">5. External outputs are downstream of Program</text>
+
+  <rect class="box" x="890" y="1046" width="360" height="148"/>
+  <text class="sideTitle" x="1070" y="1084" text-anchor="middle">LEGEND</text>
+  <text class="sideBody" x="910" y="1114">gray box — active effect stage</text>
+  <text class="sideBody" x="910" y="1138">green box — named bus or resource owner</text>
+  <text class="sideBody" x="910" y="1162">cyan box — authoritative Program output</text>
+  <text class="sideBody" x="910" y="1186">red border — downstream outputs</text>
+
+  <text class="green" x="700" y="1720" text-anchor="middle" style="font-size:22px">Each stage can be bypassed; recipes only select among legal insertion points.</text>
+</svg>
