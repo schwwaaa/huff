@@ -129,3 +129,18 @@ These values exclude browser-internal texture duplication, row alignment, compos
 - JPEG mirror encode/decode between separate WebViews.
 
 Those ceilings should be documented rather than hidden. HUFF Classic can be made substantially firmer, but it should not be advertised with the same high-resolution guarantees as native HUFF.
+
+## Pass 11 update — neutral-path buffer traffic
+
+Pass 11 does not change the number or dimensions of resident full-resolution surfaces. It changes when those surfaces are touched.
+
+In an all-neutral configuration:
+
+- the main canvas receives one full-frame `copy` from `gCur`;
+- the main background is not filled first;
+- `gBuf` is synchronized only when the decoded-frame serial changes;
+- `gScratch` is untouched.
+
+Identity Feedback no longer copies `gBuf → gScratch`, clears `gBuf`, and redraws the same pixels. Edge-position Symmetry no longer copies and swaps an unchanged frame. Zero-strength Flow does not clear or populate `gScratch`.
+
+The resident memory footprint is unchanged from Pass 10, but avoidable memory bandwidth is reduced.

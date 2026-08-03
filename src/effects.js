@@ -16,6 +16,8 @@
 //  - Glitch tile placement reuses typed target/grid buffers and persistent
 //    Float64 cluster offsets instead of allocating arrays, Maps, and objects
 //    every frame.
+//  - Pass 11 neutral Solarize states return before scratch allocation/readback;
+//    the draw dispatcher also skips neutral Flow/Feedback/Symmetry/Mix stages.
 
 // ─── Temporal ring drawing ───────────────────────────────────────────────────
 // FrameRing stores reusable canvas snapshots, so historical frames remain
@@ -901,6 +903,10 @@ let _solPhase    = 0;
 let _solHasCache = false;
 
 function applySolarize(buf, thresh = 0.5, amount = 1.0, solR = 1.0, solG = 1.0, solB = 1.0) {
+  // Keep the function safe when called outside the main dispatcher. These
+  // states are exact identities and must not trigger a synchronous readback.
+  if (thresh >= 1) return;
+  if (amount === 0 && solR === 1 && solG === 1 && solB === 1) return;
   const BW = buf.width, BH = buf.height;
   const MAX_W = 640;
   const scale = BW > MAX_W ? MAX_W / BW : 1;

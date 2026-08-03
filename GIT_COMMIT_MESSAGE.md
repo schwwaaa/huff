@@ -1,37 +1,36 @@
-# Git Commit Message — HUFF Classic Optimization Pass 10
+# HUFF Classic Optimization Pass 11 — Git Commit Message
 
-## Recommended commit
+## Commit title
 
 ```text
-perf: reuse HUFF Classic scanline band geometry
+perf: bypass neutral HUFF Classic render stages
+```
 
-Add a persistent typed workspace for scanline band rectangles and offsets.
-Cache per-band noise seed constants and rotated-span geometry by render size and angle.
-Reuse prepared band coordinates when scanline phase and controls are unchanged, with explicit seed invalidation.
-Skip zero-contribution alpha, fast-jitter, and shift work while preserving phase behavior.
-Set Canvas2D alpha once per scanline pass and preserve band draw order and clipping.
-Preserve controls, routing, temporal history, mirror, Syphon, Spout, and mandatory framework packaging.
-Add deterministic scanline equivalence validation and a current engine audit.
+## Commit body
+
+```text
+Resolve effective frame activity before entering the persistent Canvas2D pipeline.
+
+Skip zero-strength Flow, invisible Scanlines, zero-mix Luma and Global Mix, identity Feedback, edge-position Symmetry, and exact-identity Solarize states.
+
+Present the clean source directly when every stage is neutral and synchronize gBuf only once per decoded source frame instead of every render tick.
+
+Preserve Glitch and Scanline phase progression, fixed layer order, persistence behavior during active processing, and immediate re-entry from the current clean frame.
+
+Include Scanlines and Pipeline Luma Key in effective-pipeline accounting so their output is not discarded when used independently.
+
+Add exact neutral-state and bypass-copy validation while preserving Syphon, Spout, Rust relay, Tauri packaging, and the mandatory bundled Syphon framework.
 ```
 
 ## Ready-to-run command
 
 ```bash
 git add . && git commit \
-  -m "perf: reuse HUFF Classic scanline band geometry" \
-  -m "Add a persistent typed workspace for scanline band rectangles and offsets." \
-  -m "Cache per-band noise seed constants and rotated-span geometry by render size and angle." \
-  -m "Reuse prepared band coordinates when scanline phase and controls are unchanged, with explicit seed invalidation." \
-  -m "Skip zero-contribution alpha, fast-jitter, and shift work while preserving phase behavior." \
-  -m "Set Canvas2D alpha once per scanline pass and preserve band draw order and clipping." \
-  -m "Preserve controls, routing, temporal history, mirror, Syphon, Spout, and mandatory framework packaging." \
-  -m "Add deterministic scanline equivalence validation and a current engine audit."
+  -m "perf: bypass neutral HUFF Classic render stages" \
+  -m "Resolve effective frame activity before entering the persistent Canvas2D pipeline." \
+  -m "Skip zero-strength Flow, invisible Scanlines, zero-mix Luma and Global Mix, identity Feedback, edge-position Symmetry, and exact-identity Solarize states." \
+  -m "Present the clean source directly when every stage is neutral and synchronize gBuf only once per decoded source frame instead of every render tick." \
+  -m "Preserve Glitch and Scanline phase progression, fixed layer order, persistence behavior during active processing, and immediate re-entry from the current clean frame." \
+  -m "Include Scanlines and Pipeline Luma Key in effective-pipeline accounting so their output is not discarded when used independently." \
+  -m "Add neutral-state validation while preserving Syphon, Spout, Rust relay, Tauri packaging, and mandatory framework bundling."
 ```
-
-## Commit after
-
-- `npm run validate:pass10` passes.
-- The application compiles locally.
-- Static and spinning Scanlines visually match Pass 9.
-- Resize/fullscreen behavior remains correct.
-- Syphon remains operational under high-band Scanline load.

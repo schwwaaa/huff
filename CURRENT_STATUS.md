@@ -1,8 +1,8 @@
 # HUFF Classic Current Status
 
-**Current package:** HUFF Classic Optimization Pass 10  
+**Current package:** HUFF Classic Optimization Pass 11  
 **Date:** 2026-08-03  
-**Authoritative lineage:** user-supplied `huff-08022026.zip` → Pass 4 → Pass 5 → Pass 6 → Pass 7 → Pass 8 → Pass 9 → Pass 10
+**Authoritative lineage:** user-supplied `huff-08022026.zip` → Pass 4 → Pass 5 → Pass 6 → Pass 7 → Pass 8 → Pass 9 → Pass 10 → Pass 11
 
 ## Product definition
 
@@ -32,47 +32,55 @@ It is not the native-wgpu HUFF edition and does not use native-HUFF milestone nu
 - Reusable Scanline band workspace and cached rotated geometry.
 - Cached Solarize channel maps and decoded-frame-aware luma masks.
 - Cached FrameRing capacity and retained overwrite contexts.
+- Allocation-free effective-stage activity plan.
+- True all-neutral bypass and decoded-frame-aware `gBuf` synchronization.
 
 ## Current render topology
 
 ```text
 video/camera → gCur
                  ↓
-              gBuf ↔ gScratch
-                 ↓
-          main output canvas
-                 ├─ JPEG mirror, only with canvas receiver
-                 ├─ Syphon, only with Syphon receiver
-                 └─ Spout when enabled on Windows
+        effective-stage resolver
+          ├─ all neutral → direct main output
+          └─ active      → gBuf ↔ gScratch
+                              ↓
+                       main output canvas
+                         ├─ JPEG mirror, only with canvas receiver
+                         ├─ Syphon, only with Syphon receiver
+                         └─ Spout when enabled on Windows
 ```
 
-Scanlines read `gCur` and paint bands directly into `gBuf`; they do not allocate another full-resolution surface.
+## Pass 11 result
 
-## Pass 10 result
+The renderer now bypasses exact neutral states before they acquire scratch storage or perform full-resolution work.
 
-The Scanline engine now retains:
+Recognized neutral states include:
 
-- typed band rectangle storage;
-- per-band noise seed constants;
-- angle/trigonometric coverage geometry;
-- prepared bands for identical static states;
-- explicit cache invalidation when the p5 noise seed changes.
+- zero-strength Flow;
+- invisible/empty Scanlines;
+- zero-mix Luma and Global Mix;
+- identity Feedback at full/clamped opacity;
+- no-region Symmetry boundaries;
+- exact-identity Solarize;
+- zero Base Mix.
 
-Animated Scanline math still runs when SPEED, SPIN, phases, or controls change. One Canvas2D `drawImage()` remains required per accepted visible band.
+The all-neutral path directly presents `gCur` and updates `gBuf` only when `_vfc` reports a new decoded source frame. Glitch and Scanline phases continue advancing.
+
+The effective-pipeline resolver also corrects Scanline-only and Luma-only accounting.
 
 ## Current high-cost areas
 
+### Two-window JPEG mirror
+
+The controls WebView still owns decoding and rendering, then encodes JPEG for the canvas output WebView. This is the largest remaining architectural cost in normal Classic use.
+
 ### Canvas2D tile/band draws
 
-Glitch, Scanlines, Flow, smear, and temporal sampling can still issue many `drawImage()` operations. Static setup work has been reduced, but the visual model itself remains draw-call-heavy.
-
-### Neutral paths
-
-Some effects and composite stages may still touch full-resolution surfaces when their effective output is visually neutral. Pass 11 will audit these cases.
+Glitch, Scanlines, Flow, smear, and temporal sampling can still issue many `drawImage()` operations. Setup work is cached, but the visual model remains draw-call-heavy.
 
 ### CPU pixel processing
 
-Solarize and Pipeline Luma Key still use downsampled synchronous readback. Caching reduces frequency but does not remove the CPU boundary.
+Active Solarize and Pipeline Luma Key still use downsampled synchronous readback. Neutral states now skip it, but active states still cross the CPU boundary.
 
 ### Native output readback
 
@@ -93,24 +101,39 @@ The routes are bounded and reusable, not zero-copy.
 
 ## Next mandatory optimization work
 
-### Pass 11 — No-op and dirty-state elimination
+### Pass 12 — Canvas-window renderer ownership
 
-Audit and bypass stages whose current settings cannot visibly change the frame:
+Move normal decoding and Canvas2D rendering into the output/canvas WebView.
 
-- zero-strength Flow;
-- invisible Scanlines;
-- inactive or zero-contribution Global Mix;
-- neutral base mix;
-- zero-effect Feedback states;
-- inactive Solarize and Luma paths;
-- redundant background/presentation operations;
-- inaccurate `anyFxActive` conditions.
+Current:
 
-Every shortcut must preserve state progression and become active again immediately when controls change.
+```text
+controls WebView renders
+→ ImageBitmap / JPEG encoding
+→ Rust relay
+→ JPEG decode
+→ canvas output
+```
+
+Target:
+
+```text
+controls WebView sends state/actions
+→ canvas WebView decodes and renders directly
+→ local output presentation
+```
+
+Mandatory requirements:
+
+- preserve the existing controls UI and fixed effect pipeline;
+- keep MIDI, OSC, presets, transport, and source selection synchronized;
+- move Syphon/Spout capture with the authoritative renderer;
+- retain latest-state control transport;
+- provide a compatibility fallback before deleting the JPEG mirror;
+- prove visual parity and source/audio behavior before making it default.
 
 ### Later mandatory work
 
-- Move renderer ownership into the canvas window.
 - Decode-paced rendering and source lifecycle hardening.
 - Real FrameRing memory measurements and release-safe defaults.
 - Solarize/Luma Worker or WebGL micro-pass comparison.
@@ -122,7 +145,7 @@ Every shortcut must preserve state progression and become active again immediate
 
 ## Release blockers
 
-- Runtime visual parity for Passes 5–10.
+- Runtime visual parity for Passes 5–11.
 - Extended Syphon packet-loss, latency, and memory results.
 - Repeated source-switch and resize soak tests.
 - Windows Spout verification.
@@ -136,7 +159,7 @@ Every shortcut must preserve state progression and become active again immediate
 - HUFF Classic remains Tauri v1 + web rendering; no wgpu renderer changes.
 - Do not add features during optimization unless explicitly requested.
 - Preserve fixed effect order and control semantics.
-- Do not eliminate an effect update merely because its current pixels are invisible if its internal state must continue progressing.
+- Preserve phase/state progression when a stage is neutral unless equivalence is proven.
 - `gBuf` and `gScratch` remain distinct.
 - Any stage writing `gScratch` must clear or fully replace it before swapping.
 - Cache invalidation keys must include every input affecting the cached result.

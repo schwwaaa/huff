@@ -107,3 +107,9 @@ The acknowledgement is emitted after Rust has placed the JPEG into each canvas r
 - 4K full-resolution feedback and temporal history.
 
 These are framework boundaries rather than hidden release promises. HUFF Classic can become faster and firmer, but native HUFF remains the path for high-resolution GPU-owned output.
+
+## Pass 11 update — effective-stage dispatch
+
+Before entering the fixed Classic pipeline, the renderer now distinguishes enabled controls from stages that can actually contribute pixels. The resolver is stored in one sealed reusable object and does not allocate per frame.
+
+The clean bypass path avoids the JPEG/Syphon/Spout architecture changes planned for later passes; it only reduces work inside the current authoritative controls-window renderer. Output transports continue to capture the same main output canvas.

@@ -1,155 +1,192 @@
-# HUFF Classic Optimization Pass 10 — Testing Checklist
+# HUFF Classic Optimization Pass 11 — Testing Checklist
 
 **Tester:** ____________________  
 **Machine / OS:** ____________________  
 **Build mode:** `npm run dev` / packaged app  
 **Date:** ____________________
 
-## 1. Build and launch
+## 1. Build and validation
 
 - [ ] `npm install` completes.
+- [ ] `npm run validate:pass9` passes.
 - [ ] `npm run validate:pass10` passes.
-- [ ] `npm run dev` compiles and launches both windows.
-- [ ] File playback, audio, transport, camera, and shutdown work.
-- [ ] No new console errors appear.
+- [ ] `npm run validate:pass11` passes.
+- [ ] `npm run dev` launches the controls and canvas windows.
+- [ ] No new console or Rust errors appear.
 
-## 2. Basic Scanline parity
+## 2. True bypass behavior
 
-Compare with Pass 9 where possible.
+Turn every effect OFF.
 
-- [ ] Scanlines OFF produces the same output.
-- [ ] Scanlines ON at defaults matches Pass 9.
-- [ ] ALPHA at 0, middle, and 1.
-- [ ] Band count at minimum, middle, and maximum.
-- [ ] Radius/band size at minimum, middle, and maximum.
-- [ ] No missing corners, blank strips, or changed band order.
+- [ ] Moving video displays normally.
+- [ ] Audio remains continuous.
+- [ ] Background selector does not leak around or replace the full video frame.
+- [ ] Pausing and resuming works.
+- [ ] Seeking works.
+- [ ] Changing files works.
+- [ ] Starting/stopping camera works.
+- [ ] Re-enabling an effect starts immediately from the current source frame.
 
-Notes:
+Observe clean-state CPU and memory against Pass 10:
 
 ```text
-
+Pass 10 CPU: __________
+Pass 11 CPU: __________
+Pass 10 memory: _______
+Pass 11 memory: _______
 ```
 
-## 3. Angle and spin
+## 3. Flow neutral transition
 
-- [ ] ANGLE = 0°.
-- [ ] ANGLE = 90°.
-- [ ] ANGLE = -90°.
-- [ ] ANGLE = 45° and -45°.
-- [ ] ANGLE at arbitrary values such as 17.5° and 133°.
-- [ ] SPIN L only.
-- [ ] SPIN R only.
-- [ ] Both spin toggles active; existing right-wins behavior remains.
-- [ ] SPIN SPEED minimum and maximum.
-- [ ] Rotated bands still cover all four corners.
+- [ ] Flow OFF matches Pass 10.
+- [ ] Flow ON with STRENGTH `0` remains clean.
+- [ ] Flow ON with STRENGTH below `1` remains clean because integer strength is zero.
+- [ ] Moving STRENGTH to `1` starts Flow immediately.
+- [ ] Returning STRENGTH to `0` returns to clean output without stale `gBuf` pixels.
+- [ ] Flow PULSE/history selection still works at positive strength.
 
-## 4. Static prepared-band reuse
+## 4. Scanline neutral transition
+
+- [ ] Scanlines ON with ALPHA `0` remains visually clean.
+- [ ] Increasing ALPHA starts at the continuously advanced phase/spin position.
+- [ ] Band count `0` is neutral.
+- [ ] Increasing band count starts immediately.
+- [ ] Scanline-only output remains visible with Glitch, Flow, Symmetry, Solarize, Global Mix, and Feedback OFF.
+- [ ] Left/right spin continues across alpha-zero periods without resetting.
+
+## 5. Pipeline Luma transition
+
+- [ ] Luma ON with MIX `0` remains neutral.
+- [ ] Increasing MIX activates immediately.
+- [ ] Luma-only output is not discarded by the clean fallback.
+- [ ] Threshold and invert controls remain unchanged.
+- [ ] Decoded-frame luma cache continues to update with moving video.
+
+## 6. Global Mix and Base Mix
+
+- [ ] Global Mix ON with AMOUNT `0` is neutral at every insertion position.
+- [ ] Increasing AMOUNT activates immediately at BEFORE, AFTER, AFTER FLOW, and FINAL.
+- [ ] Base ON with MIX `0` performs no visible blend.
+- [ ] Base Mix remains correct when an effect is active.
+- [ ] Base ON by itself does not force stale-buffer output.
+
+## 7. Feedback identity and active states
 
 Set:
 
 ```text
-SPEED = 0
-SPIN L = off
-SPIN R = off
+FB X = 0
+FB Y = 0
+FB Z = 1
+FB θ = 0
 ```
 
-- [ ] Video continues playing through fixed band positions.
-- [ ] No frozen source image appears.
-- [ ] Moving any Scanline control updates immediately.
-- [ ] Changing SEED updates the fixed band positions immediately.
-- [ ] Changing ANGLE invalidates and rebuilds correctly.
-- [ ] Resizing invalidates and rebuilds correctly.
-- [ ] Returning to static settings remains stable.
+- [ ] FEEDBACK `0` is neutral.
+- [ ] FEEDBACK `1` is visually identical to bypass.
+- [ ] FEEDBACK `2` and `3` remain visually identical at the identity transform, matching the prior alpha clamp.
+- [ ] FEEDBACK below `1` still changes opacity/persistence.
+- [ ] Moving X or Y activates Feedback immediately.
+- [ ] Changing Z activates Feedback immediately.
+- [ ] Rotating θ activates Feedback immediately.
+- [ ] Returning all transform controls to identity removes the redundant pass without a jump.
 
-## 5. Drift, shift, skew, focus, roll, and gap
+## 8. Symmetry no-op boundary
 
-- [ ] DRIFT = 0 matches Pass 9.
-- [ ] DRIFT at maximum remains animated and stable.
-- [ ] SHIFT = 0 and SKEW = 0 matches Pass 9.
-- [ ] SHIFT maximum with SKEW negative and positive extremes.
-- [ ] FOCUS = 0, 0.5, and 1.
-- [ ] ROLL negative, zero, and positive extremes.
-- [ ] GAP = 0, small, and maximum.
-- [ ] SPEED = 0, default, and maximum.
+- [ ] Vertical Symmetry at POS `1` is neutral.
+- [ ] Horizontal Symmetry at POS `1` is neutral.
+- [ ] HV Symmetry at POS `1` is neutral.
+- [ ] Moving POS inward activates immediately.
+- [ ] POS `0`, `0.5`, and arbitrary values match Pass 10.
+- [ ] Resize/fullscreen recalculates the edge condition correctly.
 
-## 6. Layer-priority regression
+## 9. Solarize identity transitions
 
-- [ ] SCAN TOP.
-- [ ] GLITCH TOP.
-- [ ] NEUTRAL alternating mode.
-- [ ] PULSE layer mode at slow and fast speeds.
-- [ ] Pipeline Luma Key still travels with Glitch rather than Scanlines.
-- [ ] Global Mix insertion positions remain unchanged.
+- [ ] Solarize OFF is neutral.
+- [ ] THRESHOLD `1` is neutral even with non-default amount/channels.
+- [ ] AMOUNT `0` with R/G/B all `1` is neutral.
+- [ ] Changing any one channel multiplier activates immediately.
+- [ ] Lowering THRESHOLD activates immediately.
+- [ ] Non-neutral Solarize matches Pass 10.
+- [ ] Audio remains stable while repeatedly entering/leaving Solarize identity states.
 
-## 7. Heavy Canvas2D combinations
+## 10. Layer and persistence regression
 
-- [ ] Scanlines + dense Glitch.
-- [ ] Scanlines + Feedback.
-- [ ] Scanlines + Flow.
-- [ ] Scanlines + Feedback + Flow + Symmetry.
-- [ ] Scanlines + Solarize.
-- [ ] Scanlines + Pipeline Luma Key.
-- [ ] Controls remain responsive at high band count.
+- [ ] Glitch top.
+- [ ] Scanlines top.
+- [ ] Neutral alternating order.
+- [ ] Pulse order.
+- [ ] Persistence below one works when an effect is active.
+- [ ] Turning all effects off returns to current clean video.
+- [ ] Turning effects back on seeds from the current frame rather than an old frame.
+- [ ] Refresh and CLR BUF reset correctly.
 
-Observed render FPS / responsiveness:
+## 11. Syphon regression
+
+Pass 11 does not change Syphon, its worker, native code, or framework packaging.
+
+- [ ] Start Syphon without a receiver; waiting state remains correct.
+- [ ] Connect a receiver and select `huff`.
+- [ ] Run all-neutral playback for 20 minutes.
+- [ ] Toggle Flow/Scanline/Luma/Feedback/Solarize neutral and active states.
+- [ ] No growing latency appears.
+- [ ] Receiver reconnect works.
+- [ ] Closing HUFF removes the Syphon source.
 
 ```text
-
+Syphon FPS: __________
+Receiver drops: ______
+Start memory: ________
+20-minute memory: ____
 ```
 
-## 8. Resize and fullscreen
+## 12. Canvas mirror regression
 
-- [ ] Resize continuously with Scanlines active.
+- [ ] Canvas window receives clean bypass frames.
+- [ ] Canvas window receives active-effect frames.
+- [ ] Closing canvas window pauses mirror encoding.
+- [ ] Reopening/relaunching reconnects.
+- [ ] Syphon continues independently while canvas mirror is disconnected.
+
+## 13. Resize and long-session test
+
+- [ ] Resize continuously in bypass.
+- [ ] Resize continuously with effects active.
 - [ ] Enter/leave fullscreen 20 times.
-- [ ] Test horizontal, diagonal, and spinning angles during resize.
-- [ ] No stale span geometry or clipped corners appear.
-- [ ] Memory settles after resizing stops.
+- [ ] Switch bypass ↔ active at least 100 times.
+- [ ] Run moving video for at least 30 minutes.
+- [ ] Memory settles after transitions and resize.
 
-Start memory: __________  
-Peak memory: __________  
-Settled memory: __________
+```text
+Start memory: __________
+Peak memory: ___________
+30-minute memory: ______
+```
 
-## 9. Syphon regression
-
-Pass 10 does not modify Syphon code or framework packaging.
-
-- [ ] Start Syphon and connect a receiver.
-- [ ] Run high-band Scanlines at 720p30/60.
-- [ ] Run high-band Scanlines at 1080p30.
-- [ ] Test static SPEED = 0 and active SPIN.
-- [ ] Observe receiver drops, latency, and HUFF responsiveness.
-- [ ] Disconnect/reconnect the receiver.
-- [ ] Close HUFF and confirm the Syphon source disappears.
-
-Syphon FPS: __________  
-Receiver drops: __________  
-Start memory: __________  
-30-minute memory: __________
-
-## 10. Platform checks
+## 14. Platform checks
 
 ### macOS
 
 - [ ] WKWebView development run.
-- [ ] Packaged ARM application.
-- [ ] Universal application if available.
+- [ ] Packaged ARM build.
+- [ ] Universal build if available.
 - [ ] Bundled `Syphon.framework` remains in `Contents/Frameworks`.
 
 ### Windows
 
-- [ ] WebView2 Scanline visual parity.
+- [ ] WebView2 neutral-path parity.
 - [ ] Spout regression.
 
 ### Linux
 
-- [ ] WebKitGTK Scanline visual parity.
-- [ ] Playback/audio regression with supported codecs.
+- [ ] WebKitGTK neutral-path parity.
+- [ ] Playback/audio with supported codecs.
+- [ ] Shutdown leaves no process behind.
 
-## 11. Pass/fail summary
+## 15. Pass/fail summary
 
-- [ ] PASS — safe to commit and continue.
-- [ ] CONDITIONAL PASS — issue recorded; optimization may continue.
-- [ ] FAIL — revert to Pass 9 and report the exact angle/control combination.
+- [ ] PASS — safe to commit and continue to renderer-ownership work.
+- [ ] CONDITIONAL PASS — issue recorded; continue only if unrelated.
+- [ ] FAIL — return to Pass 10 and report exact control values.
 
 Summary:
 

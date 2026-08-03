@@ -2,6 +2,22 @@
 
 This changelog tracks the optimization series for the legacy Tauri v1 + p5.js/Canvas2D edition. It intentionally excludes the native-wgpu HUFF project.
 
+## Pass 11 — No-op and dirty-state elimination
+
+**Date:** 2026-08-03  
+**Status:** Implementation and deterministic static validation complete; runtime visual parity and endurance testing pending
+
+- Added one sealed, reusable effective-stage activity record with no per-frame object allocation.
+- Replaced the incomplete `anyFxActive` predicate with stage-specific contribution checks.
+- Added a true all-neutral path that copies `gCur` directly to the main canvas without a background fill or persistent-pipeline dispatch.
+- Coalesced bypass `gCur → gBuf` synchronization by decoded-frame serial rather than repeated render ticks.
+- Skipped zero-strength Flow, invisible/empty Scanlines, zero-mix Luma and Global Mix, identity Feedback, no-region Symmetry, exact-identity Solarize, and zero Base Mix.
+- Added internal Solarize identity guards before scratch allocation and synchronous readback.
+- Preserved Glitch/Scanline phase and Scanline spin progression while neutral states are bypassed.
+- Included Scanline-only and Luma-only states in final pipeline accounting.
+- Added `npm run validate:pass11` for no-op predicates, identity proofs, bypass synchronization, and source-path checks.
+- Kept Syphon, Spout, Rust relay, Tauri configuration, framework layout, controls, and fixed routing unchanged.
+
 ## Pass 10 — Scanline band workspace and static geometry cache
 
 **Date:** 2026-08-03  

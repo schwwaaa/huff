@@ -13,6 +13,8 @@
  *  - Pass 8: final presentation uses direct Canvas2D blits
  *  - Pass 9: ring capture contexts stay in copy mode and capacity math is cached
  *  - Pass 9: mirror encoding pauses without an attached canvas receiver
+ *  - Pass 11: neutral stages bypass full-frame work and clean presentation
+ *    avoids redundant background/buffer copies while decoded-frame state stays current
  */
 
 // ─── Module-local DOM helpers ─────────────────────────────────────────────────
@@ -143,6 +145,11 @@ function initRenderStateCache() {
 }
 
 let baseSeed = 1, seededOnce = false;
+// When the renderer is in a true bypass state, gBuf only needs to follow gCur
+// once per decoded source frame. The previous path copied the same full frame
+// on every 60 Hz render tick even when a 24/30 fps source had not changed.
+let _bypassSyncedVfc = -1;
+let _renderWasBypassed = true;
 let nPhaseX = 0, nPhaseY = 1000;
 let nPhaseScanX = 0, nPhaseScanY = 2000; // independent scanline phase
 let _scanSpinAngle = 0;                   // continuous spin accumulator (degrees)
@@ -801,6 +808,8 @@ function windowResized() {
     [gBuf, gScratch].forEach(_clearGraphics);
     frameRing.clear(true);
     seededOnce = false;
+    _bypassSyncedVfc = -1;
+    _renderWasBypassed = true;
     if (typeof resetClusterPhysics === 'function') resetClusterPhysics();
     updateDim();
   });
@@ -811,6 +820,8 @@ function clearAll() {
   [gBuf, gScratch].forEach(_clearGraphics);
   frameRing.clear();
   seededOnce = false;
+  _bypassSyncedVfc = -1;
+  _renderWasBypassed = true;
   if (typeof resetClusterPhysics === 'function') resetClusterPhysics();
 }
 
@@ -1386,11 +1397,7 @@ function _emitGlobalMix(state) {
   ctx.restore();
 }
 
-function draw() {
-  _tickFPS();
-  const s = renderState;
-
-  const bg = s.bgMode || 'black';
+function _paintMainBackground(bg) {
   if (_mainCtx) {
     _mainCtx.save();
     _mainCtx.setTransform(1, 0, 0, 1, 0, 0);
@@ -1402,27 +1409,146 @@ function draw() {
       : '#000';
     _mainCtx.fillRect(0, 0, width, height);
     _mainCtx.restore();
-  } else {
-    if      (bg === 'white') background(255);
-    else if (bg === 'green') background(0, 255, 0);
-    else if (bg === 'blue')  background(0, 0, 255);
-    else                     background(0);
+    return;
   }
 
-  if (!videoEl) { drawWaiting(); return; }
+  if      (bg === 'white') background(255);
+  else if (bg === 'green') background(0, 255, 0);
+  else if (bg === 'blue')  background(0, 0, 255);
+  else                     background(0);
+}
 
-  // Keep gCur current at 60fps. The <video> element always holds the latest
-  // decoded frame so this is always safe — between video decode events it just
-  // holds the previous frame, which is exactly what we want.
+function _feedbackHasVisibleEffect(state) {
+  const amount = state.feedback;
+  if (!(amount > 0)) return false;
+
+  // Feedback clears gBuf and redraws the snapshot with alpha clamped to one.
+  // At full opacity with an identity transform, the result is pixel-for-pixel
+  // the same buffer, so the full-resolution snapshot/clear/redraw is redundant.
+  const angle = ((state.fbTheta % 360) + 360) % 360;
+  const identityTransform =
+    state.fbX === 0 &&
+    state.fbY === 0 &&
+    state.fbZ === 1 &&
+    angle === 0;
+
+  return amount < 1 || !identityTransform;
+}
+
+function _symmetryHasVisibleEffect(state) {
+  if (!state.symOn) return false;
+  const mode = state.symMode || 'v';
+  const pos = state.symPos;
+  const x0 = Math.max(0, Math.min(width, Math.round(width * pos)));
+  const y0 = Math.max(0, Math.min(height, Math.round(height * pos)));
+
+  const verticalChanges = (mode === 'v' || mode === 'hv') && x0 < width;
+  const horizontalChanges = (mode === 'h' || mode === 'hv') && y0 < height;
+  return verticalChanges || horizontalChanges;
+}
+
+function _solarizeHasVisibleEffect(state) {
+  if (!state.solarizeOn) return false;
+
+  // Threshold 1 maps to 255 and the effect uses a strict `lum > threshold`
+  // comparison, so no possible pixel is modified.
+  if (state.solarizeThresh >= 1) return false;
+
+  // With zero inversion amount and unity channel multipliers, every lookup maps
+  // each channel to itself. Avoid the synchronous readback entirely.
+  return !(
+    state.solarizeAmt === 0 &&
+    state.solarizeR === 1 &&
+    state.solarizeG === 1 &&
+    state.solarizeB === 1
+  );
+}
+
+const _frameActivity = Object.seal({
+  glitch: false,
+  scanlines: false,
+  luma: false,
+  globalMix: false,
+  feedback: false,
+  flow: false,
+  symmetry: false,
+  solarize: false,
+  baseMix: false,
+  any: false,
+});
+
+function _resolveFrameActivity(state) {
+  const glitch = !!state.corruptOn;
+  const scanlines =
+    !!state.clusters &&
+    Math.trunc(state.clusterCount) > 0 &&
+    state.scanAlpha > 0;
+  const luma = !!state.lumaKeyOn && state.lumaKeyMix > 0;
+  const globalMix = !!state.globalMixOn && state.globalMixAmt > 0;
+  const feedback = _feedbackHasVisibleEffect(state);
+  const flow = !!state.flowOn && Math.trunc(state.flowStrength) > 0;
+  const symmetry = _symmetryHasVisibleEffect(state);
+  const solarize = _solarizeHasVisibleEffect(state);
+  const baseMix = !!state.baseOn && state.baseMix > 0;
+
+  const activity = _frameActivity;
+  activity.glitch = glitch;
+  activity.scanlines = scanlines;
+  activity.luma = luma;
+  activity.globalMix = globalMix;
+  activity.feedback = feedback;
+  activity.flow = flow;
+  activity.symmetry = symmetry;
+  activity.solarize = solarize;
+  activity.baseMix = baseMix;
+  activity.any =
+    glitch || scanlines || luma || globalMix ||
+    feedback || flow || symmetry || solarize;
+  return activity;
+}
+
+function _syncBypassBuffer() {
+  // Preserve the prior bypass-state contract: gBuf follows the clean source.
+  // Decode-driven WebViews only need one copy per genuinely new video frame,
+  // rather than repeating the same copy on every 60 Hz render tick.
+  if (seededOnce && _bypassSyncedVfc === _vfc) return;
+  if (_copyGraphicsFrame(gBuf, gCur)) {
+    seededOnce = true;
+    _bypassSyncedVfc = _vfc;
+  }
+}
+
+function _presentCleanFrame(curCanvas) {
+  if (_mainCtx && curCanvas) {
+    _mainCtx.save();
+    _mainCtx.setTransform(1, 0, 0, 1, 0, 0);
+    _mainCtx.globalAlpha = 1;
+    _mainCtx.globalCompositeOperation = 'copy';
+    _mainCtx.drawImage(curCanvas, 0, 0, width, height);
+    _mainCtx.restore();
+    return;
+  }
+  image(gCur, 0, 0, width, height);
+}
+
+function draw() {
+  _tickFPS();
+  const s = renderState;
+  const bg = s.bgMode || 'black';
+
+  if (!videoEl) {
+    _paintMainBackground(bg);
+    drawWaiting();
+    return;
+  }
+
+  // Keep gCur current at 60fps only on WebViews without rVFC. Modern WebViews
+  // update it once per genuinely decoded source frame in pumpVideoFrames().
   _syncGCur();
 
-  randomSeed(baseSeed + frameCount);
-
-  if (!seededOnce) {
-    _copyGraphicsFrame(gBuf, gCur);
-    seededOnce = true;
-  }
-
+  // Preserve phase progression even when the corresponding stage is currently
+  // neutral. Re-enabling an effect therefore resumes at the same temporal point
+  // as the pre-optimization renderer.
   const mul     = s.glitchSpeedMul;
   const coarse  = s.glitchSpeed * mul;
   const fine    = s.glitchSpeedFine * mul;
@@ -1430,36 +1556,13 @@ function draw() {
   nPhaseX += density * 0.01;
   nPhaseY += density * 0.011;
 
-  // Scanline phase advances independently of glitch density.
   const scanSpeed = s.scanSpeed;
   nPhaseScanX += scanSpeed * 0.008;
   nPhaseScanY += scanSpeed * 0.009;
 
-  const pers = s.persistence;
-  if (pers < 1) {
-    const ctx = gBuf.drawingContext;
-    ctx.save();
-    ctx.globalCompositeOperation = 'destination-out';
-    ctx.fillStyle = `rgba(0,0,0,${map(1 - pers, 0, 1, 1, 20) / 255})`;
-    ctx.fillRect(0, 0, gBuf.width, gBuf.height);
-    ctx.restore();
-  }
-
-  // Paint order remains the Classic layer-priority model.
-  const layerState = s.layerPriority || 'scan';
-  const pulseSpd    = s.layerPulseSpeed;
-  const pulseFrames = Math.max(1, Math.round(60 / Math.max(0.1, pulseSpd)));
-  let glitchOnTop;
-  if      (layerState === 'glitch')  glitchOnTop = true;
-  else if (layerState === 'neutral') glitchOnTop = (frameCount & 1) === 0;
-  else if (layerState === 'pulse')   glitchOnTop = (Math.floor(frameCount / pulseFrames) & 1) === 0;
-  else                               glitchOnTop = false;
-
-  const glitchPriority = 1.0;
-  const scanPriority    = 1.0;
-  const lumaMix         = s.lumaKeyMix;
-
   // Left and right are separate toggles; right wins if both are active.
+  // Continue the accumulator while Scanlines are visually neutral so toggling
+  // alpha/count/on-state does not restart or pause the spin.
   const spinSpeed = s.scanSpinSpeed;
   const spinLeft  = !!s.scanSpinLeft;
   const spinRight = !!s.scanSpinRight;
@@ -1474,27 +1577,77 @@ function draw() {
     _scanSpinAngle = s.scanAngle;
   }
 
+  const activity = _resolveFrameActivity(s);
+
+  // True bypass: direct clean presentation, no background fill, no persistent
+  // decay, no effect dispatch, and no repeated gBuf copy for unchanged decoded
+  // frames. gBuf still follows each new source frame for immediate re-entry.
+  if (!activity.any) {
+    _syncBypassBuffer();
+    _renderWasBypassed = true;
+    _presentCleanFrame(_graphicsCanvas(gCur));
+    return;
+  }
+
+  // Entering the active pipeline from bypass starts from the current clean
+  // decoded frame. During an active run, gBuf retains its persistent state.
+  if (!seededOnce || _renderWasBypassed) {
+    _copyGraphicsFrame(gBuf, gCur);
+    seededOnce = true;
+  }
+  _renderWasBypassed = false;
+  _bypassSyncedVfc = -1;
+
+  if (activity.glitch) randomSeed(baseSeed + frameCount);
+
+  const pers = s.persistence;
+  if (pers < 1) {
+    const ctx = gBuf.drawingContext;
+    ctx.save();
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.fillStyle = `rgba(0,0,0,${map(1 - pers, 0, 1, 1, 20) / 255})`;
+    ctx.fillRect(0, 0, gBuf.width, gBuf.height);
+    ctx.restore();
+  }
+
+  // Paint order remains the Classic layer-priority model. Only calculate the
+  // ordering state when at least one of the two ordered groups contributes.
+  let glitchOnTop = false;
+  if (activity.scanlines || activity.glitch || activity.luma) {
+    const layerState = s.layerPriority || 'scan';
+    const pulseSpd    = s.layerPulseSpeed;
+    const pulseFrames = Math.max(1, Math.round(60 / Math.max(0.1, pulseSpd)));
+    if      (layerState === 'glitch')  glitchOnTop = true;
+    else if (layerState === 'neutral') glitchOnTop = (frameCount & 1) === 0;
+    else if (layerState === 'pulse')   glitchOnTop = (Math.floor(frameCount / pulseFrames) & 1) === 0;
+  }
+
+  const glitchPriority = 1.0;
+  const scanPriority    = 1.0;
+  const lumaMix         = s.lumaKeyMix;
+
   if (glitchOnTop) {
-    applyScanlines(density, scanAngleArg, scanPriority, s);
-    _emitGlitchGroup(s, density, glitchPriority, lumaMix);
+    if (activity.scanlines) applyScanlines(density, scanAngleArg, scanPriority, s);
+    if (activity.glitch || activity.luma) {
+      _emitGlitchGroup(s, density, glitchPriority, lumaMix);
+    }
   } else {
-    _emitGlitchGroup(s, density, glitchPriority, lumaMix);
-    applyScanlines(density, scanAngleArg, scanPriority, s);
+    if (activity.glitch || activity.luma) {
+      _emitGlitchGroup(s, density, glitchPriority, lumaMix);
+    }
+    if (activity.scanlines) applyScanlines(density, scanAngleArg, scanPriority, s);
   }
 
   const gmPos = s.globalMixPos || 'after';
-  if (gmPos === 'before') _emitGlobalMix(s);
+  if (activity.globalMix && gmPos === 'before') _emitGlobalMix(s);
 
   const fb = s.feedback;
-  if (fb > 0) {
+  if (activity.feedback) {
     const fx = s.fbX;
     const fy = s.fbY;
     const fz = s.fbZ;
     const ft = (s.fbTheta * Math.PI) / 180;
 
-    // The same shared ping-pong surface used by Flow/Symmetry is idle here.
-    // Snapshot feedback into it instead of maintaining a separate full-size
-    // feedback canvas, then allow later stages to overwrite/reuse it.
     _copyGraphicsFrame(gScratch, gBuf);
     const feedbackSource = _graphicsCanvas(gScratch);
 
@@ -1509,33 +1662,33 @@ function draw() {
     ctx.restore();
   }
 
-  if (gmPos === 'after') _emitGlobalMix(s);
+  if (activity.globalMix && gmPos === 'after') _emitGlobalMix(s);
 
-  const flowS = Math.trunc(s.flowStrength);
-  if (s.flowOn && flowS > 0) {
-    applyFlowWarp(gBuf, gScratch, flowS,
+  if (activity.flow) {
+    applyFlowWarp(gBuf, gScratch, Math.trunc(s.flowStrength),
       Math.trunc(s.flowScale), Math.trunc(s.flowPulse), s.flowImpl, s.flowSpeed,
       s.flowTurb, s.flowSwirl, s.flowSpread);
     [gBuf, gScratch] = [gScratch, gBuf];
   }
 
-  if (gmPos === 'afterflow') _emitGlobalMix(s);
+  if (activity.globalMix && gmPos === 'afterflow') _emitGlobalMix(s);
 
-  if (s.symOn) {
+  if (activity.symmetry) {
     applySymmetry(gBuf, gScratch, s.symMode || 'v', s.symPos);
     [gBuf, gScratch] = [gScratch, gBuf];
   }
 
-  if (s.solarizeOn) {
+  if (activity.solarize) {
     applySolarize(gBuf, s.solarizeThresh, s.solarizeAmt,
       s.solarizeR, s.solarizeG, s.solarizeB);
   }
 
-  if (gmPos === 'final') _emitGlobalMix(s);
+  if (activity.globalMix && gmPos === 'final') _emitGlobalMix(s);
 
-  const anyFxActive =
-    s.corruptOn || s.clusters || s.flowOn || s.symOn || s.solarizeOn ||
-    (s.globalMixOn && s.globalMixAmt > 0) || fb > 0;
+  // Effects may leave transparent regions, so retain the selected background in
+  // the active path. The clean bypass path above is a full-frame opaque copy and
+  // therefore does not need this fill.
+  _paintMainBackground(bg);
 
   const curCanvas = _graphicsCanvas(gCur);
   const bufCanvas = _graphicsCanvas(gBuf);
@@ -1543,33 +1696,25 @@ function draw() {
     _mainCtx.save();
     _mainCtx.setTransform(1, 0, 0, 1, 0, 0);
     _mainCtx.globalCompositeOperation = 'source-over';
-    if (anyFxActive) {
-      if (s.baseOn && s.baseMix > 0) {
-        _mainCtx.globalAlpha = s.baseMix;
-        _mainCtx.drawImage(curCanvas, 0, 0, width, height);
-      }
-      if (bufCanvas) {
-        _mainCtx.globalAlpha = 1;
-        _mainCtx.drawImage(bufCanvas, 0, 0, width, height);
-      }
-    } else {
-      _mainCtx.globalAlpha = 1;
+    if (activity.baseMix) {
+      _mainCtx.globalAlpha = s.baseMix;
       _mainCtx.drawImage(curCanvas, 0, 0, width, height);
-      _copyGraphicsFrame(gBuf, gCur);
+    }
+    if (bufCanvas) {
+      _mainCtx.globalAlpha = 1;
+      _mainCtx.drawImage(bufCanvas, 0, 0, width, height);
     }
     _mainCtx.restore();
-  } else if (anyFxActive) {
-    if (s.baseOn && s.baseMix > 0) {
-      push(); tint(255, s.baseMix * 255);
-      image(gCur, 0, 0, width, height); pop();
+  } else {
+    if (activity.baseMix) {
+      push();
+      tint(255, s.baseMix * 255);
+      image(gCur, 0, 0, width, height);
+      pop();
     }
     image(gBuf, 0, 0, width, height);
-  } else {
-    image(gCur, 0, 0, width, height);
-    _copyGraphicsFrame(gBuf, gCur);
   }
 }
-
 function drawWaiting() {
   push();
   noStroke(); fill(255, 20); rect(0, 0, width, height);
