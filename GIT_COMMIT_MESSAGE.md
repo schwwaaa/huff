@@ -1,36 +1,37 @@
-# Git Commit Message — HUFF Classic Optimization Pass 8
+# Git Commit Message — HUFF Classic Optimization Pass 10
 
 ## Recommended commit
 
 ```text
-perf: consolidate HUFF Classic canvas buffers
+perf: reuse HUFF Classic scanline band geometry
 
-Reuse one full-resolution ping-pong surface for feedback, flow, and symmetry.
-Reduce the persistent p5 Graphics set from four surfaces to three and remove the separate feedback snapshot canvas.
-Resize p5 Graphics and pixel-processing scratch canvases in place to reduce transient allocation during window changes.
-Move main output presentation and symmetry transforms to direct Canvas2D operations.
-Cache mirror canvas lookup and quality-derived JPEG/FPS tuning outside the animation-frame pump.
-Preserve effect order, controls, temporal history, Syphon transport, Spout, and mandatory framework packaging.
-Update technical documentation and add a current canvas/buffer audit.
+Add a persistent typed workspace for scanline band rectangles and offsets.
+Cache per-band noise seed constants and rotated-span geometry by render size and angle.
+Reuse prepared band coordinates when scanline phase and controls are unchanged, with explicit seed invalidation.
+Skip zero-contribution alpha, fast-jitter, and shift work while preserving phase behavior.
+Set Canvas2D alpha once per scanline pass and preserve band draw order and clipping.
+Preserve controls, routing, temporal history, mirror, Syphon, Spout, and mandatory framework packaging.
+Add deterministic scanline equivalence validation and a current engine audit.
 ```
 
 ## Ready-to-run command
 
 ```bash
 git add . && git commit \
-  -m "perf: consolidate HUFF Classic canvas buffers" \
-  -m "Reuse one full-resolution ping-pong surface for feedback, flow, and symmetry." \
-  -m "Reduce the persistent p5 Graphics set from four surfaces to three and remove the separate feedback snapshot canvas." \
-  -m "Resize p5 Graphics and pixel-processing scratch canvases in place to reduce transient allocation during window changes." \
-  -m "Move main output presentation and symmetry transforms to direct Canvas2D operations." \
-  -m "Cache mirror canvas lookup and quality-derived JPEG/FPS tuning outside the animation-frame pump." \
-  -m "Preserve effect order, controls, temporal history, Syphon transport, Spout, and mandatory framework packaging." \
-  -m "Update technical documentation and add a current canvas/buffer audit."
+  -m "perf: reuse HUFF Classic scanline band geometry" \
+  -m "Add a persistent typed workspace for scanline band rectangles and offsets." \
+  -m "Cache per-band noise seed constants and rotated-span geometry by render size and angle." \
+  -m "Reuse prepared band coordinates when scanline phase and controls are unchanged, with explicit seed invalidation." \
+  -m "Skip zero-contribution alpha, fast-jitter, and shift work while preserving phase behavior." \
+  -m "Set Canvas2D alpha once per scanline pass and preserve band draw order and clipping." \
+  -m "Preserve controls, routing, temporal history, mirror, Syphon, Spout, and mandatory framework packaging." \
+  -m "Add deterministic scanline equivalence validation and a current engine audit."
 ```
 
-## Commit only after
+## Commit after
 
-- Feedback, Flow, and Symmetry combinations pass visual testing.
-- Rapid resize/fullscreen tests do not reveal stale frames or growing memory.
-- Mirror output remains correct.
-- A Syphon receiver confirms the main output canvas still publishes correctly.
+- `npm run validate:pass10` passes.
+- The application compiles locally.
+- Static and spinning Scanlines visually match Pass 9.
+- Resize/fullscreen behavior remains correct.
+- Syphon remains operational under high-band Scanline load.

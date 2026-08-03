@@ -188,7 +188,7 @@ body {
 <hr/>
 
 <h2>Canvas Mirror Window</h2>
-<p>The canvas window connects to the embedded WebSocket relay on port <code>8787</code> and renders frames as they arrive.</p>
+<p>The canvas window connects to the embedded WebSocket relay on port <code>8787</code> and renders JPEG frames as they arrive. The controls WebView receives canvas-client count updates from Rust, performs no mirror capture or JPEG encoding while no canvas receiver is attached, and waits for one relay acknowledgement before sending the next frame.</p>
 <ul>
   <li>Opens automatically with the app.</li>
   <li>Press <strong>F</strong> in the canvas window to toggle fullscreen.</li>
@@ -198,19 +198,27 @@ body {
 <div class="callout note"><strong>OBS capture:</strong> The canvas window has no UI chrome. Use OBS Window Capture pointed at the canvas window for recording or streaming.</div>
 <hr/>
 
-<h2>WebSocket Binary Protocol</h2>
+<h2>WebSocket Roles and Frame Payloads</h2>
 <div class="term" style="font-size:11px;line-height:1.8">
-Syphon frame:
-  Bytes  0–7   : b"HUFFSYPH"  (8 bytes)
-  Bytes  8–11  : width  u32 little-endian
-  Bytes  12–15 : height u32 little-endian
-  Bytes  16+   : raw RGBA8 pixels (width × height × 4 bytes)
+Canvas mirror sender:
+  hello text : {"type":"hello","role":"index"}
+  frame      : JPEG binary payload
+  relay ack  : {"type":"mirror-ack","receivers":N}
 
-Spout frame:
-  Bytes  0–8   : b"HUFFSPOUT"  (9 bytes)
-  Bytes  9–12  : width  u32 little-endian
-  Bytes  13–16 : height u32 little-endian
-  Bytes  17+   : raw RGBA8 pixels (width × height × 4 bytes)
+Canvas mirror receiver:
+  hello text : {"type":"hello","role":"canvas"}
+  frame      : JPEG binary payload from latest-frame relay slot
+
+Syphon sender:
+  hello text : {"type":"hello","role":"syphon-sender","width":W,"height":H}
+  frame      : raw RGBA8 pixels only (W × H × 4 bytes)
+
+Spout sender:
+  hello text : {"type":"hello","role":"spout-sender","width":W,"height":H}
+  frame      : raw RGBA8 pixels only (W × H × 4 bytes)
+
+Legacy compatibility:
+  HUFFSYPH / HUFFSPOUT header packets remain accepted by Rust.
 </div>
 
         </div>

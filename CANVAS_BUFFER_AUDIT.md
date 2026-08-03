@@ -1,6 +1,6 @@
 # HUFF Classic Canvas and Buffer Audit
 
-**Current code:** Optimization Pass 8  
+**Current code:** Optimization Pass 9  
 **Renderer:** p5.js + Canvas2D inside Tauri v1 WebViews
 
 ## Current render-resolution surfaces
@@ -12,11 +12,11 @@
 | `gBuf` | Always | Active persistent/effect composite | Glitch, scanlines, feedback, luma, global mix, and final effects operate here |
 | `gScratch` | Always | Shared full-frame ping-pong target | Reused by Feedback snapshot, Flow Warp, and Symmetry |
 
-Pass 8 removes one always-resident full-resolution p5 Graphics surface and the Feedback-only full-resolution snapshot canvas.
+Pass 8 removed one always-resident full-resolution p5 Graphics surface and the Feedback-only full-resolution snapshot canvas. Pass 9 keeps this topology unchanged.
 
 ## Temporal history
 
-`FrameRing` contains reusable canvas-backed snapshots. Capacity is controlled by QUALITY and capped by an estimated 192 MiB raw RGBA budget.
+`FrameRing` contains reusable canvas-backed snapshots. Capacity is controlled by QUALITY and capped by an estimated 192 MiB raw RGBA budget. Pass 9 keeps each dedicated slot context in Canvas2D `copy` mode and recalculates capacity only when resolution or QUALITY changes.
 
 This remains the largest scalable memory owner at ordinary 720p/1080p settings. Canvas-backed history avoids `getImageData()` capture and later `putImageData()` reconstruction, but each retained history slot still requires a full frame backing store.
 
@@ -24,7 +24,7 @@ This remains the largest scalable memory owner at ordinary 720p/1080p settings. 
 
 - Validate whether the practical WebView memory cost per history canvas materially exceeds the current four-bytes-per-pixel estimate.
 - Consider a stricter platform-specific budget after macOS, Windows, and Linux soak measurements.
-- Consider reduced-resolution history only as an explicit quality policy; it would alter effect appearance and is not part of Pass 8.
+- Consider reduced-resolution history only as an explicit quality policy; it would alter effect appearance and is not part of Pass 9.
 
 ## Feedback
 
@@ -37,6 +37,8 @@ gBuf → copy into gScratch → transform gScratch back into gBuf
 The snapshot is overwritten later if Flow or Symmetry runs. There is no separate feedback canvas.
 
 ## Flow Warp and Symmetry
+
+Flow Warp now also retains static tile geometry in `FlowGridWorkspace`, keyed by render dimensions and SCALE. Animated noise/displacement and actual tile blits remain per frame.
 
 Both effects use the same ping-pong target:
 
@@ -74,8 +76,11 @@ Both are resized in place and cached across identical decoded source frames and 
 - Worker path: transferred `ImageBitmap` + Worker-owned `OffscreenCanvas` capped at 1280×1280.
 - Fallback path: one reusable DOM canvas capped at 1280×1280.
 - Mirror transmission is capped at 30 fps and latest-frame-wins.
+- Rust reports the number of connected canvas receivers.
+- With no receiver, the controls WebView performs no mirror capture or encoding.
+- With a receiver, one relay acknowledgement permits the next JPEG submission.
 
-Pass 8 caches QUALITY-derived JPEG/FPS values on control events but does not alter the encoded image or transport protocol.
+Pass 8 cached QUALITY-derived JPEG/FPS values on control events. Pass 9 adds receiver-aware idle behavior and one-frame-in-flight relay acknowledgement without changing the encoded image format.
 
 ## Syphon surfaces
 
@@ -90,7 +95,7 @@ main WebView canvas
   → Syphon publish
 ```
 
-The JavaScript stream is one-frame-in-flight and pauses expensive capture/readback when no Syphon client is attached. The native Metal texture ring remains unchanged in Pass 8.
+The JavaScript stream is one-frame-in-flight and pauses expensive capture/readback when no Syphon client is attached. The native Metal texture ring remains unchanged in Pass 9.
 
 The unavoidable Classic ceiling is the WebView canvas readback and browser/native transfer. True zero-copy Syphon requires a renderer that owns a shareable native GPU texture, which belongs to the native HUFF architecture rather than HUFF Classic.
 

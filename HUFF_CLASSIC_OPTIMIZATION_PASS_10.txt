@@ -1,0 +1,18 @@
+HUFF CLASSIC OPTIMIZATION PASS 10
+
+Scope: Scanline engine workspace and static geometry cache
+Baseline: HUFF Classic Optimization Pass 9
+Date: 2026-08-03
+
+Key changes:
+- reusable typed band workspace
+- cached per-band noise constants
+- cached rotated-span geometry
+- prepared-band reuse for identical static states
+- zero-contribution shortcuts
+- one Canvas2D alpha assignment per scanline pass
+
+Validation:
+  npm run validate:pass10
+
+See DOCUMENTATION_INDEX.md for the complete documentation suite.

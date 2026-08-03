@@ -1,21 +1,28 @@
-# HUFF Classic Optimization Pass 8 — Testing Checklist
+# HUFF Classic Optimization Pass 10 — Testing Checklist
 
 **Tester:** ____________________  
 **Machine / OS:** ____________________  
 **Build mode:** `npm run dev` / packaged app  
 **Date:** ____________________
 
-Pass 8 changes full-resolution buffer ownership and final Canvas2D presentation. Static tests passed, but visual/runtime confirmation is required before this pass is considered stabilized.
-
-## 1. Launch and basic source behavior
+## 1. Build and launch
 
 - [ ] `npm install` completes.
-- [ ] `npm run dev` launches both HUFF windows.
-- [ ] File video loads.
-- [ ] Audio plays without immediate breakup.
-- [ ] Play, pause, scrub, refresh, and loop behavior match Pass 7.
-- [ ] Camera starts/stops and can switch back to file playback.
-- [ ] Closing either window leaves no HUFF process behind.
+- [ ] `npm run validate:pass10` passes.
+- [ ] `npm run dev` compiles and launches both windows.
+- [ ] File playback, audio, transport, camera, and shutdown work.
+- [ ] No new console errors appear.
+
+## 2. Basic Scanline parity
+
+Compare with Pass 9 where possible.
+
+- [ ] Scanlines OFF produces the same output.
+- [ ] Scanlines ON at defaults matches Pass 9.
+- [ ] ALPHA at 0, middle, and 1.
+- [ ] Band count at minimum, middle, and maximum.
+- [ ] Radius/band size at minimum, middle, and maximum.
+- [ ] No missing corners, blank strips, or changed band order.
 
 Notes:
 
@@ -23,147 +30,126 @@ Notes:
 
 ```
 
-## 2. No-effect output and base presentation
+## 3. Angle and spin
 
-- [ ] Disable Corrupt, Scanlines/Clusters, Feedback, Flow, Symmetry, Solarize, and Global Mix.
-- [ ] Clean video fills the output exactly as before.
-- [ ] Black, white, green, and blue background modes remain correct where visible.
-- [ ] BASE ON/OFF and BASE MIX match Pass 7 when effects create transparent regions.
-- [ ] Canvas mirror framing/aspect behavior is unchanged.
+- [ ] ANGLE = 0°.
+- [ ] ANGLE = 90°.
+- [ ] ANGLE = -90°.
+- [ ] ANGLE = 45° and -45°.
+- [ ] ANGLE at arbitrary values such as 17.5° and 133°.
+- [ ] SPIN L only.
+- [ ] SPIN R only.
+- [ ] Both spin toggles active; existing right-wins behavior remains.
+- [ ] SPIN SPEED minimum and maximum.
+- [ ] Rotated bands still cover all four corners.
 
-## 3. Feedback parity
+## 4. Static prepared-band reuse
 
-Test Feedback before combining it with other passes.
+Set:
 
-- [ ] Feedback amount only.
-- [ ] X translation positive and negative.
-- [ ] Y translation positive and negative.
-- [ ] Scale below 1, at 1, and above 1.
-- [ ] Rotation in both directions.
-- [ ] Persistence near 0, near 1, and above 1 using existing Classic semantics.
-- [ ] Clear Buffer immediately removes accumulated feedback.
-- [ ] Feedback activation does not create a one-frame flash or stale scratch image.
+```text
+SPEED = 0
+SPIN L = off
+SPIN R = off
+```
 
-## 4. Flow Warp parity
+- [ ] Video continues playing through fixed band positions.
+- [ ] No frozen source image appears.
+- [ ] Moving any Scanline control updates immediately.
+- [ ] Changing SEED updates the fixed band positions immediately.
+- [ ] Changing ANGLE invalidates and rebuilds correctly.
+- [ ] Resizing invalidates and rebuilds correctly.
+- [ ] Returning to static settings remains stable.
 
-- [ ] Flow on with low strength / large scale.
-- [ ] Flow on with high strength / small scale.
-- [ ] Pulse/history sampling.
-- [ ] Implode/explode range.
-- [ ] Speed at 0, 1, and high values.
-- [ ] Turbulence, swirl, and spread extremes.
-- [ ] No blank tiles or stale regions appear after repeated toggling.
+## 5. Drift, shift, skew, focus, roll, and gap
 
-## 5. Symmetry parity
+- [ ] DRIFT = 0 matches Pass 9.
+- [ ] DRIFT at maximum remains animated and stable.
+- [ ] SHIFT = 0 and SKEW = 0 matches Pass 9.
+- [ ] SHIFT maximum with SKEW negative and positive extremes.
+- [ ] FOCUS = 0, 0.5, and 1.
+- [ ] ROLL negative, zero, and positive extremes.
+- [ ] GAP = 0, small, and maximum.
+- [ ] SPEED = 0, default, and maximum.
 
-- [ ] Vertical mode at positions 0, 0.5, and 1.
-- [ ] Horizontal mode at positions 0, 0.5, and 1.
-- [ ] Horizontal + vertical mode at positions 0, 0.5, and 1.
-- [ ] Rapid mode switching does not leave stale quadrants.
-- [ ] Symmetry edges and clipping match Pass 7.
+## 6. Layer-priority regression
 
-## 6. Shared-scratch combinations
+- [ ] SCAN TOP.
+- [ ] GLITCH TOP.
+- [ ] NEUTRAL alternating mode.
+- [ ] PULSE layer mode at slow and fast speeds.
+- [ ] Pipeline Luma Key still travels with Glitch rather than Scanlines.
+- [ ] Global Mix insertion positions remain unchanged.
 
-These combinations specifically validate the new ping-pong ownership.
+## 7. Heavy Canvas2D combinations
 
-- [ ] Feedback + Flow.
-- [ ] Feedback + Symmetry.
-- [ ] Flow + Symmetry.
-- [ ] Feedback + Flow + Symmetry.
-- [ ] Add Glitch and Scanlines to all three.
-- [ ] Add Solarize.
-- [ ] Add Pipeline Luma Key.
-- [ ] Toggle Flow and Symmetry on/off rapidly while Feedback remains active.
-- [ ] Change Global Mix insertion point through before / after / afterflow / final.
+- [ ] Scanlines + dense Glitch.
+- [ ] Scanlines + Feedback.
+- [ ] Scanlines + Flow.
+- [ ] Scanlines + Feedback + Flow + Symmetry.
+- [ ] Scanlines + Solarize.
+- [ ] Scanlines + Pipeline Luma Key.
+- [ ] Controls remain responsive at high band count.
 
-Expected: no one-frame stale content, incorrect stage order, or reference aliasing.
+Observed render FPS / responsiveness:
 
-## 7. Resize and fullscreen allocation behavior
+```text
 
-Record Activity Monitor memory before and after.
+```
 
-- [ ] Resize the controls/render window slowly across multiple dimensions.
-- [ ] Drag-resize rapidly for 15 seconds.
-- [ ] Enter and leave fullscreen 10 times.
-- [ ] Resize while Feedback is active.
-- [ ] Resize while Flow + Symmetry are active.
-- [ ] Resize while Solarize and luma key are active.
-- [ ] The frame ring clears after a resolution change as designed.
-- [ ] Memory settles instead of increasing after every resize cycle.
-- [ ] No disposed-canvas or `drawImage` exceptions appear in the console.
+## 8. Resize and fullscreen
 
-Memory before: __________  
-Peak during resize: __________  
-Settled after resize: __________
+- [ ] Resize continuously with Scanlines active.
+- [ ] Enter/leave fullscreen 20 times.
+- [ ] Test horizontal, diagonal, and spinning angles during resize.
+- [ ] No stale span geometry or clipped corners appear.
+- [ ] Memory settles after resizing stops.
 
-## 8. Mirror transport
+Start memory: __________  
+Peak memory: __________  
+Settled memory: __________
 
-- [ ] QUALITY changes still update mirror JPEG quality/FPS behavior.
-- [ ] Mirror remains capped at 30 fps.
-- [ ] No growing mirror latency.
-- [ ] Disconnect/reopen the canvas window.
-- [ ] Mirror resumes without restarting HUFF.
+## 9. Syphon regression
 
-## 9. Syphon regression and endurance
+Pass 10 does not modify Syphon code or framework packaging.
 
-Pass 8 does not intentionally change Syphon, but the main output canvas is now presented through direct Canvas2D calls.
+- [ ] Start Syphon and connect a receiver.
+- [ ] Run high-band Scanlines at 720p30/60.
+- [ ] Run high-band Scanlines at 1080p30.
+- [ ] Test static SPEED = 0 and active SPIN.
+- [ ] Observe receiver drops, latency, and HUFF responsiveness.
+- [ ] Disconnect/reconnect the receiver.
+- [ ] Close HUFF and confirm the Syphon source disappears.
 
-- [ ] Start Syphon with no receiver: source remains discoverable and publishing pauses.
-- [ ] Connect receiver: stream begins automatically.
-- [ ] Disconnect receiver: capture/readback/publish pauses.
-- [ ] Reconnect receiver at least five times.
-- [ ] Test 1280×720 at 30 fps.
-- [ ] Test 1280×720 at 60 fps if the receiver/system can sustain it.
-- [ ] Test 1920×1080 at 30 fps.
-- [ ] Run Feedback + Flow + Symmetry during Syphon output.
-- [ ] Observe receiver dropped-frame/packet-loss indicator.
-- [ ] Confirm latency does not grow over 30 minutes.
-- [ ] Confirm memory does not climb continuously over 30 minutes.
-
-Published FPS: __________  
+Syphon FPS: __________  
 Receiver drops: __________  
 Start memory: __________  
 30-minute memory: __________
 
-## 10. Control-path regression
-
-- [ ] Mouse/touch sliders update effects.
-- [ ] MIDI updates effects.
-- [ ] OSC updates effects.
-- [ ] Preset load updates effects.
-- [ ] Reset updates effects.
-- [ ] Undo updates effects.
-- [ ] Programmatic control changes still dispatch `input` or `change`.
-
-## 11. Platform checks
+## 10. Platform checks
 
 ### macOS
 
-- [ ] Development build.
-- [ ] Packaged ARM app.
-- [ ] Packaged Intel app if available.
-- [ ] Universal app.
-- [ ] `Syphon.framework` exists inside `Contents/Frameworks`.
-- [ ] App signing verification passes.
+- [ ] WKWebView development run.
+- [ ] Packaged ARM application.
+- [ ] Universal application if available.
+- [ ] Bundled `Syphon.framework` remains in `Contents/Frameworks`.
 
 ### Windows
 
-- [ ] WebView2 render parity.
-- [ ] Spout sender starts and publishes.
-- [ ] Resize behavior and memory settle.
+- [ ] WebView2 Scanline visual parity.
+- [ ] Spout regression.
 
 ### Linux
 
-- [ ] WebKitGTK video playback.
-- [ ] Supported test codec plays with audio.
-- [ ] Resize behavior and memory settle.
-- [ ] Mirror window works.
+- [ ] WebKitGTK Scanline visual parity.
+- [ ] Playback/audio regression with supported codecs.
 
-## 12. Pass/fail summary
+## 11. Pass/fail summary
 
 - [ ] PASS — safe to commit and continue.
-- [ ] CONDITIONAL PASS — issues documented but optimization can continue.
-- [ ] FAIL — revert to Pass 7 and report exact failing combination.
+- [ ] CONDITIONAL PASS — issue recorded; optimization may continue.
+- [ ] FAIL — revert to Pass 9 and report the exact angle/control combination.
 
 Summary:
 

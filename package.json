@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "tauri dev",
     "build": "node scripts/tauri-build.cjs",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "validate:pass9": "node scripts/validate-pass9.mjs",
+    "validate:pass10": "node scripts/validate-pass10.mjs"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^1.6.3"

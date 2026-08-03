@@ -598,8 +598,10 @@ Syphon lets huff share its canvas as a named texture that any Syphon-enabled app
 
 **Technical notes:**
 - The Syphon.framework is bundled inside the huff app bundle — no separate installation is needed.
-- The pipeline is: `canvas.getImageData()` → raw RGBA bytes → `HUFFSYPH` binary WS frame → Rust `syphon::push_frame()` → `MTLTexture` CPU upload → `SyphonMetalServer.publishFrameTexture()`.
-- This uses a CPU round-trip (JS pixel readback). Frame rate is throttled to the configured FPS cap to limit the readback cost.
+- The pipeline is: worker-assisted canvas scaling/readback → raw RGBA bytes on a dedicated `syphon-sender` WebSocket → Rust `syphon::push_pixels()` → reusable `MTLTexture` upload → `SyphonMetalServer.publishFrameTexture()`.
+- Width and height are declared once in the socket hello message; normal frames contain raw RGBA only. Legacy `HUFFSYPH` packets remain accepted for compatibility.
+- Capture and Metal upload pause while no Syphon receiver is attached, and one publish acknowledgement permits the next frame.
+- This still uses a CPU round-trip (JS pixel readback). Frame rate is throttled to the configured FPS cap to limit the readback cost.
 
 ### Spout (Windows)
 
@@ -615,12 +617,13 @@ Spout is the Windows equivalent of Syphon. huff shares its canvas as a named D3D
 
 **Technical notes:**
 - The Spout bridge DLL (`spout_bridge.dll`) is compiled from source and bundled next to the huff executable.
-- The pipeline is: `canvas.getImageData()` → raw RGBA bytes → `HUFFSPOUT` binary WS frame → Rust `spout::push_frame()` → `spoutdx_send_image()` → D3D11 `UpdateSubresource`.
+- The pipeline is: canvas scaling/readback → raw RGBA bytes on a dedicated `spout-sender` WebSocket → Rust `spout::push_pixels()` → `spoutdx_send_image()` → D3D11 `UpdateSubresource`.
+- Width and height are declared once in the socket hello message; normal frames contain raw RGBA only. Legacy `HUFFSPOUT` packets remain accepted for compatibility.
 - Same CPU round-trip as Syphon. GPU-direct zero-copy is not implemented in this release.
 
 ### Canvas Mirror Window
 
-The separate output canvas window (`canvas.html`) connects to the embedded WebSocket relay on port `8787` and receives JPEG-encoded frames. This window can be:
+The separate output canvas window (`canvas.html`) connects to the embedded WebSocket relay on port `8787` and receives JPEG-encoded frames. The controls WebView now encodes only while at least one canvas receiver is attached, and the sender waits for a relay acknowledgement before submitting another JPEG. This window can be:
 
 - Moved to a second monitor and made fullscreen (`F` key)
 - Opened in a browser by navigating to `file:///path/to/huff/src/canvas.html` while the app is running
@@ -775,16 +778,17 @@ huff/
 
 ## Performance Notes
 
-- **Frame ring** stores reusable canvas-backed snapshots rather than raw `ImageData` arrays or p5 `Graphics` instances. Decoded frames are copied once into owned canvas slots and sampled directly by temporal effects without a later `putImageData()` reconstruction.
+- **Frame ring** stores reusable canvas-backed snapshots rather than raw `ImageData` arrays or p5 `Graphics` instances. Decoded frames are copied once into owned canvas slots and sampled directly by temporal effects without a later `putImageData()` reconstruction. Dedicated ring contexts remain in `copy` mode, and capacity math only runs when resolution or QUALITY changes.
 - **192 MB ring cap** — the ring depth is capped regardless of the quality setting. At 1080p (≈8 MB per frame) this gives roughly 24 frames maximum. At 720p (≈3.7 MB) you get the full 60 frames at quality=1.
 - **`drawRingRegion`** samples the reusable history canvases directly with native `drawImage` cropping. It performs no per-tile pixel upload or allocation.
 - **Solarize** downsamples to a 640px-wide scratch canvas before the pixel pass, then scales back up. This is 4–16× faster on large canvases and makes a large practical difference on Windows/DirectX WebView.
-- **Flow warp** renders in tiles rather than per-pixel — the tile size is set by the SCALE parameter. Larger tiles = faster but coarser warp.
+- **Flow warp** renders in tiles rather than per-pixel — the tile size is set by the SCALE parameter. Static tile geometry, normalized coordinates, radial vectors, and swirl angles are cached until render size or SCALE changes. Larger tiles = faster but coarser warp.
 - **QUALITY slider** controls temporal-ring depth. Solarize uses an independent adaptive load guard that reuses its cached result only when sustained frame time exceeds the healthy range.
 - **Feedback** uses `drawingContext.drawImage` directly rather than `p5.get()`, eliminating one full-canvas copy per frame.
 - **Full-resolution surfaces** are limited to `gCur`, `gBuf`, and one shared `gScratch` ping-pong target. Feedback, Flow Warp, and Symmetry reuse `gScratch` instead of retaining separate full-size buffers.
 - **Resize behavior** resizes existing p5 Graphics objects in place and reuses Solarize/Luma scratch canvases, avoiding a temporary old-plus-new buffer set during window resizing.
 - **Final presentation** uses the cached native Canvas2D context for background fill, base mix, and final composite instead of routing full-frame blits through p5 wrappers.
+- **Canvas mirror** is receiver-aware and one-frame-in-flight. With no output window attached, HUFF performs no mirror `ImageBitmap` capture, JPEG encode, or relay upload.
 - If the app stutters, try: lower QUALITY → reduce canvas resolution → increase PIXEL SIZE → disable Flow Warp (the most expensive pass).
 
 ---
@@ -880,4 +884,12 @@ This build reuses typed glitch-placement buffers instead of creating target arra
 ## HUFF Classic Optimization Pass 8
 
 This build concentrates on the Canvas2D surface topology. It consolidates the former Flow, Symmetry, and feedback scratch surfaces into one shared ping-pong buffer, reducing the always-resident p5 Graphics set from four full-resolution surfaces to three and removing the separate feedback snapshot canvas. Existing p5 Graphics objects and CPU-pixel scratch canvases are resized in place, the main output composite and symmetry pass use direct Canvas2D operations, and mirror quality/FPS math is cached on control events. Effect order, control behavior, temporal history, Syphon transport, Spout, and mandatory Syphon framework packaging remain unchanged.
+
+## HUFF Classic Optimization Pass 9
+
+This build reduces repeated geometry work in Flow Warp by retaining a reusable typed grid workspace keyed by render size and SCALE. It also keeps dedicated frame-ring contexts in overwrite mode, caches ring-capacity calculations until resolution or QUALITY changes, and makes the JPEG canvas mirror receiver-aware with one relay frame in flight. Closing the canvas window now stops mirror capture and encoding while the controls renderer, Syphon, and Spout remain independent. Effect order, Flow formulas, Float32 displacement quantization, temporal sampling, controls, presets, and mandatory Syphon framework packaging are preserved.
+
+## HUFF Classic Optimization Pass 10
+
+This build optimizes the Scanline engine with a reusable typed band workspace. Per-band noise seed constants and static rotated-span geometry are retained across frames, identical static scanline states reuse prepared band coordinates, invisible scanline states exit before Canvas2D setup, and the shared alpha state is applied once per pass instead of once per band. Drift, focus, roll, gap quantization, skew, shift, spin, clipping, source sampling, and draw order remain unchanged. This follows the same Junkpile-derived resource discipline already applied to Flow: persistent workspaces, geometry invalidation only when its inputs change, and no per-frame resource construction.
 

@@ -1,149 +1,169 @@
-# HUFF Classic Optimization Pass 8
+# HUFF Classic Optimization Pass 10 — Scanline Engine Workspace
 
 **Date:** 2026-08-03  
-**Scope:** Canvas2D surface topology, buffer reuse, resize allocation, and final-composite overhead  
-**Baseline:** HUFF Classic Optimization Pass 7  
-**Feature policy:** No new effects, controls, routes, output protocols, or native-renderer migration
+**Scope:** HUFF Classic only — Tauri v1 + HTML/JavaScript + p5.js/Canvas2D  
+**Baseline:** HUFF Classic Optimization Pass 9  
+**Status:** Implementation and deterministic static validation complete; runtime visual parity and endurance testing pending
 
-## Purpose
+## Objective
 
-Pass 8 begins the deeper canvas-and-buffer optimization phase requested for HUFF Classic. The goal is to reduce full-resolution surface count, avoid temporary resize peaks, and remove p5 wrapper overhead from large full-frame operations while preserving the existing Classic render order and visual formulas.
+Optimize the existing Scanline effect without changing its appearance, controls, phase behavior, layer order, temporal source, or cross-platform Canvas2D implementation.
 
-The most important architectural change is that Feedback, Flow Warp, and Symmetry now share one full-resolution ping-pong surface. These stages are sequential and each completely overwrites its destination before references swap, so separate Flow and Symmetry targets were not necessary.
+This pass applies the same resource-management principles proven throughout the Junkpile examples and earlier Classic passes:
 
-## Exact code changes
+- retain reusable workspaces instead of constructing transient per-frame structures;
+- separate static geometry from animated state;
+- invalidate caches only when an input affecting the cached result changes;
+- preserve deterministic effect ordering and explicit resource ownership;
+- avoid touching native output code when the optimization is entirely inside the web renderer.
 
-### `src/canvas.js`
+## Implementation changes
 
-- Reduced full-resolution p5 Graphics surfaces from four to three:
-  - `gCur` — clean decoded/camera frame;
-  - `gBuf` — active persistent/effect composite;
-  - `gScratch` — shared ping-pong target.
-- Removed the separate `gWarp` and `gTemp` surface roles.
-- Removed the separate full-resolution feedback snapshot canvas.
-- Feedback now copies `gBuf` into `gScratch`, transforms that snapshot back into `gBuf`, and leaves `gScratch` available for later Flow/Symmetry reuse.
-- Flow Warp now writes to `gScratch` and swaps `gBuf`/`gScratch`.
-- Symmetry now writes to the same `gScratch` and swaps the same references.
-- Added in-place p5 Graphics resize reuse through `resizeCanvas()` rather than constructing four replacement Graphics objects and then deleting the old set.
-- Retained a one-buffer-at-a-time replacement fallback if a WebView/p5 implementation rejects in-place resize.
-- Moved `pixelDensity(1)` before main-canvas creation so Retina systems do not first allocate a device-pixel-ratio backing store and immediately resize it.
-- Configured each p5 Graphics density once rather than potentially re-running `pixelDensity()` after every resize.
-- Replaced full-frame p5 `clear()`/`image()` copies used by source seeding and no-effect synchronization with native Canvas2D copy compositing.
-- Replaced the main output background, base mix, and final buffer presentation with direct Canvas2D operations on a cached context.
-- Kept the prior p5 presentation path as a compatibility fallback if the native main context cannot be acquired.
-- Cached the mirror render canvas after first resolution.
-- Cached mirror JPEG quality and frame period on QUALITY control events instead of parsing the DOM and recalculating them on every animation-frame pump.
+### 1. Reusable typed scanline workspace
 
-### `src/effects.js`
+Added one persistent `ScanlineBandWorkspace` in `src/effects.js`.
 
-- Replaced Flow Warp's p5 `dst.clear()` call with one explicit native Canvas2D clear under a known identity transform and composite state.
-- Preserved the blank-output behavior if a Flow source is unexpectedly unavailable.
-- Reimplemented Symmetry's full copy, clipping, translation, scaling, and mirrored draws directly through Canvas2D rather than p5 `push()`, `pop()`, `translate()`, `scale()`, and `image()` wrappers.
-- Reused Solarize canvases and contexts across render-size changes by resizing their backing stores in place.
-- Reused Pipeline Luma Key canvases and contexts across render-size changes by resizing their backing stores in place.
-- Preserved the existing Solarize adaptive-load guard, cached result, channel maps, and luma formulas.
-- Preserved the existing decoded-frame-aware Pipeline Luma Key cache.
+It owns reusable typed arrays for:
 
-### Documentation
+- prepared band start positions;
+- prepared band lengths;
+- source offsets;
+- destination offsets;
+- drawable cross-axis lengths;
+- slow-drift noise seeds;
+- fast-jitter noise seeds;
+- shift-noise seeds.
 
-- Updated both documentation trees to describe:
-  - the event-driven typed render-state cache;
-  - canvas-backed temporal history;
-  - the new `gCur` / `gBuf` / `gScratch` topology;
-  - the shared ping-pong behavior.
-- Updated the interface documentation so CLR BUF no longer references removed `gWarp`/`gTemp` names.
-- Added the Pass 8 summary to `README.md`.
-- Added `CANVAS_BUFFER_AUDIT.md` for current surface ownership and remaining headroom.
+The arrays grow geometrically only when a larger band count is requested. Ordinary frames reuse the existing allocation.
 
-## Full-resolution surface reduction
+### 2. Cached per-band constants
 
-Pass 7 retained these p5/scratch surfaces at render resolution:
+The previous loop recalculated these constants every frame:
 
 ```text
-main output canvas
-gCur
-gBuf
-gWarp
-gTemp
-feedback snapshot canvas (only after Feedback is used)
+n × 3.7
+n × 11.3
+n × 2.3
 ```
 
-Pass 8 uses:
+They are now calculated once when workspace capacity grows and retained in `Float64Array` storage.
+
+The animated phase terms and `noise()` calls remain unchanged when the state is moving.
+
+### 3. Cached rotated-span geometry
+
+The following values are retained until render width, render height, or scanline angle changes:
+
+- angle in radians;
+- absolute sine and cosine;
+- full rotated band span (`dim`);
+- cross-axis displacement span (`cross`).
+
+Static scanline angles therefore avoid repeated trigonometric and span calculations. Spin still updates the geometry each rendered frame because its angle changes each frame.
+
+### 4. Prepared-band state reuse
+
+The workspace caches the complete prepared band list when all inputs are identical:
+
+- band count and band size;
+- gap, skew, focus, roll, shift, and drift;
+- scanline X/Y phases;
+- rotated span and cross span.
+
+This is most useful when Scanline SPEED is zero and spin is disabled. The video source can continue changing while the band coordinates are reused. Changing the HUFF seed explicitly invalidates the prepared-band cache before the next frame.
+
+### 5. Neutral-state shortcuts
+
+- Scanlines with zero effective alpha now return before context setup or band calculation.
+- Fast-jitter noise is skipped when DRIFT is exactly zero because its contribution is exactly zero.
+- Shift noise is skipped when SHIFT and SKEW are both exactly zero because the resulting displacement is exactly zero.
+
+These shortcuts do not alter phase accumulation, source playback, or other effects.
+
+### 6. Reduced Canvas2D state changes
+
+`globalAlpha` is now assigned once before the band draw loop rather than once for every visible band.
+
+The transform, clipping coverage, `drawImage()` order, and source/destination rectangles are unchanged.
+
+## Preserved behavior
+
+The following are intentionally unchanged:
+
+- Scanline ON/OFF semantics through the existing `clusters` control.
+- Use of `clusterCount` and `clusterRadius` for band count and band size.
+- Independent scanline phase accumulation in `canvas.js`.
+- Static angle and left/right spin behavior.
+- Drift and fast-jitter formulas.
+- Focus bias formula and multiplication order.
+- Roll offset formula.
+- Gap quantization.
+- Skew and shift calculations.
+- Rotated canvas coverage.
+- Source sampling from `gCur`.
+- Canvas2D band blit order.
+- Glitch/Scanline layer priority behavior.
+- Feedback, Flow, Symmetry, Solarize, Luma Key, Global Mix, and temporal history.
+- Canvas mirror, Syphon, Spout, Rust relay, Tauri configuration, and packaging.
+- Mandatory bundled `Syphon.framework` layout.
+
+## Files changed
 
 ```text
-main output canvas
-gCur
-gBuf
-gScratch
+src/effects.js
+scripts/validate-pass10.mjs
+package.json
+README.md
+docs/docs/how-it-works.html
+docs/docs/architecture.html
+docs-v1/docs/how-it-works.html
+docs-v1/docs/architecture.html
+PASS_NOTES.md
+SCANLINE_ENGINE_AUDIT.md
+CHANGELOG.md
+TESTING_CHECKLIST.md
+CURRENT_STATUS.md
+GIT_COMMIT_MESSAGE.md
+DOCUMENTATION_INDEX.md
+HUFF_CLASSIC_OPTIMIZATION_PASS_10.txt
 ```
 
-Solarize, luma key, temporal history, mirror encoding, and Syphon have their own specialized/on-demand surfaces and are documented separately in `CANVAS_BUFFER_AUDIT.md`.
+## Validation completed
 
-## Approximate raw backing-store reduction
+Run:
 
-One RGBA surface requires `width × height × 4` bytes before browser-internal overhead.
+```bash
+npm run validate:pass10
+```
 
-| Render size | Always saved | Additional saved while Feedback is active | Total Feedback-active reduction |
-|---|---:|---:|---:|
-| 1280×720 | 3.52 MiB | 3.52 MiB | 7.03 MiB |
-| 1920×1080 | 7.91 MiB | 7.91 MiB | 15.82 MiB |
-| 2560×1440 | 14.06 MiB | 14.06 MiB | 28.13 MiB |
-| 3840×2160 | 31.64 MiB | 31.64 MiB | 63.28 MiB |
+The deterministic validator completed:
 
-Actual process-memory reduction may be larger or smaller because WebKit, Chromium/WebView2, and Canvas2D implementations can retain staging textures, tiled backing stores, and recycled allocations.
+- 2,400 scanline parameter/resolution cases;
+- 28,342 exact prepared-band comparisons;
+- exact angle, rotated-span, cross-span, position, length, offset, clipping, and draw-order data comparisons;
+- static-state cache reuse verification;
+- cache invalidation verification after phase changes;
+- source-marker verification that seed changes invalidate prepared Scanline geometry;
+- source-marker checks for the workspace, early exit, one-pass alpha state, and cached noise constants.
 
-## Resize behavior improvement
+All comparisons passed in the artifact-generation environment.
 
-The prior allocator built four new full-resolution p5 Graphics objects before removing the old four. At 1080p, raw RGBA storage for those eight temporary Graphics backing stores alone could approach 63 MiB, excluding the main canvas, history ring, browser staging, and other scratch surfaces.
+## Runtime work still required
 
-Pass 8 resizes the three retained p5 Graphics objects in place. It also resizes Solarize and luma-key scratch canvases rather than replacing their JavaScript canvas/context objects.
+Static equivalence cannot verify browser rendering or WebView performance. Test:
 
-## Behavioral invariants
+- horizontal, vertical, diagonal, and arbitrary angles;
+- left and right spin;
+- SPEED at zero and nonzero values;
+- DRIFT zero and maximum;
+- SHIFT/SKEW neutral and extreme combinations;
+- FOCUS and ROLL extremes;
+- high band counts and large radius values;
+- Scanlines above and below Glitch;
+- Scanlines during Syphon output;
+- repeated resize/fullscreen cycles;
+- sustained playback and memory behavior.
 
-Pass 8 is intended to preserve:
+## Result
 
-- all controls, defaults, labels, ranges, and preset values;
-- the fixed HUFF Classic effect order;
-- glitch/scanline layer-priority behavior;
-- Feedback translation, rotation, scale, alpha, and persistence behavior;
-- Flow Warp formulas, history pulse selection, tile traversal, and quantization;
-- Symmetry modes and position behavior;
-- Solarize and Pipeline Luma Key pixel formulas;
-- base-video mix and background modes;
-- temporal frame-ring behavior;
-- MIDI, OSC, preset, reset, and undo synchronization;
-- mirror framing and maximum 30 fps operator-preview cap;
-- Pass 4–7 Syphon backpressure, receiver awareness, worker path, Metal texture reuse, and mandatory framework packaging;
-- Spout and Linux code paths.
-
-## Static equivalence validation
-
-A symbolic pipeline test exercised 800 sequential frame/stage combinations across Feedback, Flow Warp, and Symmetry. The former three-target state machine and the new single-scratch ping-pong state machine produced the same final symbolic output for every combination, and the active/scratch references never aliased.
-
-This proves the sequential buffer-ownership logic under the assumption that Flow and Symmetry completely overwrite their destinations. The code explicitly clears/copies those destinations before use.
-
-## Files changed relative to Pass 7
-
-- `src/canvas.js`
-- `src/effects.js`
-- `README.md`
-- `docs/docs/architecture.html`
-- `docs/docs/how-it-works.html`
-- `docs/docs/interface.html`
-- `docs-v1/docs/architecture.html`
-- `docs-v1/docs/how-it-works.html`
-- `docs-v1/docs/interface.html`
-- root documentation suite
-- `CANVAS_BUFFER_AUDIT.md`
-- `HUFF_CLASSIC_OPTIMIZATION_PASS_8.txt`
-
-No Rust, Tauri configuration, native Syphon bridge, bundled Syphon framework, Spout bridge, MIDI maps, OSC maps, presets, or build scripts were changed.
-
-## Runtime validation still required
-
-- Visual parity for Feedback alone and with Flow/Symmetry.
-- Visual parity for vertical, horizontal, and combined symmetry.
-- Rapid resize/fullscreen cycles and memory settling.
-- Mirror output framing and QUALITY response.
-- Syphon endurance with Feedback + Flow + Symmetry combinations.
-- Windows WebView2 and Linux WebKitGTK behavior.
+Pass 10 removes repeated scanline setup work and workspace churn while preserving the existing Canvas2D effect model. The irreducible cost remains one Canvas2D `drawImage()` per accepted visible band.

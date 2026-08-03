@@ -11,6 +11,8 @@
  *  - Pass 8: one shared full-resolution scratch buffer for feedback/flow/symmetry
  *  - Pass 8: p5.Graphics and pixel-processing scratch canvases resize in place
  *  - Pass 8: final presentation uses direct Canvas2D blits
+ *  - Pass 9: ring capture contexts stay in copy mode and capacity math is cached
+ *  - Pass 9: mirror encoding pauses without an attached canvas receiver
  */
 
 // ─── Module-local DOM helpers ─────────────────────────────────────────────────
@@ -169,6 +171,10 @@ class FrameRing {
     canvas.width  = width;
     canvas.height = height;
     const ctx = canvas.getContext('2d', { alpha:false, desynchronized:true });
+    if (ctx) {
+      ctx.globalAlpha = 1;
+      ctx.globalCompositeOperation = 'copy';
+    }
     return { canvas, ctx };
   }
 
@@ -185,15 +191,15 @@ class FrameRing {
     } else if (frame.canvas.width !== width || frame.canvas.height !== height) {
       frame.canvas.width  = width;
       frame.canvas.height = height;
+      // Resizing resets Canvas2D state. Ring contexts are dedicated overwrite
+      // surfaces, so keep them permanently in copy mode between captures.
+      frame.ctx.globalAlpha = 1;
+      frame.ctx.globalCompositeOperation = 'copy';
     }
 
     try {
-      frame.ctx.globalAlpha = 1;
-      frame.ctx.globalCompositeOperation = 'copy';
       frame.ctx.drawImage(source, 0, 0, width, height);
-      frame.ctx.globalCompositeOperation = 'source-over';
     } catch (e) {
-      frame.ctx.globalCompositeOperation = 'source-over';
       return false;
     }
 
@@ -664,15 +670,27 @@ function _syncGCur() {
   } catch(e) {}
 }
 
+let _ringCapWidth = 0;
+let _ringCapHeight = 0;
+let _ringCapQuality = NaN;
+
+function _ensureFrameRingCapacity(width, height, quality) {
+  if (width === _ringCapWidth && height === _ringCapHeight && quality === _ringCapQuality) return;
+  _ringCapWidth = width;
+  _ringCapHeight = height;
+  _ringCapQuality = quality;
+
+  const bpf = width * height * 4;
+  let cap = Math.max(4, Math.round(60 * (quality * 2)));
+  cap = Math.min(cap, Math.max(4, Math.floor(192 * 1024 * 1024 / bpf)));
+  frameRing.resize(cap);
+}
+
 function _pushToRing() {
   if (!gCur) return false;
   try {
-    const Q   = renderState.quality ?? 1;
-    const bpf = gCur.width * gCur.height * 4;
-    let cap = Math.max(4, Math.round(60 * (Q * 2)));
-    cap = Math.min(cap, Math.max(4, Math.floor(192 * 1024 * 1024 / bpf)));
-    frameRing.resize(cap);
-
+    const quality = renderState.quality ?? 1;
+    _ensureFrameRingCapacity(gCur.width, gCur.height, quality);
     const src = gCur.elt ?? gCur.drawingContext?.canvas;
     return frameRing.pushFrom(src, gCur.width, gCur.height);
   } catch(e) {
@@ -1194,6 +1212,7 @@ function setSeedFromUI() {
   baseSeed = parseInt(els.seed?.value || '1', 10);
   if (isNaN(baseSeed)) baseSeed = 1;
   noiseSeed(baseSeed);
+  window.invalidateScanlineCache?.();
 }
 
 // ─── file loading ─────────────────────────────────────────────────────────────
@@ -1661,6 +1680,8 @@ function startCamera(deviceId) {
   const tcv = document.createElement('canvas');
   const ttx = tcv.getContext('2d', { alpha:false, desynchronized:true });
   let ws = null, connected = false, fallbackBusy = false;
+  let mirrorReceivers = 0;
+  let relayFramePending = false;
   let _wsDelay = 1500;
   const WS_DELAY_MAX = 30000;
 
@@ -1696,9 +1717,14 @@ function startCamera(deviceId) {
         }
         if (msg.type === 'encoded') {
           workerBusy = false;
-          if (!connected || !ws || ws.readyState !== WebSocket.OPEN) return;
+          if (!connected || mirrorReceivers <= 0 || relayFramePending || !ws || ws.readyState !== WebSocket.OPEN) return;
           if (ws.bufferedAmount > WS_MAX_BUFFERED) return;
-          try { ws.send(msg.buffer); } catch {}
+          try {
+            relayFramePending = true;
+            ws.send(msg.buffer);
+          } catch {
+            relayFramePending = false;
+          }
           return;
         }
         if (msg.type === 'error') {
@@ -1715,6 +1741,16 @@ function startCamera(deviceId) {
   }
   initWorker();
 
+  function updateMirrorReceiverState(count) {
+    mirrorReceivers = Math.max(0, Number(count) || 0);
+    if (mirrorReceivers === 0) {
+      relayFramePending = false;
+      setWSStatus(connected ? 'WS: waiting for canvas' : 'WS: disconnected');
+    } else {
+      setWSStatus(`WS: streaming to ${mirrorReceivers} canvas${mirrorReceivers === 1 ? '' : 'es'}`);
+    }
+  }
+
   function ensureWS() {
     if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
     ws = new WebSocket(wsUrl);
@@ -1722,13 +1758,28 @@ function startCamera(deviceId) {
     ws.binaryType = 'arraybuffer';
     ws.onopen  = () => {
       connected = true;
+      relayFramePending = false;
       _wsDelay = 1500;
-      setWSStatus('WS: connected');
+      setWSStatus('WS: waiting for canvas');
       try { ws.send(JSON.stringify({ type:'hello', role:'index' })); } catch {}
+    };
+    ws.onmessage = event => {
+      if (typeof event.data !== 'string') return;
+      try {
+        const message = JSON.parse(event.data);
+        if (message.type === 'mirror-state') {
+          updateMirrorReceiverState(message.receivers);
+        } else if (message.type === 'mirror-ack') {
+          relayFramePending = false;
+          updateMirrorReceiverState(message.receivers);
+        }
+      } catch {}
     };
     ws.onerror = () => {};
     ws.onclose = () => {
       connected = false;
+      relayFramePending = false;
+      mirrorReceivers = 0;
       setWSStatus('WS: disconnected');
       setTimeout(ensureWS, _wsDelay);
       _wsDelay = Math.min(_wsDelay * 2, WS_DELAY_MAX);
@@ -1769,7 +1820,7 @@ function startCamera(deviceId) {
     let bitmap = null;
     try {
       bitmap = await createImageBitmap(cnv);
-      if (!connected || !ws || ws.readyState !== WebSocket.OPEN) {
+      if (!connected || mirrorReceivers <= 0 || relayFramePending || !ws || ws.readyState !== WebSocket.OPEN) {
         bitmap.close?.();
         workerBusy = false;
         return true;
@@ -1807,8 +1858,10 @@ function startCamera(deviceId) {
       await new Promise(resolve => {
         tcv.toBlob(blob => {
           try {
-            if (blob && connected && ws?.readyState === WebSocket.OPEN && ws.bufferedAmount <= WS_MAX_BUFFERED) {
-              ws.send(blob);
+            if (blob && connected && mirrorReceivers > 0 && !relayFramePending && ws?.readyState === WebSocket.OPEN && ws.bufferedAmount <= WS_MAX_BUFFERED) {
+              relayFramePending = true;
+              try { ws.send(blob); }
+              catch { relayFramePending = false; }
             }
           } catch {}
           resolve();
@@ -1820,7 +1873,7 @@ function startCamera(deviceId) {
   }
 
   async function sendFrame(cnv) {
-    if (!connected || !ws || ws.readyState !== WebSocket.OPEN) return;
+    if (!connected || mirrorReceivers <= 0 || relayFramePending || !ws || ws.readyState !== WebSocket.OPEN) return;
     if (ws.bufferedAmount > WS_MAX_BUFFERED) return;
     if (workerReady && !workerDisabled) {
       const accepted = await sendViaWorker(cnv);

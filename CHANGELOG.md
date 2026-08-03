@@ -2,6 +2,40 @@
 
 This changelog tracks the optimization series for the legacy Tauri v1 + p5.js/Canvas2D edition. It intentionally excludes the native-wgpu HUFF project.
 
+## Pass 10 — Scanline band workspace and static geometry cache
+
+**Date:** 2026-08-03  
+**Status:** Implementation and deterministic static validation complete; runtime visual parity and endurance testing pending
+
+- Added one persistent typed `ScanlineBandWorkspace`.
+- Cached per-band slow-drift, fast-jitter, and shift noise constants.
+- Cached angle radians, trigonometry, rotated coverage span, and cross-axis span by render size and angle.
+- Reused complete prepared band rectangles when phase, geometry, and controls are unchanged.
+- Invalidated prepared Scanline bands whenever the p5 noise seed changes.
+- Added zero-alpha, zero-fast-jitter, and zero-shift shortcuts.
+- Assigned Canvas2D alpha once per Scanline pass rather than once per accepted band.
+- Preserved Drift, Focus, Roll, Gap, Skew, Shift, Spin, clipping, source sampling, and band draw order.
+- Added `npm run validate:pass10` with 2,400 cases and 28,342 exact band comparisons.
+- Documented the Junkpile-derived persistent-workspace and invalidation model.
+- Kept Syphon, Spout, Rust relay, Tauri configuration, framework layout, effects, controls, and routing unchanged.
+
+## Pass 9 — Flow geometry cache, FrameRing hot path, and receiver-aware mirror
+
+**Date:** 2026-08-03  
+**Status:** Implementation and static validation complete; runtime Flow/mirror parity pending
+
+- Added a reusable typed `FlowGridWorkspace` keyed by render width, height, and SCALE.
+- Moved static tile positions, edge sizes, normalized coordinates, inward vectors, and radial angles out of normal Flow frames.
+- Preserved Flow noise, animation, turbulence, pull, swirl, history pulse, row-major draw order, and `Math.fround()` quantization.
+- Kept dedicated FrameRing contexts in Canvas2D `copy` mode between captures.
+- Cached FrameRing capacity calculations until resolution or QUALITY changes.
+- Added Rust canvas-client count notifications to the controls WebView.
+- Stopped mirror `ImageBitmap` capture, JPEG encoding, and WebSocket upload while no canvas receiver is attached.
+- Added one relay acknowledgement per accepted JPEG so the browser keeps one mirror frame in flight.
+- Added `npm run validate:pass9` with 1,728 cases and 4,385,502 exact Flow tile comparisons.
+- Corrected output documentation to describe current role-based raw-RGBA Syphon/Spout transport and legacy packet compatibility.
+- Kept Syphon implementation/framework, Spout bridge, controls, effects, and routing behavior unchanged.
+
 ## Pass 8 — Shared full-resolution scratch buffer and Canvas2D surface reuse
 
 **Date:** 2026-08-03  

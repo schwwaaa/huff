@@ -334,6 +334,51 @@ async fn broadcast_binary(clients: &ClientMap, sender: SocketAddr, bin: Vec<u8>)
   targets.len()
 }
 
+
+async fn notify_mirror_state(clients: &ClientMap) {
+  // The index WebView keeps its relay socket open for the lifetime of the app.
+  // Tell it whether a canvas receiver is actually attached so JPEG capture and
+  // encoding can stop completely while the output window is absent.
+  let (receivers, index_targets): (usize, Vec<tokio::sync::mpsc::Sender<Message>>) = {
+    let map = clients.lock().await;
+    let receivers = map.values().filter(|client| client.role == "canvas").count();
+    let index_targets = map.values()
+      .filter(|client| client.role == "index")
+      .map(|client| client.control_tx.clone())
+      .collect();
+    (receivers, index_targets)
+  };
+
+  let state = serde_json::json!({
+    "type": "mirror-state",
+    "receivers": receivers,
+  }).to_string();
+
+  for tx in index_targets {
+    let _ = tx.send(Message::Text(state.clone())).await;
+  }
+}
+
+async fn forward_mirror_frame(
+  clients: &ClientMap,
+  sender: SocketAddr,
+  sender_role: &str,
+  control_tx: &tokio::sync::mpsc::Sender<Message>,
+  bin: Vec<u8>,
+) {
+  let receivers = broadcast_binary(clients, sender, bin).await;
+  if sender_role == "index" {
+    // One acknowledgement per accepted JPEG keeps the browser sender to one
+    // relay frame in flight. The relay still remains latest-frame-wins for each
+    // canvas receiver, so a slow viewer cannot create a latency queue.
+    let ack = serde_json::json!({
+      "type": "mirror-ack",
+      "receivers": receivers,
+    }).to_string();
+    let _ = control_tx.send(Message::Text(ack)).await;
+  }
+}
+
 async fn handle_ws(
   stream: tokio::net::TcpStream,
   peer_addr: SocketAddr,
@@ -415,6 +460,7 @@ async fn handle_ws(
                 );
               }
               drop(map);
+              notify_mirror_state(&clients_r).await;
 
               #[cfg(target_os = "macos")]
               if sender_role == "syphon-sender" {
@@ -450,7 +496,7 @@ async fn handle_ws(
               // Legacy packet support for older HUFF Classic frontends.
               let _ = syphon::push_frame(&bin);
             } else {
-              let _ = broadcast_binary(&clients_r, peer_addr, bin).await;
+              forward_mirror_frame(&clients_r, peer_addr, &sender_role, &control_tx, bin).await;
             }
           }
 
@@ -464,13 +510,13 @@ async fn handle_ws(
               // Legacy packet support for older HUFF Classic frontends.
               spout::push_frame(&bin);
             } else {
-              let _ = broadcast_binary(&clients_r, peer_addr, bin).await;
+              forward_mirror_frame(&clients_r, peer_addr, &sender_role, &control_tx, bin).await;
             }
           }
 
           #[cfg(not(any(target_os = "macos", target_os = "windows")))]
           {
-            let _ = broadcast_binary(&clients_r, peer_addr, bin).await;
+            forward_mirror_frame(&clients_r, peer_addr, &sender_role, &control_tx, bin).await;
           }
         }
 
@@ -488,6 +534,7 @@ async fn handle_ws(
     }
 
     clients_r.lock().await.remove(&peer_addr);
+    notify_mirror_state(&clients_r).await;
     println!("[huff] {peer_addr} disconnected");
     Ok::<(), ()>(())
   });

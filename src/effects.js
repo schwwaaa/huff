@@ -3,14 +3,16 @@
 //  - All frameRing accesses updated to FrameRing API: frameRing.fromEnd(n)
 //    replaces frameRing[frameRing.length - 1 - n]. O(1) in both cases, but
 //    fromEnd() is explicit and works correctly without an array reference.
-//  - applyFlowWarp computes and draws each tile in one pass — no displacement
-//    arrays and no second grid traversal.
+//  - applyFlowWarp computes and draws each tile in one pass, with static grid
+//    geometry cached by render size + cell size.
 //  - Solarize uses cached channel lookup tables; pipeline luma masks are rebuilt
 //    only when the decoded source frame or key parameters change.
 //  - applyGlitch does not re-seed random — draw() seeds once per frame.
 //  - Cluster physics centers use p5 seeded random() for reproducibility.
 //  - Symmetry uses native Canvas2D clipping/transforms instead of p5 wrappers.
 //  - Solarize and luma-key scratch canvases resize in place.
+//  - Scanline placement reuses typed band buffers, cached angle geometry, and
+//    cached per-band noise seeds; identical static states reuse prepared bands.
 //  - Glitch tile placement reuses typed target/grid buffers and persistent
 //    Float64 cluster offsets instead of allocating arrays, Maps, and objects
 //    every frame.
@@ -179,89 +181,256 @@ function ensureClusterTileCapacity(center, required) {
 // ROLL  — steady scroll simulating CRT rolling sync loss, independent of DRIFT
 // DRIFT — dual-frequency noise: slow sync wander + fast instability jitter
 
+class ScanlineBandWorkspace {
+  constructor() {
+    this.slowSeed = new Float64Array(0);
+    this.fastSeed = new Float64Array(0);
+    this.shiftSeed = new Float64Array(0);
+    this.start = new Int32Array(0);
+    this.length = new Float64Array(0);
+    this.srcOff = new Int32Array(0);
+    this.dstOff = new Int32Array(0);
+    this.crossLength = new Float64Array(0);
+    this.count = 0;
+
+    this.geometryWidth = -1;
+    this.geometryHeight = -1;
+    this.geometryAngle = Number.NaN;
+    this.angleRad = 0;
+    this.absS = 0;
+    this.absC = 1;
+    this.dim = 0;
+    this.cross = 0;
+
+    this.cacheValid = false;
+    this.cacheBands = -1;
+    this.cacheBandSize = -1;
+    this.cacheGap = -1;
+    this.cacheSkew = Number.NaN;
+    this.cacheFocus = Number.NaN;
+    this.cacheRoll = Number.NaN;
+    this.cacheShiftScale = Number.NaN;
+    this.cacheDrift = Number.NaN;
+    this.cachePhaseX = Number.NaN;
+    this.cachePhaseY = Number.NaN;
+    this.cacheDim = Number.NaN;
+    this.cacheCross = Number.NaN;
+  }
+
+  _ensureCapacity(required) {
+    if (this.start.length >= required) return;
+    const previous = this.start.length;
+    let capacity = Math.max(32, previous || 0);
+    while (capacity < required) capacity *= 2;
+
+    const slowSeed = new Float64Array(capacity);
+    const fastSeed = new Float64Array(capacity);
+    const shiftSeed = new Float64Array(capacity);
+    const start = new Int32Array(capacity);
+    const length = new Float64Array(capacity);
+    const srcOff = new Int32Array(capacity);
+    const dstOff = new Int32Array(capacity);
+    const crossLength = new Float64Array(capacity);
+
+    slowSeed.set(this.slowSeed);
+    fastSeed.set(this.fastSeed);
+    shiftSeed.set(this.shiftSeed);
+    start.set(this.start);
+    length.set(this.length);
+    srcOff.set(this.srcOff);
+    dstOff.set(this.dstOff);
+    crossLength.set(this.crossLength);
+
+    for (let n = previous; n < capacity; n++) {
+      slowSeed[n] = n * 3.7;
+      fastSeed[n] = n * 11.3;
+      shiftSeed[n] = n * 2.3;
+    }
+
+    this.slowSeed = slowSeed;
+    this.fastSeed = fastSeed;
+    this.shiftSeed = shiftSeed;
+    this.start = start;
+    this.length = length;
+    this.srcOff = srcOff;
+    this.dstOff = dstOff;
+    this.crossLength = crossLength;
+  }
+
+  invalidate() {
+    this.cacheValid = false;
+  }
+
+  resolveGeometry(canvasWidth, canvasHeight, angleDeg) {
+    if (
+      this.geometryWidth === canvasWidth &&
+      this.geometryHeight === canvasHeight &&
+      this.geometryAngle === angleDeg
+    ) return this;
+
+    this.geometryWidth = canvasWidth;
+    this.geometryHeight = canvasHeight;
+    this.geometryAngle = angleDeg;
+    this.angleRad = (angleDeg * Math.PI) / 180;
+    this.absS = Math.abs(Math.sin(this.angleRad));
+    this.absC = Math.abs(Math.cos(this.angleRad));
+    this.dim = canvasWidth * this.absS + canvasHeight * this.absC;
+    this.cross = canvasWidth * this.absC + canvasHeight * this.absS;
+    this.cacheValid = false;
+    return this;
+  }
+
+  _matches(scanBands, bandSize, scanGap, scanSkew, focus, roll, shiftScale, driftAmt, phX, phY) {
+    return this.cacheValid &&
+      this.cacheBands === scanBands &&
+      this.cacheBandSize === bandSize &&
+      this.cacheGap === scanGap &&
+      this.cacheSkew === scanSkew &&
+      this.cacheFocus === focus &&
+      this.cacheRoll === roll &&
+      this.cacheShiftScale === shiftScale &&
+      this.cacheDrift === driftAmt &&
+      this.cachePhaseX === phX &&
+      this.cachePhaseY === phY &&
+      this.cacheDim === this.dim &&
+      this.cacheCross === this.cross;
+  }
+
+  prepare(scanBands, bandSize, scanGap, scanSkew, focus, roll, shiftScale, driftAmt, phX, phY) {
+    this._ensureCapacity(scanBands);
+    if (this._matches(scanBands, bandSize, scanGap, scanSkew, focus, roll, shiftScale, driftAmt, phX, phY)) {
+      return this.count;
+    }
+
+    const dim = this.dim;
+    const cross = this.cross;
+    const rollOffset = (phY * roll * 80) % dim;
+    const focusDistance = Math.abs(focus - 0.5);
+    const gridStep = Math.max(1, bandSize + scanGap);
+    const shiftRange = cross * shiftScale;
+    const noShift = shiftScale === 0 && scanSkew === 0;
+    const noFastJitter = driftAmt === 0;
+    let count = 0;
+
+    for (let n = 0; n < scanBands; n++) {
+      const slowDrift = noise(this.slowSeed[n] + phY * 0.25 * driftAmt) * dim;
+      const fastJitter = noFastJitter
+        ? 0
+        : (noise(this.fastSeed[n] + phY * 1.8 * driftAmt) - 0.5) * dim * 0.12 * driftAmt;
+
+      const biased = slowDrift * (1 - focusDistance * 1.4)
+                   + (focus * dim) * focusDistance * 1.4
+                   + fastJitter;
+
+      const rawPos = ((biased + rollOffset) % dim + dim) % dim;
+      const gridPos = scanGap > 0
+        ? Math.floor(rawPos / gridStep) * gridStep
+        : rawPos;
+
+      const bandStart = Math.max(0, Math.floor(gridPos));
+      const bandEnd = Math.min(dim, bandStart + bandSize);
+      const bandLength = bandEnd - bandStart;
+      if (bandLength <= 0) continue;
+
+      let shift = 0;
+      if (!noShift) {
+        const skewOffset = Math.floor(scanSkew * bandStart);
+        shift = Math.floor(
+          map(noise(this.shiftSeed[n] + phX * 0.5), 0, 1, -shiftRange, shiftRange)
+        ) + skewOffset;
+      }
+
+      const sourceOffset = Math.max(0, shift < 0 ? -shift : 0);
+      const destinationOffset = Math.max(0, shift > 0 ? shift : 0);
+      const bandCross = cross - Math.abs(shift);
+      if (bandCross <= 0) continue;
+
+      this.start[count] = bandStart;
+      this.length[count] = bandLength;
+      this.srcOff[count] = sourceOffset;
+      this.dstOff[count] = destinationOffset;
+      this.crossLength[count] = bandCross;
+      count++;
+    }
+
+    this.count = count;
+    this.cacheValid = true;
+    this.cacheBands = scanBands;
+    this.cacheBandSize = bandSize;
+    this.cacheGap = scanGap;
+    this.cacheSkew = scanSkew;
+    this.cacheFocus = focus;
+    this.cacheRoll = roll;
+    this.cacheShiftScale = shiftScale;
+    this.cacheDrift = driftAmt;
+    this.cachePhaseX = phX;
+    this.cachePhaseY = phY;
+    this.cacheDim = dim;
+    this.cacheCross = cross;
+    return count;
+  }
+}
+
+const _scanlineBands = new ScanlineBandWorkspace();
+window.invalidateScanlineCache = () => _scanlineBands.invalidate();
+
 function applyScanlines(density, angleOverride = null, scanPriority = 1.0, state = window.HUFF_RENDER_STATE) {
   const rs = state || window.HUFF_RENDER_STATE || {};
   if (!rs.clusters) return;
 
-  const scanBands  = Math.trunc(rs.clusterCount);
+  const scanBands = Math.trunc(rs.clusterCount);
   if (scanBands <= 0) return;
 
-  // Use spin override if active, otherwise read from the static slider
-  const angleDeg = angleOverride !== null
-    ? angleOverride
-    : rs.scanAngle;
-  const angleRad   = (angleDeg * Math.PI) / 180;
-  const bandAlpha  = rs.scanAlpha * scanPriority;
-  const shiftScale = rs.scanShift;
-  const driftAmt   = rs.scanDrift;
-  const scanGap    = Math.trunc(rs.scanGap);
-  const scanSkew   = rs.scanSkew;
-  const focus      = rs.scanFocus;
-  const roll       = rs.scanRoll;
+  const bandAlpha = rs.scanAlpha * scanPriority;
+  if (!(bandAlpha > 0)) return;
 
+  const angleDeg = angleOverride !== null ? angleOverride : rs.scanAngle;
+  const shiftScale = rs.scanShift;
+  const driftAmt = rs.scanDrift;
+  const scanGap = Math.trunc(rs.scanGap);
+  const scanSkew = rs.scanSkew;
+  const focus = rs.scanFocus;
+  const roll = rs.scanRoll;
+  const bandSize = Math.max(4, Math.floor(Math.trunc(rs.clusterRadius) * 3));
   const phX = nPhaseScanX;
   const phY = nPhaseScanY;
 
-  // The span needed to cover the full canvas perpendicular to the band axis
-  // at angle θ is |W·sin θ| + |H·cos θ|. At 0° this equals H, at 90° equals W,
-  // at 45° on a 16:9 canvas it's ~1.3× H. Without this, rotated bands only fill
-  // the center strip and leave the corners empty.
-  const absS = Math.abs(Math.sin(angleRad));
-  const absC = Math.abs(Math.cos(angleRad));
-  const dim   = width * absS + height * absC;   // full rotated span
-  const cross = width * absC + height * absS;   // displacement axis span
-  const bSize = Math.max(4, Math.floor(Math.trunc(rs.clusterRadius) * 3));
+  const workspace = _scanlineBands.resolveGeometry(width, height, angleDeg);
+  const dim = workspace.dim;
+  const cross = workspace.cross;
+  if (!(dim > 0) || !(cross > 0)) return;
 
-  // Roll offset scrolls bands along the full rotated span
-  const rollOffset = (phY * roll * 80) % dim;
+  const bandCount = workspace.prepare(
+    scanBands,
+    bandSize,
+    scanGap,
+    scanSkew,
+    focus,
+    roll,
+    shiftScale,
+    driftAmt,
+    phX,
+    phY,
+  );
+  if (bandCount <= 0) return;
 
-  const ctx       = gBuf.drawingContext;
-  const prevAlpha = ctx.globalAlpha;
-  const gCurCvs   = gCur.drawingContext.canvas;
-
-  // Rotate around canvas centre. We also translate so the band coordinate
-  // system is centred on the canvas — bands at position dim/2 appear at the
-  // visual centre regardless of angle.
-  const rotated = Math.abs(angleRad) > 0.001;
+  const ctx = gBuf.drawingContext;
+  const sourceCanvas = gCur.drawingContext.canvas;
   ctx.save();
   ctx.translate(gBuf.width / 2, gBuf.height / 2);
-  if (rotated) ctx.rotate(angleRad);
-  // Offset so that band Y=0 is at -dim/2 from canvas centre
+  if (Math.abs(workspace.angleRad) > 0.001) ctx.rotate(workspace.angleRad);
   ctx.translate(-gBuf.width / 2, -dim / 2);
+  ctx.globalAlpha = bandAlpha;
 
-  for (let n = 0; n < scanBands; n++) {
-    const slowDrift  = noise(n * 3.7 + phY * 0.25 * driftAmt) * dim;
-    const fastJitter = (noise(n * 11.3 + phY * 1.8 * driftAmt) - 0.5) * dim * 0.12 * driftAmt;
-
-    // Focus bias within the full rotated span
-    const biased = slowDrift * (1 - Math.abs(focus - 0.5) * 1.4)
-                 + (focus * dim) * Math.abs(focus - 0.5) * 1.4
-                 + fastJitter;
-
-    const rawPos  = ((biased + rollOffset) % dim + dim) % dim;
-    const gridPos = scanGap > 0
-      ? Math.floor(rawPos / Math.max(1, bSize + scanGap)) * (bSize + scanGap)
-      : rawPos;
-
-    const bStart = Math.max(0, Math.floor(gridPos));
-    const bEnd   = Math.min(dim, bStart + bSize);
-    const bLen   = bEnd - bStart;
-    if (bLen <= 0) continue;
-
-    const skewOffset = Math.floor(scanSkew * bStart);
-    const shift = Math.floor(
-      map(noise(n * 2.3 + phX * 0.5), 0, 1, -cross * shiftScale, cross * shiftScale)
-    ) + skewOffset;
-
-    const srcOff = Math.max(0, shift < 0 ? -shift : 0);
-    const dstOff = Math.max(0, shift > 0 ?  shift : 0);
-    const bCross = cross - Math.abs(shift);
-    if (bCross <= 0) continue;
-
-    ctx.globalAlpha = bandAlpha;
-    // Source coordinates: sample from gCur at the unshifted position
-    // (srcOff accounts for horizontal shift direction)
-    ctx.drawImage(gCurCvs, srcOff, bStart, bCross, bLen, dstOff, bStart, bCross, bLen);
+  for (let i = 0; i < bandCount; i++) {
+    const bandStart = workspace.start[i];
+    const bandLength = workspace.length[i];
+    const bandCross = workspace.crossLength[i];
+    ctx.drawImage(
+      sourceCanvas,
+      workspace.srcOff[i], bandStart, bandCross, bandLength,
+      workspace.dstOff[i], bandStart, bandCross, bandLength,
+    );
   }
 
   ctx.restore();
@@ -536,9 +705,84 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0, glitchPriority = 1.0, 
 }
 
 // ─── Flow warp ────────────────────────────────────────────────────────────────
-// Computes displacement and draws the tile immediately. The source and destination
-// are always distinct surfaces, so there is no need to retain a full displacement
-// field or walk the grid a second time.
+// Computes displacement and draws each tile immediately. Static grid geometry is
+// cached by render size + cell size, so normal frames no longer repeat divisions,
+// edge-size checks, radial normalisation, or atan2 work for every tile.
+
+class FlowGridWorkspace {
+  constructor() {
+    this.width = 0;
+    this.height = 0;
+    this.cell = 0;
+    this.count = 0;
+    this.capacity = 0;
+    this.x = new Int32Array(0);
+    this.y = new Int32Array(0);
+    this.tileW = new Int32Array(0);
+    this.tileH = new Int32Array(0);
+    this.nx = new Float64Array(0);
+    this.ny = new Float64Array(0);
+    this.inwardX = new Float64Array(0);
+    this.inwardY = new Float64Array(0);
+    this.radialAngle = new Float64Array(0);
+  }
+
+  _ensureCapacity(required) {
+    if (this.capacity >= required) return;
+    let cap = Math.max(32, this.capacity || 0);
+    while (cap < required) cap *= 2;
+    this.capacity = cap;
+    this.x = new Int32Array(cap);
+    this.y = new Int32Array(cap);
+    this.tileW = new Int32Array(cap);
+    this.tileH = new Int32Array(cap);
+    this.nx = new Float64Array(cap);
+    this.ny = new Float64Array(cap);
+    this.inwardX = new Float64Array(cap);
+    this.inwardY = new Float64Array(cap);
+    this.radialAngle = new Float64Array(cap);
+  }
+
+  configure(width, height, cell) {
+    if (this.width === width && this.height === height && this.cell === cell) return;
+    this.width = width;
+    this.height = height;
+    this.cell = cell;
+
+    const cols = Math.ceil(width / cell);
+    const rows = Math.ceil(height / cell);
+    const required = cols * rows;
+    this._ensureCapacity(required);
+
+    const cx = width * 0.5;
+    const cy = height * 0.5;
+    let i = 0;
+    for (let row = 0; row < rows; row++) {
+      const y = row * cell;
+      const py = y + 0.5 * cell;
+      for (let col = 0; col < cols; col++, i++) {
+        const x = col * cell;
+        const px = x + 0.5 * cell;
+        const vx = cx - px;
+        const vy = cy - py;
+        const length = Math.hypot(vx, vy) || 1;
+
+        this.x[i] = x;
+        this.y[i] = y;
+        this.tileW[i] = Math.min(cell, width - x);
+        this.tileH[i] = Math.min(cell, height - y);
+        this.nx[i] = (x + 0.5 * cell) / width * 2.0;
+        this.ny[i] = (y + 0.5 * cell) / height * 2.0;
+        this.inwardX[i] = vx / length;
+        this.inwardY[i] = vy / length;
+        this.radialAngle[i] = Math.atan2(py - cy, px - cx);
+      }
+    }
+    this.count = required;
+  }
+}
+
+const _flowGrid = new FlowGridWorkspace();
 
 function applyFlowWarp(src, dst, strength = 6, scale = 80, pulse = 0, implode = 0, speed = 1, turb = 0, swirl = 0, spread = 1) {
   let srcFrame = src;
@@ -565,58 +809,52 @@ function applyFlowWarp(src, dst, strength = 6, scale = 80, pulse = 0, implode = 
   // genuinely fast top end. speed=1 maps to the original tempo; speed=0 freezes.
   const t    = frameCount * 0.005 * Math.pow(Math.max(0, speed), 1.6);
   const w = width, h = height;
-  const cx2 = w * 0.5, cy2 = h * 0.5;
+  _flowGrid.configure(w, h, cell);
 
   // SPREAD scales the flow-field noise frequency: low = large coherent zones all
   // drifting together (watery), high = many small independent eddies.
   const freq = 0.9 * Math.max(0.05, spread);
-  const cols = Math.ceil(w / cell);
-  const rows = Math.ceil(h / cell);
+  const turbulenceMix = turb * 0.5;
+  const implodeScale = off * implode;
 
-  for (let row = 0; row < rows; row++) {
-    for (let col = 0; col < cols; col++) {
-      const x  = col * cell;
-      const y  = row * cell;
-      const nx = (x + 0.5 * cell) / w * 2.0;
-      const ny = (y + 0.5 * cell) / h * 2.0;
+  for (let i = 0; i < _flowGrid.count; i++) {
+    const x = _flowGrid.x[i];
+    const y = _flowGrid.y[i];
+    const nx = _flowGrid.nx[i];
+    const ny = _flowGrid.ny[i];
 
-      let a = noise(nx * freq + t, ny * freq) * TWO_PI * 2.0;
-      if (turb > 0) {
-        const a2 = noise(nx * freq * 4 + t * 1.3 + 100, ny * freq * 4 + t * 0.9) * TWO_PI * 2.0;
-        a = a * (1 - turb * 0.5) + a2 * (turb * 0.5);
-      }
-
-      let dx2 = Math.cos(a) * off;
-      let dy2 = Math.sin(a) * off;
-
-      if (implode !== 0) {
-        const px = x + 0.5 * cell, py = y + 0.5 * cell;
-        const vx = cx2 - px, vy = cy2 - py;
-        const L  = Math.hypot(vx, vy) || 1;
-        dx2 += (vx / L) * off * implode;
-        dy2 += (vy / L) * off * implode;
-      }
-
-      if (swirl !== 0) {
-        const px  = x + 0.5 * cell, py = y + 0.5 * cell;
-        const ang = Math.atan2(py - cy2, px - cx2) * swirl;
-        const cs  = Math.cos(ang), sn = Math.sin(ang);
-        const rx  = dx2 * cs - dy2 * sn;
-        const ry  = dx2 * sn + dy2 * cs;
-        dx2 = rx; dy2 = ry;
-      }
-
-      // The previous displacement arrays were Float32Array-backed. Preserve that
-      // quantization exactly before flooring so the visual tile selection does
-      // not shift at floating-point boundaries.
-      dx2 = Math.fround(dx2);
-      dy2 = Math.fround(dy2);
-      const tileW = Math.min(cell, w - x);
-      const tileH = Math.min(cell, h - y);
-      const sx2   = Math.max(0, Math.min(w - tileW, Math.floor(x + dx2)));
-      const sy2   = Math.max(0, Math.min(h - tileH, Math.floor(y + dy2)));
-      dctx.drawImage(srcEl, sx2, sy2, tileW, tileH, x, y, tileW, tileH);
+    let a = noise(nx * freq + t, ny * freq) * TWO_PI * 2.0;
+    if (turb > 0) {
+      const a2 = noise(nx * freq * 4 + t * 1.3 + 100, ny * freq * 4 + t * 0.9) * TWO_PI * 2.0;
+      a = a * (1 - turbulenceMix) + a2 * turbulenceMix;
     }
+
+    let dx2 = Math.cos(a) * off;
+    let dy2 = Math.sin(a) * off;
+
+    if (implode !== 0) {
+      dx2 += _flowGrid.inwardX[i] * implodeScale;
+      dy2 += _flowGrid.inwardY[i] * implodeScale;
+    }
+
+    if (swirl !== 0) {
+      const ang = _flowGrid.radialAngle[i] * swirl;
+      const cs  = Math.cos(ang), sn = Math.sin(ang);
+      const rx  = dx2 * cs - dy2 * sn;
+      const ry  = dx2 * sn + dy2 * cs;
+      dx2 = rx; dy2 = ry;
+    }
+
+    // The previous displacement arrays were Float32Array-backed. Preserve that
+    // quantization exactly before flooring so the visual tile selection does
+    // not shift at floating-point boundaries.
+    dx2 = Math.fround(dx2);
+    dy2 = Math.fround(dy2);
+    const tileW = _flowGrid.tileW[i];
+    const tileH = _flowGrid.tileH[i];
+    const sx2   = Math.max(0, Math.min(w - tileW, Math.floor(x + dx2)));
+    const sy2   = Math.max(0, Math.min(h - tileH, Math.floor(y + dy2)));
+    dctx.drawImage(srcEl, sx2, sy2, tileW, tileH, x, y, tileW, tileH);
   }
   dctx.restore();
 }

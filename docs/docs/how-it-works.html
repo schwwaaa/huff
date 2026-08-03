@@ -202,10 +202,12 @@ gBuf      active persistent/effect composite
 gScratch  shared ping-pong target for feedback, Flow Warp, and Symmetry
 </div>
 <p>Only three p5 Graphics surfaces remain at the render resolution. Each full-frame stage completely overwrites <code>gScratch</code> before the references swap, so the same allocation can serve multiple sequential stages without changing effect order.</p>
+<p>Flow Warp also retains a typed geometry workspace keyed by render size and SCALE. Tile positions, edge dimensions, normalized noise coordinates, inward unit vectors, and radial angles are rebuilt only when that key changes; per-frame noise, displacement, and draw order remain unchanged.</p>
+<p>The Scanline engine uses the same persistent-workspace discipline. Rotated-span geometry and per-band noise seed constants are retained, prepared band coordinates are reused when phase and controls are unchanged, and the Canvas2D alpha state is set once for the pass. Drift, focus, roll, gap, skew, shift, spin, clipping, and band draw order remain unchanged.</p>
 <hr/>
 
 <h2>Frame Ring Buffer</h2>
-<p>The ring buffer stores reusable canvas-backed frame snapshots at canvas resolution. New decoded frames are copied once into owned ring slots, and temporal effects sample those canvases directly with <code>drawImage()</code>; there is no per-frame <code>ImageData</code> reconstruction step.</p>
+<p>The ring buffer stores reusable canvas-backed frame snapshots at canvas resolution. New decoded frames are copied once into owned ring slots, and temporal effects sample those canvases directly with <code>drawImage()</code>; there is no per-frame <code>ImageData</code> reconstruction step. Each dedicated ring context remains in overwrite (<code>copy</code>) mode, and ring-capacity calculations are repeated only when render dimensions or QUALITY change.</p>
 <div class="table-responsive">
 <table class="win-table">
   <thead><tr><th>Parameter</th><th>Effect on ring</th></tr></thead>
@@ -231,16 +233,20 @@ gScratch  shared ping-pong target for feedback, Flow Warp, and Symmetry
 <div class="callout warn mt-2"><strong>720p or 1080p is the practical sweet spot.</strong> At 4K the ring holds only 5 frames — DEPTH and temporal effects lose most of their range.</div>
 
 <h2>Frame Output Pipeline</h2>
-<p>At the end of each draw() call, huff routes the composited output frame to one or more destinations. Syphon and Spout use a magic-byte prefix on the same WebSocket connection as the canvas mirror — Rust inspects the first bytes and routes accordingly.</p>
+<p>Output routes use role-specific WebSocket connections. Dimensions for native output are declared once in each sender's hello message, so normal Syphon/Spout frames carry raw RGBA pixels without a per-frame header. The JPEG mirror route is receiver-aware and pauses capture/encoding when no canvas client is attached.</p>
 <div class="term" style="font-size:11px;line-height:1.8">
-  <div>canvas.getImageData()</div>
-  <div>  → raw RGBA bytes</div>
-  <div>  → magic prefix (HUFFSYPH / HUFFSPOUT) + dimensions + pixels</div>
-  <div>  → binary WebSocket to port 8787</div>
-  <div>  → Rust relay inspects prefix</div>
-  <div>      HUFFSYPH  → syphon::push_frame() → MTLTexture → Syphon clients</div>
-  <div>      HUFFSPOUT → spout::push_frame()  → D3D11 texture → Spout receivers</div>
-  <div>      (none)    → forwarded to canvas role clients as JPEG frames</div>
+  <div>Canvas mirror:</div>
+  <div>  final canvas → worker JPEG → index role socket</div>
+  <div>  → latest-frame Rust relay → canvas role socket → ImageBitmap display</div>
+  <div>  → mirror acknowledgement permits next submission</div>
+  <div></div>
+  <div>Syphon:</div>
+  <div>  worker scale/readback → raw RGBA → syphon-sender role socket</div>
+  <div>  → syphon::push_pixels() → reusable MTLTexture → Syphon clients</div>
+  <div></div>
+  <div>Spout:</div>
+  <div>  canvas scale/readback → raw RGBA → spout-sender role socket</div>
+  <div>  → spout::push_pixels() → D3D11 texture → Spout receivers</div>
 </div>
 
         </div>
