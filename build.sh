@@ -71,6 +71,36 @@ tauri_build() {
 # Usage: thin_bundle_frameworks <app_bundle_path> <lipo_arch>
 #   e.g. thin_bundle_frameworks ".../huff.app" "arm64"
 #
+verify_syphon_bundle() {
+  local app="$1"
+  local framework="${app}/Contents/Frameworks/Syphon.framework"
+  local binary_a="${framework}/Versions/A/Syphon"
+  local binary_root="${framework}/Syphon"
+
+  [[ -d "${framework}" ]] || fail "Syphon.framework missing from bundle: ${framework}"
+  if [[ ! -f "${binary_a}" && ! -f "${binary_root}" ]]; then
+    fail "Syphon.framework binary missing from bundle: ${framework}"
+  fi
+  ok "Bundled Syphon.framework verified"
+}
+
+resign_mac_app() {
+  local app="$1"
+  local identity="${HUFF_CODESIGN_IDENTITY:--}"
+
+  if ! command -v codesign >/dev/null 2>&1; then
+    warn "codesign not found — universal app signature was not repaired after lipo"
+    return 0
+  fi
+
+  log "Signing assembled app (identity: ${identity})…"
+  codesign --force --deep --sign "${identity}" \
+    --entitlements "${TAURI_DIR}/entitlements.plist" \
+    "${app}"
+  codesign --verify --deep --strict --verbose=2 "${app}"
+  ok "App signature verified"
+}
+
 thin_bundle_frameworks() {
   local app="$1"
   local arch="$2"
@@ -96,6 +126,7 @@ build_mac_arm() {
   log "Building macOS arm64 (Apple Silicon)…"
   require_rust_target "aarch64-apple-darwin"
   tauri_build --target aarch64-apple-darwin
+  verify_syphon_bundle "${TAURI_DIR}/target/aarch64-apple-darwin/release/bundle/macos/${APP_NAME}.app"
   ok "macOS arm64 build complete"
 }
 
@@ -103,6 +134,7 @@ build_mac_x86() {
   log "Building macOS x86_64 (Intel)…"
   require_rust_target "x86_64-apple-darwin"
   tauri_build --target x86_64-apple-darwin
+  verify_syphon_bundle "${TAURI_DIR}/target/x86_64-apple-darwin/release/bundle/macos/${APP_NAME}.app"
   ok "macOS x86_64 build complete"
 }
 
@@ -150,6 +182,8 @@ build_mac_universal() {
   done < "${_TMPFILE}"
   rm -f "${_TMPFILE}"
 
+  verify_syphon_bundle "${UNIVERSAL_APP}"
+  resign_mac_app "${UNIVERSAL_APP}"
   ok "Universal .app → ${UNIVERSAL_APP}"
 
   # Optional: create a DMG if create-dmg is available

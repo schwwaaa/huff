@@ -33,18 +33,14 @@
     const autofs = qs('autofs') === '1';
 
     const cvs = document.getElementById('mirror');
-    const ctx = cvs.getContext('2d', { alpha:false, desynchronized:true });
-
-    function fit() {
-      const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
-      const w = Math.floor(innerWidth  * dpr);
-      const h = Math.floor(innerHeight * dpr);
-      if (cvs.width !== w || cvs.height !== h) {
-        cvs.width = w;
-        cvs.height = h;
-      }
-    }
-    addEventListener('resize', fit, { passive:true }); fit();
+    // Keep the backing store at the encoded frame's native dimensions and let
+    // CSS/GPU composition scale it to the output window. The old viewer resized
+    // its backing canvas to the full display (and up to 2× DPR), forcing every
+    // 1280px mirror frame to be redrawn into a multi-megapixel surface.
+    const bitmapCtx = cvs.getContext('bitmaprenderer');
+    const ctx = bitmapCtx ? null : cvs.getContext('2d', { alpha:false, desynchronized:true });
+    cvs.width = 1;
+    cvs.height = 1;
 
     function isFullscreen(){ return !!(document.fullscreenElement || document.webkitFullscreenElement); }
     async function goFullscreen(){
@@ -64,8 +60,6 @@
     }
     document.addEventListener('dblclick', toggleFS);
     document.addEventListener('keydown', e => { if (e.key==='f' || e.key==='F') toggleFS(); });
-    document.addEventListener('fullscreenchange', fit);
-    document.addEventListener('webkitfullscreenchange', fit);
     if (autofs) setTimeout(()=>{ goFullscreen(); }, 120);
 
 // ── WebSocket with exponential-backoff reconnect ─────────────────────────
@@ -122,8 +116,22 @@ function connectWS() {
     catch (e) { _busy = false; return; }
     createImageBitmap(blob, { imageOrientation:'none', premultiplyAlpha:'premultiply' })
       .then(bmp => {
-        ctx.drawImage(bmp, 0, 0, cvs.width, cvs.height);
-        bmp.close?.();
+        if (cvs.width !== bmp.width || cvs.height !== bmp.height) {
+          cvs.width = bmp.width;
+          cvs.height = bmp.height;
+        }
+        if (bitmapCtx) {
+          bitmapCtx.transferFromImageBitmap(bmp);
+          // transferFromImageBitmap consumes the bitmap; close is harmless and
+          // also protects WebViews whose implementation retains ownership.
+          bmp.close?.();
+        } else {
+          ctx.globalAlpha = 1;
+          ctx.globalCompositeOperation = 'copy';
+          ctx.drawImage(bmp, 0, 0);
+          ctx.globalCompositeOperation = 'source-over';
+          bmp.close?.();
+        }
       })
       .catch(e => { console.warn('[canvas ws] bad frame', e); })
       .finally(() => {

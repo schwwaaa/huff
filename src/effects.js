@@ -8,53 +8,14 @@
 //  - applyGlitch does not re-seed random — draw() seeds once per frame.
 //  - Cluster physics centers use p5 seeded random() for reproducibility.
 
-// ─── Ring canvas LRU cache ────────────────────────────────────────────────────
-// Replaces the single shared _ringCanvas. Caches up to RING_CACHE_SIZE canvases
-// keyed by ImageData object identity. When the same ImageData is requested again
-// (e.g. the same trail frame accessed by multiple layers) the putImageData upload
-// is skipped entirely. Eviction is LRU — least-recently-used entries are dropped
-// first, which naturally aligns with how old ring frames age out.
+// ─── Temporal ring drawing ───────────────────────────────────────────────────
+// FrameRing stores reusable canvas snapshots, so historical frames remain
+// directly drawable. This avoids the old getImageData() readback on capture and
+// the later putImageData() upload/cache needed before every temporal sample.
 
-// Cache sized to hold max trail layers + glitch tile frames simultaneously.
-// At 8 trail layers + up to 16 unique glitch depth frames, 8 was too small
-// and caused repeated putImageData uploads for evicted-then-re-requested frames.
-const RING_CACHE_SIZE = 24;
-const _ringCacheMap   = new Map(); // ImageData → { canvas, ctx }
-const _ringCacheOrder = [];        // oldest-first insertion order
-
-function _getRingCanvas(imgData) {
-  if (_ringCacheMap.has(imgData)) {
-    // Promote to most-recently-used
-    const idx = _ringCacheOrder.indexOf(imgData);
-    if (idx !== -1) { _ringCacheOrder.splice(idx, 1); _ringCacheOrder.push(imgData); }
-    return _ringCacheMap.get(imgData);
-  }
-
-  let entry;
-  if (_ringCacheOrder.length >= RING_CACHE_SIZE) {
-    // Evict LRU entry — reuse its canvas to avoid a fresh allocation
-    const oldest = _ringCacheOrder.shift();
-    entry = _ringCacheMap.get(oldest);
-    _ringCacheMap.delete(oldest);
-    if (entry.canvas.width !== imgData.width || entry.canvas.height !== imgData.height) {
-      entry.canvas.width  = imgData.width;
-      entry.canvas.height = imgData.height;
-    }
-  } else {
-    const c = document.createElement('canvas');
-    c.width = imgData.width; c.height = imgData.height;
-    entry = { canvas: c, ctx: c.getContext('2d') };
-  }
-
-  entry.ctx.putImageData(imgData, 0, 0);
-  _ringCacheMap.set(imgData, entry);
-  _ringCacheOrder.push(imgData);
-  return entry;
-}
-
-function drawRingRegion(target, imgData, sx, sy, sw, sh, dx, dy, dw, dh) {
-  const { canvas } = _getRingCanvas(imgData);
-  target.drawingContext.drawImage(canvas, sx, sy, sw, sh, dx, dy, dw, dh);
+function drawRingRegion(target, frameCanvas, sx, sy, sw, sh, dx, dy, dw, dh) {
+  if (!frameCanvas) return;
+  target.drawingContext.drawImage(frameCanvas, sx, sy, sw, sh, dx, dy, dw, dh);
 }
 
 // ─── Cluster physics state ─────────────────────────────────────────────────────
@@ -76,9 +37,8 @@ window.resetClusterPhysics = resetClusterPhysics;
 //         Canvas context is rotated before drawing bands; all band math runs in
 //         the rotated frame so displacement is always perpendicular to band axis.
 // FOCUS — biases band positions toward a region of the canvas (0=top/left, 1=bottom/right)
-// GAP   — even spacing between band centres (band thickness + GAP); spreads bands apart
-// DRIFT — wander off the even comb: 0 = perfectly even, higher = organic scatter
-// PLACE — X/Y screen-space offset of the whole scanline field
+// ROLL  — steady scroll simulating CRT rolling sync loss, independent of DRIFT
+// DRIFT — dual-frequency noise: slow sync wander + fast instability jitter
 
 function applyScanlines(density, angleOverride = null, scanPriority = 1.0) {
   if (!els.clusters?.checked) return;
@@ -94,20 +54,11 @@ function applyScanlines(density, angleOverride = null, scanPriority = 1.0) {
   const angleRad   = (angleDeg * Math.PI) / 180;
   const bandAlpha  = parseFloat(els.scanAlpha?.value  ?? '0.86') * scanPriority;
   const shiftScale = parseFloat(els.scanShift?.value  ?? '0.12');
-  const driftAmt   = parseFloat(els.scanDrift?.value  ?? '0.5');
+  const driftAmt   = parseFloat(els.scanDrift?.value  ?? '1.0');
   const scanGap    = parseInt(els.scanGap?.value       ?? '0',   10);
   const scanSkew   = parseFloat(els.scanSkew?.value   ?? '0');
   const focus      = parseFloat(els.scanFocus?.value  ?? '0.5');
-  // PLACE X/Y — shift the entire scanline field in screen space (−1..1 → ±½ screen).
-  const placeX     = parseFloat(els.scanPlaceX?.value ?? '0') * width  * 0.5;
-  const placeY     = parseFloat(els.scanPlaceY?.value ?? '0') * height * 0.5;
-  // ZOOM — MODE picks what scales. PATTERN scales the whole field from centre
-  // (camera move); CONTENT magnifies the footage sampled inside each band ("band
-  // expand") without moving the bands; BOTH does each. 1 = no zoom.
-  const zoomAmt     = parseFloat(els.scanZoom?.value ?? '1');
-  const zoomMode    = els.scanZoomMode?.value ?? 'content';
-  const patternZoom = (zoomMode === 'pattern' || zoomMode === 'both') ? zoomAmt : 1;
-  const contentZoom = (zoomMode === 'content' || zoomMode === 'both') ? Math.max(0.05, zoomAmt) : 1;
+  const roll       = parseFloat(els.scanRoll?.value   ?? '0');
 
   const phX = nPhaseScanX;
   const phY = nPhaseScanY;
@@ -122,6 +73,9 @@ function applyScanlines(density, angleOverride = null, scanPriority = 1.0) {
   const cross = width * absC + height * absS;   // displacement axis span
   const bSize = Math.max(4, Math.floor(parseInt(els.clusterRadius?.value ?? '10', 10) * 3));
 
+  // Roll offset scrolls bands along the full rotated span
+  const rollOffset = (phY * roll * 80) % dim;
+
   const ctx       = gBuf.drawingContext;
   const prevAlpha = ctx.globalAlpha;
   const gCurCvs   = gCur.drawingContext.canvas;
@@ -131,33 +85,26 @@ function applyScanlines(density, angleOverride = null, scanPriority = 1.0) {
   // visual centre regardless of angle.
   const rotated = Math.abs(angleRad) > 0.001;
   ctx.save();
-  ctx.translate(placeX, placeY);                // general placement (screen-space)
   ctx.translate(gBuf.width / 2, gBuf.height / 2);
   if (rotated) ctx.rotate(angleRad);
-  if (patternZoom !== 1) ctx.scale(patternZoom, patternZoom);   // PATTERN zoom (from centre)
   // Offset so that band Y=0 is at -dim/2 from canvas centre
   ctx.translate(-gBuf.width / 2, -dim / 2);
 
-  // Bands are laid out as an EVEN COMB along the span. GAP sets the space between
-  // band centres (spacing = band thickness + GAP): GAP 0 = bands touching, higher
-  // GAP spreads them apart. DRIFT then wanders each band off its comb slot (0 = a
-  // perfectly even comb, higher = organic scatter). FOCUS pulls bands toward a
-  // point (0.5 = neutral, comb preserved).
-  const spacing  = Math.max(1, bSize + scanGap);
-  const focusStr = Math.abs(focus - 0.5) * 1.4;
   for (let n = 0; n < scanBands; n++) {
-    const evenBase = (n * spacing) % dim;
-    // DRIFT wanders each band off its comb slot, scaled to the BAND THICKNESS (not
-    // the full span) so the comb — and the GAP between bands — stays the dominant
-    // structure. The old code scaled wander to the whole span, so at any real DRIFT
-    // the bands scattered across the entire screen and the gaps vanished.
-    const wander   = (noise(n * 3.7  + phY * 0.25 * driftAmt) - 0.5) * bSize * driftAmt * 0.5
-                   + (noise(n * 11.3 + phY * 1.8  * driftAmt) - 0.5) * bSize * driftAmt * 0.15;
-    let pos = evenBase + wander;
-    pos = pos * (1 - focusStr) + (focus * dim) * focusStr;
-    const rawPos = (pos % dim + dim) % dim;
+    const slowDrift  = noise(n * 3.7 + phY * 0.25 * driftAmt) * dim;
+    const fastJitter = (noise(n * 11.3 + phY * 1.8 * driftAmt) - 0.5) * dim * 0.12 * driftAmt;
 
-    const bStart = Math.max(0, Math.floor(rawPos));
+    // Focus bias within the full rotated span
+    const biased = slowDrift * (1 - Math.abs(focus - 0.5) * 1.4)
+                 + (focus * dim) * Math.abs(focus - 0.5) * 1.4
+                 + fastJitter;
+
+    const rawPos  = ((biased + rollOffset) % dim + dim) % dim;
+    const gridPos = scanGap > 0
+      ? Math.floor(rawPos / Math.max(1, bSize + scanGap)) * (bSize + scanGap)
+      : rawPos;
+
+    const bStart = Math.max(0, Math.floor(gridPos));
     const bEnd   = Math.min(dim, bStart + bSize);
     const bLen   = bEnd - bStart;
     if (bLen <= 0) continue;
@@ -174,17 +121,8 @@ function applyScanlines(density, angleOverride = null, scanPriority = 1.0) {
 
     ctx.globalAlpha = bandAlpha;
     // Source coordinates: sample from gCur at the unshifted position
-    // (srcOff accounts for horizontal shift direction). CONTENT zoom shrinks the
-    // sampled source rect around its centre and stretches it into the band, so the
-    // footage inside the band is magnified without the band itself moving.
-    if (contentZoom !== 1) {
-      const sw = bCross / contentZoom, sh = bLen / contentZoom;
-      const sx = srcOff + (bCross - sw) / 2;
-      const sy = bStart + (bLen  - sh) / 2;
-      ctx.drawImage(gCurCvs, sx, sy, sw, sh, dstOff, bStart, bCross, bLen);
-    } else {
-      ctx.drawImage(gCurCvs, srcOff, bStart, bCross, bLen, dstOff, bStart, bCross, bLen);
-    }
+    // (srcOff accounts for horizontal shift direction)
+    ctx.drawImage(gCurCvs, srcOff, bStart, bCross, bLen, dstOff, bStart, bCross, bLen);
   }
 
   ctx.restore();
@@ -500,32 +438,8 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0, glitchPriority = 1.0) 
 // ─── Flow warp ────────────────────────────────────────────────────────────────
 // Pre-allocates Float32Array displacement buffers to avoid per-frame GC pressure.
 // Buffers are only reallocated when the grid dimensions change (scale or canvas resize).
-//
-// CARRY — why it exists.
-// STRENGTH is a per-frame displacement of at most 20px. At 1080p that is ~1.8% of
-// frame width: invisible in a single pass. Flow only reads because it warps gBuf
-// and the warped result is swapped BACK into gBuf, so the next frame warps the
-// already-warped pixels — the displacement compounds in the PIXEL BUFFER over
-// ~60 frames.
-//
-// applyGlitch blits tiles straight from frameRing (the CLEAN source) onto gBuf, so
-// every frame it repaints large regions with fresh, un-warped pixels and resets
-// that accumulator. Flow still warps the tiles, but only once, by <=20px, before
-// they are overwritten — which is why flow dies under glitch and survives under
-// scanlines (which only paint bands, leaving the rest of gBuf to accumulate).
-//
-// CARRY accumulates in the DISPLACEMENT FIELD instead of the pixel buffer:
-// acc = acc * k + d, with k = carry * 0.96. The sample offset persists no matter
-// what repaints gBuf, so each cell reads from progressively further away and the
-// warp reads on the glitch tiles themselves in a single pass. Magnitude is clamped
-// to half the short edge so it cannot run away. CARRY=0 gives k=0 and acc=d —
-// bit-identical to the previous behaviour, so existing presets are untouched.
 
 let _flowDx = null, _flowDy = null;
-// CARRY accumulator — persistent per-cell displacement, integrated across frames.
-// Same tiny footprint as the per-frame field (cols x rows floats, ~24x14 at
-// default SCALE), so this is free: no extra graphics buffer, no readback.
-let _flowAccDx = null, _flowAccDy = null;
 let _flowBufCols = 0, _flowBufRows = 0;
 
 function _ensureFlowBuffers(cols, rows) {
@@ -533,28 +447,18 @@ function _ensureFlowBuffers(cols, rows) {
   if (!_flowDx || _flowBufCols !== cols || _flowBufRows !== rows) {
     _flowDx = new Float32Array(n);
     _flowDy = new Float32Array(n);
-    _flowAccDx = new Float32Array(n);   // zero-filled = no carry until it builds
-    _flowAccDy = new Float32Array(n);
     _flowBufCols = cols;
     _flowBufRows = rows;
   }
 }
 
-// Called by canvas.js clearAll() so Refresh wipes accumulated flow displacement
-// the same way it wipes cluster momentum.
-function resetFlowField() {
-  _flowAccDx?.fill(0);
-  _flowAccDy?.fill(0);
-}
-window.resetFlowField = resetFlowField;
-
-function applyFlowWarp(src, dst, strength = 6, scale = 80, pulse = 0, implode = 0, speed = 1, turb = 0, swirl = 0, spread = 1, carry = 0) {
+function applyFlowWarp(src, dst, strength = 6, scale = 80, pulse = 0, implode = 0, speed = 1, turb = 0, swirl = 0, spread = 1) {
   dst.clear();
 
   let srcFrame = src;
   if (pulse > 0 && frameRing.length > pulse) {
     const ringFrame = frameRing.fromEnd(pulse);
-    if (ringFrame) srcFrame = { _isRingData:true, data:ringFrame };
+    if (ringFrame) srcFrame = ringFrame;
   }
 
   const cell = Math.max(8, scale | 0);
@@ -569,10 +473,6 @@ function applyFlowWarp(src, dst, strength = 6, scale = 80, pulse = 0, implode = 
   // drifting together (watery), high = many small independent eddies pointing
   // every which way (busted). spread=1 → the original 0.9 frequency.
   const freq = 0.9 * Math.max(0.05, spread);
-
-  // Ceiling on accumulated displacement — half the short edge. Past this the
-  // sample rect is clamped to the frame edge anyway, so growth is pure waste.
-  const _FLOW_MAX_DISP = Math.min(w, h) * 0.5;
 
   const cols = Math.ceil(w / cell);
   const rows = Math.ceil(h / cell);
@@ -619,28 +519,18 @@ function applyFlowWarp(src, dst, strength = 6, scale = 80, pulse = 0, implode = 
         dx2 = rx; dy2 = ry;
       }
 
-      // CARRY — leaky integration of the field. k=0 (CARRY 0) collapses to
-      // acc = dx2, i.e. exactly the old single-frame displacement.
-      if (carry > 0) {
-        const k  = carry * 0.96;
-        let ax = _flowAccDx[idx] * k + dx2;
-        let ay = _flowAccDy[idx] * k + dy2;
-        const mag = Math.hypot(ax, ay);
-        if (mag > _FLOW_MAX_DISP) {
-          const sc = _FLOW_MAX_DISP / mag;
-          ax *= sc; ay *= sc;
-        }
-        _flowAccDx[idx] = ax; _flowAccDy[idx] = ay;
-        dx2 = ax; dy2 = ay;
-      } else if (_flowAccDx[idx] !== 0 || _flowAccDy[idx] !== 0) {
-        _flowAccDx[idx] = 0; _flowAccDy[idx] = 0;   // dropping CARRY to 0 clears instantly
-      }
-
       _flowDx[idx] = dx2;
       _flowDy[idx] = dy2;
       idx++;
     }
   }
+
+  // Resolve the drawable source once. The old inner-loop lookup repeated
+  // instanceof/optional-chain work for every tile — hundreds of times per frame.
+  const srcEl = (srcFrame instanceof HTMLCanvasElement)
+    ? srcFrame
+    : (srcFrame?.elt ?? srcFrame?.drawingContext?.canvas ?? null);
+  if (!srcEl) return;
 
   const dctx = dst.drawingContext;
   dctx.save();
@@ -654,17 +544,126 @@ function applyFlowWarp(src, dst, strength = 6, scale = 80, pulse = 0, implode = 
       const sx2   = Math.max(0, Math.min(w - tileW, Math.floor(x + _flowDx[idx])));
       const sy2   = Math.max(0, Math.min(h - tileH, Math.floor(y + _flowDy[idx])));
       idx++;
-
-      if (srcFrame?._isRingData) {
-        drawRingRegion(dst, srcFrame.data, sx2, sy2, tileW, tileH, x, y, tileW, tileH);
-      } else {
-        const srcEl = srcFrame?.elt ?? srcFrame?.drawingContext?.canvas ?? null;
-        if (!srcEl) continue;
-        dctx.drawImage(srcEl, sx2, sy2, tileW, tileH, x, y, tileW, tileH);
-      }
+      dctx.drawImage(srcEl, sx2, sy2, tileW, tileH, x, y, tileW, tileH);
     }
   }
   dctx.restore();
+}
+
+// ─── Solarize ─────────────────────────────────────────────────────────────────
+// Downsamples to max 640px wide before pixel math, then scales back up.
+// ~4–16x faster on large screens / Windows.
+
+let _solCanvas = null, _solCtx = null;
+let _solOut    = null, _solOutCtx = null;
+// ── Adaptive load guard ───────────────────────────────────────────────────────
+// applySolarize()'s getImageData() forces a synchronous GPU→CPU readback. Because
+// solarize runs late in the pipeline, that readback flushes every preceding
+// effect's GPU work on the main thread before it returns. Under sustained load the
+// stall pushes the frame past budget and starves the <video> element's decode
+// pipeline that feeds Web Audio — the "breaks up, drops, then recovers" symptom.
+//
+// The guard measures the smoothed frame period and, ONLY while overloaded,
+// processes solarize every 2nd/3rd frame, re-blitting the cached full-res result
+// (_solOut) on the frames it skips. At healthy frame rates it processes every
+// frame, so the output is identical to before — the easing only kicks in exactly
+// when the machine is already dropping frames, trading a little solarize update
+// rate for stable audio.
+let _solPrevTs   = 0;
+let _solFrameEMA = 16.7;   // smoothed frame period, ms
+let _solPhase    = 0;
+let _solHasCache = false;
+
+function applySolarize(buf, thresh = 0.5, amount = 1.0, solR = 1.0, solG = 1.0, solB = 1.0) {
+  const BW = buf.width, BH = buf.height;
+  const MAX_W = 640;
+  const scale = BW > MAX_W ? MAX_W / BW : 1;
+  const sw = Math.max(1, Math.round(BW * scale));
+  const sh = Math.max(1, Math.round(BH * scale));
+
+  if (!_solCanvas || _solCanvas.width !== sw || _solCanvas.height !== sh) {
+    _solCanvas = document.createElement('canvas'); _solCanvas.width = sw; _solCanvas.height = sh;
+    _solCtx    = _solCanvas.getContext('2d', { willReadFrequently:true });
+  }
+  if (!_solOut || _solOut.width !== BW || _solOut.height !== BH) {
+    _solOut    = document.createElement('canvas'); _solOut.width = BW; _solOut.height = BH;
+    _solOutCtx = _solOut.getContext('2d');
+    _solHasCache = false;   // fresh canvas — must process before it can be reused
+  }
+
+  // Smoothed frame period (ms). Solarize runs once per frame, so the gap between
+  // calls is the frame period; skipping work shortens it, so the metric self-corrects.
+  const now = performance.now();
+  if (_solPrevTs) _solFrameEMA += ((now - _solPrevTs) - _solFrameEMA) * 0.1;
+  _solPrevTs = now;
+
+  // Processing stride from load:  ≤20ms (≈50fps+) → every frame,
+  // 20–30ms → every 2nd frame, >30ms → every 3rd frame.
+  let stride = 1;
+  if (_solFrameEMA > 30)      stride = 3;
+  else if (_solFrameEMA > 20) stride = 2;
+
+  const doProcess = (stride === 1) || (_solPhase % stride === 0) || !_solHasCache;
+  _solPhase++;
+
+  if (doProcess) {
+    const srcCanvas = buf.elt || buf.drawingContext.canvas;
+    _solCtx.clearRect(0, 0, sw, sh);
+    _solCtx.drawImage(srcCanvas, 0, 0, sw, sh);
+
+    const imgData = _solCtx.getImageData(0, 0, sw, sh);
+    const pix = imgData.data;
+    const t   = thresh * 255;
+    const a   = Math.max(0, Math.min(1, amount));
+
+    for (let i = 0; i < pix.length; i += 4) {
+      const r = pix[i], g = pix[i + 1], b = pix[i + 2];
+      const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+      if (lum > t) {
+        pix[i]     = Math.min(255, Math.max(0, (r + (255 - r - r) * a) * solR + 0.5) | 0);
+        pix[i + 1] = Math.min(255, Math.max(0, (g + (255 - g - g) * a) * solG + 0.5) | 0);
+        pix[i + 2] = Math.min(255, Math.max(0, (b + (255 - b - b) * a) * solB + 0.5) | 0);
+      }
+    }
+    _solCtx.putImageData(imgData, 0, 0);
+
+    _solOutCtx.clearRect(0, 0, BW, BH);
+    _solOutCtx.drawImage(_solCanvas, 0, 0, BW, BH);
+    _solHasCache = true;
+  }
+
+  buf.drawingContext.clearRect(0, 0, BW, BH);
+  buf.drawingContext.drawImage(_solOut, 0, 0);
+}
+
+// ─── Symmetry ─────────────────────────────────────────────────────────────────
+
+function applySymmetry(src, dst, mode = 'v', pos = 0.5) {
+  const w  = dst.width, h = dst.height;
+  const x0 = Math.max(0, Math.min(w, Math.round(w * pos)));
+  const y0 = Math.max(0, Math.min(h, Math.round(h * pos)));
+
+  dst.clear();
+  dst.imageMode(CORNER);
+  dst.image(src, 0, 0, w, h);
+
+  const ctx = dst.drawingContext;
+  if (!ctx) return;
+
+  if (mode === 'v' || mode === 'hv') {
+    ctx.save();
+    ctx.beginPath(); ctx.rect(x0, 0, w - x0, h); ctx.clip();
+    dst.push(); dst.translate(2 * x0, 0); dst.scale(-1, 1);
+    dst.image(src, 0, 0, w, h);
+    dst.pop(); ctx.restore();
+  }
+  if (mode === 'h' || mode === 'hv') {
+    ctx.save();
+    ctx.beginPath(); ctx.rect(0, y0, w, h - y0); ctx.clip();
+    dst.push(); dst.translate(0, 2 * y0); dst.scale(1, -1);
+    dst.image(src, 0, 0, w, h);
+    dst.pop(); ctx.restore();
+  }
 }
 
 // ─── Pipeline Luma Key ────────────────────────────────────────────────────────
@@ -680,7 +679,6 @@ function applyFlowWarp(src, dst, strength = 6, scale = 80, pulse = 0, implode = 
 
 let _plkCanvas = null, _plkCtx = null;
 let _plkBufCanvas = null, _plkBufCtx = null;
-let _plkPixBuf = null;
 
 function applyPipelineLumaKey(thresh, mix, invert) {
   if (mix <= 0) return;
@@ -690,43 +688,38 @@ function applyPipelineLumaKey(thresh, mix, invert) {
   const scale  = W > MAX_W ? MAX_W / W : 1;
   const sw     = Math.max(1, Math.round(W * scale));
   const sh     = Math.max(1, Math.round(H * scale));
-  const n      = sw * sh * 4;
-
   if (!_plkCanvas || _plkCanvas.width !== sw || _plkCanvas.height !== sh) {
     _plkCanvas = document.createElement('canvas');
     _plkCanvas.width = sw; _plkCanvas.height = sh;
     _plkCtx = _plkCanvas.getContext('2d', { willReadFrequently: true });
-    _plkPixBuf = null;
   }
   if (!_plkBufCanvas || _plkBufCanvas.width !== sw || _plkBufCanvas.height !== sh) {
     _plkBufCanvas = document.createElement('canvas');
     _plkBufCanvas.width = sw; _plkBufCanvas.height = sh;
     _plkBufCtx = _plkBufCanvas.getContext('2d');
   }
-  if (!_plkPixBuf || _plkPixBuf.length !== n) _plkPixBuf = new Uint8ClampedArray(n);
-
   // Read gCur (clean source) for luma sampling
   const gCurEl = gCur.elt ?? gCur.drawingContext?.canvas;
   if (!gCurEl) return;
   _plkCtx.drawImage(gCurEl, 0, 0, sw, sh);
-  const srcData = _plkCtx.getImageData(0, 0, sw, sh);
-  const sp = srcData.data;
+  // Reuse the ImageData returned by getImageData() as the mask itself. The old
+  // path allocated a second Uint8ClampedArray plus a new ImageData every frame.
+  const maskData = _plkCtx.getImageData(0, 0, sw, sh);
+  const sp = maskData.data;
+  const n = sp.length;
 
   // Build luma mask: alpha = how much glitch should show at each pixel
   // reveal=1 → keep gBuf (glitch), reveal=0 → replace with gCur (clean)
   const t = (1 - thresh) * 255;
-  const rollRange = Math.max(1, 64);
+  const rollRange = 64;
   for (let i = 0; i < n; i += 4) {
     const lum    = 0.299 * sp[i] + 0.587 * sp[i+1] + 0.114 * sp[i+2];
     const roll   = Math.max(0, Math.min(1, (lum - t) / rollRange));
     const reveal = invert ? (1 - roll) : roll;
-    // Inverted alpha: opaque where CLEAN should show, transparent where GLITCH shows
-    _plkPixBuf[i]   = 255;
-    _plkPixBuf[i+1] = 255;
-    _plkPixBuf[i+2] = 255;
-    _plkPixBuf[i+3] = ((1 - reveal) * 255 + 0.5) | 0;
+    sp[i] = sp[i+1] = sp[i+2] = 255;
+    sp[i+3] = ((1 - reveal) * 255 + 0.5) | 0;
   }
-  _plkCtx.putImageData(new ImageData(_plkPixBuf, sw, sh), 0, 0);
+  _plkCtx.putImageData(maskData, 0, 0);
 
   // Clip gCur to the "clean" regions using the inverted mask
   const gBufEl = gBuf.elt ?? gBuf.drawingContext?.canvas;

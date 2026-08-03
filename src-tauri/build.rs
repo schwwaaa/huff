@@ -12,9 +12,14 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 fn main() {
+    let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+
+    if target_os == "macos" {
+        validate_syphon_framework();
+    }
+
     tauri_build::build();
 
-    let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
     if target_os == "windows" {
         build_spout_windows();
     }
@@ -22,6 +27,30 @@ fn main() {
 
 fn src_tauri_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+}
+
+
+fn validate_syphon_framework() {
+    let framework = src_tauri_dir().join("frameworks/Syphon.framework");
+    let versioned_binary = framework.join("Versions/A/Syphon");
+    let root_binary = framework.join("Syphon");
+
+    println!("cargo:rerun-if-changed={}", framework.display());
+
+    if !framework.is_dir() {
+        panic!(
+            "HUFF Classic requires bundled Syphon.framework at {}",
+            framework.display()
+        );
+    }
+
+    if !versioned_binary.is_file() && !root_binary.is_file() {
+        panic!(
+            "Syphon.framework is incomplete: expected {} or {}",
+            versioned_binary.display(),
+            root_binary.display()
+        );
+    }
 }
 
 fn build_spout_windows() {

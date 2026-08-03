@@ -15,7 +15,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "win",
+        "title": "huff \u00b7 canvas",
         "url": "canvas.html",
         "width": 1024,
         "height": 768,
@@ -24,7 +24,7 @@
       },
       {
         "label": "controls",
-        "title": "ctrl",
+        "title": "huff \u00b7 controls",
         "url": "index.html",
         "width": 800,
         "height": 1200,

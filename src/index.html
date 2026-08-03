@@ -364,7 +364,6 @@
             transform: translate(1px, 1px);
         }
         button:disabled { opacity: .4; cursor: default; }
-        select:disabled, input:disabled { opacity: .35; cursor: default; }
 
         /* Primary "danger" button — black bg, green text */
         .btn-red {
@@ -377,16 +376,6 @@
         .btn-red:hover { background: #001100; color: var(--term-green); }
 
         /* Dim secondary */
-        .fire-btn {
-            font-size: 10px;
-            padding: 2px 10px;
-            letter-spacing: .12em;
-            cursor: pointer;
-        }
-        .fire-btn.firing {
-            background: var(--term-green);
-            color: var(--term-bg);
-        }
         .btn-dim {
             background: var(--win-bg);
             color: #404040;
@@ -829,8 +818,8 @@
             <h1 style="font-family:'VT323',monospace;font-weight:normal;letter-spacing:.14em">huff</h1>
             <div class="build">v2.0 · beta · 2025</div>
             <p>Real-time datamosh &amp; glitch-art engine. Load a video or connect a camera,
-            then sculpt temporal tile displacement, feedback loops, flow warps, clusters,
-            and scanlines — streamed live to a fullscreen mirror window over WebSocket.</p>
+            then sculpt temporal tile displacement, feedback loops, flow warps, symmetry,
+            and solarise effects — streamed live to a fullscreen mirror window over WebSocket.</p>
             <p>Built with <strong>Tauri v1</strong> + <strong>p5.js</strong>.<br>
             Embedded WS relay on <strong>port 8787</strong>.</p>
         </div>
@@ -1362,43 +1351,6 @@
                 </div>
             </div>
 
-            <!-- SMOOSH — blend glitch and scanlines together with a blend mode -->
-            <div class="group">
-                <div class="group-label">Smoosh</div>
-                <div class="group-body">
-                <div class="group-row">
-                    <div class="ctrl"><label>ON</label><input id="smooshOn" type="checkbox"></div>
-                    <div class="ctrl">
-                        <label>BLEND</label>
-                        <select id="smooshBlend" style="font-size:10px;padding:1px 2px">
-                            <option value="screen">SCREEN</option>
-                            <option value="lighter">ADD</option>
-                            <option value="lighten">LIGHTEN</option>
-                            <option value="color-dodge">DODGE</option>
-                            <option value="multiply">MULTIPLY</option>
-                            <option value="darken">DARKEN</option>
-                            <option value="color-burn">BURN</option>
-                            <option value="overlay">OVERLAY</option>
-                            <option value="soft-light">SOFT LIGHT</option>
-                            <option value="hard-light">HARD LIGHT</option>
-                            <option value="difference">DIFFERENCE</option>
-                            <option value="exclusion">EXCLUSION</option>
-                            <option value="hue">HUE</option>
-                            <option value="saturation">SATURATION</option>
-                            <option value="color">COLOR</option>
-                            <option value="luminosity">LUMINOSITY</option>
-                        </select>
-                    </div>
-                    <div class="ctrl">
-                        <label>AMOUNT</label>
-                        <input id="smooshAmt" type="range" min="0" max="1" step="0.01" value="1">
-                        <span class="val" id="smooshAmtVal">1.00</span>
-                    </div>
-                    <div class="ctrl"><label>INVERT</label><input id="smooshInvert" type="checkbox"></div>
-                </div>
-                </div>
-            </div>
-
             <!-- LUMA KEY — gates glitch output by source luminance before scanlines -->
             <div class="group">
                 <div class="group-label">Luma Key</div>
@@ -1421,15 +1373,38 @@
                 </div>
             </div>
 
+            <!-- SYMMETRY -->
+            <div class="group">
+                <div class="group-label">Symmetry</div>
+                <div class="group-body">
+                <div class="group-row">
+                    <div class="ctrl"><label>ON</label><input id="symOn" type="checkbox"></div>
+                    <div class="ctrl">
+                        <label>MODE</label>
+                        <select id="symMode">
+                            <option value="v">vertical</option>
+                            <option value="h">horizontal</option>
+                            <option value="hv">both</option>
+                        </select>
+                    </div>
+                    <div class="ctrl">
+                        <label>SYM POS</label>
+                        <input id="symPos" type="range" min="0" max="1" step="0.001" value="0.5">
+                        <span class="val" id="symPosVal">0.50</span>
+                    </div>
+                </div>
+            </div>
+            </div>
+
             <!-- SCANLINES -->
             <div class="group">
                 <div class="group-label">Scanlines</div>
                 <div class="group-body">
                 <div class="group-row">
                     <div class="ctrl"><label>ON</label><input id="clusters" type="checkbox"></div>
-                    <div class="ctrl" style="flex:1 1 100%">
+                    <div class="ctrl">
                         <label>ANGLE</label>
-                        <input id="scanAngle" type="range" min="-180" max="180" step="1" value="0" style="flex:1">
+                        <input id="scanAngle" type="range" min="-180" max="180" step="0.5" value="0">
                         <span class="val" id="scanAngleVal">0°</span>
                         <button id="scanAngleReset" class="btn-dim" style="font-size:9px;padding:1px 5px;margin-left:2px" title="Reset to 0°">0°</button>
                         <button id="scanAngle90n" class="btn-dim" style="font-size:9px;padding:1px 5px;margin-left:2px" title="Set to -90°">-90°</button>
@@ -1454,46 +1429,28 @@
                     </div>
                     <div class="ctrl">
                         <label>FOCUS</label>
-                        <input id="scanFocus" type="range" min="0" max="2" step="0.01" value="0.5">
+                        <input id="scanFocus" type="range" min="0" max="1" step="0.01" value="0.5">
                         <span class="val" id="scanFocusVal">0.50</span>
                     </div>
                     <div class="ctrl">
                         <label>SHIFT</label>
-                        <input id="scanShift" type="range" min="-4" max="4.0" step="0.01" value="0.12">
+                        <input id="scanShift" type="range" min="0" max="0.5" step="0.01" value="0.12">
                         <span class="val" id="scanShiftVal">0.12</span>
                     </div>
                     <div class="ctrl">
                         <label>SKEW</label>
-                        <input id="scanSkew" type="range" min="-3" max="3" step="0.01" value="0">
+                        <input id="scanSkew" type="range" min="-1" max="1" step="0.01" value="0">
                         <span class="val" id="scanSkewVal">0.00</span>
                     </div>
                     <div class="ctrl">
                         <label>DRIFT</label>
-                        <input id="scanDrift" type="range" min="0" max="5" step="0.01" value="0.5">
-                        <span class="val" id="scanDriftVal">0.50</span>
+                        <input id="scanDrift" type="range" min="0" max="3" step="0.01" value="1.0">
+                        <span class="val" id="scanDriftVal">1.00</span>
                     </div>
                     <div class="ctrl">
-                        <label>PLACE X</label>
-                        <input id="scanPlaceX" type="range" min="-1" max="1" step="0.01" value="0">
-                        <span class="val" id="scanPlaceXVal">0.00</span>
-                    </div>
-                    <div class="ctrl">
-                        <label>PLACE Y</label>
-                        <input id="scanPlaceY" type="range" min="-1" max="1" step="0.01" value="0">
-                        <span class="val" id="scanPlaceYVal">0.00</span>
-                    </div>
-                    <div class="ctrl">
-                        <label>ZOOM</label>
-                        <input id="scanZoom" type="range" min="0.25" max="6" step="0.01" value="1">
-                        <span class="val" id="scanZoomVal">1.00</span>
-                    </div>
-                    <div class="ctrl">
-                        <label>ZOOM MODE</label>
-                        <select id="scanZoomMode" style="font-size:10px;padding:1px 2px">
-                            <option value="content">CONTENT</option>
-                            <option value="pattern">PATTERN</option>
-                            <option value="both">BOTH</option>
-                        </select>
+                        <label>ROLL</label>
+                        <input id="scanRoll" type="range" min="-2" max="2" step="0.01" value="0">
+                        <span class="val" id="scanRollVal">0.00</span>
                     </div>
                     <div class="ctrl">
                         <label>SPEED</label>
@@ -1561,6 +1518,41 @@
                 </div>
             </div>
 
+            <!-- SOLARIZE -->
+            <div class="group">
+                <div class="group-label">Solarize</div>
+                <div class="group-body">
+                <div class="group-row">
+                    <div class="ctrl"><label>ON</label><input id="solarizeOn" type="checkbox"></div>
+                    <div class="ctrl">
+                        <label>THRESH</label>
+                        <input id="solarizeThresh" type="range" min="0" max="1" step="0.01" value="0.5">
+                        <span class="val" id="solarizeThreshVal">0.50</span>
+                    </div>
+                    <div class="ctrl">
+                        <label>AMOUNT</label>
+                        <input id="solarizeAmt" type="range" min="0" max="1" step="0.01" value="1.0">
+                        <span class="val" id="solarizeAmtVal">1.00</span>
+                    </div>
+                    <div class="ctrl">
+                        <label>SOL R</label>
+                        <input id="solarizeR" type="range" min="0" max="2" step="0.01" value="1.0">
+                        <span class="val" id="solarizeRVal">1.00</span>
+                    </div>
+                    <div class="ctrl">
+                        <label>SOL G</label>
+                        <input id="solarizeG" type="range" min="0" max="2" step="0.01" value="1.0">
+                        <span class="val" id="solarizeGVal">1.00</span>
+                    </div>
+                    <div class="ctrl">
+                        <label>SOL B</label>
+                        <input id="solarizeB" type="range" min="0" max="2" step="0.01" value="1.0">
+                        <span class="val" id="solarizeBVal">1.00</span>
+                    </div>
+                </div>
+            </div>
+            </div>
+
             <!-- FLOW -->
             <div class="group">
                 <div class="group-label">Flow</div>
@@ -1587,14 +1579,9 @@
                         <input id="flowPulse" type="range" min="0" max="200" step="1" value="0">
                         <span class="val" id="flowPulseVal">0</span>
                     </div>
-                    <div class="ctrl"><label>TRIG</label><input id="flowPulseTrig" type="checkbox"></div>
-                    <div class="ctrl">
-                        <label>FIRE</label>
-                        <button id="flowPulseFire" type="button" class="fire-btn">FIRE</button>
-                    </div>
                     <div class="ctrl">
                         <label>PULL</label>
-                        <input id="flowImpl" type="range" min="-5" max="5" step="0.01" value="0">
+                        <input id="flowImpl" type="range" min="-1" max="1" step="0.01" value="0">
                         <span class="val" id="flowImplVal">0.00</span>
                     </div>
                     <div class="ctrl">
@@ -1611,19 +1598,6 @@
                         <label>SPREAD</label>
                         <input id="flowSpread" type="range" min="0.25" max="4" step="0.01" value="1">
                         <span class="val" id="flowSpreadVal">1.00</span>
-                    </div>
-                    <div class="ctrl">
-                        <label>CARRY</label>
-                        <input id="flowCarry" type="range" min="0" max="2" step="0.01" value="0">
-                        <span class="val" id="flowCarryVal">0.00</span>
-                    </div>
-                    <div class="ctrl">
-                        <label>TARGET</label>
-                        <select id="flowTarget" style="font-size:10px;padding:1px 2px">
-                            <option value="final" selected>FINAL</option>
-                            <option value="glitch">GLITCH</option>
-                            <option value="scan">SCAN</option>
-                        </select>
                     </div>
                 </div>
             </div>
@@ -2011,24 +1985,14 @@
     <script>
     (() => {
         'use strict';
-        // ────────────────────────────────────────────────────────────────────
-        // SYPHON ENGINE
+        // HUFF Classic Syphon transport
         //
-        // Flow:
-        //   RAF loop → p5 canvas.getImageData() → prepend "HUFFSYPH" header
-        //       → binary WebSocket → Rust relay intercepts on b"HUFFSYPH"
-        //       → syphon::push_frame() → MTLTexture upload → SyphonMetalServer
-        //       → Syphon clients (Resolume, VDMX, MadMapper, etc.)
+        // Main path when supported:
+        //   p5 canvas → ImageBitmap → Worker/OffscreenCanvas scale + readback
+        //   → one raw RGBA frame in flight → Rust → persistent Metal texture
+        //   → SyphonMetalServer
         //
-        // The HUFFSYPH magic prefix lets Rust distinguish syphon frames from
-        // normal p5 canvas-mirror frames without a separate WS connection.
-        //
-        // Frame binary layout:
-        //   Bytes  0– 7  : b"HUFFSYPH"
-        //   Bytes  8–11  : width  u32 LE
-        //   Bytes 12–15  : height u32 LE
-        //   Bytes 16+    : raw RGBA8 pixels (width × height × 4)
-        // ────────────────────────────────────────────────────────────────────
+        // Older WKWebViews retain a bounded main-thread Canvas2D fallback.
 
         const invoke     = window.__TAURI__?.invoke;
         const overlay    = document.getElementById('syphonOverlay');
@@ -2042,209 +2006,393 @@
         const hInput     = document.getElementById('syphH');
         const fpsSelect  = document.getElementById('syphFps');
 
-        // ── modal ────────────────────────────────────────────────────────────
         const openModal  = () => overlay.classList.add('open');
         const closeModal = () => overlay.classList.remove('open');
         syphonBtn.addEventListener('click', openModal);
-        pill     .addEventListener('click', openModal);
-        closeBtn .addEventListener('click', closeModal);
-        overlay  .addEventListener('click', e => { if (e.target === overlay) closeModal(); });
-        window   .addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); }, true);
+        pill.addEventListener('click', openModal);
+        closeBtn.addEventListener('click', closeModal);
+        overlay.addEventListener('click', e => { if (e.target === overlay) closeModal(); });
+        window.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); }, true);
 
         if (!invoke) {
             statusBox.textContent = 'Syphon unavailable outside Tauri app.';
-            statusBox.className   = 'error';
-            pill.textContent      = 'SYPHON: N/A';
+            statusBox.className = 'error';
+            pill.textContent = 'SYPHON: N/A';
             return;
         }
 
-        // ── state ─────────────────────────────────────────────────────────────
-        let active        = false;
-        let rafId         = null;
-        let lastTs        = 0;
-        let localFrames   = 0;
-        let browserDrops  = 0;
-        let outputW       = 1280;
-        let outputH       = 720;
+        let active = false;
+        let receiverConnected = false;
+        let rafId = null;
+        let lastTs = 0;
+        let outputW = 1280;
+        let outputH = 720;
+        let sourceCanvas = null;
+        let nativeFrames = 0;
 
-        // Reuse a single offscreen canvas for pixel extraction
-        const offscreen  = document.createElement('canvas');
-        const offCtx     = offscreen.getContext('2d', { willReadFrequently: true });
+        let syphWS = null;
+        let wsReady = false;
+        let frameInFlight = false;
+        let frameStartedAt = 0;
+        let nextFrameId = 1;
 
-        // Shared WS connection — reuse the relay socket that canvas.js already
-        // maintains. We grab it from the global scope if available, otherwise
-        // open our own to the same relay URL.
-        function getRelayWS() {
-            // canvas.js exposes its ws instance on window.__huffWS if present.
-            // Fallback: open a second connection as role "syphon-sender".
-            if (window.__huffWS && window.__huffWS.readyState === WebSocket.OPEN) {
-                return window.__huffWS;
+        let worker = null;
+        let workerReady = false;
+        let workerDisabled = false;
+
+        let fallbackCanvas = null;
+        let fallbackCtx = null;
+        let statePollBusy = false;
+
+        function updateDisplay() {
+            if (!active) return;
+            if (receiverConnected) {
+                statusBox.textContent = `Syphon active — receiver connected — streaming ${outputW}×${outputH}.`;
+                statusBox.className = 'active';
+            } else {
+                statusBox.textContent = `Syphon active — waiting for a receiver. Canvas readback is paused.`;
+                statusBox.className = 'active';
             }
-            return null; // will use dedicated socket
+            if (frameLabel) {
+                const mode = workerReady ? 'worker' : 'main-thread fallback';
+                frameLabel.textContent = `${nativeFrames} frames published · ${mode}`;
+            }
         }
 
-        // Dedicated WS socket for syphon frames (avoids interfering with canvas mirror)
-        let syphWS   = null;
-        let wsReady  = false;
+        function applyRuntimeState(state) {
+            if (!state || !active) return;
+            receiverConnected = !!state.hasClients;
+            nativeFrames = Number(state.frames) || 0;
+            updateDisplay();
+        }
+
+        function closeSyphWS() {
+            wsReady = false;
+            frameInFlight = false;
+            const socket = syphWS;
+            syphWS = null;
+            try { socket?.close(); } catch {}
+        }
+
+        function handleSocketMessage(event) {
+            if (typeof event.data !== 'string') return;
+            try {
+                const message = JSON.parse(event.data);
+                if (message.type === 'syphon-state') {
+                    applyRuntimeState(message);
+                    return;
+                }
+                if (message.type === 'syphon-ack') {
+                    frameInFlight = false;
+                    receiverConnected = !!message.hasClients;
+                    nativeFrames = Number(message.frames) || nativeFrames;
+                    updateDisplay();
+                }
+            } catch {}
+        }
 
         function ensureSyphWS() {
+            if (!active) return;
             if (syphWS && (syphWS.readyState === WebSocket.OPEN || syphWS.readyState === WebSocket.CONNECTING)) return;
-            const url = window.WS_MIRROR_URL || 'ws://127.0.0.1:8787';
-            syphWS = new WebSocket(url);
-            syphWS.binaryType = 'arraybuffer';
-            syphWS.onopen  = () => {
+
+            const url = (typeof __getWSURL__ === 'function')
+                ? __getWSURL__()
+                : (window.WS_MIRROR_URL || 'ws://127.0.0.1:8787');
+            const socket = new WebSocket(url);
+            syphWS = socket;
+            socket.binaryType = 'arraybuffer';
+            socket.onmessage = handleSocketMessage;
+            socket.onopen = () => {
+                if (socket !== syphWS || !active) {
+                    try { socket.close(); } catch {}
+                    return;
+                }
                 wsReady = true;
-                syphWS.send(JSON.stringify({ type: 'hello', role: 'syphon-sender' }));
+                socket.send(JSON.stringify({
+                    type: 'hello',
+                    role: 'syphon-sender',
+                    width: outputW,
+                    height: outputH,
+                }));
             };
-            syphWS.onclose = () => { wsReady = false; syphWS = null; };
-            syphWS.onerror = () => { wsReady = false; };
-        }
-
-        // ── pixel sender ──────────────────────────────────────────────────────
-        const MAGIC       = new Uint8Array([72,85,70,70,83,89,80,72]); // "HUFFSYPH"
-        const HEADER_SIZE = 16;
-        let frameBuf      = null;
-        let frameView     = null;
-        let nativeStatus  = '';
-
-        function updateSyphonFrameLabel() {
-            if (!frameLabel) return;
-            const local = `${localFrames} browser sent · ${browserDrops} browser drops`;
-            frameLabel.textContent = nativeStatus ? `${local} · ${nativeStatus}` : local;
+            socket.onclose = () => {
+                if (socket === syphWS) {
+                    wsReady = false;
+                    syphWS = null;
+                    frameInFlight = false;
+                }
+            };
+            socket.onerror = () => {
+                if (socket === syphWS) wsReady = false;
+            };
         }
 
         function findCanvas() {
-            // p5 canvas is the first canvas in the document
-            return document.querySelector('canvas');
+            if (sourceCanvas?.isConnected) return sourceCanvas;
+            try {
+                if (typeof canvas !== 'undefined' && canvas?.elt instanceof HTMLCanvasElement) {
+                    sourceCanvas = canvas.elt;
+                    return sourceCanvas;
+                }
+            } catch {}
+            sourceCanvas = document.querySelector('canvas');
+            return sourceCanvas;
+        }
+
+        function destroyWorker() {
+            workerReady = false;
+            if (worker) {
+                try { worker.postMessage({ type: 'release' }); } catch {}
+                try { worker.terminate(); } catch {}
+            }
+            worker = null;
+        }
+
+        function ensureWorker() {
+            if (worker || workerDisabled) return workerReady;
+            const supported = typeof Worker !== 'undefined'
+                && typeof OffscreenCanvas !== 'undefined'
+                && typeof createImageBitmap === 'function';
+            if (!supported) {
+                workerDisabled = true;
+                return false;
+            }
+
+            try {
+                worker = new Worker('./syphon-stream-worker.js');
+                worker.onmessage = (event) => {
+                    const message = event.data || {};
+                    if (message.type === 'configured') {
+                        workerReady = true;
+                        updateDisplay();
+                        return;
+                    }
+                    if (message.type === 'error') {
+                        console.warn('[huff syphon worker]', message.message);
+                        frameInFlight = false;
+                        workerDisabled = true;
+                        destroyWorker();
+                        updateDisplay();
+                        return;
+                    }
+                    if (message.type !== 'pixels') return;
+
+                    if (!active || !wsReady || syphWS?.readyState !== WebSocket.OPEN) {
+                        frameInFlight = false;
+                        return;
+                    }
+                    try {
+                        syphWS.send(message.buffer);
+                        // Rust sends syphon-ack after the frame is either
+                        // published or intentionally skipped. Keep the gate
+                        // closed until that acknowledgement arrives.
+                    } catch {
+                        frameInFlight = false;
+                        closeSyphWS();
+                    }
+                };
+                worker.onerror = (event) => {
+                    console.warn('[huff syphon worker]', event.message || event);
+                    frameInFlight = false;
+                    workerDisabled = true;
+                    destroyWorker();
+                };
+                worker.postMessage({ type: 'configure', width: outputW, height: outputH });
+                return true;
+            } catch (error) {
+                console.warn('[huff syphon] worker unavailable:', error);
+                workerDisabled = true;
+                destroyWorker();
+                return false;
+            }
+        }
+
+        function ensureFallbackSurface() {
+            if (!fallbackCanvas) {
+                fallbackCanvas = document.createElement('canvas');
+                fallbackCtx = fallbackCanvas.getContext('2d', {
+                    alpha: false,
+                    desynchronized: true,
+                    willReadFrequently: true,
+                });
+            }
+            if (!fallbackCtx) return false;
+            if (fallbackCanvas.width !== outputW || fallbackCanvas.height !== outputH) {
+                fallbackCanvas.width = outputW;
+                fallbackCanvas.height = outputH;
+            }
+            return true;
+        }
+
+        function captureFallback(source) {
+            if (!ensureFallbackSurface()) {
+                frameInFlight = false;
+                return;
+            }
+            try {
+                fallbackCtx.globalAlpha = 1;
+                fallbackCtx.globalCompositeOperation = 'copy';
+                fallbackCtx.drawImage(source, 0, 0, outputW, outputH);
+                fallbackCtx.globalCompositeOperation = 'source-over';
+                const imageData = fallbackCtx.getImageData(0, 0, outputW, outputH);
+                syphWS.send(imageData.data);
+            } catch (error) {
+                console.warn('[huff syphon] capture failed:', error);
+                frameInFlight = false;
+            }
+        }
+
+        function captureWorker(source, id) {
+            createImageBitmap(source).then(bitmap => {
+                if (!active || !worker || !wsReady) {
+                    try { bitmap.close?.(); } catch {}
+                    frameInFlight = false;
+                    return;
+                }
+                worker.postMessage({
+                    type: 'frame',
+                    id,
+                    width: outputW,
+                    height: outputH,
+                    bitmap,
+                }, [bitmap]);
+            }).catch(error => {
+                console.warn('[huff syphon] ImageBitmap capture failed:', error);
+                frameInFlight = false;
+                workerDisabled = true;
+                destroyWorker();
+            });
         }
 
         function sendFrame(ts) {
             if (!active) return;
+            rafId = requestAnimationFrame(sendFrame);
 
-            const fpsCap = parseInt(fpsSelect.value, 10) || 30;
-            const period = 1000 / fpsCap;
-            if (ts - lastTs < period) { rafId = requestAnimationFrame(sendFrame); return; }
-            lastTs = ts;
-
-            if (!wsReady) { ensureSyphWS(); rafId = requestAnimationFrame(sendFrame); return; }
-
-            // Freeze dimensions when output starts. Editing the fields while live
-            // no longer creates packets that disagree with the active native texture.
-            const targetW = outputW;
-            const targetH = outputH;
-            const packetSize = HEADER_SIZE + targetW * targetH * 4;
-
-            // Keep at most approximately one raw frame queued in Chromium. Rust
-            // applies a second latest-frame boundary before Metal publication.
-            if (syphWS.bufferedAmount > packetSize) {
-                browserDrops++;
-                rafId = requestAnimationFrame(sendFrame);
+            if (!wsReady) {
+                ensureSyphWS();
                 return;
             }
 
-            const cnv = findCanvas();
-            if (!cnv) { rafId = requestAnimationFrame(sendFrame); return; }
-
-            if (offscreen.width !== targetW || offscreen.height !== targetH) {
-                offscreen.width  = targetW;
-                offscreen.height = targetH;
-                frameBuf = null;
-                frameView = null;
+            // A lost socket/ACK must not permanently freeze output.
+            if (frameInFlight) {
+                if (ts - frameStartedAt > 2500) {
+                    frameInFlight = false;
+                    closeSyphWS();
+                    ensureSyphWS();
+                }
+                return;
             }
 
-            offCtx.drawImage(cnv, 0, 0, targetW, targetH);
-            let imgData;
-            try { imgData = offCtx.getImageData(0, 0, targetW, targetH); }
-            catch (e) { rafId = requestAnimationFrame(sendFrame); return; }
+            // Syphon's own hasClients signal is authoritative. No receiver means
+            // no canvas scale, no getImageData, no WebSocket payload, and no
+            // Metal upload.
+            if (!receiverConnected) return;
+            if (syphWS.bufferedAmount > 0) return;
 
-            // Reuse one exact-sized packet. WebSocket.send() snapshots typed-array
-            // data synchronously, avoiding Blob creation and blob.arrayBuffer().
-            if (!frameBuf || frameBuf.byteLength !== packetSize) {
-                frameBuf = new Uint8Array(packetSize);
-                frameView = new DataView(frameBuf.buffer);
-                frameBuf.set(MAGIC, 0);
+            const fpsCap = parseInt(fpsSelect.value, 10) || 30;
+            const period = 1000 / fpsCap;
+            if (ts - lastTs < period) return;
+
+            const source = findCanvas();
+            if (!source) return;
+
+            lastTs = ts;
+            frameInFlight = true;
+            frameStartedAt = ts;
+            const id = nextFrameId++;
+
+            if (ensureWorker() && workerReady) {
+                captureWorker(source, id);
+            } else {
+                captureFallback(source);
             }
-            frameView.setUint32(8,  targetW, true);
-            frameView.setUint32(12, targetH, true);
-            frameBuf.set(imgData.data, HEADER_SIZE);
-
-            try {
-                syphWS.send(frameBuf);
-                localFrames++;
-                updateSyphonFrameLabel();
-            } catch {}
-
-            rafId = requestAnimationFrame(sendFrame);
         }
 
-        // ── start / stop ─────────────────────────────────────────────────────
+        async function pollRuntimeState() {
+            if (!active || statePollBusy) return;
+            statePollBusy = true;
+            try {
+                const state = await invoke('syphon_runtime_state');
+                applyRuntimeState(state);
+            } catch {}
+            finally { statePollBusy = false; }
+        }
+
         async function startSyphon() {
             const w = Math.max(64, parseInt(wInput.value, 10) || 1280);
             const h = Math.max(64, parseInt(hInput.value, 10) || 720);
 
-            statusBox.textContent = 'Starting…';
-            statusBox.className   = '';
+            statusBox.textContent = 'Starting Syphon…';
+            statusBox.className = '';
 
             try {
-                const msg = await invoke('start_syphon', { width: w, height: h });
-                active = true;
+                const message = await invoke('start_syphon', { width: w, height: h });
                 outputW = w;
                 outputH = h;
-                localFrames = 0;
-                browserDrops = 0;
-                frameBuf = null;
-                frameView = null;
-                nativeStatus = '';
-                updateSyphonFrameLabel();
+                active = true;
+                receiverConnected = false;
+                nativeFrames = 0;
+                lastTs = 0;
+                frameInFlight = false;
+                workerDisabled = false;
+                ensureWorker();
                 ensureSyphWS();
+                await pollRuntimeState();
 
-                statusBox.textContent = `${msg}\nSending ${w}×${h} pixels → Syphon → look for "huff" in your VJ software.`;
-                statusBox.className   = 'active';
-                pill.textContent      = `SYPHON: ${w}×${h}`;
-                pill.style.color      = 'rgba(180,100,255,.9)';
+                statusBox.textContent = `${message}\nWaiting for a receiver; capture remains paused until one connects.`;
+                statusBox.className = 'active';
+                pill.textContent = `SYPHON: ${w}×${h}`;
+                pill.style.color = 'rgba(180,100,255,.9)';
                 toggleBtn.textContent = '■ Stop';
                 toggleBtn.classList.add('active');
+                updateDisplay();
 
                 rafId = requestAnimationFrame(sendFrame);
-            } catch (e) {
-                statusBox.textContent = `⚠ ${e}`;
-                statusBox.className   = 'error';
+            } catch (error) {
+                statusBox.textContent = `⚠ ${error}`;
+                statusBox.className = 'error';
             }
         }
 
         async function stopSyphon() {
             active = false;
-            if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+            receiverConnected = false;
+            frameInFlight = false;
+            if (rafId) {
+                cancelAnimationFrame(rafId);
+                rafId = null;
+            }
+            closeSyphWS();
+            destroyWorker();
+            if (fallbackCanvas) {
+                fallbackCanvas.width = 1;
+                fallbackCanvas.height = 1;
+            }
+            fallbackCanvas = null;
+            fallbackCtx = null;
 
             try {
-                const msg = await invoke('stop_syphon');
-                statusBox.textContent = msg;
+                statusBox.textContent = await invoke('stop_syphon');
             } catch {}
 
-            statusBox.className   = '';
-            pill.textContent      = 'SYPHON: OFF';
-            pill.style.color      = 'rgba(180,100,255,.5)';
+            statusBox.className = '';
+            pill.textContent = 'SYPHON: OFF';
+            pill.style.color = 'rgba(180,100,255,.5)';
             toggleBtn.textContent = '▶ Start';
             toggleBtn.classList.remove('active');
-            nativeStatus = '';
             if (frameLabel) frameLabel.textContent = '';
         }
 
         toggleBtn.addEventListener('click', () => {
-            if (active) stopSyphon(); else startSyphon();
+            active ? stopSyphon() : startSyphon();
         });
 
-        // ── status poll ───────────────────────────────────────────────────────
-        // Poll Rust every 2s while active to get authoritative frame count
-        setInterval(async () => {
-            if (!active) return;
-            try {
-                const s = await invoke('syphon_status');
-                nativeStatus = s || '';
-                updateSyphonFrameLabel();
-            } catch {}
-        }, 2000);
-
+        setInterval(pollRuntimeState, 500);
+        window.addEventListener('beforeunload', () => {
+            active = false;
+            closeSyphWS();
+            destroyWorker();
+        }, { once: true });
     })();
     </script>
 
@@ -2256,16 +2404,9 @@
         // ── Spout Engine — mirrors the Syphon engine, Windows only ───────────
         //
         // Frame pipeline:
-        //   p5 canvas → getImageData() → "HUFFSPOUT" binary WS frame
-        //       → Rust relay intercepts → spout::push_frame()
-        //       → OpenGL texture upload → Spout SendTexture()
-        //       → Spout receivers (Resolume, MadMapper, etc.)
-        //
-        // Frame binary layout:
-        //   Bytes  0– 8 : "HUFFSPOUT" (9 bytes)
-        //   Bytes  9–12 : width  u32 LE
-        //   Bytes 13–16 : height u32 LE
-        //   Bytes 17+   : raw RGBA8 pixels (width × height × 4)
+        //   p5 canvas → getImageData() → raw RGBA WebSocket frame
+        //       → dedicated role + fixed dimensions declared once in hello
+        //       → Rust → SpoutDX sender → Spout receivers
 
         const invoke     = window.__TAURI__?.invoke;
         const tauriEvent = window.__TAURI__?.event;
@@ -2300,15 +2441,16 @@
         }
 
         // ── state ─────────────────────────────────────────────────────────────
-        let running       = false;
-        let frameCount    = 0;
-        let browserDrops  = 0;
-        let outputW       = 1280;
-        let outputH       = 720;
-        let rafId         = null;
-        let lastTs        = 0;
-        let spoutCanvas   = null;
-        let spoutCtx      = null;
+        let running      = false;
+        let frameCount   = 0;
+        let rafId        = null;
+        let lastTs       = 0;
+        let spoutCanvas  = null;
+        let spoutCtx     = null;
+        let sourceCanvas = null;
+        let outputW      = 1280;
+        let outputH      = 720;
+        let spoutWS      = null;
 
         // ── helpers ───────────────────────────────────────────────────────────
         function setStatus(text, cls = '') {
@@ -2331,24 +2473,39 @@
         }
 
         // ── frame sender ──────────────────────────────────────────────────────
-        // Finds the p5 canvas, reads raw RGBA pixels, prepends the HUFFSPOUT
-        // header, and sends it as a binary WS message to Rust.
         function findCanvas() {
+            if (sourceCanvas?.isConnected) return sourceCanvas;
             try {
-                if (typeof canvas !== 'undefined' && canvas?.elt instanceof HTMLCanvasElement)
-                    return canvas.elt;
+                if (typeof canvas !== 'undefined' && canvas?.elt instanceof HTMLCanvasElement) {
+                    sourceCanvas = canvas.elt;
+                    return sourceCanvas;
+                }
             } catch {}
-            return document.querySelector('canvas') || null;
+            sourceCanvas = document.querySelector('canvas');
+            return sourceCanvas;
         }
 
-        // Pre-allocated frame buffer and static magic — no per-frame allocations
-        const SPOUT_MAGIC = new Uint8Array([
-            0x48,0x55,0x46,0x46,0x53,0x50,0x4F,0x55,0x54 // "HUFFSPOUT"
-        ]);
-        const HEADER_SIZE = 9 + 4 + 4; // magic + width(u32) + height(u32)
-        let frameBuf    = null; // reused Uint8Array, grown as needed
-        let frameHeader = new DataView(new ArrayBuffer(HEADER_SIZE));
-        SPOUT_MAGIC.forEach((b, i) => frameHeader.setUint8(i, b));
+        function closeSpoutWS() {
+            const socket = spoutWS;
+            spoutWS = null;
+            try { socket?.close(); } catch {}
+        }
+
+        function ensureSpoutWS() {
+            if (!running) return;
+            if (spoutWS && (spoutWS.readyState === WebSocket.OPEN || spoutWS.readyState === WebSocket.CONNECTING)) return;
+            const wsUrl = (typeof __getWSURL__ === 'function') ? __getWSURL__() : 'ws://127.0.0.1:8787';
+            const socket = new WebSocket(wsUrl);
+            spoutWS = socket;
+            socket.binaryType = 'arraybuffer';
+            socket.onopen = () => {
+                if (socket !== spoutWS || !running) { try { socket.close(); } catch {} return; }
+                socket.send(JSON.stringify({
+                    type: 'hello', role: 'spout-sender', width: outputW, height: outputH,
+                }));
+            };
+            socket.onclose = () => { if (socket === spoutWS) spoutWS = null; };
+        }
 
         function sendSpoutFrame(ts) {
             if (!running) return;
@@ -2360,66 +2517,43 @@
 
             if (ts - lastTs < period) return;
 
-            // Backpressure — allow no more than approximately one raw frame in
-            // Chromium. The Rust worker independently replaces stale frames.
-            const ws = sendSpoutFrame._ws;
-            const w = outputW;
-            const h = outputH;
-            const packetSize = HEADER_SIZE + w * h * 4;
-            if (ws && ws.readyState === WebSocket.OPEN && ws.bufferedAmount > packetSize) {
-                browserDrops++;
-                return;
-            }
+            ensureSpoutWS();
+            if (!spoutWS || spoutWS.readyState !== WebSocket.OPEN) return;
+
+            // One pending raw frame is already obsolete. Skip before readback.
+            if (spoutWS.bufferedAmount > 0) return;
 
             lastTs = ts;
 
             const src = findCanvas();
             if (!src) return;
 
-            // Lazy-allocate offscreen canvas; invalidate frameBuf if size changes
-            if (!spoutCanvas || spoutCanvas.width !== w || spoutCanvas.height !== h) {
+            if (!spoutCanvas || spoutCanvas.width !== outputW || spoutCanvas.height !== outputH) {
                 spoutCanvas = document.createElement('canvas');
-                spoutCanvas.width  = w;
-                spoutCanvas.height = h;
-                spoutCtx = spoutCanvas.getContext('2d', { willReadFrequently: true });
-                frameBuf = null;
+                spoutCanvas.width  = outputW;
+                spoutCanvas.height = outputH;
+                spoutCtx = spoutCanvas.getContext('2d', {
+                    alpha: false,
+                    desynchronized: true,
+                    willReadFrequently: true,
+                });
             }
 
-            spoutCtx.drawImage(src, 0, 0, w, h);
-            const imageData = spoutCtx.getImageData(0, 0, w, h);
-            const pixels    = imageData.data;
+            spoutCtx.globalAlpha = 1;
+            spoutCtx.globalCompositeOperation = 'copy';
+            spoutCtx.drawImage(src, 0, 0, outputW, outputH);
+            spoutCtx.globalCompositeOperation = 'source-over';
 
-            // Reuse frame buffer — only reallocate when dimensions change
-            const totalSize = HEADER_SIZE + pixels.byteLength;
-            if (!frameBuf || frameBuf.byteLength !== totalSize) {
-                frameBuf = new Uint8Array(totalSize);
-            }
+            let imageData;
+            try { imageData = spoutCtx.getImageData(0, 0, outputW, outputH); }
+            catch { return; }
 
-            // Write header (magic already set, just update w/h)
-            frameHeader.setUint32(9,  w, true);
-            frameHeader.setUint32(13, h, true);
-            frameBuf.set(new Uint8Array(frameHeader.buffer), 0);
-            frameBuf.set(pixels, HEADER_SIZE);
-
-            // Reconnect if needed
-            if (!ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
-                const wsUrl = (typeof __getWSURL__ === 'function') ? __getWSURL__() : 'ws://127.0.0.1:8787';
-                sendSpoutFrame._ws = new WebSocket(wsUrl);
-                sendSpoutFrame._ws.binaryType = 'arraybuffer';
-                sendSpoutFrame._ws.onopen = () => {
-                    try { sendSpoutFrame._ws.send(JSON.stringify({ type: 'hello', role: 'spout' })); } catch {}
-                };
-                return; // skip this frame while connecting
-            }
-
-            if (ws.readyState === WebSocket.OPEN) {
-                // frameBuf is exact-sized; sending the typed array avoids the
-                // previous full-frame ArrayBuffer.slice() allocation.
-                ws.send(frameBuf);
-                frameCount++;
-                if (frameCountEl) {
-                    frameCountEl.textContent = `${frameCount} sent · ${browserDrops} browser drops`;
-                }
+            // Send the ImageData view directly. This removes the old second
+            // frame-sized Uint8Array and .set() copy from every Spout frame.
+            spoutWS.send(imageData.data);
+            frameCount++;
+            if (frameCountEl && (frameCount % 15 === 0)) {
+                frameCountEl.textContent = `${frameCount} frames`;
             }
         }
 
@@ -2432,12 +2566,12 @@
             try {
                 const msg = await invoke('start_spout', { width: w, height: h });
                 setStatus(`${msg}\nSending ${w}×${h} pixels → Spout → look for "huff" in your VJ software.`, 'active');
-                running      = true;
-                outputW       = w;
-                outputH       = h;
-                frameCount    = 0;
-                browserDrops  = 0;
-                frameBuf      = null;
+                outputW    = Math.max(64, w);
+                outputH    = Math.max(64, h);
+                running    = true;
+                frameCount = 0;
+                lastTs     = 0;
+                ensureSpoutWS();
                 toggleBtn.textContent = '■ Stop';
                 toggleBtn.classList.add('active');
                 setPillActive(true);
@@ -2450,6 +2584,9 @@
         async function stopSpout() {
             running = false;
             if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+            closeSpoutWS();
+            spoutCanvas = null;
+            spoutCtx = null;
             toggleBtn.textContent = '▶ Start';
             toggleBtn.classList.remove('active');
             setPillActive(false);
@@ -2474,6 +2611,8 @@
                 if (running) setStatus(s, 'active');
             } catch {}
         }, 2000);
+
+        window.addEventListener('beforeunload', closeSpoutWS, { once: true });
 
     })();
     </script>

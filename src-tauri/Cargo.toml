@@ -1,3 +1,6 @@
+# Keep HUFF Classic isolated from unrelated Cargo workspaces in parent directories.
+[workspace]
+
 [package]
 name = "huff"
 version = "1.0.2"
