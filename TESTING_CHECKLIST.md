@@ -1,7 +1,7 @@
-# HUFF Classic Pass 6 Testing Checklist
+# HUFF Classic Pass 7 Testing Checklist
 
-**Package:** HUFF Classic Optimization Pass 6  
-**Testing state:** Source validation completed; target-machine runtime testing required
+**Package:** HUFF Classic Optimization Pass 7  
+**Testing state:** Source and deterministic algorithm validation completed; target-machine runtime testing required
 
 ## 1. Startup and baseline
 
@@ -11,87 +11,83 @@
 - [ ] Loading a video begins playback with synchronized audio.
 - [ ] Camera start, stop, refresh, and device switching still work.
 
-## 2. Control-cache parity
+## 2. Glitch placement parity
 
-Test each category while video is running. A visible control change must affect the image immediately.
+Use the same clip, seed, render size, and preset in Pass 6 and Pass 7.
 
-- [ ] Glitch ON/OFF and all glitch ranges.
-- [ ] History depth, scatter, corrupt drift, pixel size, and smear.
-- [ ] Cluster tiles, centers, spread, speed, steer, inertia, coherence, bounds, pulse, and breathe.
-- [ ] Scanline ON/OFF, count, radius, alpha, shift, drift, angle, spin, gap, skew, focus, and roll.
-- [ ] Feedback amount, persistence, X, Y, zoom, and rotation.
-- [ ] Flow enable, strength, scale, pulse, pull, speed, turbulence, swirl, and spread.
-- [ ] Symmetry enable, mode, and position.
-- [ ] Solarize enable, threshold, amount, and RGB controls.
-- [ ] Pipeline luma key enable, threshold, mix, and inversion.
-- [ ] Global Mix enable, blend mode, amount, and insertion position.
-- [ ] Base-video enable and amount.
-- [ ] Background mode and layer-priority modes.
-
-## 3. Programmatic control paths
-
-These paths are especially important because Pass 6 synchronizes through control events.
-
-- [ ] Load a named preset and confirm every recalled parameter affects rendering.
-- [ ] Import a preset JSON file and recall it.
-- [ ] Use Reset All and confirm the renderer returns to HTML defaults.
-- [ ] Use Reset Feedback Motion and confirm all four motion values update visually.
-- [ ] Use scan-angle snap buttons and confirm immediate angle changes.
-- [ ] Move several mapped controls over MIDI.
-- [ ] Toggle several mapped controls over MIDI.
-- [ ] Move several mapped controls over OSC.
-- [ ] Toggle several mapped controls over OSC.
-- [ ] Undo a parameter change with Ctrl/Cmd+Z and confirm rendered state follows the UI.
-
-## 4. Integer-control parity
-
-Pass 6 preserves previous `parseInt()` behavior with explicit truncation. Test MIDI/OSC intermediate values on these controls:
-
-- [ ] Glitch base X/Y.
-- [ ] Pixel/block size and smear length.
-- [ ] Scan count, radius, and gap.
-- [ ] Spatial gap and cluster counts/spreads.
-- [ ] Flow strength, scale, and pulse.
-
-The result should remain discrete rather than producing fractional tile dimensions or counts.
-
-## 5. Visual parity against Pass 5
-
-Using the same clip, seed, resolution, and preset:
-
-- [ ] Glitch tile locations and temporal history feel unchanged.
+- [ ] Glitch target positions match when Spatial Gap is `0`.
+- [ ] Glitch target positions match with Spatial Gap enabled.
+- [ ] Low, medium, and maximum Corrupt values behave identically.
+- [ ] Block size and Pixel Size produce the same tile dimensions.
+- [ ] Jitter produces the same displaced positions.
+- [ ] Smear length and angle produce the same trails.
+- [ ] Depth and Depth Scatter select the same temporal material.
 - [ ] Layer Priority modes retain the same paint order.
-- [ ] Scanline placement and spin are unchanged.
-- [ ] Cluster movement and coherence are unchanged.
-- [ ] Feedback transform is unchanged.
-- [ ] Flow Warp is unchanged.
-- [ ] Solarize and luma-key results are unchanged.
-- [ ] Global Mix insertion positions are unchanged.
 
-## 6. Performance observation
+## 3. Cluster parity
+
+- [ ] Cluster Tiles disabled behaves exactly as Pass 6.
+- [ ] Cluster Tiles enabled with Coherence `0` retains the prior boil.
+- [ ] Coherence `1` retains fixed constellations moving with their centers.
+- [ ] Intermediate Coherence values morph at the same apparent rate.
+- [ ] Increasing and decreasing Centers preserves expected center state.
+- [ ] Changing Bias changes clustered/free distribution as before.
+- [ ] Changing Spread and Minimum Spread produces the same region sizes.
+- [ ] Breathe expands/contracts the same constellation.
+- [ ] Speed, Speed Variation, Steer, Drift, Inertia, Pulse, Bounce, and Wrap remain unchanged.
+- [ ] Reducing cluster tile demand and raising it again produces no stale or duplicated offsets.
+
+## 4. Spatial-gap stress
+
+- [ ] Gap `0` permits unconstrained placement.
+- [ ] Small gaps produce dense placement without errors.
+- [ ] Large gaps reject nearby candidates as before.
+- [ ] Gap values near or larger than the canvas dimension do not crash.
+- [ ] High Corrupt + large Gap terminates normally at the existing attempt limits.
+- [ ] Resizing the output larger causes no stale-index errors.
+- [ ] Resizing smaller after a large render remains stable.
+
+## 5. Control and preset regression
+
+- [ ] Named presets recall correctly.
+- [ ] Imported preset JSON recalls correctly.
+- [ ] Reset All clears cluster physics and renders defaults.
+- [ ] MIDI control of glitch and cluster parameters remains immediate.
+- [ ] OSC control of glitch and cluster parameters remains immediate.
+- [ ] Undo follows visible and rendered control state.
+
+## 6. Performance and memory observation
 
 - [ ] Toggle the built-in profiler with the backtick key.
-- [ ] Record idle FPS with a video loaded and effects disabled.
-- [ ] Record FPS with the normal working preset.
-- [ ] Record FPS with glitch + clusters + flow + Solarize.
-- [ ] Compare control responsiveness during sustained rendering.
-- [ ] Observe CPU and memory for at least 20–30 minutes.
+- [ ] Record `applyGlitch` time with clusters disabled.
+- [ ] Record `applyGlitch` time with clusters enabled and Coherence `0`.
+- [ ] Record `applyGlitch` time with a large Spatial Gap.
+- [ ] Compare control responsiveness against Pass 6.
+- [ ] Observe memory for at least 20–30 minutes with a glitch-heavy preset.
+- [ ] Look for reduced sawtooth memory growth or garbage-collection pauses.
 - [ ] Confirm latency does not increase over time.
 
 ## 7. Syphon regression
 
-No Syphon code changed in Pass 6, but render-thread changes must not destabilize it.
+No Syphon code changed in Pass 7, but heavy glitch output must remain stable.
 
-- [ ] Start Syphon with no receiver; publishing remains paused while source stays discoverable.
+- [ ] Start Syphon with no receiver; publishing remains paused while discoverable.
 - [ ] Connect a receiver; publishing starts.
-- [ ] Disconnect and reconnect repeatedly.
-- [ ] Test 1280×720 at 30 and 60 fps.
+- [ ] Test a glitch-heavy preset at 1280×720, 30 and 60 fps.
 - [ ] Test 1920×1080 at 30 fps.
-- [ ] Test with a heavy effect preset active.
+- [ ] Disconnect and reconnect repeatedly.
 - [ ] Check receiver drops, HUFF skipped/published counters, latency, and memory.
 - [ ] Close HUFF and confirm the source and process disappear.
 
-## 8. Cross-platform regression queue
+## 8. Remaining Pass 5/6 regression queue
+
+- [ ] Flow Warp visual parity.
+- [ ] Solarize visual parity and adaptive cadence.
+- [ ] Pipeline Luma Key threshold, mix, invert, and decoded-frame caching.
+- [ ] Event-driven render-state synchronization across UI, MIDI, OSC, presets, reset, and undo.
+- [ ] Feedback, symmetry, Global Mix, and base-video behavior.
+
+## 9. Cross-platform regression queue
 
 - [ ] macOS Apple Silicon development build.
 - [ ] macOS Intel or universal build.
@@ -104,8 +100,9 @@ No Syphon code changed in Pass 6, but render-thread changes must not destabilize
 - Inline HTML script syntax checks.
 - JSON parsing.
 - Shell-script syntax checks.
-- Render-state key coverage: every state property used by draw/glitch/scanlines is registered in `hookUI()`.
-- Static hot-path comparison confirmed removal of direct DOM reads/parsing from the active draw/effect path.
+- Old/new spatial-gap acceptance equivalence across multiple dimensions, gap values, and candidate sequences.
+- Old/new cluster-offset random-call and value equivalence across creation, reroll, shrink, and regrow transitions.
+- Static confirmation that the active placement path no longer creates `targets` arrays, placement `Map`s, coordinate-pair arrays, cell arrays, or rerolled offset objects.
 - Syphon framework file and canonical bundle directory presence checked.
 - ZIP integrity checked after packaging.
 
@@ -115,4 +112,5 @@ No Syphon code changed in Pass 6, but render-thread changes must not destabilize
 - Actual macOS Syphon publication.
 - Windows Spout output.
 - Linux WebKitGTK runtime behavior.
-- Visual parity on target hardware.
+- Complete visual parity on target hardware.
+- Measured garbage-collection reduction on the target WebView.

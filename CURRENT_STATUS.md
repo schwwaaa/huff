@@ -1,8 +1,8 @@
 # HUFF Classic Current Status
 
-**Current package:** HUFF Classic Optimization Pass 6  
+**Current package:** HUFF Classic Optimization Pass 7  
 **Date:** 2026-08-03  
-**Authoritative lineage:** user-supplied `huff-08022026.zip` → Pass 4 → Pass 5 → Pass 6
+**Authoritative lineage:** user-supplied `huff-08022026.zip` → Pass 4 → Pass 5 → Pass 6 → Pass 7
 
 ## Product definition
 
@@ -34,12 +34,16 @@ HUFF Classic is not the native-wgpu HUFF edition and does not use that edition�
 - Event-driven typed render state.
 - Removal of per-frame DOM parsing in draw, glitch, and scanline processing.
 - Removal of per-frame draw-loop closures and unreachable cluster helper code.
+- Reusable typed glitch target buffers.
+- Reusable linked-cell spatial-gap index.
+- Persistent typed cluster-offset buffers.
 
 ### Runtime status
 
 - Pass 4: reported generally okay; additional packet-loss, endurance, and reconnect testing needed.
 - Pass 5: runtime parity and endurance testing not yet fully reported.
-- Pass 6: implementation packaged; runtime parity and control-path testing pending.
+- Pass 6: runtime control-cache and visual-parity testing pending.
+- Pass 7: deterministic bookkeeping equivalence passed; complete visual and endurance testing pending.
 - Overall release state: optimization in progress, not stabilized.
 
 ## Known architectural ceilings
@@ -53,7 +57,7 @@ The renderer remains sensitive to:
 - CPU pixel readback for Solarize and Pipeline Luma Key;
 - browser/WebView implementation differences across platforms.
 
-Pass 6 reduces control and JavaScript bookkeeping overhead. It does not remove the fundamental Canvas2D pixel and draw-call ceilings.
+Pass 7 reduces JavaScript allocation and spatial-index overhead around glitch placement. It does not reduce the number of Canvas2D tile blits selected by the existing controls.
 
 ### Syphon
 
@@ -74,22 +78,24 @@ Backpressure, client awareness, workers, resource reuse, and caching reduce over
 
 ## Immediate next work
 
-1. Runtime-test Pass 6 control synchronization and visual parity.
+1. Runtime-test Pass 6/7 control synchronization and visual parity.
 2. Continue sustained Syphon packet-loss, latency, and memory testing.
-3. Use the built-in profiler to identify the next measured bottleneck.
-4. Optimize the glitch tile-placement allocation path only after parity is confirmed.
-5. Begin cross-platform packaging hardening after render behavior stabilizes.
+3. Compare profiler results and memory behavior with glitch-heavy presets.
+4. Audit remaining per-frame Canvas2D state changes and repeated calculations only after parity is confirmed.
+5. Begin cross-platform packaging hardening after renderer behavior stabilizes.
 
 ## Release blockers still open
 
 - Extended macOS Syphon endurance results.
-- Full Pass 5/6 visual-parity confirmation.
+- Full Pass 5–7 visual-parity confirmation.
 - Windows Spout verification.
 - Linux playback and codec verification.
 - Cross-platform memory and shutdown soak tests.
 - Developer ID signing and notarization for public macOS distribution.
 - Final version alignment and public release documentation.
 
-## Development rule
+## Development rules
 
-Any code that changes a control programmatically must dispatch `input` or `change` after assigning `.value` or `.checked`. All current built-in HUFF paths already follow this rule.
+- Any code that changes a control programmatically must dispatch `input` or `change` after assigning `.value` or `.checked`.
+- Glitch placement scratch buffers are intentionally retained and grown geometrically; they should not be replaced with per-frame arrays.
+- Syphon.framework remains mandatory and must stay in the verified canonical bundle path.

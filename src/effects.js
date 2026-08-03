@@ -9,6 +9,9 @@
 //    only when the decoded source frame or key parameters change.
 //  - applyGlitch does not re-seed random — draw() seeds once per frame.
 //  - Cluster physics centers use p5 seeded random() for reproducibility.
+//  - Glitch tile placement reuses typed target/grid buffers and persistent
+//    Float64 cluster offsets instead of allocating arrays, Maps, and objects
+//    every frame.
 
 // ─── Temporal ring drawing ───────────────────────────────────────────────────
 // FrameRing stores reusable canvas snapshots, so historical frames remain
@@ -55,6 +58,113 @@ function resetClusterPhysics() {
   _cluPhysT = 0;
 }
 window.resetClusterPhysics = resetClusterPhysics;
+
+// ─── Reusable glitch-placement workspace ─────────────────────────────────────
+// Tile placement previously rebuilt an Array of [x,y] pairs plus a Map of cell
+// Arrays on every rendered frame. This workspace retains typed buffers and a
+// linked-cell spatial index between frames. Capacity only grows when a preset,
+// control value, or render size actually requires more targets.
+class GlitchPlacementWorkspace {
+  constructor() {
+    this.x = new Int32Array(0);
+    this.y = new Int32Array(0);
+    this.next = new Int32Array(0);
+    this.head = new Int32Array(0);
+    this.count = 0;
+    this.gap = 0;
+    this.gapSq = 0;
+    this.gridW = 0;
+    this.gridH = 0;
+  }
+
+  _ensureTargetCapacity(required) {
+    if (this.x.length >= required) return;
+    let cap = Math.max(32, this.x.length || 0);
+    while (cap < required) cap *= 2;
+    const nx = new Int32Array(cap);
+    const ny = new Int32Array(cap);
+    const nn = new Int32Array(cap);
+    nx.set(this.x); ny.set(this.y); nn.set(this.next);
+    this.x = nx; this.y = ny; this.next = nn;
+  }
+
+  _ensureGridCapacity(required) {
+    if (this.head.length >= required) return;
+    let cap = Math.max(64, this.head.length || 0);
+    while (cap < required) cap *= 2;
+    this.head = new Int32Array(cap);
+  }
+
+  begin(maxTargets, canvasW, canvasH, gap) {
+    this._ensureTargetCapacity(Math.max(1, maxTargets));
+    this.count = 0;
+    this.gap = gap;
+    this.gapSq = gap * gap;
+
+    if (gap <= 0) {
+      this.gridW = 0;
+      this.gridH = 0;
+      return;
+    }
+
+    this.gridW = Math.ceil(canvasW / gap) + 2;
+    this.gridH = Math.ceil(canvasH / gap) + 2;
+    const cells = this.gridW * this.gridH;
+    this._ensureGridCapacity(cells);
+    this.head.fill(-1, 0, cells);
+  }
+
+  add(x, y) {
+    if (this.gap <= 0) {
+      const i = this.count++;
+      this.x[i] = x;
+      this.y[i] = y;
+      return true;
+    }
+
+    const gx = Math.floor(x / this.gap);
+    const gy = Math.floor(y / this.gap);
+    for (let oy = -1; oy <= 1; oy++) {
+      const ngy = gy + oy;
+      if (ngy < 0 || ngy >= this.gridH) continue;
+      const row = ngy * this.gridW;
+      for (let ox = -1; ox <= 1; ox++) {
+        const ngx = gx + ox;
+        if (ngx < 0 || ngx >= this.gridW) continue;
+        let i = this.head[row + ngx];
+        while (i >= 0) {
+          const dx = x - this.x[i];
+          const dy = y - this.y[i];
+          if (dx * dx + dy * dy < this.gapSq) return false;
+          i = this.next[i];
+        }
+      }
+    }
+
+    const i = this.count++;
+    this.x[i] = x;
+    this.y[i] = y;
+    const key = gy * this.gridW + gx;
+    this.next[i] = this.head[key];
+    this.head[key] = i;
+    return true;
+  }
+}
+
+const _glitchTargets = new GlitchPlacementWorkspace();
+
+function ensureClusterTileCapacity(center, required) {
+  if ((center.tileAngles?.length || 0) >= required) return;
+  let cap = Math.max(8, center.tileAngles?.length || 0);
+  while (cap < required) cap *= 2;
+  const angles = new Float64Array(cap);
+  const radii  = new Float64Array(cap);
+  if (center.tileAngles) angles.set(center.tileAngles);
+  if (center.tileRadii)  radii.set(center.tileRadii);
+  center.tileAngles = angles;
+  center.tileRadii  = radii;
+}
+
 // Self-contained — initialises _ringCanvas itself rather than relying on
 // drawRingRegion having run first. Safe to call in any order.
 
@@ -224,41 +334,11 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0, glitchPriority = 1.0, 
   // top is calmer than the old linear px/frame.
   const cluTravel    = Math.pow(Math.max(0, cluSpeed) / 10, 1.7) * 7;
 
-  const targets = [];
-
   // ── Spatial index — O(1) gap enforcement ──────────────────────────────────
-  // Divide the canvas into cells of size `gap`. Each cell stores the actual
-  // tile positions it contains. Checking a candidate only requires scanning
-  // the 3×3 neighbourhood of cells, not all existing targets.
-  let tryAdd;
-  if (gap <= 0) {
-    tryAdd = (x, y) => { targets.push([x, y]); return true; };
-  } else {
-    const cellSize = gap;
-    const gridW    = Math.ceil(width  / cellSize) + 2;
-    const gridCells = new Map(); // cell key → [[x,y],…]
-
-    tryAdd = (x, y) => {
-      const gx = Math.floor(x / cellSize);
-      const gy = Math.floor(y / cellSize);
-      for (let dy = -1; dy <= 1; dy++) {
-        for (let dx = -1; dx <= 1; dx++) {
-          const pts = gridCells.get((gy + dy) * gridW + (gx + dx));
-          if (!pts) continue;
-          for (const p of pts) {
-            const ddx = x - p[0], ddy = y - p[1];
-            if (ddx * ddx + ddy * ddy < gap * gap) return false;
-          }
-        }
-      }
-      const key  = gy * gridW + gx;
-      const cell = gridCells.get(key) ?? [];
-      cell.push([x, y]);
-      gridCells.set(key, cell);
-      targets.push([x, y]);
-      return true;
-    };
-  }
+  // Reuse typed target buffers and a linked-cell index. Candidate acceptance and
+  // insertion order remain the same as the previous Array/Map implementation.
+  const targets = _glitchTargets;
+  targets.begin(count, width, height, gap);
 
   // Note: randomSeed is set by draw() once per frame; no re-seeding here.
   // applyScanlines ran first and consumed some random state — that ordering is intentional.
@@ -280,7 +360,9 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0, glitchPriority = 1.0, 
         // center has its own characteristic speed even at the same cluSpeed.
         // cluSpeedVar=0 → all centers same speed; =1 → range 0×–2× of cluSpeed.
         speedMul: 1 + (random() - 0.5) * 2 * cluSpeedVar,
-        tiles: [],   // persistent center-relative offsets (COHERENCE)
+        tileAngles: new Float64Array(0),
+        tileRadii:  new Float64Array(0),
+        tileCount: 0,   // persistent center-relative offsets (COHERENCE)
       });
     }
     _cluPhysics.length = cluCenters;
@@ -359,41 +441,43 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0, glitchPriority = 1.0, 
     const reroll    = 1 - cluCohere;   // per-frame chance each offset re-rolls
 
     for (const c of centers) {
-      if (!c.tiles) c.tiles = [];
-      for (let i = 0; i < per && targets.length < biasCount; i++) {
+      ensureClusterTileCapacity(c, per);
+      for (let i = 0; i < per && targets.count < biasCount; i++) {
         // Persistent center-relative offset (angle + normalized radius) so the
         // cluster travels as a body. COHERENCE sets how often it re-rolls:
         // reroll=1 (COHERENCE 0) → new offset every frame = original boil;
-        // reroll=0 (COHERENCE 1) → fixed constellation. Radius is stored
-        // normalized so BREATHE still modulates the body's size.
-        let off = c.tiles[i];
-        if (!off || random() < reroll) {
-          off = { ang: random(TWO_PI), rNorm: random() };
-          c.tiles[i] = off;
+        // reroll=0 (COHERENCE 1) → fixed constellation. Float64 buffers retain
+        // the same numeric precision without allocating an object per reroll.
+        const hadOffset = i < c.tileCount;
+        if (!hadOffset || random() < reroll) {
+          c.tileAngles[i] = random(TWO_PI);
+          c.tileRadii[i]  = random();
+          if (!hadOffset) c.tileCount = i + 1;
         }
-        const r = effMin + off.rNorm * Math.max(1, effSpread - effMin);
-        const x = (c.x + Math.cos(off.ang) * r + width)  % width;
-        const y = (c.y + Math.sin(off.ang) * r + height) % height;
-        let ok = tryAdd(Math.floor(x), Math.floor(y)), tries = 0;
+        const angle = c.tileAngles[i];
+        const r = effMin + c.tileRadii[i] * Math.max(1, effSpread - effMin);
+        const x = (c.x + Math.cos(angle) * r + width)  % width;
+        const y = (c.y + Math.sin(angle) * r + height) % height;
+        let ok = targets.add(Math.floor(x), Math.floor(y)), tries = 0;
         while (!ok && tries++ < 6) {
           // Collision fallback — transient random probe, doesn't disturb the body
           const a2 = random(TWO_PI);
           const r2 = effMin + random() * Math.max(1, effSpread - effMin);
-          ok = tryAdd(
+          ok = targets.add(
             Math.floor((c.x + Math.cos(a2) * r2 + width)  % width),
             Math.floor((c.y + Math.sin(a2) * r2 + height) % height)
           );
         }
       }
-      if (c.tiles.length > per) c.tiles.length = per;   // trim if per shrank
+      if (c.tileCount > per) c.tileCount = per;   // trim if per shrank
     }
     let guard = 0;
-    while (targets.length < count && guard++ < count * 4)
-      tryAdd(Math.floor(random(cols)) * block, Math.floor(random(rows)) * block);
+    while (targets.count < count && guard++ < count * 4)
+      targets.add(Math.floor(random(cols)) * block, Math.floor(random(rows)) * block);
   } else {
     let attempts = 0;
-    while (targets.length < count && attempts++ < count * 8)
-      tryAdd(Math.floor(random(cols)) * block, Math.floor(random(rows)) * block);
+    while (targets.count < count && attempts++ < count * 8)
+      targets.add(Math.floor(random(cols)) * block, Math.floor(random(rows)) * block);
   }
 
   // ── Blit tiles ─────────────────────────────────────────────────────────────
@@ -406,8 +490,9 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0, glitchPriority = 1.0, 
   // glitchPriority scales contribution relative to scanlines (A/B mix).
   ctx.globalAlpha = (tileAlpha / 255) * glitchPriority;
 
-  for (let i = 0; i < targets.length; i++) {
-    let [cx, cy] = targets[i];
+  for (let i = 0; i < targets.count; i++) {
+    let cx = targets.x[i];
+    let cy = targets.y[i];
 
     const ox = Math.floor(map(noise(nPhaseX + i * 0.013), 0, 1, -block * 2, block * 2) * jitter);
     const oy = Math.floor(map(noise(nPhaseY + i * 0.017), 0, 1, -block * 2, block * 2) * jitter);

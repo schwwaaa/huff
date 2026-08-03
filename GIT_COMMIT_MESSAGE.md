@@ -1,16 +1,16 @@
-# Git Commit Message — HUFF Classic Optimization Pass 6
+# Git Commit Message — HUFF Classic Optimization Pass 7
 
 ## Recommended commit
 
 ```text
-perf: cache HUFF Classic render controls outside the frame loop
+perf: reuse HUFF Classic glitch placement buffers
 
-- mirror UI controls into a typed event-driven render state
-- remove repeated DOM reads and numeric parsing from draw, glitch, and scanline paths
-- synchronize normal UI, MIDI, OSC, preset, reset, and undo control events
-- preserve integer behavior for discrete tile, count, gap, and flow controls
-- reuse draw-loop helpers instead of allocating effect closures every frame
-- remove unreachable cluster-center code and stale performance documentation
+- replace per-frame glitch target arrays with reusable typed coordinate buffers
+- replace the Map-of-arrays gap index with a linked-cell Int32 workspace
+- remove temporary coordinate-pair and occupied-cell allocations
+- store persistent cluster angles and radii in reusable Float64 buffers
+- preserve seeded random order, gap acceptance, cluster coherence, and tile draw order
+- add deterministic equivalence coverage for placement and cluster offset state
 - preserve existing Syphon transport and mandatory framework packaging
 ```
 
@@ -18,16 +18,16 @@ perf: cache HUFF Classic render controls outside the frame loop
 
 ```bash
 git add . && git commit \
-  -m "perf: cache HUFF Classic render controls outside the frame loop" \
-  -m "Mirror UI controls into a typed event-driven render state." \
-  -m "Remove repeated DOM reads and numeric parsing from draw, glitch, and scanline paths." \
-  -m "Synchronize normal UI, MIDI, OSC, preset, reset, and undo control events." \
-  -m "Preserve integer behavior for discrete tile, count, gap, and flow controls." \
-  -m "Reuse draw-loop helpers instead of allocating effect closures every frame." \
-  -m "Remove unreachable cluster-center code and correct stale performance documentation." \
+  -m "perf: reuse HUFF Classic glitch placement buffers" \
+  -m "Replace per-frame glitch target arrays with reusable typed coordinate buffers." \
+  -m "Replace the Map-of-arrays gap index with a linked-cell Int32 workspace." \
+  -m "Remove temporary coordinate-pair, occupied-cell, and rerolled-offset object allocations." \
+  -m "Store persistent cluster angles and radii in reusable Float64 buffers." \
+  -m "Preserve seeded random order, gap acceptance, cluster coherence, and tile draw order." \
+  -m "Add deterministic equivalence coverage for placement and cluster offset state." \
   -m "Preserve existing Syphon transport and mandatory framework packaging."
 ```
 
 ## Accuracy note
 
-This message describes implemented code changes without claiming that Pass 6, Pass 5, or the Syphon path is fully stabilized. Runtime testing remains in progress.
+This message describes implemented code changes without claiming that Pass 7, earlier renderer passes, or the Syphon path is fully stabilized. Target-machine runtime testing remains in progress.

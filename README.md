@@ -868,3 +868,8 @@ This build reduces full-frame canvas clears, combines the Flow Warp grid into on
 ## HUFF Classic Optimization Pass 6
 
 This build mirrors render controls into an event-driven typed state cache, removing repeated DOM lookups and number parsing from the 60 fps draw/effect path. Glitch, scanline, feedback, flow, symmetry, solarize, global-mix, and temporal-ring settings now read the cached state while normal UI input, MIDI, OSC, presets, and reset operations keep it synchronized through their existing input/change events. Per-frame effect closures were also moved to reusable helpers, and an unreachable static-cluster helper was removed. No effect, control, routing, Syphon, or packaging behavior was intentionally changed.
+
+
+## HUFF Classic Optimization Pass 7
+
+This build reuses typed glitch-placement buffers instead of creating target arrays, coordinate pairs, a Map-of-arrays spatial index, and cluster-offset objects on every rendered frame. The existing seeded-random order, Spatial Gap rule, cluster coherence, target order, temporal history selection, and Canvas2D blit sequence are preserved. No Syphon, Spout, routing, control, or packaging behavior was intentionally changed.

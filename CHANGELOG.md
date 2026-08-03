@@ -2,6 +2,19 @@
 
 This changelog tracks the optimization series for the legacy Tauri v1 + p5.js/Canvas2D edition. It intentionally excludes the native-wgpu HUFF project.
 
+## Pass 7 — Reusable glitch placement and cluster-offset buffers
+
+**Date:** 2026-08-03  
+**Status:** Implementation complete; runtime visual-parity and endurance testing pending
+
+- Replaced per-frame glitch target arrays with reusable typed coordinate buffers.
+- Replaced the per-frame Map-of-arrays spatial-gap index with a reusable linked-cell `Int32Array` index.
+- Removed temporary `[x, y]` arrays from target insertion and tile blitting.
+- Replaced rerolled cluster-offset objects with persistent `Float64Array` angle/radius buffers.
+- Preserved seeded-random call order, spatial acceptance order, strict gap comparison, and cluster shrink/regrow semantics.
+- Added deterministic equivalence tests for spatial acceptance and cluster-offset state transitions.
+- Preserved all renderer routing, controls, Syphon transport, framework packaging, Spout, and Linux paths.
+
 ## Pass 6 — Event-driven render state and allocation cleanup
 
 **Date:** 2026-08-03  
