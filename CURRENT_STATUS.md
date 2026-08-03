@@ -1,8 +1,8 @@
 # HUFF Classic Current Status
 
-**Current package:** HUFF Classic Optimization Pass 7  
+**Current package:** HUFF Classic Optimization Pass 8  
 **Date:** 2026-08-03  
-**Authoritative lineage:** user-supplied `huff-08022026.zip` → Pass 4 → Pass 5 → Pass 6 → Pass 7
+**Authoritative lineage:** user-supplied `huff-08022026.zip` → Pass 4 → Pass 5 → Pass 6 → Pass 7 → Pass 8
 
 ## Product definition
 
@@ -10,92 +10,117 @@ HUFF Classic is the free legacy edition intended for public release on macOS, Wi
 
 - Tauri v1.
 - HTML/CSS/JavaScript control surface.
-- p5.js and Canvas2D renderer.
+- p5.js + Canvas2D renderer.
 - Existing HUFF Classic effects and fixed routing.
-- Native platform bridges where required, including bundled Syphon on macOS and Spout on Windows.
+- Native platform output bridges where required, including bundled Syphon on macOS and Spout on Windows.
 
-HUFF Classic is not the native-wgpu HUFF edition and does not use that edition’s milestone numbering or renderer architecture.
+HUFF Classic is not the native-wgpu HUFF edition and does not use that edition's milestone numbering or architecture.
 
 ## Current optimization state
 
 ### Completed implementation areas
 
-- Canvas-backed temporal history and reduced history allocation.
-- Bounded/latest-frame mirror and native-output behavior.
+- Canvas-backed temporal history with bounded capacity.
+- Reduced redundant decoded-frame copying.
+- Bounded/latest-frame mirror and native-output transport.
 - Worker-assisted mirror encoding where supported.
-- Reduced native-output packet copying.
-- Client-aware, bounded Syphon publication.
-- Mandatory Syphon framework validation and bundle verification.
-- Persistent Metal resource reuse and autorelease-pool cleanup.
-- Reduced full-frame clear/draw operations.
+- Client-aware, one-frame-in-flight Syphon publication.
+- Mandatory Syphon framework validation and application-bundle verification.
+- Persistent native Metal resource reuse and autorelease-pool cleanup.
+- Reduced full-frame clear/draw pairs.
 - One-pass Flow Warp grid processing.
-- Cached Solarize lookup tables.
+- Cached Solarize lookup tables and adaptive processing result.
 - Decoded-frame-aware Pipeline Luma Key caching.
-- Event-driven typed render state.
-- Removal of per-frame DOM parsing in draw, glitch, and scanline processing.
-- Removal of per-frame draw-loop closures and unreachable cluster helper code.
-- Reusable typed glitch target buffers.
-- Reusable linked-cell spatial-gap index.
-- Persistent typed cluster-offset buffers.
+- Event-driven typed render state with no DOM parsing in the main effect path.
+- Reusable typed glitch-placement and cluster-offset workspaces.
+- Shared `gScratch` surface for Feedback, Flow Warp, and Symmetry.
+- Reduction from four to three full-resolution p5 Graphics surfaces.
+- Removal of the separate full-resolution Feedback snapshot canvas.
+- In-place p5 Graphics and CPU-pixel scratch-canvas resize reuse.
+- Direct Canvas2D main presentation and native Symmetry operations.
+- Event-cached mirror quality and frame-period tuning.
 
 ### Runtime status
 
-- Pass 4: reported generally okay; additional packet-loss, endurance, and reconnect testing needed.
-- Pass 5: runtime parity and endurance testing not yet fully reported.
-- Pass 6: runtime control-cache and visual-parity testing pending.
-- Pass 7: deterministic bookkeeping equivalence passed; complete visual and endurance testing pending.
-- Overall release state: optimization in progress, not stabilized.
+- Pass 4: user reported generally okay; extended packet-loss and endurance testing still pending.
+- Pass 5–7: implementation/static validation complete; comprehensive runtime parity not yet closed.
+- Pass 8: symbolic buffer-ownership equivalence and syntax/config validation passed; visual parity, resize, memory, mirror, and Syphon regression testing pending.
+- Overall release state: active optimization, not yet stabilized.
+
+## Current full-resolution topology
+
+```text
+main output canvas
+      ↑
+    gBuf  ↔  gScratch
+      ↑
+    gCur
+```
+
+- `gCur`: clean source.
+- `gBuf`: active effect/persistent state.
+- `gScratch`: shared sequential destination/snapshot.
+- FrameRing: independent canvas-backed temporal history.
+- Solarize: optional full-resolution cached output plus downsampled pixel canvas.
+- Syphon: independent worker/fallback readback surface plus native triple Metal texture ring.
+
+See `CANVAS_BUFFER_AUDIT.md` for full ownership and memory analysis.
 
 ## Known architectural ceilings
 
-### Canvas2D
+### Canvas2D draw-call ceiling
 
-The renderer remains sensitive to:
+Glitch, scanlines, Flow Warp, and temporal effects can issue many Canvas2D `drawImage()` calls. Passes 5–8 reduce surrounding bookkeeping, allocation, and full-frame surface overhead, but the selected number of tile/band blits remains a central cost.
 
-- full-resolution canvas copies;
-- large numbers of tile draw calls;
-- CPU pixel readback for Solarize and Pipeline Luma Key;
-- browser/WebView implementation differences across platforms.
+### CPU pixel-readback ceiling
 
-Pass 7 reduces JavaScript allocation and spatial-index overhead around glitch placement. It does not reduce the number of Canvas2D tile blits selected by the existing controls.
+Solarize and Pipeline Luma Key still require downsampled `getImageData()` pixel loops. Their caching and adaptive behavior reduce frequency, but Canvas2D cannot turn those operations into zero-copy GPU passes.
 
-### Syphon
+### Native-output ceiling
 
-The current Classic path necessarily crosses the browser/native boundary:
+Classic Syphon/Spout still crosses:
 
 ```text
-WebView canvas → CPU RGBA → WebSocket/native bridge → Metal texture → Syphon
+WebView canvas → CPU RGBA → local transport → native GPU texture
 ```
 
-Backpressure, client awareness, workers, resource reuse, and caching reduce overhead, but the path is not zero-copy.
+The path is bounded and client-aware, but it is not zero-copy.
 
 ### High resolution
 
-- 720p is the safest cross-platform performance target.
-- 1080p requires effect-combination and target-hardware testing.
-- 4K should not be promised as a dependable HUFF Classic capability.
-- High-resolution and high-frame-rate guarantees belong more naturally to the native HUFF edition.
+- 720p remains the safest cross-platform target.
+- 1080p requires effect-combination and hardware testing.
+- 4K should not be promised as a dependable HUFF Classic real-time mode.
+- High-resolution guarantees belong to native HUFF.
 
-## Immediate next work
+## Immediate next optimization work
 
-1. Runtime-test Pass 6/7 control synchronization and visual parity.
-2. Continue sustained Syphon packet-loss, latency, and memory testing.
-3. Compare profiler results and memory behavior with glitch-heavy presets.
-4. Audit remaining per-frame Canvas2D state changes and repeated calculations only after parity is confirmed.
-5. Begin cross-platform packaging hardening after renderer behavior stabilizes.
+After basic Pass 8 parity is confirmed:
+
+1. Use the built-in profiler to identify remaining highest-cost effect combinations on the target Mac.
+2. Audit neutral/no-op stages so they do not perform full-frame work when their output would be identical.
+3. Measure actual FrameRing process-memory cost against the estimated raw RGBA budget.
+4. Audit scanline and glitch `drawImage()` counts and repeated noise/math calculations without changing seeded visual behavior.
+5. Continue Syphon packet-loss, latency, and memory endurance tests while heavy effect combinations run.
+6. Begin Windows WebView2 and Linux WebKitGTK parity testing before release freeze.
 
 ## Release blockers still open
 
+- Full Pass 5–8 visual-parity confirmation.
 - Extended macOS Syphon endurance results.
-- Full Pass 5–7 visual-parity confirmation.
+- Repeated resize/source-switch memory soak results.
 - Windows Spout verification.
 - Linux playback and codec verification.
-- Cross-platform memory and shutdown soak tests.
+- Cross-platform packaging and shutdown soak tests.
 - Developer ID signing and notarization for public macOS distribution.
 - Final version alignment and public release documentation.
 
 ## Development rules
 
-- Any code that changes a control programmatically must dispatch `input` or `change` after assigning `.value` or `.checked`.
-- Glitch placement scratch buffers are intentionally retained and grown geometrically; they should not be replaced with per-frame arrays.
-- Syphon.framework remains mandatory and must stay in the verified canonical bundle path.
+- HUFF Classic remains Tauri v1 + web rendering; no wgpu changes in this branch.
+- Any code that changes a control programmatically must dispatch `input` or `change`.
+- `gBuf` and `gScratch` must always remain distinct references.
+- Any stage using `gScratch` must completely clear or replace its destination before swapping.
+- Glitch placement typed workspaces must not regress to per-frame arrays/Maps.
+- `Syphon.framework` remains mandatory and must stay in the working canonical layout supplied by the user.
+- Every future ZIP must include the complete documentation suite and commit message.

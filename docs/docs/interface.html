@@ -172,7 +172,7 @@ body {
     <tr><td>LOOP</td><td>Loop the file continuously. Unchecking plays once and stops.</td></tr>
     <tr><td>↻ Refresh</td><td>Re-seed glitch randomisation.</td></tr>
     <tr><td>↺ Reset</td><td>Reset all parameters to defaults.</td></tr>
-    <tr><td>CLR BUF</td><td>Instantly wipes the frame ring and all internal buffers (<code>gBuf</code>, <code>gWarp</code>, <code>gTemp</code>) and resets cluster physics. Use this to clear accumulated trails/feedback/glitch history without resetting any parameter values or noise phases — the animation continues from where it was.</td></tr>
+    <tr><td>CLR BUF</td><td>Instantly wipes the frame ring and all internal buffers (<code>gBuf</code> and the shared <code>gScratch</code> ping-pong buffer) and resets cluster physics. Use this to clear accumulated trails/feedback/glitch history without resetting any parameter values or noise phases — the animation continues from where it was.</td></tr>
     <tr><td>Camera</td><td>Select a webcam from the dropdown. Click ↻ Refresh to scan for newly connected devices.</td></tr>
     <tr><td>Seek Bar</td><td>Scrub to any position in the loaded file. Uses fast keyframe seeking while dragging for low latency; playback resumes automatically on release.</td></tr>
     <tr><td>Time Display</td><td>Shows current position and total duration as <code>M:SS / M:SS</code>.</td></tr>

@@ -1,116 +1,172 @@
-# HUFF Classic Pass 7 Testing Checklist
+# HUFF Classic Optimization Pass 8 — Testing Checklist
 
-**Package:** HUFF Classic Optimization Pass 7  
-**Testing state:** Source and deterministic algorithm validation completed; target-machine runtime testing required
+**Tester:** ____________________  
+**Machine / OS:** ____________________  
+**Build mode:** `npm run dev` / packaged app  
+**Date:** ____________________
 
-## 1. Startup and baseline
+Pass 8 changes full-resolution buffer ownership and final Canvas2D presentation. Static tests passed, but visual/runtime confirmation is required before this pass is considered stabilized.
+
+## 1. Launch and basic source behavior
 
 - [ ] `npm install` completes.
-- [ ] `npm run dev` opens both controls and canvas windows.
-- [ ] No JavaScript errors appear before a source is loaded.
-- [ ] Loading a video begins playback with synchronized audio.
-- [ ] Camera start, stop, refresh, and device switching still work.
+- [ ] `npm run dev` launches both HUFF windows.
+- [ ] File video loads.
+- [ ] Audio plays without immediate breakup.
+- [ ] Play, pause, scrub, refresh, and loop behavior match Pass 7.
+- [ ] Camera starts/stops and can switch back to file playback.
+- [ ] Closing either window leaves no HUFF process behind.
 
-## 2. Glitch placement parity
+Notes:
 
-Use the same clip, seed, render size, and preset in Pass 6 and Pass 7.
+```text
 
-- [ ] Glitch target positions match when Spatial Gap is `0`.
-- [ ] Glitch target positions match with Spatial Gap enabled.
-- [ ] Low, medium, and maximum Corrupt values behave identically.
-- [ ] Block size and Pixel Size produce the same tile dimensions.
-- [ ] Jitter produces the same displaced positions.
-- [ ] Smear length and angle produce the same trails.
-- [ ] Depth and Depth Scatter select the same temporal material.
-- [ ] Layer Priority modes retain the same paint order.
+```
 
-## 3. Cluster parity
+## 2. No-effect output and base presentation
 
-- [ ] Cluster Tiles disabled behaves exactly as Pass 6.
-- [ ] Cluster Tiles enabled with Coherence `0` retains the prior boil.
-- [ ] Coherence `1` retains fixed constellations moving with their centers.
-- [ ] Intermediate Coherence values morph at the same apparent rate.
-- [ ] Increasing and decreasing Centers preserves expected center state.
-- [ ] Changing Bias changes clustered/free distribution as before.
-- [ ] Changing Spread and Minimum Spread produces the same region sizes.
-- [ ] Breathe expands/contracts the same constellation.
-- [ ] Speed, Speed Variation, Steer, Drift, Inertia, Pulse, Bounce, and Wrap remain unchanged.
-- [ ] Reducing cluster tile demand and raising it again produces no stale or duplicated offsets.
+- [ ] Disable Corrupt, Scanlines/Clusters, Feedback, Flow, Symmetry, Solarize, and Global Mix.
+- [ ] Clean video fills the output exactly as before.
+- [ ] Black, white, green, and blue background modes remain correct where visible.
+- [ ] BASE ON/OFF and BASE MIX match Pass 7 when effects create transparent regions.
+- [ ] Canvas mirror framing/aspect behavior is unchanged.
 
-## 4. Spatial-gap stress
+## 3. Feedback parity
 
-- [ ] Gap `0` permits unconstrained placement.
-- [ ] Small gaps produce dense placement without errors.
-- [ ] Large gaps reject nearby candidates as before.
-- [ ] Gap values near or larger than the canvas dimension do not crash.
-- [ ] High Corrupt + large Gap terminates normally at the existing attempt limits.
-- [ ] Resizing the output larger causes no stale-index errors.
-- [ ] Resizing smaller after a large render remains stable.
+Test Feedback before combining it with other passes.
 
-## 5. Control and preset regression
+- [ ] Feedback amount only.
+- [ ] X translation positive and negative.
+- [ ] Y translation positive and negative.
+- [ ] Scale below 1, at 1, and above 1.
+- [ ] Rotation in both directions.
+- [ ] Persistence near 0, near 1, and above 1 using existing Classic semantics.
+- [ ] Clear Buffer immediately removes accumulated feedback.
+- [ ] Feedback activation does not create a one-frame flash or stale scratch image.
 
-- [ ] Named presets recall correctly.
-- [ ] Imported preset JSON recalls correctly.
-- [ ] Reset All clears cluster physics and renders defaults.
-- [ ] MIDI control of glitch and cluster parameters remains immediate.
-- [ ] OSC control of glitch and cluster parameters remains immediate.
-- [ ] Undo follows visible and rendered control state.
+## 4. Flow Warp parity
 
-## 6. Performance and memory observation
+- [ ] Flow on with low strength / large scale.
+- [ ] Flow on with high strength / small scale.
+- [ ] Pulse/history sampling.
+- [ ] Implode/explode range.
+- [ ] Speed at 0, 1, and high values.
+- [ ] Turbulence, swirl, and spread extremes.
+- [ ] No blank tiles or stale regions appear after repeated toggling.
 
-- [ ] Toggle the built-in profiler with the backtick key.
-- [ ] Record `applyGlitch` time with clusters disabled.
-- [ ] Record `applyGlitch` time with clusters enabled and Coherence `0`.
-- [ ] Record `applyGlitch` time with a large Spatial Gap.
-- [ ] Compare control responsiveness against Pass 6.
-- [ ] Observe memory for at least 20–30 minutes with a glitch-heavy preset.
-- [ ] Look for reduced sawtooth memory growth or garbage-collection pauses.
-- [ ] Confirm latency does not increase over time.
+## 5. Symmetry parity
 
-## 7. Syphon regression
+- [ ] Vertical mode at positions 0, 0.5, and 1.
+- [ ] Horizontal mode at positions 0, 0.5, and 1.
+- [ ] Horizontal + vertical mode at positions 0, 0.5, and 1.
+- [ ] Rapid mode switching does not leave stale quadrants.
+- [ ] Symmetry edges and clipping match Pass 7.
 
-No Syphon code changed in Pass 7, but heavy glitch output must remain stable.
+## 6. Shared-scratch combinations
 
-- [ ] Start Syphon with no receiver; publishing remains paused while discoverable.
-- [ ] Connect a receiver; publishing starts.
-- [ ] Test a glitch-heavy preset at 1280×720, 30 and 60 fps.
+These combinations specifically validate the new ping-pong ownership.
+
+- [ ] Feedback + Flow.
+- [ ] Feedback + Symmetry.
+- [ ] Flow + Symmetry.
+- [ ] Feedback + Flow + Symmetry.
+- [ ] Add Glitch and Scanlines to all three.
+- [ ] Add Solarize.
+- [ ] Add Pipeline Luma Key.
+- [ ] Toggle Flow and Symmetry on/off rapidly while Feedback remains active.
+- [ ] Change Global Mix insertion point through before / after / afterflow / final.
+
+Expected: no one-frame stale content, incorrect stage order, or reference aliasing.
+
+## 7. Resize and fullscreen allocation behavior
+
+Record Activity Monitor memory before and after.
+
+- [ ] Resize the controls/render window slowly across multiple dimensions.
+- [ ] Drag-resize rapidly for 15 seconds.
+- [ ] Enter and leave fullscreen 10 times.
+- [ ] Resize while Feedback is active.
+- [ ] Resize while Flow + Symmetry are active.
+- [ ] Resize while Solarize and luma key are active.
+- [ ] The frame ring clears after a resolution change as designed.
+- [ ] Memory settles instead of increasing after every resize cycle.
+- [ ] No disposed-canvas or `drawImage` exceptions appear in the console.
+
+Memory before: __________  
+Peak during resize: __________  
+Settled after resize: __________
+
+## 8. Mirror transport
+
+- [ ] QUALITY changes still update mirror JPEG quality/FPS behavior.
+- [ ] Mirror remains capped at 30 fps.
+- [ ] No growing mirror latency.
+- [ ] Disconnect/reopen the canvas window.
+- [ ] Mirror resumes without restarting HUFF.
+
+## 9. Syphon regression and endurance
+
+Pass 8 does not intentionally change Syphon, but the main output canvas is now presented through direct Canvas2D calls.
+
+- [ ] Start Syphon with no receiver: source remains discoverable and publishing pauses.
+- [ ] Connect receiver: stream begins automatically.
+- [ ] Disconnect receiver: capture/readback/publish pauses.
+- [ ] Reconnect receiver at least five times.
+- [ ] Test 1280×720 at 30 fps.
+- [ ] Test 1280×720 at 60 fps if the receiver/system can sustain it.
 - [ ] Test 1920×1080 at 30 fps.
-- [ ] Disconnect and reconnect repeatedly.
-- [ ] Check receiver drops, HUFF skipped/published counters, latency, and memory.
-- [ ] Close HUFF and confirm the source and process disappear.
+- [ ] Run Feedback + Flow + Symmetry during Syphon output.
+- [ ] Observe receiver dropped-frame/packet-loss indicator.
+- [ ] Confirm latency does not grow over 30 minutes.
+- [ ] Confirm memory does not climb continuously over 30 minutes.
 
-## 8. Remaining Pass 5/6 regression queue
+Published FPS: __________  
+Receiver drops: __________  
+Start memory: __________  
+30-minute memory: __________
 
-- [ ] Flow Warp visual parity.
-- [ ] Solarize visual parity and adaptive cadence.
-- [ ] Pipeline Luma Key threshold, mix, invert, and decoded-frame caching.
-- [ ] Event-driven render-state synchronization across UI, MIDI, OSC, presets, reset, and undo.
-- [ ] Feedback, symmetry, Global Mix, and base-video behavior.
+## 10. Control-path regression
 
-## 9. Cross-platform regression queue
+- [ ] Mouse/touch sliders update effects.
+- [ ] MIDI updates effects.
+- [ ] OSC updates effects.
+- [ ] Preset load updates effects.
+- [ ] Reset updates effects.
+- [ ] Undo updates effects.
+- [ ] Programmatic control changes still dispatch `input` or `change`.
 
-- [ ] macOS Apple Silicon development build.
-- [ ] macOS Intel or universal build.
-- [ ] Windows 10/11 playback and Spout.
-- [ ] Linux playback, audio, camera, mirror window, and package prerequisites.
+## 11. Platform checks
 
-## Validation completed in the build environment
+### macOS
 
-- External JavaScript syntax checks.
-- Inline HTML script syntax checks.
-- JSON parsing.
-- Shell-script syntax checks.
-- Old/new spatial-gap acceptance equivalence across multiple dimensions, gap values, and candidate sequences.
-- Old/new cluster-offset random-call and value equivalence across creation, reroll, shrink, and regrow transitions.
-- Static confirmation that the active placement path no longer creates `targets` arrays, placement `Map`s, coordinate-pair arrays, cell arrays, or rerolled offset objects.
-- Syphon framework file and canonical bundle directory presence checked.
-- ZIP integrity checked after packaging.
+- [ ] Development build.
+- [ ] Packaged ARM app.
+- [ ] Packaged Intel app if available.
+- [ ] Universal app.
+- [ ] `Syphon.framework` exists inside `Contents/Frameworks`.
+- [ ] App signing verification passes.
 
-## Not validated in the build environment
+### Windows
 
-- Rust/Tauri compilation: Cargo is unavailable here.
-- Actual macOS Syphon publication.
-- Windows Spout output.
-- Linux WebKitGTK runtime behavior.
-- Complete visual parity on target hardware.
-- Measured garbage-collection reduction on the target WebView.
+- [ ] WebView2 render parity.
+- [ ] Spout sender starts and publishes.
+- [ ] Resize behavior and memory settle.
+
+### Linux
+
+- [ ] WebKitGTK video playback.
+- [ ] Supported test codec plays with audio.
+- [ ] Resize behavior and memory settle.
+- [ ] Mirror window works.
+
+## 12. Pass/fail summary
+
+- [ ] PASS — safe to commit and continue.
+- [ ] CONDITIONAL PASS — issues documented but optimization can continue.
+- [ ] FAIL — revert to Pass 7 and report exact failing combination.
+
+Summary:
+
+```text
+
+```

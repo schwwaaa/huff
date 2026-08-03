@@ -8,6 +8,9 @@
  *  - "UI hidden" persistent indicator when header is toggled off with P
  *  - WS mirror JPEG quality and target FPS dynamically follow the quality slider
  *  - hookUI split into focused sub-functions
+ *  - Pass 8: one shared full-resolution scratch buffer for feedback/flow/symmetry
+ *  - Pass 8: p5.Graphics and pixel-processing scratch canvases resize in place
+ *  - Pass 8: final presentation uses direct Canvas2D blits
  */
 
 // ─── Module-local DOM helpers ─────────────────────────────────────────────────
@@ -83,9 +86,8 @@ function connectVideoAudio(videoElement) {
     console.warn('[huff audio] connectVideoAudio failed:', e);
   }
 }
-let gCur, gBuf, gWarp, gTemp;
-let _fbCanvas = null, _fbCtx = null;
-let canvas;
+let gCur, gBuf, gScratch;
+let canvas, _mainCanvasEl = null, _mainCtx = null;
 let playing = false;
 let _wasPlaying  = false; // whether video was playing when a scrub started
 let _seekPending = false; // whether a seek is still in flight when drag ends
@@ -535,9 +537,9 @@ function cloakVideo(p5Vid) {
 }
 
 function blitVideoInto(target) {
-  target.imageMode(CORNER);
-  target.clear();
-  if (videoEl) { try { target.image(videoEl, 0, 0, target.width, target.height); } catch {} }
+  if (!target || !videoEl) return;
+  const source = videoEl.elt ?? videoEl;
+  try { _copyFullFrame(target.drawingContext, source, target.width, target.height); } catch {}
 }
 
 let __camPrimed = false;
@@ -587,6 +589,63 @@ function _copyFullFrame(ctx, source, width, height) {
     ctx.globalAlpha = prevAlpha;
   }
 }
+
+function _graphicsCanvas(g) {
+  return g?.elt ?? g?.drawingContext?.canvas ?? null;
+}
+
+function _clearGraphics(g) {
+  const ctx = g?.drawingContext;
+  if (!ctx) return;
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.clearRect(0, 0, g.width, g.height);
+  ctx.restore();
+}
+
+function _copyGraphicsFrame(dst, src) {
+  const source = _graphicsCanvas(src);
+  if (!dst?.drawingContext || !source) return false;
+  return _copyFullFrame(dst.drawingContext, source, dst.width, dst.height);
+}
+
+function _configureGraphics(g) {
+  if (!g) return g;
+  // Newly-created p5.Graphics instances inherit the global density, but mark
+  // them explicitly once. Avoid re-running pixelDensity() after each resize,
+  // which some p5 builds implement by reallocating the backing canvas.
+  if (!g.__huffDensity1) {
+    try { g.pixelDensity(1); } catch {}
+    g.__huffDensity1 = true;
+  }
+  try { g.imageMode(CORNER); } catch {}
+  const ctx = g.drawingContext;
+  if (ctx) {
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
+  }
+  return g;
+}
+
+// Reuse p5.Graphics objects across window resizes. JavaScript resize callbacks
+// cannot run concurrently with draw(), so resizing the existing backing stores
+// avoids the old eight-surface transient (four old + four new) without exposing
+// partially swapped references. A single-buffer replacement remains as fallback.
+function _ensureGraphics(g, w, h) {
+  if (!g) return _configureGraphics(createGraphics(w, h));
+  if (g.width === w && g.height === h) return _configureGraphics(g);
+  try {
+    g.resizeCanvas(w, h);
+    return _configureGraphics(g);
+  } catch (error) {
+    const replacement = _configureGraphics(createGraphics(w, h));
+    try { g.remove(); } catch {}
+    return replacement;
+  }
+}
+
 
 function _syncGCur() {
   if (!playing || !videoEl?.elt || !gCur) return;
@@ -690,9 +749,13 @@ function _tickFPS() {
 }
 
 function setup() {
+  // Set density before allocation so Retina systems never create a temporary
+  // device-pixel-ratio backing store only to resize it immediately afterward.
+  pixelDensity(1);
   canvas = createCanvas(windowWidth, windowHeight);
   try { canvas.hide(); } catch {}
-  pixelDensity(1);
+  _mainCanvasEl = canvas?.elt ?? document.querySelector('canvas');
+  _mainCtx = _mainCanvasEl?.getContext('2d', { alpha:true, desynchronized:true }) ?? null;
   allocBuffers();
   clearAll();
   hookUI();
@@ -703,18 +766,9 @@ function setup() {
 window.setup = setup;
 
 function allocBuffers() {
-  // Build new buffers BEFORE disposing old ones.
-  // draw() may be mid-frame during a resize; this prevents it from accessing
-  // a half-rebuilt set. References are swapped atomically after construction.
-  const nCur  = createGraphics(width, height);
-  const nBuf  = createGraphics(width, height);
-  const nWarp = createGraphics(width, height);
-  const nTemp = createGraphics(width, height);
-
-  [gCur, gBuf, gWarp, gTemp].forEach(g => { try { if (g) g.remove(); } catch {} });
-
-  gCur = nCur; gBuf = nBuf; gWarp = nWarp; gTemp = nTemp;
-  _fbCanvas = null; _fbCtx = null;
+  gCur     = _ensureGraphics(gCur,     width, height);
+  gBuf     = _ensureGraphics(gBuf,     width, height);
+  gScratch = _ensureGraphics(gScratch, width, height);
 }
 
 let _resizeRaf = 0;
@@ -722,9 +776,11 @@ function windowResized() {
   if (_resizeRaf) cancelAnimationFrame(_resizeRaf);
   _resizeRaf = requestAnimationFrame(() => {
     _resizeRaf = 0;
-    resizeCanvas(windowWidth, windowHeight);
+    resizeCanvas(windowWidth, windowHeight, true);
+    _mainCanvasEl = canvas?.elt ?? _mainCanvasEl;
+    _mainCtx = _mainCanvasEl?.getContext('2d', { alpha:true, desynchronized:true }) ?? _mainCtx;
     allocBuffers();
-    [gBuf, gWarp, gTemp].forEach(g => { try { g.clear(); } catch {} });
+    [gBuf, gScratch].forEach(_clearGraphics);
     frameRing.clear(true);
     seededOnce = false;
     if (typeof resetClusterPhysics === 'function') resetClusterPhysics();
@@ -734,7 +790,7 @@ function windowResized() {
 window.windowResized = windowResized;
 
 function clearAll() {
-  [gBuf, gWarp, gTemp].forEach(g => { try { g.clear(); } catch {} });
+  [gBuf, gScratch].forEach(_clearGraphics);
   frameRing.clear();
   seededOnce = false;
   if (typeof resetClusterPhysics === 'function') resetClusterPhysics();
@@ -1316,10 +1372,23 @@ function draw() {
   const s = renderState;
 
   const bg = s.bgMode || 'black';
-  if      (bg === 'white') background(255);
-  else if (bg === 'green') background(0, 255, 0);
-  else if (bg === 'blue')  background(0, 0, 255);
-  else                     background(0);
+  if (_mainCtx) {
+    _mainCtx.save();
+    _mainCtx.setTransform(1, 0, 0, 1, 0, 0);
+    _mainCtx.globalAlpha = 1;
+    _mainCtx.globalCompositeOperation = 'source-over';
+    _mainCtx.fillStyle = bg === 'white' ? '#fff'
+      : bg === 'green' ? '#00ff00'
+      : bg === 'blue'  ? '#0000ff'
+      : '#000';
+    _mainCtx.fillRect(0, 0, width, height);
+    _mainCtx.restore();
+  } else {
+    if      (bg === 'white') background(255);
+    else if (bg === 'green') background(0, 255, 0);
+    else if (bg === 'blue')  background(0, 0, 255);
+    else                     background(0);
+  }
 
   if (!videoEl) { drawWaiting(); return; }
 
@@ -1331,7 +1400,7 @@ function draw() {
   randomSeed(baseSeed + frameCount);
 
   if (!seededOnce) {
-    gBuf.image(gCur, 0, 0, gBuf.width, gBuf.height);
+    _copyGraphicsFrame(gBuf, gCur);
     seededOnce = true;
   }
 
@@ -1404,14 +1473,11 @@ function draw() {
     const fz = s.fbZ;
     const ft = (s.fbTheta * Math.PI) / 180;
 
-    const gCanvas = gBuf.elt || gBuf.drawingContext.canvas;
-    if (!_fbCanvas || _fbCanvas.width !== gBuf.width || _fbCanvas.height !== gBuf.height) {
-      _fbCanvas = document.createElement('canvas');
-      _fbCanvas.width  = gBuf.width;
-      _fbCanvas.height = gBuf.height;
-      _fbCtx = _fbCanvas.getContext('2d', { alpha:true });
-    }
-    _copyFullFrame(_fbCtx, gCanvas, _fbCanvas.width, _fbCanvas.height);
+    // The same shared ping-pong surface used by Flow/Symmetry is idle here.
+    // Snapshot feedback into it instead of maintaining a separate full-size
+    // feedback canvas, then allow later stages to overwrite/reuse it.
+    _copyGraphicsFrame(gScratch, gBuf);
+    const feedbackSource = _graphicsCanvas(gScratch);
 
     const ctx = gBuf.drawingContext;
     ctx.save();
@@ -1420,7 +1486,7 @@ function draw() {
     ctx.translate(gBuf.width / 2 + fx, gBuf.height / 2 + fy);
     ctx.rotate(ft);
     ctx.scale(fz, fz);
-    ctx.drawImage(_fbCanvas, -gBuf.width / 2, -gBuf.height / 2, gBuf.width, gBuf.height);
+    ctx.drawImage(feedbackSource, -gBuf.width / 2, -gBuf.height / 2, gBuf.width, gBuf.height);
     ctx.restore();
   }
 
@@ -1428,17 +1494,17 @@ function draw() {
 
   const flowS = Math.trunc(s.flowStrength);
   if (s.flowOn && flowS > 0) {
-    applyFlowWarp(gBuf, gWarp, flowS,
+    applyFlowWarp(gBuf, gScratch, flowS,
       Math.trunc(s.flowScale), Math.trunc(s.flowPulse), s.flowImpl, s.flowSpeed,
       s.flowTurb, s.flowSwirl, s.flowSpread);
-    [gBuf, gWarp] = [gWarp, gBuf];
+    [gBuf, gScratch] = [gScratch, gBuf];
   }
 
   if (gmPos === 'afterflow') _emitGlobalMix(s);
 
   if (s.symOn) {
-    applySymmetry(gBuf, gTemp, s.symMode || 'v', s.symPos);
-    [gBuf, gTemp] = [gTemp, gBuf];
+    applySymmetry(gBuf, gScratch, s.symMode || 'v', s.symPos);
+    [gBuf, gScratch] = [gScratch, gBuf];
   }
 
   if (s.solarizeOn) {
@@ -1452,7 +1518,28 @@ function draw() {
     s.corruptOn || s.clusters || s.flowOn || s.symOn || s.solarizeOn ||
     (s.globalMixOn && s.globalMixAmt > 0) || fb > 0;
 
-  if (anyFxActive) {
+  const curCanvas = _graphicsCanvas(gCur);
+  const bufCanvas = _graphicsCanvas(gBuf);
+  if (_mainCtx && curCanvas) {
+    _mainCtx.save();
+    _mainCtx.setTransform(1, 0, 0, 1, 0, 0);
+    _mainCtx.globalCompositeOperation = 'source-over';
+    if (anyFxActive) {
+      if (s.baseOn && s.baseMix > 0) {
+        _mainCtx.globalAlpha = s.baseMix;
+        _mainCtx.drawImage(curCanvas, 0, 0, width, height);
+      }
+      if (bufCanvas) {
+        _mainCtx.globalAlpha = 1;
+        _mainCtx.drawImage(bufCanvas, 0, 0, width, height);
+      }
+    } else {
+      _mainCtx.globalAlpha = 1;
+      _mainCtx.drawImage(curCanvas, 0, 0, width, height);
+      _copyGraphicsFrame(gBuf, gCur);
+    }
+    _mainCtx.restore();
+  } else if (anyFxActive) {
     if (s.baseOn && s.baseMix > 0) {
       push(); tint(255, s.baseMix * 255);
       image(gCur, 0, 0, width, height); pop();
@@ -1460,7 +1547,7 @@ function draw() {
     image(gBuf, 0, 0, width, height);
   } else {
     image(gCur, 0, 0, width, height);
-    gBuf.image(gCur, 0, 0, gBuf.width, gBuf.height);
+    _copyGraphicsFrame(gBuf, gCur);
   }
 }
 
@@ -1547,11 +1634,17 @@ function startCamera(deviceId) {
 
   function setWSStatus(txt) { const el = _$('status'); if (el) el.textContent = txt; }
 
+  let cachedRenderCanvas = null;
   function findCanvas() {
+    if (cachedRenderCanvas?.isConnected) return cachedRenderCanvas;
     try {
-      if (typeof canvas !== 'undefined' && canvas?.elt instanceof HTMLCanvasElement) return canvas.elt;
+      if (typeof canvas !== 'undefined' && canvas?.elt instanceof HTMLCanvasElement) {
+        cachedRenderCanvas = canvas.elt;
+        return cachedRenderCanvas;
+      }
     } catch {}
-    return document.querySelector('canvas') || null;
+    cachedRenderCanvas = document.querySelector('canvas') || null;
+    return cachedRenderCanvas;
   }
 
   const wsUrl   = (typeof __getWSURL__ === 'function') ? __getWSURL__() : (window.WS_MIRROR_URL || 'ws://127.0.0.1:8787');
@@ -1643,16 +1736,26 @@ function startCamera(deviceId) {
   }
   ensureWS();
 
-  function _q() { return parseFloat(_$('quality')?.value ?? '1'); }
-  function streamJpegQ() { return Math.max(0.3, Math.min(0.97, 0.5 + _q() * 0.47)); }
-
-  // The mirror is an operator preview, not the canonical render clock. Keeping
-  // it at 30fps prevents JPEG transport from stealing the 60Hz effect budget.
+  // The mirror is an operator preview, not the canonical render clock. Cache
+  // its tuning values on control events rather than parsing the DOM and doing
+  // quality/FPS math on every animation-frame pump.
   const STREAM_FPS_CAP = 30;
-  function targetPeriod() {
-    const fps = Math.max(10, Math.min(STREAM_FPS_CAP, Math.round(15 + _q() * 45)));
-    return 1000 / fps;
+  let _streamJpegQ = 0.97;
+  let _streamPeriod = 1000 / STREAM_FPS_CAP;
+  function refreshStreamTuning(rawQuality) {
+    const q = Number.isFinite(rawQuality) ? rawQuality : 1;
+    _streamJpegQ = Math.max(0.3, Math.min(0.97, 0.5 + q * 0.47));
+    const fps = Math.max(10, Math.min(STREAM_FPS_CAP, Math.round(15 + q * 45)));
+    _streamPeriod = 1000 / fps;
   }
+  refreshStreamTuning(renderState.quality ?? Number(_$('quality')?.value ?? 1));
+  const updateStreamTuning = event => {
+    if (event.target?.id === 'quality') refreshStreamTuning(Number(event.target.value));
+  };
+  document.addEventListener('input', updateStreamTuning);
+  document.addEventListener('change', updateStreamTuning);
+  function streamJpegQ() { return _streamJpegQ; }
+  function targetPeriod() { return _streamPeriod; }
 
   // Do not enqueue another encoded frame while the socket is backed up.
   const WS_MAX_BUFFERED = 1 << 19; // ~512KB

@@ -782,6 +782,9 @@ huff/
 - **Flow warp** renders in tiles rather than per-pixel — the tile size is set by the SCALE parameter. Larger tiles = faster but coarser warp.
 - **QUALITY slider** controls temporal-ring depth. Solarize uses an independent adaptive load guard that reuses its cached result only when sustained frame time exceeds the healthy range.
 - **Feedback** uses `drawingContext.drawImage` directly rather than `p5.get()`, eliminating one full-canvas copy per frame.
+- **Full-resolution surfaces** are limited to `gCur`, `gBuf`, and one shared `gScratch` ping-pong target. Feedback, Flow Warp, and Symmetry reuse `gScratch` instead of retaining separate full-size buffers.
+- **Resize behavior** resizes existing p5 Graphics objects in place and reuses Solarize/Luma scratch canvases, avoiding a temporary old-plus-new buffer set during window resizing.
+- **Final presentation** uses the cached native Canvas2D context for background fill, base mix, and final composite instead of routing full-frame blits through p5 wrappers.
 - If the app stutters, try: lower QUALITY → reduce canvas resolution → increase PIXEL SIZE → disable Flow Warp (the most expensive pass).
 
 ---
@@ -873,3 +876,8 @@ This build mirrors render controls into an event-driven typed state cache, remov
 ## HUFF Classic Optimization Pass 7
 
 This build reuses typed glitch-placement buffers instead of creating target arrays, coordinate pairs, a Map-of-arrays spatial index, and cluster-offset objects on every rendered frame. The existing seeded-random order, Spatial Gap rule, cluster coherence, target order, temporal history selection, and Canvas2D blit sequence are preserved. No Syphon, Spout, routing, control, or packaging behavior was intentionally changed.
+
+## HUFF Classic Optimization Pass 8
+
+This build concentrates on the Canvas2D surface topology. It consolidates the former Flow, Symmetry, and feedback scratch surfaces into one shared ping-pong buffer, reducing the always-resident p5 Graphics set from four full-resolution surfaces to three and removing the separate feedback snapshot canvas. Existing p5 Graphics objects and CPU-pixel scratch canvases are resized in place, the main output composite and symmetry pass use direct Canvas2D operations, and mirror quality/FPS math is cached on control events. Effect order, control behavior, temporal history, Syphon transport, Spout, and mandatory Syphon framework packaging remain unchanged.
+

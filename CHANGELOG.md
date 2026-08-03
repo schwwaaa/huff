@@ -2,6 +2,22 @@
 
 This changelog tracks the optimization series for the legacy Tauri v1 + p5.js/Canvas2D edition. It intentionally excludes the native-wgpu HUFF project.
 
+## Pass 8 — Shared full-resolution scratch buffer and Canvas2D surface reuse
+
+**Date:** 2026-08-03  
+**Status:** Implementation and static validation complete; runtime visual parity, resize, and endurance testing pending
+
+- Consolidated Feedback, Flow Warp, and Symmetry onto one shared full-resolution ping-pong surface.
+- Reduced always-resident p5 Graphics surfaces from four to three.
+- Removed the separate full-resolution feedback snapshot canvas.
+- Reused p5 Graphics objects across window resize instead of constructing an entire replacement set.
+- Reused Solarize and Pipeline Luma Key scratch canvas/context objects across size changes.
+- Set pixel density before main-canvas allocation and only configured Graphics density once.
+- Replaced full-frame p5 wrapper operations in source copy, final presentation, and Symmetry with native Canvas2D operations.
+- Cached mirror canvas resolution and QUALITY-derived JPEG/FPS tuning.
+- Updated public technical documentation to match the canvas-backed ring, typed render state, and current buffer topology.
+- Kept Syphon implementation/framework, Spout, effect order, controls, and routing unchanged.
+
 ## Pass 7 — Reusable glitch placement and cluster-offset buffers
 
 **Date:** 2026-08-03  

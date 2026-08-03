@@ -1,36 +1,24 @@
-# HUFF Classic Pass 7 Documentation Index
+# HUFF Classic Optimization Pass 8 — Documentation Index
 
-This package includes the application source plus a cumulative optimization record.
+Use this page as the entry point for the documentation included with the source package.
 
-## Documents
+## Pass-specific documents
 
-### `PASS_NOTES.md`
-Exact Pass 7 scope, implementation details, allocation changes, equivalence validation, files changed, and behavioral invariants.
+- [`PASS_NOTES.md`](PASS_NOTES.md) — exact implementation changes, invariants, static validation, and files changed.
+- [`CANVAS_BUFFER_AUDIT.md`](CANVAS_BUFFER_AUDIT.md) — current Canvas2D surface ownership, raw memory reference, Syphon boundary, and remaining headroom.
+- [`TESTING_CHECKLIST.md`](TESTING_CHECKLIST.md) — runtime visual-parity, resize, memory, mirror, Syphon, and cross-platform tests.
+- [`GIT_COMMIT_MESSAGE.md`](GIT_COMMIT_MESSAGE.md) — recommended commit title/body and ready-to-run command.
 
-### `CHANGELOG.md`
-Cumulative record of HUFF Classic Optimization Passes 1–7.
+## Cumulative project documents
 
-### `TESTING_CHECKLIST.md`
-Glitch/cluster parity, spatial-gap stress, memory, Syphon, prior-pass regression, endurance, and cross-platform testing checklist.
+- [`CHANGELOG.md`](CHANGELOG.md) — optimization history from Pass 1 through Pass 8.
+- [`CURRENT_STATUS.md`](CURRENT_STATUS.md) — current architecture, completed work, open ceilings, next work, and release blockers.
+- [`README.md`](README.md) — project overview, installation, use, output, and performance notes.
 
-### `CURRENT_STATUS.md`
-Current product boundary, completed work, architectural ceilings, release blockers, and immediate next work.
+## Pass marker
 
-### `GIT_COMMIT_MESSAGE.md`
-Ready-to-use Git commit title, body, and shell command for Pass 7.
+- [`HUFF_CLASSIC_OPTIMIZATION_PASS_8.txt`](HUFF_CLASSIC_OPTIMIZATION_PASS_8.txt) — compact package identifier and summary.
 
-### `HUFF_CLASSIC_OPTIMIZATION_PASS_7.txt`
-Compact package marker and stabilization warning.
+## Scope reminder
 
-### `README.md`
-Project-level usage, build, architecture, and performance documentation.
-
-## Package identity
-
-```text
-Product: HUFF Classic
-Edition: legacy Tauri v1 + p5.js/Canvas2D
-Pass: 7
-Status: optimization in progress; runtime stabilization pending
-Native HUFF/wgpu milestone numbering: not applicable
-```
+This package is **HUFF Classic**: Tauri v1 + HTML/JavaScript + p5.js/Canvas2D. It does not contain the native-wgpu HUFF renderer or native-HUFF milestone numbering.

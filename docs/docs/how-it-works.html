@@ -189,14 +189,23 @@ Each pass is independently toggleable. Disabled passes are completely skipped �
 <hr/>
 
 <h2>UI → Effect Data Flow</h2>
-<p>All parameter control — sliders, MIDI CC, OSC messages — converges on the same DOM element values. The p5.js draw loop reads these values directly on every frame.</p>
+<p>All parameter control — sliders, MIDI CC, OSC messages, presets, and reset actions — still converges on the same DOM controls. Two delegated <code>input</code>/<code>change</code> listeners mirror those controls into the typed <code>HUFF_RENDER_STATE</code> cache, and the draw loop reads that cache instead of reparsing the DOM every frame.</p>
 <div class="callout">
-<strong>No debounce, no interpolation layer, no intermediate state object.</strong> Moving a slider and receiving a MIDI CC produce identical results — both write the same DOM element. There is no latency between a MIDI CC and it affecting the output; the next draw() frame picks it up.
+<strong>The DOM remains the public control surface; the typed cache is the render surface.</strong> MIDI and OSC updates dispatch the same events as pointer interaction, so the next draw frame receives the new value without repeated per-frame DOM lookup or numeric conversion.
 </div>
 <hr/>
 
+<h2>Full-Resolution Buffer Topology</h2>
+<div class="term" style="font-size:11px;line-height:1.8">
+gCur      clean decoded/camera frame
+gBuf      active persistent/effect composite
+gScratch  shared ping-pong target for feedback, Flow Warp, and Symmetry
+</div>
+<p>Only three p5 Graphics surfaces remain at the render resolution. Each full-frame stage completely overwrites <code>gScratch</code> before the references swap, so the same allocation can serve multiple sequential stages without changing effect order.</p>
+<hr/>
+
 <h2>Frame Ring Buffer</h2>
-<p>The ring buffer stores raw ImageData objects — RGBA pixel arrays at canvas resolution. It is the shared memory between passes.</p>
+<p>The ring buffer stores reusable canvas-backed frame snapshots at canvas resolution. New decoded frames are copied once into owned ring slots, and temporal effects sample those canvases directly with <code>drawImage()</code>; there is no per-frame <code>ImageData</code> reconstruction step.</p>
 <div class="table-responsive">
 <table class="win-table">
   <thead><tr><th>Parameter</th><th>Effect on ring</th></tr></thead>

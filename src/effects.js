@@ -9,6 +9,8 @@
 //    only when the decoded source frame or key parameters change.
 //  - applyGlitch does not re-seed random — draw() seeds once per frame.
 //  - Cluster physics centers use p5 seeded random() for reproducibility.
+//  - Symmetry uses native Canvas2D clipping/transforms instead of p5 wrappers.
+//  - Solarize and luma-key scratch canvases resize in place.
 //  - Glitch tile placement reuses typed target/grid buffers and persistent
 //    Float64 cluster offsets instead of allocating arrays, Maps, and objects
 //    every frame.
@@ -539,8 +541,6 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0, glitchPriority = 1.0, 
 // field or walk the grid a second time.
 
 function applyFlowWarp(src, dst, strength = 6, scale = 80, pulse = 0, implode = 0, speed = 1, turb = 0, swirl = 0, spread = 1) {
-  dst.clear();
-
   let srcFrame = src;
   if (pulse > 0 && frameRing.length > pulse) {
     const ringFrame = frameRing.fromEnd(pulse);
@@ -550,7 +550,14 @@ function applyFlowWarp(src, dst, strength = 6, scale = 80, pulse = 0, implode = 
   const srcEl = (srcFrame instanceof HTMLCanvasElement)
     ? srcFrame
     : (srcFrame?.elt ?? srcFrame?.drawingContext?.canvas ?? null);
-  if (!srcEl) return;
+
+  const dctx = dst.drawingContext;
+  dctx.save();
+  dctx.setTransform(1, 0, 0, 1, 0, 0);
+  dctx.globalAlpha = 1;
+  dctx.globalCompositeOperation = 'source-over';
+  dctx.clearRect(0, 0, dst.width, dst.height);
+  if (!srcEl) { dctx.restore(); return; }
 
   const cell = Math.max(8, scale | 0);
   const off  = strength;
@@ -566,8 +573,6 @@ function applyFlowWarp(src, dst, strength = 6, scale = 80, pulse = 0, implode = 
   const cols = Math.ceil(w / cell);
   const rows = Math.ceil(h / cell);
 
-  const dctx = dst.drawingContext;
-  dctx.save();
   for (let row = 0; row < rows; row++) {
     for (let col = 0; col < cols; col++) {
       const x  = col * cell;
@@ -664,14 +669,24 @@ function applySolarize(buf, thresh = 0.5, amount = 1.0, solR = 1.0, solG = 1.0, 
   const sw = Math.max(1, Math.round(BW * scale));
   const sh = Math.max(1, Math.round(BH * scale));
 
-  if (!_solCanvas || _solCanvas.width !== sw || _solCanvas.height !== sh) {
-    _solCanvas = document.createElement('canvas'); _solCanvas.width = sw; _solCanvas.height = sh;
-    _solCtx    = _solCanvas.getContext('2d', { willReadFrequently:true });
+  if (!_solCanvas) {
+    _solCanvas = document.createElement('canvas');
+    _solCtx = _solCanvas.getContext('2d', { willReadFrequently:true });
   }
-  if (!_solOut || _solOut.width !== BW || _solOut.height !== BH) {
-    _solOut    = document.createElement('canvas'); _solOut.width = BW; _solOut.height = BH;
-    _solOutCtx = _solOut.getContext('2d');
-    _solHasCache = false;   // fresh canvas — must process before it can be reused
+  if (_solCanvas.width !== sw || _solCanvas.height !== sh) {
+    _solCanvas.width = sw;
+    _solCanvas.height = sh;
+    _solCtx = _solCanvas.getContext('2d', { willReadFrequently:true });
+  }
+  if (!_solOut) {
+    _solOut = document.createElement('canvas');
+    _solOutCtx = _solOut.getContext('2d', { alpha:true, desynchronized:true });
+  }
+  if (_solOut.width !== BW || _solOut.height !== BH) {
+    _solOut.width = BW;
+    _solOut.height = BH;
+    _solOutCtx = _solOut.getContext('2d', { alpha:true, desynchronized:true });
+    _solHasCache = false;   // resized backing store — process before reuse
   }
 
   // Smoothed frame period (ms). Solarize runs once per frame, so the gap between
@@ -722,27 +737,33 @@ function applySymmetry(src, dst, mode = 'v', pos = 0.5) {
   const w  = dst.width, h = dst.height;
   const x0 = Math.max(0, Math.min(w, Math.round(w * pos)));
   const y0 = Math.max(0, Math.min(h, Math.round(h * pos)));
-
-  dst.clear();
-  dst.imageMode(CORNER);
-  dst.image(src, 0, 0, w, h);
-
+  const srcCanvas = src?.elt ?? src?.drawingContext?.canvas ?? null;
   const ctx = dst.drawingContext;
-  if (!ctx) return;
+  if (!ctx || !srcCanvas) return;
+
+  // Replace the destination in one native Canvas2D copy, then perform the same
+  // clipped mirror draws without p5 push/pop/image wrapper overhead.
+  copyCanvasFrame(ctx, srcCanvas, w, h);
 
   if (mode === 'v' || mode === 'hv') {
     ctx.save();
-    ctx.beginPath(); ctx.rect(x0, 0, w - x0, h); ctx.clip();
-    dst.push(); dst.translate(2 * x0, 0); dst.scale(-1, 1);
-    dst.image(src, 0, 0, w, h);
-    dst.pop(); ctx.restore();
+    ctx.beginPath();
+    ctx.rect(x0, 0, w - x0, h);
+    ctx.clip();
+    ctx.translate(2 * x0, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(srcCanvas, 0, 0, w, h);
+    ctx.restore();
   }
   if (mode === 'h' || mode === 'hv') {
     ctx.save();
-    ctx.beginPath(); ctx.rect(0, y0, w, h - y0); ctx.clip();
-    dst.push(); dst.translate(0, 2 * y0); dst.scale(1, -1);
-    dst.image(src, 0, 0, w, h);
-    dst.pop(); ctx.restore();
+    ctx.beginPath();
+    ctx.rect(0, y0, w, h - y0);
+    ctx.clip();
+    ctx.translate(0, 2 * y0);
+    ctx.scale(1, -1);
+    ctx.drawImage(srcCanvas, 0, 0, w, h);
+    ctx.restore();
   }
 }
 
@@ -771,16 +792,24 @@ function applyPipelineLumaKey(thresh, mix, invert, sourceFrameSerial = -1) {
   const scale  = W > MAX_W ? MAX_W / W : 1;
   const sw     = Math.max(1, Math.round(W * scale));
   const sh     = Math.max(1, Math.round(H * scale));
-  if (!_plkCanvas || _plkCanvas.width !== sw || _plkCanvas.height !== sh) {
+  if (!_plkCanvas) {
     _plkCanvas = document.createElement('canvas');
-    _plkCanvas.width = sw; _plkCanvas.height = sh;
+    _plkCtx = _plkCanvas.getContext('2d', { willReadFrequently: true });
+  }
+  if (_plkCanvas.width !== sw || _plkCanvas.height !== sh) {
+    _plkCanvas.width = sw;
+    _plkCanvas.height = sh;
     _plkCtx = _plkCanvas.getContext('2d', { willReadFrequently: true });
     _plkCacheFrame = -1;
   }
-  if (!_plkBufCanvas || _plkBufCanvas.width !== sw || _plkBufCanvas.height !== sh) {
+  if (!_plkBufCanvas) {
     _plkBufCanvas = document.createElement('canvas');
-    _plkBufCanvas.width = sw; _plkBufCanvas.height = sh;
-    _plkBufCtx = _plkBufCanvas.getContext('2d');
+    _plkBufCtx = _plkBufCanvas.getContext('2d', { alpha:true, desynchronized:true });
+  }
+  if (_plkBufCanvas.width !== sw || _plkBufCanvas.height !== sh) {
+    _plkBufCanvas.width = sw;
+    _plkBufCanvas.height = sh;
+    _plkBufCtx = _plkBufCanvas.getContext('2d', { alpha:true, desynchronized:true });
     _plkCacheFrame = -1;
   }
 

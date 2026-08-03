@@ -219,7 +219,7 @@ huff/
 <h2>Frontend Architecture</h2>
 <p>The frontend intentionally has no build step and no bundler. Everything is plain ES6 loaded via script tags. This keeps the dev cycle fast — edit a file, reload the WebView, see the change immediately.</p>
 <p><code>index.html</code> is large (~2300 lines) because the entire controls UI, all MIDI/OSC/Syphon/Spout logic, and the p5 draw loop all live in one file. This is intentional — a single file is trivially auditable and has no dependency graph to maintain.</p>
-<p><code>effects.js</code> is the one separate module because its functions are called from both <code>canvas.js</code> and <code>index.html</code>. The only shared interface between the two is the <code>frameRing</code> array and <code>gBuf</code> p5 Graphics object.</p>
+<p><code>effects.js</code> contains the Canvas2D effect functions called by <code>canvas.js</code>. The renderer shares a canvas-backed <code>FrameRing</code>, the clean-source surface <code>gCur</code>, the active persistent surface <code>gBuf</code>, and one reusable ping-pong surface <code>gScratch</code>. Flow, symmetry, and feedback reuse that same scratch surface rather than owning separate full-resolution buffers.</p>
 <hr/>
 
 <h2>macOS Universal Binary Build</h2>
