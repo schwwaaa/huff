@@ -67,25 +67,25 @@ window.resetClusterPhysics = resetClusterPhysics;
 // ROLL  — steady scroll simulating CRT rolling sync loss, independent of DRIFT
 // DRIFT — dual-frequency noise: slow sync wander + fast instability jitter
 
-function applyScanlines(density, angleOverride = null, scanPriority = 1.0) {
-  if (!els.clusters?.checked) return;
+function applyScanlines(density, angleOverride = null, scanPriority = 1.0, state = window.HUFF_RENDER_STATE) {
+  const rs = state || window.HUFF_RENDER_STATE || {};
+  if (!rs.clusters) return;
 
-  const scanBands  = parseInt(els.clusterCount?.value ?? '3',  10);
-  const bandSize   = parseInt(els.clusterRadius?.value ?? '10', 10);
+  const scanBands  = Math.trunc(rs.clusterCount);
   if (scanBands <= 0) return;
 
   // Use spin override if active, otherwise read from the static slider
   const angleDeg = angleOverride !== null
     ? angleOverride
-    : parseFloat(els.scanAngle?.value ?? '0');
+    : rs.scanAngle;
   const angleRad   = (angleDeg * Math.PI) / 180;
-  const bandAlpha  = parseFloat(els.scanAlpha?.value  ?? '0.86') * scanPriority;
-  const shiftScale = parseFloat(els.scanShift?.value  ?? '0.12');
-  const driftAmt   = parseFloat(els.scanDrift?.value  ?? '1.0');
-  const scanGap    = parseInt(els.scanGap?.value       ?? '0',   10);
-  const scanSkew   = parseFloat(els.scanSkew?.value   ?? '0');
-  const focus      = parseFloat(els.scanFocus?.value  ?? '0.5');
-  const roll       = parseFloat(els.scanRoll?.value   ?? '0');
+  const bandAlpha  = rs.scanAlpha * scanPriority;
+  const shiftScale = rs.scanShift;
+  const driftAmt   = rs.scanDrift;
+  const scanGap    = Math.trunc(rs.scanGap);
+  const scanSkew   = rs.scanSkew;
+  const focus      = rs.scanFocus;
+  const roll       = rs.scanRoll;
 
   const phX = nPhaseScanX;
   const phY = nPhaseScanY;
@@ -98,7 +98,7 @@ function applyScanlines(density, angleOverride = null, scanPriority = 1.0) {
   const absC = Math.abs(Math.cos(angleRad));
   const dim   = width * absS + height * absC;   // full rotated span
   const cross = width * absC + height * absS;   // displacement axis span
-  const bSize = Math.max(4, Math.floor(parseInt(els.clusterRadius?.value ?? '10', 10) * 3));
+  const bSize = Math.max(4, Math.floor(Math.trunc(rs.clusterRadius) * 3));
 
   // Roll offset scrolls bands along the full rotated span
   const rollOffset = (phY * roll * 80) % dim;
@@ -159,15 +159,16 @@ function applyScanlines(density, angleOverride = null, scanPriority = 1.0) {
 // ─── Glitch ───────────────────────────────────────────────────────────────────
 // Note: randomSeed is set by draw() once per frame. No re-seeding here.
 
-function applyGlitch(density = 1, baseDX = 0, baseDY = 0, glitchPriority = 1.0) {
-  const block     = parseInt(els.block.value, 10);
-  const size      = parseInt(els.glitchSize.value, 10);
-  const smearLen  = parseInt(els.glitchSmear.value, 10);
-  const corrupt   = parseFloat(els.corrupt.value);
-  const tileAlpha = Math.floor(parseFloat(els.glitchAlpha?.value ?? '1.0') * 255);
-  const jitter    = parseFloat(els.glitchJitter?.value ?? '1.0');
+function applyGlitch(density = 1, baseDX = 0, baseDY = 0, glitchPriority = 1.0, state = window.HUFF_RENDER_STATE) {
+  const rs = state || window.HUFF_RENDER_STATE || {};
+  const block     = Math.trunc(rs.block);
+  const size      = Math.trunc(rs.glitchSize);
+  const smearLen  = Math.trunc(rs.glitchSmear);
+  const corrupt   = rs.corrupt;
+  const tileAlpha = Math.floor(rs.glitchAlpha * 255);
+  const jitter    = rs.glitchJitter;
 
-  const smearAngleDeg = parseFloat(els.glitchSmearAngle?.value ?? '0');
+  const smearAngleDeg = rs.glitchSmearAngle;
   let dxUnit, dyUnit;
   if (smearAngleDeg === 0) {
     dxUnit = map(noise(nPhaseX), 0, 1, -1, 1);
@@ -183,41 +184,41 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0, glitchPriority = 1.0) 
   const rows  = Math.max(1, Math.floor(height / block));
   const total = cols * rows;
 
-  const depth   = parseFloat(els.depth.value);
+  const depth   = rs.depth;
   const maxBack = Math.max(1, Math.floor((frameRing.length - 1) * depth));
 
-  const depthScatter = parseFloat(els.depthScatter?.value ?? '1.0');
+  const depthScatter = rs.depthScatter;
   const baseBack     = Math.max(1, Math.floor(maxBack * (0.3 + 0.7 * noise(nPhaseX * 0.1 + nPhaseY * 0.07))));
 
-  const corruptDrift = parseFloat(els.corruptDrift?.value ?? '0');
+  const corruptDrift = rs.corruptDrift;
   const driftMod     = corruptDrift > 0 ? (noise(nPhaseX * 0.08, nPhaseY * 0.08) * 2 - 1) : 0;
   const corruptMul   = Math.max(0.05, 1.0 + corruptDrift * driftMod);
   let count = Math.max(1, Math.floor(total * corrupt * corruptMul));
 
-  const gap          = parseInt(els.spatialGap.value, 10);
-  const useCluTiles  = !!els.clusterTiles?.checked;
-  const cluCenters   = parseInt(els.cluCenters?.value   ?? '3',  10);
-  const cluSpread    = parseInt(els.cluSpread?.value    ?? '80', 10);
-  const cluMinSpread = parseInt(els.cluMinSpread?.value ?? '0',  10);
-  const cluBias      = parseFloat(els.cluBias?.value    ?? '0.85');
-  const cluDrift     = parseFloat(els.cluDrift?.value   ?? '0');
-  const cluSpeed     = parseFloat(els.cluSpeed?.value   ?? '0');
-  const cluInertia   = parseFloat(els.cluInertia?.value ?? '0.92');
+  const gap          = Math.trunc(rs.spatialGap);
+  const useCluTiles  = !!rs.clusterTiles;
+  const cluCenters   = Math.trunc(rs.cluCenters);
+  const cluSpread    = Math.trunc(rs.cluSpread);
+  const cluMinSpread = Math.trunc(rs.cluMinSpread);
+  const cluBias      = rs.cluBias;
+  const cluDrift     = rs.cluDrift;
+  const cluSpeed     = rs.cluSpeed;
+  const cluInertia   = rs.cluInertia;
   // STEER decouples heading-change rate from travel SPEED: cluSpeed is now pure
   // travel velocity, cluSteer is how fast the heading sweeps. cluBounce makes
   // centers reflect off the edges (true side-to-side travel) instead of wrapping
   // (which teleported them across — the main source of jumpiness). cluBreathe
   // slowly oscillates the scatter radius so the cloud expands/contracts.
-  const cluSteer     = parseFloat(els.cluSteer?.value   ?? '1');
-  const cluBreathe   = parseFloat(els.cluBreathe?.value ?? '0');
-  const cluBounce    = (els.cluBounds?.value ?? 'bounce') === 'bounce';
+  const cluSteer     = rs.cluSteer;
+  const cluBreathe   = rs.cluBreathe;
+  const cluBounce    = (rs.cluBounds || 'bounce') === 'bounce';
   const cluBreatheF  = cluBreathe > 0 ? (1 + Math.sin(millis() * 0.0006) * cluBreathe) : 1;
   // COHERENCE — how much each center's tile offsets persist frame to frame, so a
   // cluster reads as a BODY that travels with its center instead of re-rolling
   // into static every frame. 0 = full per-frame boil (original), 1 = rigid
   // constellation, between = slowly morphing blob. This is what makes the physics
   // (steer / inertia / bounce) legible — there's finally something to watch move.
-  const cluCohere    = parseFloat(els.cluCohere?.value ?? '0.8');
+  const cluCohere    = rs.cluCohere;
   // Recalibrated travel: exponential so the slow, watchable range spreads across
   // the lower half of the SPEED slider instead of bunching at the bottom, and the
   // top is calmer than the old linear px/frame.
@@ -262,8 +263,8 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0, glitchPriority = 1.0) 
   // Note: randomSeed is set by draw() once per frame; no re-seeding here.
   // applyScanlines ran first and consumed some random state — that ordering is intentional.
 
-  const cluSpeedVar = parseFloat(els.cluSpeedVar?.value ?? '0');
-  const cluPulse    = parseFloat(els.cluPulse?.value   ?? '0');
+  const cluSpeedVar = rs.cluSpeedVar;
+  const cluPulse    = rs.cluPulse;
 
   // ── Cluster center physics ─────────────────────────────────────────────────
   function getPhysicsCenters() {
@@ -339,22 +340,7 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0, glitchPriority = 1.0) 
     return _cluPhysics;
   }
 
-  function getStaticCenters() {
-    const centers = [];
-    for (let i = 0; i < cluCenters; i++) {
-      const baseX = Math.floor(random(cols)) * block + (block >> 1);
-      const baseY = Math.floor(random(rows)) * block + (block >> 1);
-      const driftOff  = cluDrift > 0
-        ? (noise(i * 3.7 + nPhaseX * cluDrift * 0.01) - 0.5) * 2 * Math.min(width, height) * 0.5 * cluDrift : 0;
-      const driftOffY = cluDrift > 0
-        ? (noise(i * 5.3 + nPhaseY * cluDrift * 0.01) - 0.5) * 2 * Math.min(width, height) * 0.5 * cluDrift : 0;
-      centers.push({
-        x: (baseX + driftOff  + width)  % width,
-        y: (baseY + driftOffY + height) % height,
-      });
-    }
-    return centers;
-  }
+
 
   // ── Tile placement ─────────────────────────────────────────────────────────
   if (useCluTiles && cluCenters > 0) {

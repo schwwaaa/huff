@@ -91,6 +91,53 @@ let _wasPlaying  = false; // whether video was playing when a scrub started
 let _seekPending = false; // whether a seek is still in flight when drag ends
 
 const els = {};
+
+// ─── Event-driven render state ───────────────────────────────────────────────
+// The renderer used to parse values directly from dozens of DOM controls on
+// every frame. Keep the DOM as the public control surface, but mirror control
+// values into a typed state object whenever input/change events occur. MIDI,
+// OSC, presets, reset buttons, and normal pointer input already dispatch those
+// events, so all control paths remain synchronized without per-frame DOM reads.
+const renderState = Object.create(null);
+window.HUFF_RENDER_STATE = renderState;
+
+function _readRenderControl(el) {
+  if (!el) return undefined;
+  if (el.type === 'checkbox') return !!el.checked;
+  if (el.type === 'range' || el.type === 'number') {
+    const n = Number(el.value);
+    return Number.isFinite(n) ? n : 0;
+  }
+  return el.value ?? '';
+}
+
+function _syncRenderControl(id) {
+  const el = els[id];
+  if (!el) return;
+  const tag = el.tagName;
+  if (tag !== 'INPUT' && tag !== 'SELECT' && tag !== 'TEXTAREA') return;
+  renderState[id] = _readRenderControl(el);
+}
+
+function initRenderStateCache() {
+  for (const [id, el] of Object.entries(els)) {
+    if (!el) continue;
+    const tag = el.tagName;
+    if (tag !== 'INPUT' && tag !== 'SELECT' && tag !== 'TEXTAREA') continue;
+    _syncRenderControl(id);
+  }
+
+  // Event delegation keeps synchronization to two listeners rather than adding
+  // input/change listeners to every control. All existing interaction paths
+  // bubble these events through the document.
+  const syncFromEvent = event => {
+    const id = event.target?.id;
+    if (id && els[id] === event.target) _syncRenderControl(id);
+  };
+  document.addEventListener('input', syncFromEvent);
+  document.addEventListener('change', syncFromEvent);
+}
+
 let baseSeed = 1, seededOnce = false;
 let nPhaseX = 0, nPhaseY = 1000;
 let nPhaseScanX = 0, nPhaseScanY = 2000; // independent scanline phase
@@ -561,7 +608,7 @@ function _syncGCur() {
 function _pushToRing() {
   if (!gCur) return false;
   try {
-    const Q   = parseFloat(els.quality?.value ?? '1');
+    const Q   = renderState.quality ?? 1;
     const bpf = gCur.width * gCur.height * 4;
     let cap = Math.max(4, Math.round(60 * (Q * 2)));
     cap = Math.min(cap, Math.max(4, Math.floor(192 * 1024 * 1024 / bpf)));
@@ -738,6 +785,7 @@ function hookUI() {
     'globalMixOn','globalMixBlend','globalMixAmt','globalMixAmtVal','globalMixPos',
   ].forEach(k => els[k] = _$(k));
 
+  initRenderStateCache();
   hookFile();
   hookTransport();
   hookCamera();
@@ -1240,10 +1288,34 @@ function enableTransport(en) {
 
 // ─── draw loop ────────────────────────────────────────────────────────────────
 
+// ─── Draw-loop helpers ───────────────────────────────────────────────────────
+// Defined once rather than recreated as closures on every render frame.
+function _emitGlitchGroup(state, density, glitchPriority, lumaMix) {
+  if (state.corruptOn) {
+    applyGlitch(density, Math.trunc(state.glitchBaseX), Math.trunc(state.glitchBaseY), glitchPriority, state);
+  }
+  if (state.lumaKeyOn && lumaMix > 0) {
+    applyPipelineLumaKey(state.lumaKeyAB, lumaMix, !!state.lumaKeyInvert, _vfc);
+  }
+}
+
+function _emitGlobalMix(state) {
+  if (!state.globalMixOn || state.globalMixAmt <= 0) return;
+  const gCurEl = gCur.elt ?? gCur.drawingContext?.canvas;
+  if (!gCurEl) return;
+  const ctx = gBuf.drawingContext;
+  ctx.save();
+  ctx.globalCompositeOperation = state.globalMixBlend || 'screen';
+  ctx.globalAlpha = state.globalMixAmt;
+  ctx.drawImage(gCurEl, 0, 0, gBuf.width, gBuf.height);
+  ctx.restore();
+}
+
 function draw() {
   _tickFPS();
+  const s = renderState;
 
-  const bg = els.bgMode?.value || 'black';
+  const bg = s.bgMode || 'black';
   if      (bg === 'white') background(255);
   else if (bg === 'green') background(0, 255, 0);
   else if (bg === 'blue')  background(0, 0, 255);
@@ -1263,21 +1335,19 @@ function draw() {
     seededOnce = true;
   }
 
-  const mul     = parseFloat(els.glitchSpeedMul?.value  ?? '1');
-  const coarse  = parseFloat(els.glitchSpeed?.value     ?? '0.8') * mul;
-  const fine    = parseFloat(els.glitchSpeedFine?.value ?? '1')   * mul;
+  const mul     = s.glitchSpeedMul;
+  const coarse  = s.glitchSpeed * mul;
+  const fine    = s.glitchSpeedFine * mul;
   const density = coarse * fine;
   nPhaseX += density * 0.01;
   nPhaseY += density * 0.011;
 
   // Scanline phase advances independently of glitch density.
-  // Previously: nPhaseScanX += density * scanSpeed * 0.01 — if density=0 (glitch off), bands froze.
-  // Now: advances every draw() at scanSpeed rate regardless of glitch state.
-  const scanSpeed = parseFloat(els.scanSpeed?.value ?? '1.0');
+  const scanSpeed = s.scanSpeed;
   nPhaseScanX += scanSpeed * 0.008;
   nPhaseScanY += scanSpeed * 0.009;
 
-  const pers = parseFloat(els.persistence?.value ?? '0.7');
+  const pers = s.persistence;
   if (pers < 1) {
     const ctx = gBuf.drawingContext;
     ctx.save();
@@ -1287,60 +1357,24 @@ function draw() {
     ctx.restore();
   }
 
-  // ORDER: [Glitch group ⇄ Scanlines] — both composite onto the SAME gBuf, so
-  // paint order IS z-order. A shared buffer can only ever have ONE layer painted
-  // last, so priority is inherently BINARY — there is no continuous "51% on top"
-  // without giving each layer its own buffer (an FPS cost we're not paying). So
-  // LAYER PRIORITY is a discrete selector, NOT a slider, and it does NOT touch
-  // opacity — each effect draws at its own native opacity (glitchAlpha / scanAlpha,
-  // which those effects own). This only chooses paint order:
-  //   GLITCH  → glitch painted last   (glitch on top)
-  //   SCAN    → scanlines painted last (scanlines on top)
-  //   NEUTRAL → order flips every frame; the eye integrates to a balanced 50/50
-  //             interleave — the honest, zero-cost stand-in for a "both" middle
-  //   PULSE   → order flips on a cycle set by PULSE SPEED — a rhythmic swap
-  const layerState = els.layerPriority?.value ?? 'scan';
-  // PULSE SPEED = flips per second; convert to whole frames per half-cycle.
-  const pulseSpd    = parseFloat(els.layerPulseSpeed?.value ?? '2');
+  // Paint order remains the Classic layer-priority model.
+  const layerState = s.layerPriority || 'scan';
+  const pulseSpd    = s.layerPulseSpeed;
   const pulseFrames = Math.max(1, Math.round(60 / Math.max(0.1, pulseSpd)));
   let glitchOnTop;
   if      (layerState === 'glitch')  glitchOnTop = true;
   else if (layerState === 'neutral') glitchOnTop = (frameCount & 1) === 0;
   else if (layerState === 'pulse')   glitchOnTop = (Math.floor(frameCount / pulseFrames) & 1) === 0;
-  else /* 'scan' */                  glitchOnTop = false;
+  else                               glitchOnTop = false;
 
-  // Each layer draws at its own opacity — no crossfade scaling.
   const glitchPriority = 1.0;
-  const scanPriority   = 1.0;
+  const scanPriority    = 1.0;
+  const lumaMix         = s.lumaKeyMix;
 
-  // Glitch group = glitch tiles + the Luma Key gate. The gate travels WITH glitch
-  // (keying the glitched buffer against clean source) so it stays meaningful at
-  // whichever depth glitch sits — this is what gives Luma Key real reach now.
-  const lkMix = parseFloat(els.lumaKeyMix?.value ?? '0');
-  const _emitGlitch = () => {
-    if (els.corruptOn?.checked) {
-      applyGlitch(density,
-        parseInt(els.glitchBaseX?.value ?? '0', 10),
-        parseInt(els.glitchBaseY?.value ?? '0', 10),
-        glitchPriority);
-    }
-    if (els.lumaKeyOn?.checked && lkMix > 0) {
-      applyPipelineLumaKey(
-        parseFloat(els.lumaKeyAB?.value ?? '0.5'),
-        lkMix,
-        !!els.lumaKeyInvert?.checked,
-        _vfc
-      );
-    }
-  };
-
-  // Advance spin accumulator before scanlines runs in EITHER branch.
-  // Left and right are separate toggles; right wins if both on. When neither is
-  // active, keep the accumulator synced to the manual slider so enabling spin
-  // starts from where the slider currently is — no jump.
-  const spinSpeed = parseFloat(els.scanSpinSpeed?.value ?? '1');
-  const spinLeft  = !!els.scanSpinLeft?.checked;
-  const spinRight = !!els.scanSpinRight?.checked;
+  // Left and right are separate toggles; right wins if both are active.
+  const spinSpeed = s.scanSpinSpeed;
+  const spinLeft  = !!s.scanSpinLeft;
+  const spinRight = !!s.scanSpinRight;
   let scanAngleArg = null;
   if (spinRight) {
     _scanSpinAngle = (_scanSpinAngle + spinSpeed * 0.5) % 360;
@@ -1349,54 +1383,26 @@ function draw() {
     _scanSpinAngle = ((_scanSpinAngle - spinSpeed * 0.5) % 360 + 360) % 360;
     scanAngleArg   = _scanSpinAngle;
   } else {
-    _scanSpinAngle = parseFloat(els.scanAngle?.value ?? '0');
+    _scanSpinAngle = s.scanAngle;
   }
-  const _emitScanlines = () => applyScanlines(density, scanAngleArg, scanPriority);
 
-  // Emit in paint order: the priority layer is painted LAST (on top). Each draws
-  // at its own opacity — no crossfade.
-  if (glitchOnTop) { _emitScanlines(); _emitGlitch(); }
-  else             { _emitGlitch();    _emitScanlines(); }
+  if (glitchOnTop) {
+    applyScanlines(density, scanAngleArg, scanPriority, s);
+    _emitGlitchGroup(s, density, glitchPriority, lumaMix);
+  } else {
+    _emitGlitchGroup(s, density, glitchPriority, lumaMix);
+    applyScanlines(density, scanAngleArg, scanPriority, s);
+  }
 
-  // Global Mix — blend the clean source video (gCur) over the effects chain via a
-  // selectable blend mode at AMOUNT opacity. POSITION decides where in the chain
-  // the clean frame is injected, which sets how much of the chain still processes
-  // it — a "surfaced vs processed" dial:
-  //   'before'   → before feedback: clean is pulled into the feedback recursion
-  //                and then flow/symmetry/solarize — most processed.
-  //   'after'    → after feedback: feedback trails the dirty result, clean is laid
-  //                fresh on top, then flow/symmetry/solarize process it. (With
-  //                feedback off, 'before' and 'after' are identical — nothing sits
-  //                between them but the feedback stage.)
-  //   'afterflow'→ after the flow warp: clean skips feedback AND the warp, but is
-  //                still mirrored by symmetry and coloured by solarize.
-  //   'final'    → after solarize: clean laid over the fully processed frame,
-  //                pristine — maximally surfaced, unprocessed.
-  // Defined here, invoked at whichever point POSITION selects. The closure reads
-  // gBuf live, so it correctly targets the current buffer even after flow/symmetry
-  // swap it.
-  const _emitGlobalMix = () => {
-    if (!els.globalMixOn?.checked) return;
-    const gmMix  = parseFloat(els.globalMixAmt?.value ?? '0');
-    const gCurEl = gCur.elt ?? gCur.drawingContext?.canvas;
-    if (gmMix > 0 && gCurEl) {
-      const ctx = gBuf.drawingContext;
-      ctx.save();
-      ctx.globalCompositeOperation = els.globalMixBlend?.value ?? 'screen';
-      ctx.globalAlpha = gmMix;
-      ctx.drawImage(gCurEl, 0, 0, gBuf.width, gBuf.height);
-      ctx.restore();
-    }
-  };
-  const gmPos = els.globalMixPos?.value ?? 'after';
-  if (gmPos === 'before') _emitGlobalMix();
+  const gmPos = s.globalMixPos || 'after';
+  if (gmPos === 'before') _emitGlobalMix(s);
 
-  const fb = parseFloat(els.feedback?.value ?? '0');
+  const fb = s.feedback;
   if (fb > 0) {
-    const fx = parseFloat(els.fbX?.value    ?? '0');
-    const fy = parseFloat(els.fbY?.value    ?? '0');
-    const fz = parseFloat(els.fbZ?.value    ?? '1');
-    const ft = (parseFloat(els.fbTheta?.value ?? '0') * Math.PI) / 180;
+    const fx = s.fbX;
+    const fy = s.fbY;
+    const fz = s.fbZ;
+    const ft = (s.fbTheta * Math.PI) / 180;
 
     const gCanvas = gBuf.elt || gBuf.drawingContext.canvas;
     if (!_fbCanvas || _fbCanvas.width !== gBuf.width || _fbCanvas.height !== gBuf.height) {
@@ -1418,49 +1424,37 @@ function draw() {
     ctx.restore();
   }
 
-  if (gmPos === 'after') _emitGlobalMix();
+  if (gmPos === 'after') _emitGlobalMix(s);
 
-  const flowS = parseInt(els.flowStrength?.value ?? '0', 10);
-  if (els.flowOn?.checked && flowS > 0) {
+  const flowS = Math.trunc(s.flowStrength);
+  if (s.flowOn && flowS > 0) {
     applyFlowWarp(gBuf, gWarp, flowS,
-      parseInt(els.flowScale?.value  ?? '80', 10),
-      parseInt(els.flowPulse?.value  ?? '0',  10),
-      parseFloat(els.flowImpl?.value  ?? '0'),
-      parseFloat(els.flowSpeed?.value ?? '1'),
-      parseFloat(els.flowTurb?.value  ?? '0'),
-      parseFloat(els.flowSwirl?.value ?? '0'),
-      parseFloat(els.flowSpread?.value ?? '1'));
+      Math.trunc(s.flowScale), Math.trunc(s.flowPulse), s.flowImpl, s.flowSpeed,
+      s.flowTurb, s.flowSwirl, s.flowSpread);
     [gBuf, gWarp] = [gWarp, gBuf];
   }
 
-  if (gmPos === 'afterflow') _emitGlobalMix();
+  if (gmPos === 'afterflow') _emitGlobalMix(s);
 
-  if (els.symOn?.checked) {
-    applySymmetry(gBuf, gTemp, els.symMode?.value || 'v', parseFloat(els.symPos?.value ?? '0.5'));
+  if (s.symOn) {
+    applySymmetry(gBuf, gTemp, s.symMode || 'v', s.symPos);
     [gBuf, gTemp] = [gTemp, gBuf];
   }
 
-  if (els.solarizeOn?.checked) {
-    applySolarize(gBuf,
-      parseFloat(els.solarizeThresh?.value ?? '0.5'),
-      parseFloat(els.solarizeAmt?.value    ?? '1.0'),
-      parseFloat(els.solarizeR?.value      ?? '1.0'),
-      parseFloat(els.solarizeG?.value      ?? '1.0'),
-      parseFloat(els.solarizeB?.value      ?? '1.0'));
+  if (s.solarizeOn) {
+    applySolarize(gBuf, s.solarizeThresh, s.solarizeAmt,
+      s.solarizeR, s.solarizeG, s.solarizeB);
   }
 
-  if (gmPos === 'final') _emitGlobalMix();
+  if (gmPos === 'final') _emitGlobalMix(s);
 
   const anyFxActive =
-    els.corruptOn?.checked || els.clusters?.checked  ||
-    els.flowOn?.checked    || els.symOn?.checked     ||
-    els.solarizeOn?.checked ||
-    (els.globalMixOn?.checked && parseFloat(els.globalMixAmt?.value ?? '0') > 0) ||
-    parseFloat(els.feedback?.value ?? '0') > 0;
+    s.corruptOn || s.clusters || s.flowOn || s.symOn || s.solarizeOn ||
+    (s.globalMixOn && s.globalMixAmt > 0) || fb > 0;
 
   if (anyFxActive) {
-    if (els.baseOn?.checked && parseFloat(els.baseMix?.value ?? '0') > 0) {
-      push(); tint(255, parseFloat(els.baseMix.value) * 255);
+    if (s.baseOn && s.baseMix > 0) {
+      push(); tint(255, s.baseMix * 255);
       image(gCur, 0, 0, width, height); pop();
     }
     image(gBuf, 0, 0, width, height);
@@ -1468,10 +1462,7 @@ function draw() {
     image(gCur, 0, 0, width, height);
     gBuf.image(gCur, 0, 0, gBuf.width, gBuf.height);
   }
-
-
 }
-
 
 function drawWaiting() {
   push();

@@ -775,12 +775,12 @@ huff/
 
 ## Performance Notes
 
-- **Frame ring** stores `ImageData` objects (raw RGBA pixel arrays) rather than p5 `Graphics` instances. This avoids the `get()` copy-on-read allocation and keeps peak memory predictable.
+- **Frame ring** stores reusable canvas-backed snapshots rather than raw `ImageData` arrays or p5 `Graphics` instances. Decoded frames are copied once into owned canvas slots and sampled directly by temporal effects without a later `putImageData()` reconstruction.
 - **192 MB ring cap** — the ring depth is capped regardless of the quality setting. At 1080p (≈8 MB per frame) this gives roughly 24 frames maximum. At 720p (≈3.7 MB) you get the full 60 frames at quality=1.
-- **`drawRingRegion`** uses a single shared offscreen `<canvas>` with `putImageData` + native `drawImage` cropping per tile. No per-tile allocation.
+- **`drawRingRegion`** samples the reusable history canvases directly with native `drawImage` cropping. It performs no per-tile pixel upload or allocation.
 - **Solarize** downsamples to a 640px-wide scratch canvas before the pixel pass, then scales back up. This is 4–16× faster on large canvases and makes a large practical difference on Windows/DirectX WebView.
 - **Flow warp** renders in tiles rather than per-pixel — the tile size is set by the SCALE parameter. Larger tiles = faster but coarser warp.
-- **QUALITY slider** controls ring depth and also determines how often Solarize runs (it skips frames proportionally at lower quality values).
+- **QUALITY slider** controls temporal-ring depth. Solarize uses an independent adaptive load guard that reuses its cached result only when sustained frame time exceeds the healthy range.
 - **Feedback** uses `drawingContext.drawImage` directly rather than `p5.get()`, eliminating one full-canvas copy per frame.
 - If the app stutters, try: lower QUALITY → reduce canvas resolution → increase PIXEL SIZE → disable Flow Warp (the most expensive pass).
 
@@ -863,3 +863,8 @@ Re-run the WebKitGTK/libssl dependency install for your distribution from the [B
 ## HUFF Classic Optimization Pass 5
 
 This build reduces full-frame canvas clears, combines the Flow Warp grid into one traversal, caches Solarize channel maps, and reuses Pipeline Luma Key masks between identical decoded frames. The Pass 4 bounded, client-aware Syphon transport remains included.
+
+
+## HUFF Classic Optimization Pass 6
+
+This build mirrors render controls into an event-driven typed state cache, removing repeated DOM lookups and number parsing from the 60 fps draw/effect path. Glitch, scanline, feedback, flow, symmetry, solarize, global-mix, and temporal-ring settings now read the cached state while normal UI input, MIDI, OSC, presets, and reset operations keep it synchronized through their existing input/change events. Per-frame effect closures were also moved to reusable helpers, and an unreachable static-cluster helper was removed. No effect, control, routing, Syphon, or packaging behavior was intentionally changed.
