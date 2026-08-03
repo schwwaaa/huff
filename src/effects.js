@@ -3,8 +3,10 @@
 //  - All frameRing accesses updated to FrameRing API: frameRing.fromEnd(n)
 //    replaces frameRing[frameRing.length - 1 - n]. O(1) in both cases, but
 //    fromEnd() is explicit and works correctly without an array reference.
-//  - applyFlowWarp pre-allocates Float32Array displacement buffers — avoids
-//    per-frame GC pressure from repeated typed-array construction.
+//  - applyFlowWarp computes and draws each tile in one pass — no displacement
+//    arrays and no second grid traversal.
+//  - Solarize uses cached channel lookup tables; pipeline luma masks are rebuilt
+//    only when the decoded source frame or key parameters change.
 //  - applyGlitch does not re-seed random — draw() seeds once per frame.
 //  - Cluster physics centers use p5 seeded random() for reproducibility.
 
@@ -16,6 +18,31 @@
 function drawRingRegion(target, frameCanvas, sx, sy, sw, sh, dx, dy, dw, dh) {
   if (!frameCanvas) return;
   target.drawingContext.drawImage(frameCanvas, sx, sy, sw, sh, dx, dy, dw, dh);
+}
+
+function copyCanvasFrame(ctx, source, width, height) {
+  if (!ctx || !source || width <= 0 || height <= 0) return;
+  const prevOp    = ctx.globalCompositeOperation;
+  const prevAlpha = ctx.globalAlpha;
+  try {
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'copy';
+    ctx.drawImage(source, 0, 0, width, height);
+  } finally {
+    ctx.globalCompositeOperation = prevOp || 'source-over';
+    ctx.globalAlpha = prevAlpha;
+  }
+}
+
+// Exact coefficient contributions reused by both CPU luma paths. This removes
+// three multiplications from every sampled pixel without changing the formula.
+const _lumaR = new Float64Array(256);
+const _lumaG = new Float64Array(256);
+const _lumaB = new Float64Array(256);
+for (let i = 0; i < 256; i++) {
+  _lumaR[i] = 0.299 * i;
+  _lumaG[i] = 0.587 * i;
+  _lumaB[i] = 0.114 * i;
 }
 
 // ─── Cluster physics state ─────────────────────────────────────────────────────
@@ -436,21 +463,9 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0, glitchPriority = 1.0) 
 }
 
 // ─── Flow warp ────────────────────────────────────────────────────────────────
-// Pre-allocates Float32Array displacement buffers to avoid per-frame GC pressure.
-// Buffers are only reallocated when the grid dimensions change (scale or canvas resize).
-
-let _flowDx = null, _flowDy = null;
-let _flowBufCols = 0, _flowBufRows = 0;
-
-function _ensureFlowBuffers(cols, rows) {
-  const n = cols * rows;
-  if (!_flowDx || _flowBufCols !== cols || _flowBufRows !== rows) {
-    _flowDx = new Float32Array(n);
-    _flowDy = new Float32Array(n);
-    _flowBufCols = cols;
-    _flowBufRows = rows;
-  }
-}
+// Computes displacement and draws the tile immediately. The source and destination
+// are always distinct surfaces, so there is no need to retain a full displacement
+// field or walk the grid a second time.
 
 function applyFlowWarp(src, dst, strength = 6, scale = 80, pulse = 0, implode = 0, speed = 1, turb = 0, swirl = 0, spread = 1) {
   dst.clear();
@@ -461,6 +476,11 @@ function applyFlowWarp(src, dst, strength = 6, scale = 80, pulse = 0, implode = 
     if (ringFrame) srcFrame = ringFrame;
   }
 
+  const srcEl = (srcFrame instanceof HTMLCanvasElement)
+    ? srcFrame
+    : (srcFrame?.elt ?? srcFrame?.drawingContext?.canvas ?? null);
+  if (!srcEl) return;
+
   const cell = Math.max(8, scale | 0);
   const off  = strength;
   // SPEED is exponential (pow 1.6): fine, crawling control at the low end and a
@@ -470,15 +490,13 @@ function applyFlowWarp(src, dst, strength = 6, scale = 80, pulse = 0, implode = 
   const cx2 = w * 0.5, cy2 = h * 0.5;
 
   // SPREAD scales the flow-field noise frequency: low = large coherent zones all
-  // drifting together (watery), high = many small independent eddies pointing
-  // every which way (busted). spread=1 → the original 0.9 frequency.
+  // drifting together (watery), high = many small independent eddies.
   const freq = 0.9 * Math.max(0.05, spread);
-
   const cols = Math.ceil(w / cell);
   const rows = Math.ceil(h / cell);
-  _ensureFlowBuffers(cols, rows);
 
-  let idx = 0;
+  const dctx = dst.drawingContext;
+  dctx.save();
   for (let row = 0; row < rows; row++) {
     for (let col = 0; col < cols; col++) {
       const x  = col * cell;
@@ -486,11 +504,7 @@ function applyFlowWarp(src, dst, strength = 6, scale = 80, pulse = 0, implode = 
       const nx = (x + 0.5 * cell) / w * 2.0;
       const ny = (y + 0.5 * cell) / h * 2.0;
 
-      // Primary noise octave (frequency set by SPREAD)
       let a = noise(nx * freq + t, ny * freq) * TWO_PI * 2.0;
-
-      // Turbulence: second octave at 4× the (spread-scaled) frequency, half
-      // amplitude — keeps its "4× finer than base" character at any SPREAD.
       if (turb > 0) {
         const a2 = noise(nx * freq * 4 + t * 1.3 + 100, ny * freq * 4 + t * 0.9) * TWO_PI * 2.0;
         a = a * (1 - turb * 0.5) + a2 * (turb * 0.5);
@@ -499,7 +513,6 @@ function applyFlowWarp(src, dst, strength = 6, scale = 80, pulse = 0, implode = 
       let dx2 = Math.cos(a) * off;
       let dy2 = Math.sin(a) * off;
 
-      // Implode (positive) / Explode (negative) — bidirectional on one slider
       if (implode !== 0) {
         const px = x + 0.5 * cell, py = y + 0.5 * cell;
         const vx = cx2 - px, vy = cy2 - py;
@@ -508,8 +521,6 @@ function applyFlowWarp(src, dst, strength = 6, scale = 80, pulse = 0, implode = 
         dy2 += (vy / L) * off * implode;
       }
 
-      // Swirl: rotate displacement vector by angle proportional to distance from center
-      // Positive = clockwise spiral, negative = counterclockwise
       if (swirl !== 0) {
         const px  = x + 0.5 * cell, py = y + 0.5 * cell;
         const ang = Math.atan2(py - cy2, px - cx2) * swirl;
@@ -519,31 +530,15 @@ function applyFlowWarp(src, dst, strength = 6, scale = 80, pulse = 0, implode = 
         dx2 = rx; dy2 = ry;
       }
 
-      _flowDx[idx] = dx2;
-      _flowDy[idx] = dy2;
-      idx++;
-    }
-  }
-
-  // Resolve the drawable source once. The old inner-loop lookup repeated
-  // instanceof/optional-chain work for every tile — hundreds of times per frame.
-  const srcEl = (srcFrame instanceof HTMLCanvasElement)
-    ? srcFrame
-    : (srcFrame?.elt ?? srcFrame?.drawingContext?.canvas ?? null);
-  if (!srcEl) return;
-
-  const dctx = dst.drawingContext;
-  dctx.save();
-  idx = 0;
-  for (let row = 0; row < rows; row++) {
-    for (let col = 0; col < cols; col++) {
-      const x     = col * cell;
-      const y     = row * cell;
+      // The previous displacement arrays were Float32Array-backed. Preserve that
+      // quantization exactly before flooring so the visual tile selection does
+      // not shift at floating-point boundaries.
+      dx2 = Math.fround(dx2);
+      dy2 = Math.fround(dy2);
       const tileW = Math.min(cell, w - x);
       const tileH = Math.min(cell, h - y);
-      const sx2   = Math.max(0, Math.min(w - tileW, Math.floor(x + _flowDx[idx])));
-      const sy2   = Math.max(0, Math.min(h - tileH, Math.floor(y + _flowDy[idx])));
-      idx++;
+      const sx2   = Math.max(0, Math.min(w - tileW, Math.floor(x + dx2)));
+      const sy2   = Math.max(0, Math.min(h - tileH, Math.floor(y + dy2)));
       dctx.drawImage(srcEl, sx2, sy2, tileW, tileH, x, y, tileW, tileH);
     }
   }
@@ -556,6 +551,23 @@ function applyFlowWarp(src, dst, strength = 6, scale = 80, pulse = 0, implode = 
 
 let _solCanvas = null, _solCtx = null;
 let _solOut    = null, _solOutCtx = null;
+const _solRMap = new Uint8ClampedArray(256);
+const _solGMap = new Uint8ClampedArray(256);
+const _solBMap = new Uint8ClampedArray(256);
+let _solMapKey = '';
+
+function _refreshSolarizeMaps(amount, solR, solG, solB) {
+  const key = `${amount}|${solR}|${solG}|${solB}`;
+  if (key === _solMapKey) return;
+  _solMapKey = key;
+  const a = Math.max(0, Math.min(1, amount));
+  for (let i = 0; i < 256; i++) {
+    const inverted = i + (255 - i - i) * a;
+    _solRMap[i] = Math.floor(Math.min(255, Math.max(0, inverted * solR + 0.5)));
+    _solGMap[i] = Math.floor(Math.min(255, Math.max(0, inverted * solG + 0.5)));
+    _solBMap[i] = Math.floor(Math.min(255, Math.max(0, inverted * solB + 0.5)));
+  }
+}
 // ── Adaptive load guard ───────────────────────────────────────────────────────
 // applySolarize()'s getImageData() forces a synchronous GPU→CPU readback. Because
 // solarize runs late in the pipeline, that readback flushes every preceding
@@ -608,32 +620,29 @@ function applySolarize(buf, thresh = 0.5, amount = 1.0, solR = 1.0, solG = 1.0, 
 
   if (doProcess) {
     const srcCanvas = buf.elt || buf.drawingContext.canvas;
-    _solCtx.clearRect(0, 0, sw, sh);
-    _solCtx.drawImage(srcCanvas, 0, 0, sw, sh);
+    copyCanvasFrame(_solCtx, srcCanvas, sw, sh);
 
     const imgData = _solCtx.getImageData(0, 0, sw, sh);
     const pix = imgData.data;
     const t   = thresh * 255;
-    const a   = Math.max(0, Math.min(1, amount));
+    _refreshSolarizeMaps(amount, solR, solG, solB);
 
     for (let i = 0; i < pix.length; i += 4) {
       const r = pix[i], g = pix[i + 1], b = pix[i + 2];
-      const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+      const lum = _lumaR[r] + _lumaG[g] + _lumaB[b];
       if (lum > t) {
-        pix[i]     = Math.min(255, Math.max(0, (r + (255 - r - r) * a) * solR + 0.5) | 0);
-        pix[i + 1] = Math.min(255, Math.max(0, (g + (255 - g - g) * a) * solG + 0.5) | 0);
-        pix[i + 2] = Math.min(255, Math.max(0, (b + (255 - b - b) * a) * solB + 0.5) | 0);
+        pix[i]     = _solRMap[r];
+        pix[i + 1] = _solGMap[g];
+        pix[i + 2] = _solBMap[b];
       }
     }
     _solCtx.putImageData(imgData, 0, 0);
 
-    _solOutCtx.clearRect(0, 0, BW, BH);
-    _solOutCtx.drawImage(_solCanvas, 0, 0, BW, BH);
+    copyCanvasFrame(_solOutCtx, _solCanvas, BW, BH);
     _solHasCache = true;
   }
 
-  buf.drawingContext.clearRect(0, 0, BW, BH);
-  buf.drawingContext.drawImage(_solOut, 0, 0);
+  copyCanvasFrame(buf.drawingContext, _solOut, BW, BH);
 }
 
 // ─── Symmetry ─────────────────────────────────────────────────────────────────
@@ -679,8 +688,11 @@ function applySymmetry(src, dst, mode = 'v', pos = 0.5) {
 
 let _plkCanvas = null, _plkCtx = null;
 let _plkBufCanvas = null, _plkBufCtx = null;
+let _plkCacheFrame = -1;
+let _plkCacheThresh = NaN;
+let _plkCacheInvert = false;
 
-function applyPipelineLumaKey(thresh, mix, invert) {
+function applyPipelineLumaKey(thresh, mix, invert, sourceFrameSerial = -1) {
   if (mix <= 0) return;
 
   const W = gBuf.width, H = gBuf.height;
@@ -692,45 +704,55 @@ function applyPipelineLumaKey(thresh, mix, invert) {
     _plkCanvas = document.createElement('canvas');
     _plkCanvas.width = sw; _plkCanvas.height = sh;
     _plkCtx = _plkCanvas.getContext('2d', { willReadFrequently: true });
+    _plkCacheFrame = -1;
   }
   if (!_plkBufCanvas || _plkBufCanvas.width !== sw || _plkBufCanvas.height !== sh) {
     _plkBufCanvas = document.createElement('canvas');
     _plkBufCanvas.width = sw; _plkBufCanvas.height = sh;
     _plkBufCtx = _plkBufCanvas.getContext('2d');
+    _plkCacheFrame = -1;
   }
-  // Read gCur (clean source) for luma sampling
+
   const gCurEl = gCur.elt ?? gCur.drawingContext?.canvas;
   if (!gCurEl) return;
-  _plkCtx.drawImage(gCurEl, 0, 0, sw, sh);
-  // Reuse the ImageData returned by getImageData() as the mask itself. The old
-  // path allocated a second Uint8ClampedArray plus a new ImageData every frame.
-  const maskData = _plkCtx.getImageData(0, 0, sw, sh);
-  const sp = maskData.data;
-  const n = sp.length;
 
-  // Build luma mask: alpha = how much glitch should show at each pixel
-  // reveal=1 → keep gBuf (glitch), reveal=0 → replace with gCur (clean)
-  const t = (1 - thresh) * 255;
-  const rollRange = 64;
-  for (let i = 0; i < n; i += 4) {
-    const lum    = 0.299 * sp[i] + 0.587 * sp[i+1] + 0.114 * sp[i+2];
-    const roll   = Math.max(0, Math.min(1, (lum - t) / rollRange));
-    const reveal = invert ? (1 - roll) : roll;
-    sp[i] = sp[i+1] = sp[i+2] = 255;
-    sp[i+3] = ((1 - reveal) * 255 + 0.5) | 0;
+  // The mask and masked clean patch depend only on the decoded clean frame,
+  // threshold, invert state, and dimensions. At a 60 Hz render rate with a
+  // 30 fps source this avoids rebuilding the same pixel mask twice.
+  const rebuild = sourceFrameSerial !== _plkCacheFrame
+    || thresh !== _plkCacheThresh
+    || invert !== _plkCacheInvert;
+
+  if (rebuild) {
+    copyCanvasFrame(_plkCtx, gCurEl, sw, sh);
+    const maskData = _plkCtx.getImageData(0, 0, sw, sh);
+    const sp = maskData.data;
+    const n = sp.length;
+
+    // Build luma mask: alpha = how much glitch should show at each pixel.
+    const t = (1 - thresh) * 255;
+    const rollRange = 64;
+    for (let i = 0; i < n; i += 4) {
+      const r = sp[i], g = sp[i + 1], b = sp[i + 2];
+      const lum    = _lumaR[r] + _lumaG[g] + _lumaB[b];
+      const roll   = Math.max(0, Math.min(1, (lum - t) / rollRange));
+      const reveal = invert ? (1 - roll) : roll;
+      sp[i] = sp[i + 1] = sp[i + 2] = 255;
+      sp[i + 3] = ((1 - reveal) * 255 + 0.5) | 0;
+    }
+    _plkCtx.putImageData(maskData, 0, 0);
+
+    copyCanvasFrame(_plkBufCtx, gCurEl, sw, sh);
+    _plkBufCtx.globalCompositeOperation = 'destination-in';
+    _plkBufCtx.drawImage(_plkCanvas, 0, 0, sw, sh);
+    _plkBufCtx.globalCompositeOperation = 'source-over';
+
+    _plkCacheFrame  = sourceFrameSerial;
+    _plkCacheThresh = thresh;
+    _plkCacheInvert = invert;
   }
-  _plkCtx.putImageData(maskData, 0, 0);
 
-  // Clip gCur to the "clean" regions using the inverted mask
-  const gBufEl = gBuf.elt ?? gBuf.drawingContext?.canvas;
-  if (!gBufEl) return;
-  _plkBufCtx.clearRect(0, 0, sw, sh);
-  _plkBufCtx.drawImage(gCurEl, 0, 0, sw, sh);         // clean source
-  _plkBufCtx.globalCompositeOperation = 'destination-in';
-  _plkBufCtx.drawImage(_plkCanvas, 0, 0, sw, sh);      // keep only clean areas
-  _plkBufCtx.globalCompositeOperation = 'source-over';
-
-  // Overlay the clean-area patch onto gBuf at mix strength.
+  // Overlay the cached clean-area patch onto gBuf at mix strength.
   // Glitch areas are untouched — gBuf content (trails, feedback) preserved.
   const ctx = gBuf.drawingContext;
   ctx.save();

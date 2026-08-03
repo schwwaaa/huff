@@ -523,6 +523,24 @@ async function primeCameraPermissionOnce() {
 let _rafPumpLast = 0;
 let _rvfcOwnsGCur = false;
 
+// Replace an entire 2D canvas in one operation. Using the `copy` composite mode
+// avoids a separate full-surface clear before drawImage(), which otherwise adds
+// another memory-bandwidth pass at the render resolution.
+function _copyFullFrame(ctx, source, width, height) {
+  if (!ctx || !source || width <= 0 || height <= 0) return false;
+  const prevOp    = ctx.globalCompositeOperation;
+  const prevAlpha = ctx.globalAlpha;
+  try {
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'copy';
+    ctx.drawImage(source, 0, 0, width, height);
+    return true;
+  } finally {
+    ctx.globalCompositeOperation = prevOp || 'source-over';
+    ctx.globalAlpha = prevAlpha;
+  }
+}
+
 function _syncGCur() {
   if (!playing || !videoEl?.elt || !gCur) return;
   // requestVideoFrameCallback already updates gCur exactly when a new decoded
@@ -536,14 +554,12 @@ function _syncGCur() {
   // _syncGCur resumes automatically on the next draw() call after seeking completes.
   if (videoEl.elt.seeking) return;
   try {
-    const ctx = gCur.drawingContext;
-    ctx.clearRect(0, 0, gCur.width, gCur.height);
-    ctx.drawImage(videoEl.elt, 0, 0, gCur.width, gCur.height);
+    _copyFullFrame(gCur.drawingContext, videoEl.elt, gCur.width, gCur.height);
   } catch(e) {}
 }
 
 function _pushToRing() {
-  if (!gCur) return;
+  if (!gCur) return false;
   try {
     const Q   = parseFloat(els.quality?.value ?? '1');
     const bpf = gCur.width * gCur.height * 4;
@@ -552,8 +568,10 @@ function _pushToRing() {
     frameRing.resize(cap);
 
     const src = gCur.elt ?? gCur.drawingContext?.canvas;
-    if (frameRing.pushFrom(src, gCur.width, gCur.height)) _vfc++;
-  } catch(e) {}
+    return frameRing.pushFrom(src, gCur.width, gCur.height);
+  } catch(e) {
+    return false;
+  }
 }
 
 // Each call to pumpVideoFrames() generates a new session token.
@@ -574,11 +592,11 @@ function pumpVideoFrames() {
       if (session !== _pumpSession) return; // stale chain — stop
       if (playing && gCur) {
         try {
-          const ctx = gCur.drawingContext;
-          ctx.clearRect(0, 0, gCur.width, gCur.height);
-          ctx.drawImage(v, 0, 0, gCur.width, gCur.height);
+          if (_copyFullFrame(gCur.drawingContext, v, gCur.width, gCur.height)) {
+            _vfc++;
+            _pushToRing();
+          }
         } catch(e) {}
-        _pushToRing();
       }
       if (session === _pumpSession) v.requestVideoFrameCallback(onFrame);
     };
@@ -586,7 +604,11 @@ function pumpVideoFrames() {
   } else {
     const tick = (ts) => {
       if (session !== _pumpSession) return; // stale chain — stop
-      if (ts - _rafPumpLast >= (1000 / 60)) { _rafPumpLast = ts; _pushToRing(); }
+      if (ts - _rafPumpLast >= (1000 / 60)) {
+        _rafPumpLast = ts;
+        _vfc++;
+        _pushToRing();
+      }
       requestAnimationFrame(tick);
     };
     requestAnimationFrame(tick);
@@ -1123,7 +1145,10 @@ function onFile(ev) {
     clearInterval(poller);
     primed = true;
     clearAll(); updateDim();
-    try { blitVideoInto(gCur); } catch {}
+    try {
+      blitVideoInto(gCur);
+      _vfc++; // invalidate decoded-frame-dependent effect caches for the new source
+    } catch {}
 
     // Clean up any orphaned gesture listeners from a previous file load (#4)
     if (_gesturePointer) {
@@ -1303,7 +1328,8 @@ function draw() {
       applyPipelineLumaKey(
         parseFloat(els.lumaKeyAB?.value ?? '0.5'),
         lkMix,
-        !!els.lumaKeyInvert?.checked
+        !!els.lumaKeyInvert?.checked,
+        _vfc
       );
     }
   };
@@ -1379,8 +1405,7 @@ function draw() {
       _fbCanvas.height = gBuf.height;
       _fbCtx = _fbCanvas.getContext('2d', { alpha:true });
     }
-    _fbCtx.clearRect(0, 0, _fbCanvas.width, _fbCanvas.height);
-    _fbCtx.drawImage(gCanvas, 0, 0);
+    _copyFullFrame(_fbCtx, gCanvas, _fbCanvas.width, _fbCanvas.height);
 
     const ctx = gBuf.drawingContext;
     ctx.save();

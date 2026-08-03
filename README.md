@@ -858,3 +858,8 @@ Re-run the WebKitGTK/libssl dependency install for your distribution from the [B
 <p align="center">
   <sub>huff v1.0.2 beta · built with Tauri, p5.js, Rust, Syphon, Spout2 · ISC licence</sub>
 </p>
+
+
+## HUFF Classic Optimization Pass 5
+
+This build reduces full-frame canvas clears, combines the Flow Warp grid into one traversal, caches Solarize channel maps, and reuses Pipeline Luma Key masks between identical decoded frames. The Pass 4 bounded, client-aware Syphon transport remains included.
