@@ -168,3 +168,22 @@ This changelog tracks the optimization series for the legacy Tauri v1 + p5.js/Ca
 - No wgpu renderer.
 - No new effects or feature expansion during optimization.
 - macOS, Windows, and Linux remain the intended public platforms, with platform-specific output capabilities.
+
+## Pass 12R — Decode Regression Rollback
+
+### Rejected
+
+- Rejected the Pass 12 direct-renderer migration after it produced a video decode error with media supported by the established HUFF Classic path.
+- Rejected native path loading through `convertFileSrc()` and the Tauri asset protocol as an unverified replacement for Blob URL loading.
+
+### Restored
+
+- Restored the complete Pass 11 runtime and native baseline.
+- Restored `File` → `URL.createObjectURL()` → p5 `createVideo()` media loading.
+- Restored the controls WebView as the authoritative decode/render owner.
+- Retained all validated optimization work from Passes 1–11.
+
+### Documented
+
+- Added a video decode incident report with the exact regression boundary and configuration defect.
+- Established that future renderer-ownership work must remain experimental until target-platform runtime tests pass.

@@ -1,36 +1,25 @@
-# HUFF Classic Optimization Pass 11 — Git Commit Message
-
-## Commit title
+# Git Commit Message
 
 ```text
-perf: bypass neutral HUFF Classic render stages
+revert: restore HUFF Classic working video decode path
+
+- reject the Pass 12 direct-renderer migration after supported media produced a decode error
+- restore the complete Pass 11 runtime and native baseline
+- restore File-to-Blob-URL loading through p5 createVideo
+- remove asset-protocol video loading and renderer-window decode ownership from the release path
+- retain all validated canvas, buffer, Flow, Scanline, no-op, Syphon, and Spout optimizations from Passes 1–11
+- document the decode regression, configuration mismatch, rollback boundary, and required runtime checks
 ```
 
-## Commit body
-
-```text
-Resolve effective frame activity before entering the persistent Canvas2D pipeline.
-
-Skip zero-strength Flow, invisible Scanlines, zero-mix Luma and Global Mix, identity Feedback, edge-position Symmetry, and exact-identity Solarize states.
-
-Present the clean source directly when every stage is neutral and synchronize gBuf only once per decoded source frame instead of every render tick.
-
-Preserve Glitch and Scanline phase progression, fixed layer order, persistence behavior during active processing, and immediate re-entry from the current clean frame.
-
-Include Scanlines and Pipeline Luma Key in effective-pipeline accounting so their output is not discarded when used independently.
-
-Add exact neutral-state and bypass-copy validation while preserving Syphon, Spout, Rust relay, Tauri packaging, and the mandatory bundled Syphon framework.
-```
-
-## Ready-to-run command
+## Command
 
 ```bash
 git add . && git commit \
-  -m "perf: bypass neutral HUFF Classic render stages" \
-  -m "Resolve effective frame activity before entering the persistent Canvas2D pipeline." \
-  -m "Skip zero-strength Flow, invisible Scanlines, zero-mix Luma and Global Mix, identity Feedback, edge-position Symmetry, and exact-identity Solarize states." \
-  -m "Present the clean source directly when every stage is neutral and synchronize gBuf only once per decoded source frame instead of every render tick." \
-  -m "Preserve Glitch and Scanline phase progression, fixed layer order, persistence behavior during active processing, and immediate re-entry from the current clean frame." \
-  -m "Include Scanlines and Pipeline Luma Key in effective-pipeline accounting so their output is not discarded when used independently." \
-  -m "Add neutral-state validation while preserving Syphon, Spout, Rust relay, Tauri packaging, and mandatory framework bundling."
+  -m "revert: restore HUFF Classic working video decode path" \
+  -m "Reject the Pass 12 direct-renderer migration after supported media produced a decode error." \
+  -m "Restore the complete Pass 11 runtime and native baseline." \
+  -m "Restore File-to-Blob-URL loading through p5 createVideo." \
+  -m "Remove asset-protocol video loading and renderer-window decode ownership from the release path." \
+  -m "Retain all validated canvas, buffer, Flow, Scanline, no-op, Syphon, and Spout optimizations from Passes 1–11." \
+  -m "Document the decode regression, rollback boundary, and required runtime checks."
 ```
