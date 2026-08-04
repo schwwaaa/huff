@@ -15,6 +15,8 @@
  *  - Pass 9: mirror encoding pauses without an attached canvas receiver
  *  - Pass 11: neutral stages bypass full-frame work and clean presentation
  *    avoids redundant background/buffer copies while decoded-frame state stays current
+ *  - Pass 13S: source-generation guards and owned async cleanup harden file,
+ *    camera, autoplay, and shutdown lifecycle without changing frame scheduling
  */
 
 // ─── Module-local DOM helpers ─────────────────────────────────────────────────
@@ -89,6 +91,98 @@ function connectVideoAudio(videoElement) {
   } catch (e) {
     console.warn('[huff audio] connectVideoAudio failed:', e);
   }
+}
+
+// ─── Stability-safe media lifecycle ownership ────────────────────────────────
+// Preserve the proven File → Blob URL → p5 createVideo() path and all existing
+// render, transport, mirror, and profiler clocks. These helpers only own async
+// callbacks and cleanup so a replaced source cannot reactivate later.
+let _sourceGeneration = 0;
+let _sourceReadyPoller = 0;
+let _sourceGestureUnlock = null;
+let _sourceShutdownComplete = false;
+
+function _clearSourceReadyPoller() {
+  if (!_sourceReadyPoller) return;
+  clearInterval(_sourceReadyPoller);
+  _sourceReadyPoller = 0;
+}
+
+function _clearSourceGestureUnlock() {
+  const gesture = _sourceGestureUnlock;
+  if (!gesture) return;
+  window.removeEventListener('pointerdown', gesture, true);
+  window.removeEventListener('keydown', gesture, true);
+  _sourceGestureUnlock = null;
+}
+
+function _disconnectSourceAudio(element) {
+  const src = element ? _audioSrcMap.get(element) : null;
+  if (!src) return;
+  try { src.disconnect(_gainNode); } catch { try { src.disconnect(); } catch {} }
+  if (_audioSrc === src) _audioSrc = null;
+}
+
+function _sourceIsCurrent(generation, media) {
+  return generation === _sourceGeneration && videoEl?.elt === media;
+}
+
+function _retireCurrentSource({ revokeBlob = true } = {}) {
+  const generation = ++_sourceGeneration;
+  // Invalidate only the decode callback chain. Independent render, transport,
+  // mirror, and profiler schedulers remain exactly as they were in Pass 12R.
+  _pumpSession++;
+  _clearSourceReadyPoller();
+  _clearSourceGestureUnlock();
+
+  const wrapper = videoEl;
+  const media = wrapper?.elt ?? wrapper ?? null;
+  if (media) {
+    try { media.pause(); } catch {}
+    try { media.srcObject?.getTracks().forEach(track => track.stop()); } catch {}
+    try { if (media.srcObject) media.srcObject = null; } catch {}
+    _disconnectSourceAudio(media);
+  }
+  try { wrapper?.remove?.(); } catch {}
+  videoEl = null;
+  playing = false;
+  _wasPlaying = false;
+  _seekPending = false;
+  _rvfcOwnsGCur = false;
+
+  if (revokeBlob && currentBlobUrl) {
+    try { URL.revokeObjectURL(currentBlobUrl); } catch {}
+    currentBlobUrl = null;
+  }
+  return generation;
+}
+
+function _installSourceGestureUnlock(media, generation) {
+  _clearSourceGestureUnlock();
+  const gesture = async () => {
+    if (!_sourceIsCurrent(generation, media)) {
+      _clearSourceGestureUnlock();
+      return;
+    }
+    try { await media.play(); } catch {}
+    _clearSourceGestureUnlock();
+  };
+  _sourceGestureUnlock = gesture;
+  window.addEventListener('pointerdown', gesture, true);
+  window.addEventListener('keydown', gesture, true);
+}
+
+// Profiler-only lifecycle/output counters. They are not sampled from draw().
+const _profileTelemetry = {
+  decoded: 0,
+  ringCaptured: 0,
+  mirrorSent: 0,
+  mirrorDropped: 0,
+};
+window.__huffProfilerActive = false;
+function _profileCount(name, amount = 1) {
+  if (!window.__huffProfilerActive) return;
+  _profileTelemetry[name] = (_profileTelemetry[name] || 0) + amount;
 }
 let gCur, gBuf, gScratch;
 let canvas, _mainCanvasEl = null, _mainCtx = null;
@@ -725,7 +819,8 @@ function pumpVideoFrames() {
         try {
           if (_copyFullFrame(gCur.drawingContext, v, gCur.width, gCur.height)) {
             _vfc++;
-            _pushToRing();
+            _profileCount('decoded');
+            if (_pushToRing()) _profileCount('ringCaptured');
           }
         } catch(e) {}
       }
@@ -738,7 +833,7 @@ function pumpVideoFrames() {
       if (ts - _rafPumpLast >= (1000 / 60)) {
         _rafPumpLast = ts;
         _vfc++;
-        _pushToRing();
+        if (_pushToRing()) _profileCount('ringCaptured');
       }
       requestAnimationFrame(tick);
     };
@@ -1233,15 +1328,9 @@ function onFile(ev) {
   const file  = input.files?.[0]; if (!file) return;
   queueMicrotask(() => { try { input.value = ''; } catch {} });
 
-  try { videoEl?.elt?.srcObject?.getTracks().forEach(t => t.stop()); } catch {}
-  try { if (videoEl) videoEl.remove(); } catch {}
-  videoEl = null;
-  if (currentBlobUrl) { try { URL.revokeObjectURL(currentBlobUrl); } catch {} currentBlobUrl = null; }
-
-  // Invalidate any active pump and clear orphaned gesture listeners
-  _pumpSession++;
-
-  playing = false;
+  // Preserve the stable Pass 12R decoder and scheduler. Only retire ownership
+  // of the previous source and invalidate callbacks that may arrive later.
+  const generation = _retireCurrentSource({ revokeBlob: true });
   enableTransport(false);
 
   // seedOnLoad: randomize seed for each new file so visuals feel fresh
@@ -1262,21 +1351,14 @@ function onFile(ev) {
   v.setAttribute('playsinline', '');
   try { v.disableRemotePlayback = true; } catch {}
 
-  // Track gesture unlock listeners so they can be removed if a new file loads
-  // before the user ever triggers a gesture (#4 — orphaned listener bug).
-  let _gesturePointer = null;
-  let _gestureKey     = null;
-
   let primed = false;
-  let poller;
+  const sourceIsCurrent = () => _sourceIsCurrent(generation, v);
 
   const startPlayback = async () => {
-    if (primed) return;
-    // #3: readyState >= 2 (HAVE_CURRENT_DATA) is sufficient to call play()
-    // and get a renderable frame. The original >= 3 blocked valid MP4/MKV files
-    // that reported state 2 when first ready and never briefly hit state 3.
+    if (primed || !sourceIsCurrent()) return;
+    // readyState >= 2 (HAVE_CURRENT_DATA) remains the proven HUFF Classic gate.
     if (v.readyState < 2 || v.videoWidth === 0) return;
-    clearInterval(poller);
+    _clearSourceReadyPoller();
     primed = true;
     clearAll(); updateDim();
     try {
@@ -1284,31 +1366,14 @@ function onFile(ev) {
       _vfc++; // invalidate decoded-frame-dependent effect caches for the new source
     } catch {}
 
-    // Clean up any orphaned gesture listeners from a previous file load (#4)
-    if (_gesturePointer) {
-      window.removeEventListener('pointerdown', _gesturePointer, true);
-      _gesturePointer = null;
-    }
-    if (_gestureKey) {
-      window.removeEventListener('keydown', _gestureKey, true);
-      _gestureKey = null;
-    }
-
+    _clearSourceGestureUnlock();
     try {
       await v.play();
     } catch {
-      const gesture = async () => {
-        try { await v.play(); } catch {}
-        window.removeEventListener('pointerdown', gesture, true);
-        window.removeEventListener('keydown',     gesture, true);
-        _gesturePointer = null;
-        _gestureKey     = null;
-      };
-      _gesturePointer = gesture;
-      _gestureKey     = gesture;
-      window.addEventListener('pointerdown', gesture, true);
-      window.addEventListener('keydown',     gesture, true);
+      _installSourceGestureUnlock(v, generation);
     }
+    // play() may resolve after another file or camera has replaced this source.
+    if (!sourceIsCurrent()) return;
 
     // #8: apply playback rate from UI
     const rateSelect = _$('playbackRate');
@@ -1318,11 +1383,10 @@ function onFile(ev) {
     const loopToggle = _$('loopToggle');
     try { v.loop = loopToggle ? loopToggle.checked : true; } catch {}
 
-    // After any seek completes, resume play immediately if we were playing
-    // before the scrub started. This is what makes the resume seamless —
-    // play() is called the moment the browser has a decoded frame ready,
-    // not after some timeout or the next user interaction.
+    // Resume immediately when a scrubbed frame becomes available. Ignore a
+    // late seeked event from any source that is no longer authoritative.
     v.addEventListener('seeked', () => {
+      if (!sourceIsCurrent()) return;
       _seekPending = false;
       pumpVideoFrames();
       if (_wasPlaying && !seekBar?._dragging) {
@@ -1332,11 +1396,7 @@ function onFile(ev) {
       }
     });
 
-    // #6: set playing only after play() has been called successfully
     playing = true;
-
-    // #10: start pump BEFORE enabling transport so there's no window where
-    // the user can click Pause before the first requestVideoFrameCallback fires.
     pumpVideoFrames();
     enableTransport(true);
 
@@ -1349,14 +1409,20 @@ function onFile(ev) {
   v.addEventListener('canplaythrough', startPlayback, { once:true });
   v.addEventListener('loadeddata',     startPlayback, { once:true });
 
-  let poll = 0;
-  poller = setInterval(() => {
+  let polls = 0;
+  _sourceReadyPoller = setInterval(() => {
+    if (!sourceIsCurrent()) {
+      _clearSourceReadyPoller();
+      return;
+    }
     startPlayback();
-    if (primed || ++poll > 40) clearInterval(poller);
+    if (primed || ++polls > 40) _clearSourceReadyPoller();
   }, 100);
 
   v.addEventListener('error', () => {
-    clearInterval(poller);
+    if (!sourceIsCurrent()) return;
+    _clearSourceReadyPoller();
+    _clearSourceGestureUnlock();
     enableTransport(true);
     const code = v.error?.code ?? '?';
     showToast(`Video decode error (code ${code}) — try a different file`, true);
@@ -1748,24 +1814,35 @@ async function listCameras() {
 }
 
 function stopCamera() {
-  try { videoEl?.elt?.srcObject?.getTracks().forEach(t => t.stop()); } catch {}
-  try { if (videoEl) videoEl.remove(); } catch {}
-  videoEl = null; playing = false;
+  _retireCurrentSource({ revokeBlob: true });
   try { enableTransport(false); } catch {}
 }
 
 function startCamera(deviceId) {
-  stopCamera();
+  const generation = _retireCurrentSource({ revokeBlob: true });
+  try { enableTransport(false); } catch {}
+
   const video = deviceId?.length
     ? { deviceId:{ exact:deviceId }, width:{ ideal:1920 }, height:{ ideal:1080 } }
     : { facingMode:{ ideal:'user'  }, width:{ ideal:1920 }, height:{ ideal:1080 } };
   try {
-    videoEl = createCapture({ video, audio:false }, () => {
+    let capture = null;
+    capture = createCapture({ video, audio:false }, () => {
+      const v = capture?.elt;
+      // createCapture may finish after the user has selected a file, stopped
+      // the camera, or requested another device. Retire that stale stream
+      // immediately instead of allowing a second hidden capture to remain live.
+      if (!v || generation !== _sourceGeneration || videoEl !== capture) {
+        try { v?.srcObject?.getTracks().forEach(track => track.stop()); } catch {}
+        try { if (v?.srcObject) v.srcObject = null; } catch {}
+        try { capture?.remove?.(); } catch {}
+        return;
+      }
       try { enableTransport(true); } catch {}
       listCameras();
-      const v = videoEl.elt;
       try { v.setAttribute('playsinline', ''); v.muted = true; } catch {}
       const kick = () => {
+        if (generation !== _sourceGeneration || videoEl !== capture) return;
         try {
           playing = true;
           v.play().catch(() => {});
@@ -1776,16 +1853,35 @@ function startCamera(deviceId) {
       if (v.readyState >= 1) kick();
       else v.addEventListener('loadedmetadata', kick, { once:true });
     });
+    videoEl = capture;
     try { cloakVideo(videoEl); } catch {}
   } catch(e) {
-    console.warn('startCamera:', e);
-    const msg = (e?.name === 'NotAllowedError') ? 'Camera permission denied'
-              : (e?.name === 'NotFoundError')   ? 'No camera found'
-              : `Camera error: ${e?.message ?? e}`;
-    showToast(msg, true);
-    try { enableTransport(false); } catch {}
+    if (generation === _sourceGeneration) {
+      _retireCurrentSource({ revokeBlob: true });
+      console.warn('startCamera:', e);
+      const msg = (e?.name === 'NotAllowedError') ? 'Camera permission denied'
+                : (e?.name === 'NotFoundError')   ? 'No camera found'
+                : `Camera error: ${e?.message ?? e}`;
+      showToast(msg, true);
+      try { enableTransport(false); } catch {}
+    }
   }
 }
+
+function _shutdownMediaLifecycle() {
+  if (_sourceShutdownComplete) return;
+  _sourceShutdownComplete = true;
+  _retireCurrentSource({ revokeBlob: true });
+  try { _audioSrc?.disconnect?.(); } catch {}
+  try { _gainNode?.disconnect?.(); } catch {}
+  try { _audioCtx?.close?.(); } catch {}
+  _audioSrc = null;
+  _gainNode = null;
+  _audioCtx = null;
+}
+window.addEventListener('pagehide', _shutdownMediaLifecycle, { once:true });
+window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
+
 
 // ─── ws-mirror ────────────────────────────────────────────────────────────────
 // Streams the canvas to canvas.html via a local WebSocket relay.
@@ -1825,6 +1921,7 @@ function startCamera(deviceId) {
   const tcv = document.createElement('canvas');
   const ttx = tcv.getContext('2d', { alpha:false, desynchronized:true });
   let ws = null, connected = false, fallbackBusy = false;
+  let mirrorShutdown = false;
   let mirrorReceivers = 0;
   let relayFramePending = false;
   let _wsDelay = 1500;
@@ -1862,13 +1959,18 @@ function startCamera(deviceId) {
         }
         if (msg.type === 'encoded') {
           workerBusy = false;
-          if (!connected || mirrorReceivers <= 0 || relayFramePending || !ws || ws.readyState !== WebSocket.OPEN) return;
-          if (ws.bufferedAmount > WS_MAX_BUFFERED) return;
+          if (!connected || mirrorReceivers <= 0 || !ws || ws.readyState !== WebSocket.OPEN) return;
+          if (relayFramePending || ws.bufferedAmount > WS_MAX_BUFFERED) {
+            _profileCount('mirrorDropped');
+            return;
+          }
           try {
             relayFramePending = true;
             ws.send(msg.buffer);
+            _profileCount('mirrorSent');
           } catch {
             relayFramePending = false;
+            _profileCount('mirrorDropped');
           }
           return;
         }
@@ -1897,6 +1999,7 @@ function startCamera(deviceId) {
   }
 
   function ensureWS() {
+    if (mirrorShutdown) return;
     if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
     ws = new WebSocket(wsUrl);
     window.__huffWS = ws;
@@ -1926,8 +2029,10 @@ function startCamera(deviceId) {
       relayFramePending = false;
       mirrorReceivers = 0;
       setWSStatus('WS: disconnected');
-      setTimeout(ensureWS, _wsDelay);
-      _wsDelay = Math.min(_wsDelay * 2, WS_DELAY_MAX);
+      if (!mirrorShutdown) {
+        setTimeout(ensureWS, _wsDelay);
+        _wsDelay = Math.min(_wsDelay * 2, WS_DELAY_MAX);
+      }
     };
   }
   ensureWS();
@@ -1960,14 +2065,20 @@ function startCamera(deviceId) {
     if (!workerReady || workerDisabled) return false;
     // Worker already owns a newer frame. Drop this tick instead of falling back
     // to a second main-thread encode in parallel.
-    if (workerBusy) return true;
+    if (workerBusy) { _profileCount('mirrorDropped'); return true; }
     workerBusy = true;
     let bitmap = null;
     try {
       bitmap = await createImageBitmap(cnv);
-      if (!connected || mirrorReceivers <= 0 || relayFramePending || !ws || ws.readyState !== WebSocket.OPEN) {
+      if (!connected || mirrorReceivers <= 0 || !ws || ws.readyState !== WebSocket.OPEN) {
         bitmap.close?.();
         workerBusy = false;
+        return true;
+      }
+      if (relayFramePending || ws.bufferedAmount > WS_MAX_BUFFERED) {
+        bitmap.close?.();
+        workerBusy = false;
+        _profileCount('mirrorDropped');
         return true;
       }
       encoderWorker.postMessage({
@@ -1987,7 +2098,7 @@ function startCamera(deviceId) {
   }
 
   async function sendFallback(cnv) {
-    if (fallbackBusy) return;
+    if (fallbackBusy) { _profileCount('mirrorDropped'); return; }
     fallbackBusy = true;
     try {
       const sw = cnv.width, sh = cnv.height;
@@ -2005,8 +2116,8 @@ function startCamera(deviceId) {
           try {
             if (blob && connected && mirrorReceivers > 0 && !relayFramePending && ws?.readyState === WebSocket.OPEN && ws.bufferedAmount <= WS_MAX_BUFFERED) {
               relayFramePending = true;
-              try { ws.send(blob); }
-              catch { relayFramePending = false; }
+              try { ws.send(blob); _profileCount('mirrorSent'); }
+              catch { relayFramePending = false; _profileCount('mirrorDropped'); }
             }
           } catch {}
           resolve();
@@ -2018,8 +2129,14 @@ function startCamera(deviceId) {
   }
 
   async function sendFrame(cnv) {
-    if (!connected || mirrorReceivers <= 0 || relayFramePending || !ws || ws.readyState !== WebSocket.OPEN) return;
-    if (ws.bufferedAmount > WS_MAX_BUFFERED) return;
+    if (!connected || mirrorReceivers <= 0 || relayFramePending || !ws || ws.readyState !== WebSocket.OPEN) {
+      if (connected && mirrorReceivers > 0 && relayFramePending) _profileCount('mirrorDropped');
+      return;
+    }
+    if (ws.bufferedAmount > WS_MAX_BUFFERED) {
+      _profileCount('mirrorDropped');
+      return;
+    }
     if (workerReady && !workerDisabled) {
       const accepted = await sendViaWorker(cnv);
       if (accepted) return;
@@ -2037,10 +2154,24 @@ function startCamera(deviceId) {
     requestAnimationFrame(pump);
   });
 
-  window.addEventListener('beforeunload', () => {
+  function shutdownMirror() {
+    if (mirrorShutdown) return;
+    mirrorShutdown = true;
+    connected = false;
+    mirrorReceivers = 0;
+    relayFramePending = false;
+    workerBusy = false;
+    fallbackBusy = false;
     try { encoderWorker?.terminate(); } catch {}
-    try { ws?.close(); } catch {}
-  }, { once:true });
+    encoderWorker = null;
+    if (ws) {
+      try { ws.onopen = ws.onmessage = ws.onerror = ws.onclose = null; } catch {}
+      try { ws.close(); } catch {}
+    }
+    ws = null;
+  }
+  window.addEventListener('pagehide', shutdownMirror, { once:true });
+  window.addEventListener('beforeunload', shutdownMirror, { once:true });
 })();
 
 // ─── Performance profiler — toggle with the backtick ` key ────────────────────
@@ -2093,6 +2224,8 @@ function startCamera(deviceId) {
   }
 
   let frames = 0, lastReport = performance.now();
+  let lastTelemetry = { ..._profileTelemetry };
+
   function report() {
     const now = performance.now();
     const dt  = now - lastReport;
@@ -2100,6 +2233,12 @@ function startCamera(deviceId) {
       const f       = Math.max(1, frames);
       const frameMs = dt / f;
       const fps     = 1000 / frameMs;
+      const decodedDelta = _profileTelemetry.decoded - lastTelemetry.decoded;
+      const ringDelta = _profileTelemetry.ringCaptured - lastTelemetry.ringCaptured;
+      const mirrorSentDelta = _profileTelemetry.mirrorSent - lastTelemetry.mirrorSent;
+      const mirrorDroppedDelta = _profileTelemetry.mirrorDropped - lastTelemetry.mirrorDropped;
+      const decodeFps = decodedDelta * 1000 / dt;
+      const ringFps = ringDelta * 1000 / dt;
       const rows = NAMES.map(function (n) { return [n, acc[n] / f]; })
                         .filter(function (r) { return r[1] > 0.005; })
                         .sort(function (a, b) { return b[1] - a[1]; });
@@ -2112,6 +2251,9 @@ function startCamera(deviceId) {
         'HUFF PROFILER  (toggle: ` )\n' +
         'fps        ' + fps.toFixed(1).padStart(6) + '\n' +
         'frame      ' + frameMs.toFixed(2).padStart(6) + ' ms\n' +
+        'decode     ' + decodeFps.toFixed(1).padStart(6) + ' fps\n' +
+        'ring       ' + ringFps.toFixed(1).padStart(6) + ' fps\n' +
+        'mirror     ' + `${mirrorSentDelta}/${mirrorDroppedDelta}`.padStart(6) + ' sent/drop\n' +
         '──────────────────────\n' +
         (rows.length ? rows.map(function (r) { return fmt(r[0], r[1]); }).join('\n')
                      : '(no effects active)') + '\n' +
@@ -2119,20 +2261,26 @@ function startCamera(deviceId) {
         fmt('effects', measured) + '\n' +
         fmt('other',   Math.max(0, frameMs - measured));
     }
-    if (dt >= 500) { NAMES.forEach(function (n) { acc[n] = 0; }); frames = 0; lastReport = now; }
+    if (dt >= 500) {
+      NAMES.forEach(function (n) { acc[n] = 0; });
+      frames = 0;
+      lastReport = now;
+      lastTelemetry = { ..._profileTelemetry };
+    }
   }
 
   function loop() { frames++; report(); requestAnimationFrame(loop); }
 
   function toggle() {
     visible = !visible;
+    window.__huffProfilerActive = visible;
     ensureOverlay();
     overlay.style.display = visible ? 'block' : 'none';
-    if (!visible) {
-      overlay.textContent = '';
-      NAMES.forEach(function (n) { acc[n] = 0; });
-      frames = 0; lastReport = performance.now();
-    }
+    NAMES.forEach(function (n) { acc[n] = 0; });
+    frames = 0;
+    lastReport = performance.now();
+    lastTelemetry = { ..._profileTelemetry };
+    if (!visible) overlay.textContent = '';
   }
 
   window.addEventListener('keydown', function (e) {

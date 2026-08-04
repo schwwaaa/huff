@@ -187,3 +187,30 @@ This changelog tracks the optimization series for the legacy Tauri v1 + p5.js/Ca
 
 - Added a video decode incident report with the exact regression boundary and configuration defect.
 - Established that future renderer-ownership work must remain experimental until target-platform runtime tests pass.
+
+## Pass 13 — Scheduler Consolidation Rejected
+
+**Date:** 2026-08-03  
+**Status:** Rejected after runtime testing
+
+- Moved transport updates, mirror scheduling, and profiler work behind completed p5 frames.
+- Reworked the stable media lifecycle broadly.
+- Produced significantly worse frame pacing and playback stability than Pass 12R.
+- Must not be used as a baseline or merged.
+
+## Pass 13S — Stability-Safe Lifecycle Hardening
+
+**Date:** 2026-08-03  
+**Status:** Implementation and static validation complete; runtime testing pending
+
+- Branched from Pass 12R rather than the rejected Pass 13.
+- Preserved Blob URL + p5 `createVideo()` media loading.
+- Preserved independent p5, transport, mirror, and profiler animation clocks.
+- Added source-generation guards to readiness, autoplay, seek, error, and camera callbacks.
+- Added explicit ownership and cleanup for readiness intervals and autoplay listeners.
+- Rejected stale camera completions and stopped abandoned tracks.
+- Added conservative source retirement without clearing `src` or forcing decoder `load()` during ordinary replacement.
+- Added idempotent pagehide/beforeunload cleanup for media, audio, Blob URLs, mirror Worker, and mirror WebSocket.
+- Prevented mirror reconnect after shutdown begins.
+- Added profiler-only decode, temporal-ring, and mirror backpressure telemetry.
+- Added `validate:pass13s` to enforce the stable scheduler and decoder boundaries.

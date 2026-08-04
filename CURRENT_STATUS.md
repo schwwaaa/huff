@@ -1,23 +1,23 @@
-# HUFF Classic Current Status — After Pass 12R
+# HUFF Classic Current Status — Pass 13S
 
 ## Authoritative baseline
 
-**HUFF Classic Optimization Pass 12R is Pass 11 runtime code plus rollback documentation.**
+**HUFF Classic Optimization Pass 13S is the stable Pass 12R / Pass 11 renderer with narrowly scoped lifecycle hardening.**
 
-Pass 12 direct-renderer code is rejected and must not be merged or used for further optimization.
+Rejected Pass 13 scheduling changes are not included.
 
-## Working architecture retained
+## Working architecture
 
 ```text
 controls WebView
-  → File input / Blob URL video decode
+  → File input / Blob URL / p5 createVideo decode
   → p5.js + Canvas2D renderer
   → bounded temporal history
-  → receiver-aware JPEG canvas mirror
-  → Syphon / Spout output paths
+  → independent receiver-aware JPEG mirror
+  → independent Syphon / Spout output paths
 ```
 
-## Completed optimization work retained
+## Retained optimization work
 
 - bounded reusable temporal history;
 - latest-frame-wins output transport and backpressure;
@@ -31,12 +31,32 @@ controls WebView
 - cached Flow and Scanline geometry;
 - neutral-stage and clean-path bypasses.
 
+## Pass 13S additions
+
+- source-generation guards;
+- globally owned readiness polling;
+- globally owned autoplay unlock listeners;
+- stale camera completion rejection;
+- conservative media/audio/Blob retirement;
+- idempotent pagehide/beforeunload cleanup;
+- mirror shutdown without reconnect;
+- profiler-only decode/ring/mirror telemetry.
+
 ## Rejected work
 
-- renderer-window decode ownership;
-- native path loading via Tauri asset protocol;
-- replacement of the working Blob URL media path.
+- renderer-window decoder ownership;
+- native path loading through Tauri asset protocol;
+- auxiliary services attached to the end of `draw()`;
+- aggressive decoder reset during ordinary source replacement.
 
 ## Next optimization boundary
 
-Continue inside the existing working architecture. The next pass should focus on decode/render cadence and repeated-frame elimination without changing how files are loaded or which WebView owns the decoder.
+Runtime-test Pass 13S first. After confirmation, return to isolated Canvas2D measurements using the profiler:
+
+1. temporal-ring capture cost;
+2. mirror capture pressure with and without a receiver;
+3. CPU pixel readback in Solarize and Luma Key;
+4. draw-call cost in Glitch, Scanlines, and Flow;
+5. long-session memory behavior.
+
+Only one expensive subsystem should change per pass.
