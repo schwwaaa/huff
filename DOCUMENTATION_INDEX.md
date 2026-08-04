@@ -1,16 +1,12 @@
-# HUFF Classic Pass 14 Documentation Index
+# HUFF Classic Pass 16S Documentation Index
 
-- `PASS_NOTES.md` — exact implementation scope, benefits, and unchanged boundaries
-- `HISTORY_RING_MEMORY_AUDIT.md` — current history topology, capacity policy, copy paths, and release behavior
-- `CHANGELOG.md` — cumulative HUFF Classic optimization history
-- `CURRENT_STATUS.md` — authoritative baseline and next optimization boundary
-- `OPTIMIZATION_ROADMAP.md` — completed, rejected, and remaining mandatory passes
-- `TESTING_CHECKLIST.md` — playback, temporal, resize, memory, cluster, output, and shutdown tests
-- `GIT_COMMIT_MESSAGE.md` — ready-to-use commit title, body, and command
-- `SOURCE_LIFECYCLE_STABILITY_AUDIT.md` — retained Pass 13S lifecycle boundary
-- `VIDEO_DECODE_INCIDENT_REPORT.md` — retained Pass 12 decode-regression record
-- `NO_OP_DIRTY_STATE_AUDIT.md` — retained Pass 11 audit
-- `SCANLINE_ENGINE_AUDIT.md` — retained Pass 10 audit
-- `CANVAS_PIPELINE_AUDIT.md` — retained canvas-path audit
-- `CANVAS_BUFFER_AUDIT.md` — retained buffer-topology audit
-- `scripts/validate-pass14.mjs` — ring ordering/release, copy dispatch, scheduler boundary, and physics validation
+- `PASS_NOTES.md` — exact Pass 16S scope and replacement rule.
+- `SYPHON_BLACK_FRAME_INCIDENT_REPORT.md` — symptom, comparison, and identified startup weakness.
+- `SYPHON_BOOTSTRAP_AUDIT.md` — corrected transport states and preserved optimizations.
+- `TESTING_CHECKLIST.md` — target-machine Syphon and regression tests.
+- `VALIDATION_REPORT.md` — static checks and environment limits.
+- `CURRENT_STATUS.md` — authoritative baseline and release gate.
+- `CHANGELOG.md` — cumulative HUFF Classic optimization history.
+- `OPTIMIZATION_ROADMAP.md` — remaining mandatory work.
+- `GIT_COMMIT_MESSAGE.md` — ready-to-use commit title, body, and command.
+- `HUFF_CLASSIC_OPTIMIZATION_PASS_16S.txt` — compact package marker.

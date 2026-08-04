@@ -300,7 +300,7 @@ Controls the input material fed into the effect chain.
 | **BASE MIX** | Opacity of the base video layer (0 = fully glitched, 1 = full base). |
 | **BASE BG** | Background fill colour when no tile covers a pixel: Black, Green (chroma), Blue, White. |
 | **SEED ON LOAD** | Prime the frame ring buffer with the first video frame immediately on file load, rather than waiting for the ring to fill naturally. |
-| **QUALITY** | Scales the frame ring depth (0→4 frames, 1→60 frames) and affects the temporal richness of all time-based effects. Also controls Solarize frame-skip frequency. |
+| **QUALITY** | Scales the frame-ring depth (0→4 frames, 1→60 frames) and affects the temporal richness of history-based effects. |
 
 ### Glitch Group
 
@@ -781,9 +781,9 @@ huff/
 - **Frame ring** stores reusable canvas-backed snapshots rather than raw `ImageData` arrays or p5 `Graphics` instances. Decoded frames are copied once into owned canvas slots and sampled directly by temporal effects without a later `putImageData()` reconstruction. Dedicated ring contexts remain in `copy` mode, and capacity math only runs when resolution or QUALITY changes.
 - **192 MB ring cap** — the ring depth is capped regardless of the quality setting. At 1080p (≈8 MB per frame) this gives roughly 24 frames maximum. At 720p (≈3.7 MB) you get the full 60 frames at quality=1.
 - **`drawRingRegion`** samples the reusable history canvases directly with native `drawImage` cropping. It performs no per-tile pixel upload or allocation.
-- **Solarize** downsamples to a 640px-wide scratch canvas before the pixel pass, then scales back up. This is 4–16× faster on large canvases and makes a large practical difference on Windows/DirectX WebView.
+- **Solarize** downsamples to a 640px-wide scratch canvas before the pixel pass. The processed scratch is presented directly back into the active buffer, avoiding a second full-resolution Solarize cache canvas and one full-resolution copy on processed frames. Little-endian targets use a packed Uint32 pixel loop with an exact byte-loop fallback.
 - **Flow warp** renders in tiles rather than per-pixel — the tile size is set by the SCALE parameter. Static tile geometry, normalized coordinates, radial vectors, and swirl angles are cached until render size or SCALE changes. Larger tiles = faster but coarser warp.
-- **QUALITY slider** controls temporal-ring depth. Solarize uses an independent adaptive load guard that reuses its cached result only when sustained frame time exceeds the healthy range.
+- **QUALITY slider** controls temporal-ring depth. Solarize uses a separate adaptive load guard that reuses its cached processed scratch only when sustained frame time exceeds the healthy range.
 - **Feedback** uses `drawingContext.drawImage` directly rather than `p5.get()`, eliminating one full-canvas copy per frame.
 - **Full-resolution surfaces** are limited to `gCur`, `gBuf`, and one shared `gScratch` ping-pong target. Feedback, Flow Warp, and Symmetry reuse `gScratch` instead of retaining separate full-size buffers.
 - **Resize behavior** resizes existing p5 Graphics objects in place and reuses Solarize/Luma scratch canvases, avoiding a temporary old-plus-new buffer set during window resizing.
@@ -901,3 +901,20 @@ This build adds a reusable render-activity plan and bypasses full-frame work whe
 ## HUFF Classic Optimization Pass 13S
 
 This build branches from the stable Pass 12R / Pass 11 runtime. It preserves Blob URL loading through p5 `createVideo()` and keeps the p5 renderer, transport display, canvas mirror, and profiler on their existing independent schedules. Source-generation guards now prevent late file, autoplay, seek, error, and camera callbacks from reactivating replaced media. Readiness intervals, autoplay listeners, camera tracks, Blob URLs, Web Audio links, mirror Workers, and WebSockets receive explicit replacement and shutdown cleanup. The rejected Pass 13 render-boundary scheduler consolidation is not included.
+
+
+## HUFF Classic Optimization Pass 14
+
+This build uses exact-size Canvas2D copies where source and destination dimensions already match, explicitly releases discarded temporal-ring backing stores, and reuses the clustered-glitch physics updater. The stable Pass 13S media lifecycle and independent frame clocks remain unchanged.
+
+## HUFF Classic Optimization Pass 15
+
+This build bounds canvas-mirror ImageBitmap staging before Worker transfer on supporting WebViews. Unsupported or ignored resize options automatically return to the proven full-resolution Worker path. Mirror pacing, decoder ownership, effects, Syphon, Spout, and native packaging remain unchanged.
+
+## HUFF Classic Optimization Pass 16
+
+This build isolates the Solarize CPU path. It removes the dedicated full-resolution Solarize cache canvas, presents the processed 640px scratch directly into the active buffer, uses a packed little-endian Uint32 pixel loop with an exact byte fallback, removes per-frame string-key allocation from channel-map caching, and adds profiler-only readback/transform/upload/presentation timing. The synchronous Canvas2D readback itself remains in place, and the stable decoder and scheduler architecture are unchanged.
+
+## HUFF Classic Optimization Pass 16S
+
+Pass 16S supersedes Pass 16 after a Syphon client could discover the `huff` server but remain black with no advancing frames. The browser and native publisher no longer apply mutually blocking `hasClients` gates. HUFF publishes one bounded bootstrap frame per second until a receiver is confirmed, then resumes the selected Syphon frame rate. One-frame acknowledgements, WebSocket backpressure, Worker-assisted readback, persistent Metal textures, the Pass 16 Solarize optimization, and all stable decoder/render-clock boundaries remain intact.

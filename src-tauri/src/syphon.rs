@@ -392,9 +392,11 @@ pub fn status() -> String {
     }
 }
 
-/// Uploads one fixed-size raw RGBA frame. Returns true only when a receiver was
-/// attached and the frame was published. No Metal upload or command buffer is
-/// created while the server has no clients.
+/// Uploads one fixed-size raw RGBA frame. Returns true when the frame was
+/// accepted and submitted to Syphon. The browser normally publishes at the
+/// selected frame rate only while a client is attached, but it may send a
+/// one-frame-per-second bootstrap probe before attachment so lazy clients do not
+/// remain stuck on a discoverable black source.
 pub fn push_pixels(width: u32, height: u32, pixels: &[u8]) -> bool {
     let expected = (width as usize)
         .saturating_mul(height as usize)
@@ -418,11 +420,10 @@ pub fn push_pixels(width: u32, height: u32, pixels: &[u8]) -> bool {
 
     unsafe {
         with_autorelease_pool(|| {
-            let clients: bool = msg_send![state.server, hasClients];
-            if !clients {
-                return false;
-            }
-
+            // Do not duplicate the browser-side receiver gate here. A strict
+            // gate on both sides can deadlock clients that wait for the first
+            // published surface before completing attachment. The browser keeps
+            // no-client probes bounded to one frame per second.
             let texture = state.textures[state.next_texture];
             state.next_texture = (state.next_texture + 1) % TEXTURE_COUNT;
 

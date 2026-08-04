@@ -2,6 +2,52 @@
 
 This changelog tracks the optimization series for the legacy Tauri v1 + p5.js/Canvas2D edition. It intentionally excludes the native-wgpu HUFF project.
 
+## Pass 16S — Syphon bootstrap publication repair
+
+**Date:** 2026-08-03  
+**Status:** implementation and static validation complete; target-runtime OBS confirmation pending
+
+- Superseded Pass 16 after OBS discovered the `huff` Syphon server but displayed black with no advancing frames.
+- Identified a deadlock-capable double gate: the browser sender and native publisher both refused work until `hasClients` was already true.
+- Added one bounded bootstrap frame per second while no receiver is confirmed.
+- Removed the duplicate native no-client return so a newly attaching client receives a current published surface.
+- Restored the selected 30/60 fps cap immediately after receiver attachment.
+- Retained one-frame-in-flight acknowledgement, WebSocket backpressure, Worker readback, persistent Metal textures, and receiver-aware full-rate pacing.
+- Added output-size ImageBitmap capture when supported, with the original full-size Worker fallback.
+- Preserved Pass 16 Solarize changes, stable decoder ownership, independent frame clocks, effects, mirror transport, Spout, and framework packaging.
+- Added `npm run validate:pass16s`.
+
+## Pass 16 — Solarize readback and presentation optimization
+
+**Date:** 2026-08-03  
+**Status:** implementation and deterministic validation complete; target-runtime Solarize comparison pending
+
+- Removed the dedicated full-resolution Solarize output cache canvas.
+- Presented the processed bounded Solarize scratch directly into `gBuf`.
+- Removed one full-resolution canvas copy from every processed Solarize frame.
+- Added a packed little-endian `Uint32Array` pixel path with exact alpha preservation.
+- Retained the previous byte-oriented algorithm as an automatic fallback.
+- Added pre-shifted packed channel maps and removed temporary channel-map key strings.
+- Preserved the 640px scratch bound, Float64 luma formula, strict threshold comparison, channel rounding, and adaptive load-guard cadence.
+- Added profiler-only readback, transform, upload, presentation, and processed/reused measurements.
+- Added `npm run validate:pass16` with 644 checks and 8,391,032 exact pixel comparisons.
+- Preserved Blob URL decoding, independent frame clocks, all other effects, mirror transport, Syphon, Spout, Rust/Tauri code, and framework packaging.
+
+## Pass 15 — Bounded mirror bitmap staging
+
+**Date:** 2026-08-03  
+**Status:** implementation and deterministic static validation complete; target-runtime mirror comparison pending
+
+- Requested final bounded mirror dimensions during `createImageBitmap()` capture on supporting WebViews.
+- Reduced the normal Worker-transfer bitmap from full render resolution to the established mirror preview dimensions for canvases above 1280 × 1280 bounds.
+- Added one-session detection and fallback when ImageBitmap resize options are rejected or ignored.
+- Retained the previous full-resolution Worker path and main-thread `toBlob()` fallback.
+- Cached mirror target geometry until render-canvas dimensions change.
+- Added exact-size Worker copies for pre-sized bitmaps while preserving Worker scaling for legacy input.
+- Added profiler-only mirror capture, encode, and resized/full staging telemetry.
+- Preserved independent mirror scheduling, receiver-aware suspension, relay acknowledgement, WebSocket backpressure, decoder ownership, effects, Syphon, Spout, and native packaging.
+- Added `npm run validate:pass15` with compatibility-state, target-dimension, transfer-reduction, and scheduler-boundary checks.
+
 ## Pass 14 — Exact-size canvas copies and temporal-ring release
 
 **Date:** 2026-08-03  

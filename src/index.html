@@ -2029,6 +2029,15 @@
         let outputH = 720;
         let sourceCanvas = null;
         let nativeFrames = 0;
+        let bootstrapFrames = 0;
+
+        // Some Syphon clients discover the server before they fully attach to
+        // its current surface. A strict hasClients gate on both the browser and
+        // native sides can therefore leave a discoverable source permanently
+        // black with zero published frames. Keep a very low-rate bootstrap
+        // publication alive until a receiver is confirmed, then switch to the
+        // selected output frame rate.
+        const BOOTSTRAP_FPS = 1;
 
         let syphWS = null;
         let wsReady = false;
@@ -2050,12 +2059,13 @@
                 statusBox.textContent = `Syphon active — receiver connected — streaming ${outputW}×${outputH}.`;
                 statusBox.className = 'active';
             } else {
-                statusBox.textContent = `Syphon active — waiting for a receiver. Canvas readback is paused.`;
+                statusBox.textContent = `Syphon active — waiting for a receiver. Publishing a 1 fps bootstrap frame.`;
                 statusBox.className = 'active';
             }
             if (frameLabel) {
                 const mode = workerReady ? 'worker' : 'main-thread fallback';
-                frameLabel.textContent = `${nativeFrames} frames published · ${mode}`;
+                const bootstrap = receiverConnected ? '' : ` · ${bootstrapFrames} bootstrap`;
+                frameLabel.textContent = `${nativeFrames} frames published${bootstrap} · ${mode}`;
             }
         }
 
@@ -2086,6 +2096,7 @@
                     frameInFlight = false;
                     receiverConnected = !!message.hasClients;
                     nativeFrames = Number(message.frames) || nativeFrames;
+                    if (!receiverConnected && message.published) bootstrapFrames++;
                     updateDisplay();
                 }
             } catch {}
@@ -2242,8 +2253,23 @@
             }
         }
 
-        function captureWorker(source, id) {
-            createImageBitmap(source).then(bitmap => {
+        async function captureWorker(source, id) {
+            let bitmap = null;
+            try {
+                const needsScale = source.width !== outputW || source.height !== outputH;
+                if (needsScale) {
+                    try {
+                        bitmap = await createImageBitmap(source, 0, 0, source.width, source.height, {
+                            resizeWidth: outputW,
+                            resizeHeight: outputH,
+                            resizeQuality: 'low',
+                        });
+                        // Older WKWebViews may accept but ignore resize options.
+                        // The Worker still retains its proven scaling path.
+                    } catch {}
+                }
+                if (!bitmap) bitmap = await createImageBitmap(source);
+
                 if (!active || !worker || !wsReady) {
                     try { bitmap.close?.(); } catch {}
                     frameInFlight = false;
@@ -2256,12 +2282,13 @@
                     height: outputH,
                     bitmap,
                 }, [bitmap]);
-            }).catch(error => {
+            } catch (error) {
+                try { bitmap?.close?.(); } catch {}
                 console.warn('[huff syphon] ImageBitmap capture failed:', error);
                 frameInFlight = false;
                 workerDisabled = true;
                 destroyWorker();
-            });
+            }
         }
 
         function sendFrame(ts) {
@@ -2283,13 +2310,15 @@
                 return;
             }
 
-            // Syphon's own hasClients signal is authoritative. No receiver means
-            // no canvas scale, no getImageData, no WebSocket payload, and no
-            // Metal upload.
-            if (!receiverConnected) return;
             if (syphWS.bufferedAmount > 0) return;
 
-            const fpsCap = parseInt(fpsSelect.value, 10) || 30;
+            // Full-rate publishing begins as soon as Syphon confirms a client.
+            // Before that, publish one bounded bootstrap frame per second. This
+            // prevents a discoverable-but-black source when a client waits for a
+            // first frame before completing attachment.
+            const fpsCap = receiverConnected
+                ? (parseInt(fpsSelect.value, 10) || 30)
+                : BOOTSTRAP_FPS;
             const period = 1000 / fpsCap;
             if (ts - lastTs < period) return;
 
@@ -2332,6 +2361,7 @@
                 active = true;
                 receiverConnected = false;
                 nativeFrames = 0;
+                bootstrapFrames = 0;
                 lastTs = 0;
                 frameInFlight = false;
                 workerDisabled = false;
@@ -2339,7 +2369,7 @@
                 ensureSyphWS();
                 await pollRuntimeState();
 
-                statusBox.textContent = `${message}\nWaiting for a receiver; capture remains paused until one connects.`;
+                statusBox.textContent = `${message}\nWaiting for a receiver; publishing a 1 fps bootstrap frame until one connects.`;
                 statusBox.className = 'active';
                 pill.textContent = `SYPHON: ${w}×${h}`;
                 pill.style.color = 'rgba(180,100,255,.9)';

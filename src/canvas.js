@@ -19,6 +19,8 @@
  *    camera, autoplay, and shutdown lifecycle without changing frame scheduling
  *  - Pass 14: exact-size Canvas2D copies use the non-scaling draw path;
  *    temporal ring backing stores are explicitly released on shrink/resize/exit
+ *  - Pass 15: mirror ImageBitmaps are captured at bounded preview dimensions
+ *    before Worker transfer when supported, with automatic legacy fallback
  */
 
 // ─── Module-local DOM helpers ─────────────────────────────────────────────────
@@ -180,6 +182,12 @@ const _profileTelemetry = {
   ringCaptured: 0,
   mirrorSent: 0,
   mirrorDropped: 0,
+  mirrorCaptureMs: 0,
+  mirrorCaptureSamples: 0,
+  mirrorEncodeMs: 0,
+  mirrorEncodeSamples: 0,
+  mirrorScaledCaptures: 0,
+  mirrorFullCaptures: 0,
 };
 window.__huffProfilerActive = false;
 function _profileCount(name, amount = 1) {
@@ -1946,8 +1954,11 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
 // ─── ws-mirror ────────────────────────────────────────────────────────────────
 // Streams the canvas to canvas.html via a local WebSocket relay.
 // JPEG scale/encode work is moved to a Worker + OffscreenCanvas when the WebView
-// supports it. Older WebViews transparently fall back to the original main-thread
-// canvas.toBlob() path. Both paths are latest-frame-wins and bounded.
+// supports it. Pass 15 requests a bounded-size ImageBitmap before transferring it
+// to the Worker, avoiding full-resolution bitmap transfer for large render canvases.
+// Unsupported WebViews automatically retain the prior full-bitmap Worker path, and
+// older WebViews retain the main-thread canvas.toBlob() fallback. All paths remain
+// latest-frame-wins, receiver-aware, one-frame-in-flight, and independently paced.
 
 (function() {
   const STREAM_MAX_W = 1280, STREAM_MAX_H = 1280;
@@ -1980,6 +1991,24 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
 
   const tcv = document.createElement('canvas');
   const ttx = tcv.getContext('2d', { alpha:false, desynchronized:true });
+
+  // Cache mirror output dimensions until the authoritative render canvas changes
+  // size. This same rounding policy is used by Worker and fallback encoding paths.
+  let _mirrorSourceW = 0, _mirrorSourceH = 0;
+  let _mirrorTargetW = 1, _mirrorTargetH = 1;
+  function mirrorTargetSize(cnv) {
+    const sw = Math.max(1, cnv?.width | 0);
+    const sh = Math.max(1, cnv?.height | 0);
+    if (sw !== _mirrorSourceW || sh !== _mirrorSourceH) {
+      const scale = Math.min(1, STREAM_MAX_W / sw, STREAM_MAX_H / sh);
+      _mirrorSourceW = sw;
+      _mirrorSourceH = sh;
+      _mirrorTargetW = Math.max(1, Math.round(sw * scale));
+      _mirrorTargetH = Math.max(1, Math.round(sh * scale));
+    }
+    return { width: _mirrorTargetW, height: _mirrorTargetH };
+  }
+
   let ws = null, connected = false, fallbackBusy = false;
   let mirrorShutdown = false;
   let mirrorReceivers = 0;
@@ -1992,6 +2021,11 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
   let workerReady = false;
   let workerBusy = false;
   let workerDisabled = false;
+  // Optimistically use createImageBitmap resize options. A WebView that rejects
+  // or ignores them is detected once and permanently falls back to the proven
+  // full-size bitmap transfer path for the rest of the session.
+  let resizedBitmapCapture = true;
+  let resizedBitmapWarningShown = false;
 
   function disableWorker(reason) {
     if (workerDisabled) return;
@@ -2019,6 +2053,10 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
         }
         if (msg.type === 'encoded') {
           workerBusy = false;
+          if (window.__huffProfilerActive && Number.isFinite(msg.encodeMs)) {
+            _profileCount('mirrorEncodeMs', msg.encodeMs);
+            _profileCount('mirrorEncodeSamples');
+          }
           if (!connected || mirrorReceivers <= 0 || !ws || ws.readyState !== WebSocket.OPEN) return;
           if (relayFramePending || ws.bufferedAmount > WS_MAX_BUFFERED) {
             _profileCount('mirrorDropped');
@@ -2121,6 +2159,53 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
   // Do not enqueue another encoded frame while the socket is backed up.
   const WS_MAX_BUFFERED = 1 << 19; // ~512KB
 
+  async function captureMirrorBitmap(cnv, target) {
+    const profile = window.__huffProfilerActive;
+    const started = profile ? performance.now() : 0;
+    const needsScale = cnv.width !== target.width || cnv.height !== target.height;
+    let bitmap = null;
+
+    if (needsScale && resizedBitmapCapture) {
+      try {
+        bitmap = await createImageBitmap(cnv, 0, 0, cnv.width, cnv.height, {
+          resizeWidth: target.width,
+          resizeHeight: target.height,
+          resizeQuality: 'low',
+        });
+        // Some older implementations may accept but ignore resize options.
+        if (bitmap.width !== target.width || bitmap.height !== target.height) {
+          resizedBitmapCapture = false;
+          if (!resizedBitmapWarningShown) {
+            resizedBitmapWarningShown = true;
+            console.warn('[huff mirror] resized ImageBitmap capture ignored; using legacy full-size transfer');
+          }
+          _profileCount('mirrorFullCaptures');
+        } else {
+          _profileCount('mirrorScaledCaptures');
+        }
+      } catch (error) {
+        resizedBitmapCapture = false;
+        if (!resizedBitmapWarningShown) {
+          resizedBitmapWarningShown = true;
+          console.warn('[huff mirror] resized ImageBitmap capture unsupported; using legacy full-size transfer:', error?.message || error);
+        }
+      }
+    }
+
+    if (!bitmap) {
+      bitmap = await createImageBitmap(cnv);
+      _profileCount('mirrorFullCaptures');
+    } else if (!needsScale) {
+      _profileCount('mirrorFullCaptures');
+    }
+
+    if (profile) {
+      _profileCount('mirrorCaptureMs', performance.now() - started);
+      _profileCount('mirrorCaptureSamples');
+    }
+    return bitmap;
+  }
+
   async function sendViaWorker(cnv) {
     if (!workerReady || workerDisabled) return false;
     // Worker already owns a newer frame. Drop this tick instead of falling back
@@ -2129,7 +2214,8 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
     workerBusy = true;
     let bitmap = null;
     try {
-      bitmap = await createImageBitmap(cnv);
+      const target = mirrorTargetSize(cnv);
+      bitmap = await captureMirrorBitmap(cnv, target);
       if (!connected || mirrorReceivers <= 0 || !ws || ws.readyState !== WebSocket.OPEN) {
         bitmap.close?.();
         workerBusy = false;
@@ -2144,9 +2230,10 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
       encoderWorker.postMessage({
         type: 'frame',
         bitmap,
-        maxW: STREAM_MAX_W,
-        maxH: STREAM_MAX_H,
+        width: target.width,
+        height: target.height,
         quality: streamJpegQ(),
+        profile: window.__huffProfilerActive,
       }, [bitmap]);
       return true;
     } catch (error) {
@@ -2161,18 +2248,28 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
     if (fallbackBusy) { _profileCount('mirrorDropped'); return; }
     fallbackBusy = true;
     try {
-      const sw = cnv.width, sh = cnv.height;
-      const scale = Math.min(1, STREAM_MAX_W / sw, STREAM_MAX_H / sh);
-      const tw = Math.max(1, Math.round(sw * scale));
-      const th = Math.max(1, Math.round(sh * scale));
+      const target = mirrorTargetSize(cnv);
+      const tw = target.width, th = target.height;
       if (tcv.width !== tw || tcv.height !== th) { tcv.width = tw; tcv.height = th; }
+      const profile = window.__huffProfilerActive;
+      const captureStarted = profile ? performance.now() : 0;
       ttx.globalAlpha = 1;
       ttx.globalCompositeOperation = 'copy';
-      ttx.drawImage(cnv, 0, 0, tw, th);
+      if (cnv.width === tw && cnv.height === th) ttx.drawImage(cnv, 0, 0);
+      else ttx.drawImage(cnv, 0, 0, tw, th);
       ttx.globalCompositeOperation = 'source-over';
+      if (profile) {
+        _profileCount('mirrorCaptureMs', performance.now() - captureStarted);
+        _profileCount('mirrorCaptureSamples');
+      }
       const q = streamJpegQ();
+      const encodeStarted = profile ? performance.now() : 0;
       await new Promise(resolve => {
         tcv.toBlob(blob => {
+          if (profile) {
+            _profileCount('mirrorEncodeMs', performance.now() - encodeStarted);
+            _profileCount('mirrorEncodeSamples');
+          }
           try {
             if (blob && connected && mirrorReceivers > 0 && !relayFramePending && ws?.readyState === WebSocket.OPEN && ws.bufferedAmount <= WS_MAX_BUFFERED) {
               relayFramePending = true;
@@ -2283,8 +2380,25 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
     document.body.appendChild(overlay);
   }
 
+  function solarTelemetrySnapshot() {
+    const t = window.__huffSolarizeTelemetry || {};
+    return {
+      readbackMs: t.readbackMs || 0,
+      readbackSamples: t.readbackSamples || 0,
+      transformMs: t.transformMs || 0,
+      transformSamples: t.transformSamples || 0,
+      uploadMs: t.uploadMs || 0,
+      uploadSamples: t.uploadSamples || 0,
+      presentMs: t.presentMs || 0,
+      presentSamples: t.presentSamples || 0,
+      processedFrames: t.processedFrames || 0,
+      reusedFrames: t.reusedFrames || 0,
+    };
+  }
+
   let frames = 0, lastReport = performance.now();
   let lastTelemetry = { ..._profileTelemetry };
+  let lastSolarTelemetry = solarTelemetrySnapshot();
 
   function report() {
     const now = performance.now();
@@ -2297,6 +2411,29 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
       const ringDelta = _profileTelemetry.ringCaptured - lastTelemetry.ringCaptured;
       const mirrorSentDelta = _profileTelemetry.mirrorSent - lastTelemetry.mirrorSent;
       const mirrorDroppedDelta = _profileTelemetry.mirrorDropped - lastTelemetry.mirrorDropped;
+      const mirrorCaptureMsDelta = _profileTelemetry.mirrorCaptureMs - lastTelemetry.mirrorCaptureMs;
+      const mirrorCaptureSamplesDelta = _profileTelemetry.mirrorCaptureSamples - lastTelemetry.mirrorCaptureSamples;
+      const mirrorEncodeMsDelta = _profileTelemetry.mirrorEncodeMs - lastTelemetry.mirrorEncodeMs;
+      const mirrorEncodeSamplesDelta = _profileTelemetry.mirrorEncodeSamples - lastTelemetry.mirrorEncodeSamples;
+      const mirrorScaledDelta = _profileTelemetry.mirrorScaledCaptures - lastTelemetry.mirrorScaledCaptures;
+      const mirrorFullDelta = _profileTelemetry.mirrorFullCaptures - lastTelemetry.mirrorFullCaptures;
+      const mirrorCaptureAvg = mirrorCaptureSamplesDelta > 0 ? mirrorCaptureMsDelta / mirrorCaptureSamplesDelta : 0;
+      const mirrorEncodeAvg = mirrorEncodeSamplesDelta > 0 ? mirrorEncodeMsDelta / mirrorEncodeSamplesDelta : 0;
+      const solarNow = solarTelemetrySnapshot();
+      const solarReadbackSamples = solarNow.readbackSamples - lastSolarTelemetry.readbackSamples;
+      const solarTransformSamples = solarNow.transformSamples - lastSolarTelemetry.transformSamples;
+      const solarUploadSamples = solarNow.uploadSamples - lastSolarTelemetry.uploadSamples;
+      const solarPresentSamples = solarNow.presentSamples - lastSolarTelemetry.presentSamples;
+      const solarReadbackAvg = solarReadbackSamples > 0
+        ? (solarNow.readbackMs - lastSolarTelemetry.readbackMs) / solarReadbackSamples : 0;
+      const solarTransformAvg = solarTransformSamples > 0
+        ? (solarNow.transformMs - lastSolarTelemetry.transformMs) / solarTransformSamples : 0;
+      const solarUploadAvg = solarUploadSamples > 0
+        ? (solarNow.uploadMs - lastSolarTelemetry.uploadMs) / solarUploadSamples : 0;
+      const solarPresentAvg = solarPresentSamples > 0
+        ? (solarNow.presentMs - lastSolarTelemetry.presentMs) / solarPresentSamples : 0;
+      const solarProcessedDelta = solarNow.processedFrames - lastSolarTelemetry.processedFrames;
+      const solarReusedDelta = solarNow.reusedFrames - lastSolarTelemetry.reusedFrames;
       const decodeFps = decodedDelta * 1000 / dt;
       const ringFps = ringDelta * 1000 / dt;
       const rows = NAMES.map(function (n) { return [n, acc[n] / f]; })
@@ -2316,6 +2453,14 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
         'ring mem   ' + `${frameRing.allocatedSlots}/${frameRing.capacity}`.padStart(6) + ' slots\n' +
         'ring MiB   ' + (frameRing.estimatedBytes / 1048576).toFixed(1).padStart(6) + '\n' +
         'mirror     ' + `${mirrorSentDelta}/${mirrorDroppedDelta}`.padStart(6) + ' sent/drop\n' +
+        'mir cap    ' + mirrorCaptureAvg.toFixed(2).padStart(6) + ' ms\n' +
+        'mir enc    ' + mirrorEncodeAvg.toFixed(2).padStart(6) + ' ms\n' +
+        'mir stage  ' + `${mirrorScaledDelta}/${mirrorFullDelta}`.padStart(6) + ' scaled/full\n' +
+        'sol read   ' + solarReadbackAvg.toFixed(2).padStart(6) + ' ms\n' +
+        'sol xform  ' + solarTransformAvg.toFixed(2).padStart(6) + ' ms\n' +
+        'sol upload ' + solarUploadAvg.toFixed(2).padStart(6) + ' ms\n' +
+        'sol present' + solarPresentAvg.toFixed(2).padStart(6) + ' ms\n' +
+        'sol cache  ' + `${solarProcessedDelta}/${solarReusedDelta}`.padStart(6) + ' process/reuse\n' +
         '──────────────────────\n' +
         (rows.length ? rows.map(function (r) { return fmt(r[0], r[1]); }).join('\n')
                      : '(no effects active)') + '\n' +
@@ -2328,6 +2473,7 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
       frames = 0;
       lastReport = now;
       lastTelemetry = { ..._profileTelemetry };
+      lastSolarTelemetry = solarTelemetrySnapshot();
     }
   }
 
@@ -2342,6 +2488,7 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
     frames = 0;
     lastReport = performance.now();
     lastTelemetry = { ..._profileTelemetry };
+    lastSolarTelemetry = solarTelemetrySnapshot();
     if (!visible) overlay.textContent = '';
   }
 

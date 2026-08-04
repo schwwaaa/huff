@@ -1,52 +1,32 @@
-# HUFF Classic Current Status — Pass 14
+# HUFF Classic Current Status — Pass 16S
 
 ## Authoritative baseline
 
-**HUFF Classic Optimization Pass 14 is Pass 13S plus an isolated Canvas2D copy and temporal-ring resource pass.**
+Pass 16S supersedes Pass 16.
 
-The rejected Pass 13 scheduler consolidation and Pass 12 asset-protocol decoder migration remain excluded.
+It retains the stable Pass 13S lifecycle and Pass 14–16 Canvas2D improvements while repairing the Syphon black/zero-frame startup condition.
 
-## Working architecture
+## Stable systems retained
 
-```text
-controls WebView
-  → File input / Blob URL / p5 createVideo decode
-  → decoded-frame gCur update
-  → bounded full-resolution temporal ring
-  → p5.js + Canvas2D effect pipeline
-  → independent JPEG canvas mirror
-  → independent Syphon / Spout outputs
-```
+- File → Blob URL → p5 `createVideo()` decoding
+- Independent p5 render, transport, mirror, and profiler clocks
+- Canvas-backed temporal history
+- Consolidated full-resolution buffer topology
+- Cached Flow and Scanline geometry
+- Neutral-stage bypass
+- Reduced Solarize surface/copy cost
+- Receiver-aware JPEG mirror
+- Source-generation lifecycle guards
+- Mandatory bundled universal `Syphon.framework`
+- Spout native path
 
-## Pass 14 additions
+## Pass 16S repair state
 
-- exact-size full-frame Canvas2D copy dispatch;
-- exact-size temporal-history capture path;
-- explicit history backing-store retirement on shrink, resize, and exit;
-- newest-frame retention during ring-capacity reduction;
-- temporal-ring allocation and estimated-memory profiler rows;
-- reusable clustered-glitch physics updater;
-- Pass 14 deterministic validation.
+- Syphon server discovery remains unchanged.
+- No-client output now publishes one bounded bootstrap frame per second.
+- Connected clients receive the selected output frame rate.
+- Browser and native layers no longer apply a mutually blocking `hasClients` gate.
 
-## Preserved stability boundaries
+## Release gate
 
-- Blob URL + p5 `createVideo()` media path;
-- controls-window decoder ownership;
-- independent p5, transport, mirror, and profiler clocks;
-- full-rate history capture;
-- existing history capacity and memory-budget policy;
-- fixed effect order and formulas;
-- Pass 13S source-generation and cleanup guards;
-- Syphon, Spout, Rust relay, and mandatory framework packaging.
-
-## Next optimization boundary
-
-Runtime-test Pass 14 before changing another subsystem. The next measured candidates are:
-
-1. mirror capture staging and full-canvas snapshot cost;
-2. Solarize CPU readback and upload;
-3. Pipeline Luma Key CPU mask work;
-4. high-density Glitch draw-call cost;
-5. temporal-history capture policy only if a behavioral tradeoff is explicitly approved.
-
-The next pass must continue from whichever of Pass 13S or Pass 14 proves more stable in target testing.
+Pass 16S is not accepted as the next committed baseline until OBS displays live frames and the published-frame counter advances under target macOS testing.

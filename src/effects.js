@@ -20,6 +20,9 @@
 //    the draw dispatcher also skips neutral Flow/Feedback/Symmetry/Mix stages.
 //  - Pass 14 exact-size canvas copies avoid Canvas2D scaling setup, and the
 //    cluster-physics updater is reused instead of recreated inside applyGlitch.
+//  - Pass 16 processes Solarize pixels through a little-endian Uint32 path,
+//    keeps the byte path as fallback, and presents the cached 640px result
+//    directly instead of maintaining a second full-resolution cache canvas.
 
 // ─── Temporal ring drawing ───────────────────────────────────────────────────
 // FrameRing stores reusable canvas snapshots, so historical frames remain
@@ -876,24 +879,138 @@ function applyFlowWarp(src, dst, strength = 6, scale = 80, pulse = 0, implode = 
 // ~4–16x faster on large screens / Windows.
 
 let _solCanvas = null, _solCtx = null;
-let _solOut    = null, _solOutCtx = null;
 const _solRMap = new Uint8ClampedArray(256);
 const _solGMap = new Uint8ClampedArray(256);
 const _solBMap = new Uint8ClampedArray(256);
-let _solMapKey = '';
+const _solRPacked = new Uint32Array(256);
+const _solGPacked = new Uint32Array(256);
+const _solBPacked = new Uint32Array(256);
+let _solMapAmount = NaN;
+let _solMapR = NaN;
+let _solMapG = NaN;
+let _solMapB = NaN;
+let _solOutputW = 0;
+let _solOutputH = 0;
+
+// Every supported HUFF Classic release target is little-endian today, but keep
+// the original byte loop as a deterministic fallback rather than assuming it.
+const _solLittleEndian = (() => {
+  const word = new Uint32Array([0x0a0b0c0d]);
+  return new Uint8Array(word.buffer)[0] === 0x0d;
+})();
+
+// Profiler-only sub-stage telemetry. The main profiler reads this object on its
+// independent clock; Solarize only measures these phases while the profiler is
+// visible, so hidden-profiler playback retains the optimized hot path.
+const _solTelemetry = window.__huffSolarizeTelemetry || {
+  readbackMs: 0,
+  readbackSamples: 0,
+  transformMs: 0,
+  transformSamples: 0,
+  uploadMs: 0,
+  uploadSamples: 0,
+  presentMs: 0,
+  presentSamples: 0,
+  processedFrames: 0,
+  reusedFrames: 0,
+};
+window.__huffSolarizeTelemetry = _solTelemetry;
+
+function _solProfileAdd(name, amount = 1) {
+  _solTelemetry[name] = (_solTelemetry[name] || 0) + amount;
+}
 
 function _refreshSolarizeMaps(amount, solR, solG, solB) {
-  const key = `${amount}|${solR}|${solG}|${solB}`;
-  if (key === _solMapKey) return;
-  _solMapKey = key;
+  // Primitive comparisons avoid constructing a parameter-key string on every
+  // processed Solarize frame. Equality behavior remains the same for controls.
+  if (
+    amount === _solMapAmount &&
+    solR === _solMapR &&
+    solG === _solMapG &&
+    solB === _solMapB
+  ) return;
+
+  _solMapAmount = amount;
+  _solMapR = solR;
+  _solMapG = solG;
+  _solMapB = solB;
+
   const a = Math.max(0, Math.min(1, amount));
   for (let i = 0; i < 256; i++) {
     const inverted = i + (255 - i - i) * a;
     _solRMap[i] = Math.floor(Math.min(255, Math.max(0, inverted * solR + 0.5)));
     _solGMap[i] = Math.floor(Math.min(255, Math.max(0, inverted * solG + 0.5)));
     _solBMap[i] = Math.floor(Math.min(255, Math.max(0, inverted * solB + 0.5)));
+    _solRPacked[i] = _solRMap[i];
+    _solGPacked[i] = _solGMap[i] << 8;
+    _solBPacked[i] = _solBMap[i] << 16;
   }
 }
+
+function _solarizePixelsBytes(pix, threshold) {
+  for (let i = 0; i < pix.length; i += 4) {
+    const r = pix[i], g = pix[i + 1], b = pix[i + 2];
+    const lum = _lumaR[r] + _lumaG[g] + _lumaB[b];
+    if (lum > threshold) {
+      pix[i]     = _solRMap[r];
+      pix[i + 1] = _solGMap[g];
+      pix[i + 2] = _solBMap[b];
+    }
+  }
+}
+
+function _solarizePixelsWords(pix, threshold) {
+  // RGBA ImageData bytes are packed as 0xAABBGGRR on little-endian targets.
+  // Process one Uint32 per pixel while retaining the alpha byte verbatim.
+  const words = new Uint32Array(
+    pix.buffer,
+    pix.byteOffset,
+    pix.byteLength >>> 2
+  );
+  for (let i = 0; i < words.length; i++) {
+    const packed = words[i];
+    const r = packed & 0xff;
+    const g = (packed >>> 8) & 0xff;
+    const b = (packed >>> 16) & 0xff;
+    const lum = _lumaR[r] + _lumaG[g] + _lumaB[b];
+    if (lum > threshold) {
+      words[i] = (
+        (packed & 0xff000000) |
+        _solRPacked[r] |
+        _solGPacked[g] |
+        _solBPacked[b]
+      ) >>> 0;
+    }
+  }
+}
+
+function _presentSolarizeCache(ctx, width, height) {
+  if (!ctx || !_solCanvas || width <= 0 || height <= 0) return;
+  const prevOp = ctx.globalCompositeOperation;
+  const prevAlpha = ctx.globalAlpha;
+  const prevSmoothing = ctx.imageSmoothingEnabled;
+  const hasQuality = 'imageSmoothingQuality' in ctx;
+  const prevQuality = hasQuality ? ctx.imageSmoothingQuality : null;
+  try {
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'copy';
+    // Match the default scaling state of the removed full-resolution cache
+    // canvas. The old second exact-size copy did not perform any extra filtering.
+    ctx.imageSmoothingEnabled = true;
+    if (hasQuality) ctx.imageSmoothingQuality = 'low';
+    if (_solCanvas.width === width && _solCanvas.height === height) {
+      ctx.drawImage(_solCanvas, 0, 0);
+    } else {
+      ctx.drawImage(_solCanvas, 0, 0, width, height);
+    }
+  } finally {
+    ctx.globalCompositeOperation = prevOp || 'source-over';
+    ctx.globalAlpha = prevAlpha;
+    ctx.imageSmoothingEnabled = prevSmoothing;
+    if (hasQuality && prevQuality) ctx.imageSmoothingQuality = prevQuality;
+  }
+}
+
 // ── Adaptive load guard ───────────────────────────────────────────────────────
 // applySolarize()'s getImageData() forces a synchronous GPU→CPU readback. Because
 // solarize runs late in the pipeline, that readback flushes every preceding
@@ -902,11 +1019,11 @@ function _refreshSolarizeMaps(amount, solR, solG, solB) {
 // pipeline that feeds Web Audio — the "breaks up, drops, then recovers" symptom.
 //
 // The guard measures the smoothed frame period and, ONLY while overloaded,
-// processes solarize every 2nd/3rd frame, re-blitting the cached full-res result
-// (_solOut) on the frames it skips. At healthy frame rates it processes every
-// frame, so the output is identical to before — the easing only kicks in exactly
-// when the machine is already dropping frames, trading a little solarize update
-// rate for stable audio.
+// processes solarize every 2nd/3rd frame, re-presenting the cached processed
+// low-resolution result on skipped frames. At healthy frame rates it processes
+// every frame, so the output is identical to before — the easing only kicks in
+// exactly when the machine is already dropping frames, trading a little solarize
+// update rate for stable audio.
 let _solPrevTs   = 0;
 let _solFrameEMA = 16.7;   // smoothed frame period, ms
 let _solPhase    = 0;
@@ -930,17 +1047,14 @@ function applySolarize(buf, thresh = 0.5, amount = 1.0, solR = 1.0, solG = 1.0, 
   if (_solCanvas.width !== sw || _solCanvas.height !== sh) {
     _solCanvas.width = sw;
     _solCanvas.height = sh;
-    _solCtx = _solCanvas.getContext('2d', { willReadFrequently:true });
+    // Setting canvas dimensions resets context state but does not require a new
+    // context object. Keeping the same reference avoids an unnecessary lookup.
+    _solHasCache = false;
   }
-  if (!_solOut) {
-    _solOut = document.createElement('canvas');
-    _solOutCtx = _solOut.getContext('2d', { alpha:true, desynchronized:true });
-  }
-  if (_solOut.width !== BW || _solOut.height !== BH) {
-    _solOut.width = BW;
-    _solOut.height = BH;
-    _solOutCtx = _solOut.getContext('2d', { alpha:true, desynchronized:true });
-    _solHasCache = false;   // resized backing store — process before reuse
+  if (_solOutputW !== BW || _solOutputH !== BH) {
+    _solOutputW = BW;
+    _solOutputH = BH;
+    _solHasCache = false;
   }
 
   // Smoothed frame period (ms). Solarize runs once per frame, so the gap between
@@ -957,32 +1071,47 @@ function applySolarize(buf, thresh = 0.5, amount = 1.0, solR = 1.0, solG = 1.0, 
 
   const doProcess = (stride === 1) || (_solPhase % stride === 0) || !_solHasCache;
   _solPhase++;
+  const profile = window.__huffProfilerActive === true;
 
   if (doProcess) {
     const srcCanvas = buf.elt || buf.drawingContext.canvas;
+    let phaseStart = profile ? performance.now() : 0;
     copyCanvasFrame(_solCtx, srcCanvas, sw, sh);
-
     const imgData = _solCtx.getImageData(0, 0, sw, sh);
-    const pix = imgData.data;
-    const t   = thresh * 255;
-    _refreshSolarizeMaps(amount, solR, solG, solB);
-
-    for (let i = 0; i < pix.length; i += 4) {
-      const r = pix[i], g = pix[i + 1], b = pix[i + 2];
-      const lum = _lumaR[r] + _lumaG[g] + _lumaB[b];
-      if (lum > t) {
-        pix[i]     = _solRMap[r];
-        pix[i + 1] = _solGMap[g];
-        pix[i + 2] = _solBMap[b];
-      }
+    if (profile) {
+      _solProfileAdd('readbackMs', performance.now() - phaseStart);
+      _solProfileAdd('readbackSamples');
     }
-    _solCtx.putImageData(imgData, 0, 0);
 
-    copyCanvasFrame(_solOutCtx, _solCanvas, BW, BH);
+    const pix = imgData.data;
+    const t = thresh * 255;
+    _refreshSolarizeMaps(amount, solR, solG, solB);
+    phaseStart = profile ? performance.now() : 0;
+    if (_solLittleEndian) _solarizePixelsWords(pix, t);
+    else _solarizePixelsBytes(pix, t);
+    if (profile) {
+      _solProfileAdd('transformMs', performance.now() - phaseStart);
+      _solProfileAdd('transformSamples');
+    }
+
+    phaseStart = profile ? performance.now() : 0;
+    _solCtx.putImageData(imgData, 0, 0);
+    if (profile) {
+      _solProfileAdd('uploadMs', performance.now() - phaseStart);
+      _solProfileAdd('uploadSamples');
+      _solProfileAdd('processedFrames');
+    }
     _solHasCache = true;
+  } else if (profile) {
+    _solProfileAdd('reusedFrames');
   }
 
-  copyCanvasFrame(buf.drawingContext, _solOut, BW, BH);
+  const presentStart = profile ? performance.now() : 0;
+  _presentSolarizeCache(buf.drawingContext, BW, BH);
+  if (profile) {
+    _solProfileAdd('presentMs', performance.now() - presentStart);
+    _solProfileAdd('presentSamples');
+  }
 }
 
 // ─── Symmetry ─────────────────────────────────────────────────────────────────
