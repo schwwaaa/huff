@@ -2,6 +2,69 @@
 
 This changelog tracks the optimization series for the legacy Tauri v1 + p5.js/Canvas2D edition. It intentionally excludes the native-wgpu HUFF project.
 
+## Pass 14 — Exact-size canvas copies and temporal-ring release
+
+**Date:** 2026-08-03  
+**Status:** implementation and deterministic static validation complete; runtime performance and memory testing pending
+
+- Added exact-size `drawImage(source, 0, 0)` dispatch to shared full-frame Canvas2D copy helpers.
+- Retained the scaled destination path only when source and destination dimensions differ.
+- Applied the exact-size path to temporal-ring capture and recurring buffer/scratch copies.
+- Added explicit retirement of discarded FrameRing canvas backing stores.
+- Preserved newest-frame ordering when temporal-ring capacity shrinks.
+- Disposed all temporal-ring surfaces during application shutdown.
+- Added profiler rows for allocated history slots, configured capacity, and estimated raw MiB.
+- Moved clustered-glitch physics updating to one reusable module-level function.
+- Preserved cluster random/noise order, movement equations, pulse behavior, and tile state.
+- Added `npm run validate:pass14` with ring-order, release, copy-dispatch, scheduler-boundary, and physics-equivalence checks.
+- Kept full-rate history capture, the 192 MiB estimated budget, decoder ownership, frame clocks, effects, Syphon, Spout, and native packaging unchanged.
+
+## Pass 13S — Stability-Safe Lifecycle Hardening
+
+**Date:** 2026-08-03  
+**Status:** Implementation and static validation complete; runtime testing pending
+
+- Branched from Pass 12R rather than the rejected Pass 13.
+- Preserved Blob URL + p5 `createVideo()` media loading.
+- Preserved independent p5, transport, mirror, and profiler animation clocks.
+- Added source-generation guards to readiness, autoplay, seek, error, and camera callbacks.
+- Added explicit ownership and cleanup for readiness intervals and autoplay listeners.
+- Rejected stale camera completions and stopped abandoned tracks.
+- Added conservative source retirement without clearing `src` or forcing decoder `load()` during ordinary replacement.
+- Added idempotent pagehide/beforeunload cleanup for media, audio, Blob URLs, mirror Worker, and mirror WebSocket.
+- Prevented mirror reconnect after shutdown begins.
+- Added profiler-only decode, temporal-ring, and mirror backpressure telemetry.
+- Added `validate:pass13s` to enforce the stable scheduler and decoder boundaries.
+
+## Pass 13 — Scheduler Consolidation Rejected
+
+**Date:** 2026-08-03  
+**Status:** Rejected after runtime testing
+
+- Moved transport updates, mirror scheduling, and profiler work behind completed p5 frames.
+- Reworked the stable media lifecycle broadly.
+- Produced significantly worse frame pacing and playback stability than Pass 12R.
+- Must not be used as a baseline or merged.
+
+## Pass 12R — Decode Regression Rollback
+
+### Rejected
+
+- Rejected the Pass 12 direct-renderer migration after it produced a video decode error with media supported by the established HUFF Classic path.
+- Rejected native path loading through `convertFileSrc()` and the Tauri asset protocol as an unverified replacement for Blob URL loading.
+
+### Restored
+
+- Restored the complete Pass 11 runtime and native baseline.
+- Restored `File` → `URL.createObjectURL()` → p5 `createVideo()` media loading.
+- Restored the controls WebView as the authoritative decode/render owner.
+- Retained all validated optimization work from Passes 1–11.
+
+### Documented
+
+- Added a video decode incident report with the exact regression boundary and configuration defect.
+- Established that future renderer-ownership work must remain experimental until target-platform runtime tests pass.
+
 ## Pass 11 — No-op and dirty-state elimination
 
 **Date:** 2026-08-03  
@@ -169,48 +232,3 @@ This changelog tracks the optimization series for the legacy Tauri v1 + p5.js/Ca
 - No new effects or feature expansion during optimization.
 - macOS, Windows, and Linux remain the intended public platforms, with platform-specific output capabilities.
 
-## Pass 12R — Decode Regression Rollback
-
-### Rejected
-
-- Rejected the Pass 12 direct-renderer migration after it produced a video decode error with media supported by the established HUFF Classic path.
-- Rejected native path loading through `convertFileSrc()` and the Tauri asset protocol as an unverified replacement for Blob URL loading.
-
-### Restored
-
-- Restored the complete Pass 11 runtime and native baseline.
-- Restored `File` → `URL.createObjectURL()` → p5 `createVideo()` media loading.
-- Restored the controls WebView as the authoritative decode/render owner.
-- Retained all validated optimization work from Passes 1–11.
-
-### Documented
-
-- Added a video decode incident report with the exact regression boundary and configuration defect.
-- Established that future renderer-ownership work must remain experimental until target-platform runtime tests pass.
-
-## Pass 13 — Scheduler Consolidation Rejected
-
-**Date:** 2026-08-03  
-**Status:** Rejected after runtime testing
-
-- Moved transport updates, mirror scheduling, and profiler work behind completed p5 frames.
-- Reworked the stable media lifecycle broadly.
-- Produced significantly worse frame pacing and playback stability than Pass 12R.
-- Must not be used as a baseline or merged.
-
-## Pass 13S — Stability-Safe Lifecycle Hardening
-
-**Date:** 2026-08-03  
-**Status:** Implementation and static validation complete; runtime testing pending
-
-- Branched from Pass 12R rather than the rejected Pass 13.
-- Preserved Blob URL + p5 `createVideo()` media loading.
-- Preserved independent p5, transport, mirror, and profiler animation clocks.
-- Added source-generation guards to readiness, autoplay, seek, error, and camera callbacks.
-- Added explicit ownership and cleanup for readiness intervals and autoplay listeners.
-- Rejected stale camera completions and stopped abandoned tracks.
-- Added conservative source retirement without clearing `src` or forcing decoder `load()` during ordinary replacement.
-- Added idempotent pagehide/beforeunload cleanup for media, audio, Blob URLs, mirror Worker, and mirror WebSocket.
-- Prevented mirror reconnect after shutdown begins.
-- Added profiler-only decode, temporal-ring, and mirror backpressure telemetry.
-- Added `validate:pass13s` to enforce the stable scheduler and decoder boundaries.

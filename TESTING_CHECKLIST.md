@@ -1,54 +1,53 @@
-# HUFF Classic Pass 13S Testing Checklist
+# HUFF Classic Pass 14 Testing Checklist
 
-## Release decision
+## A. Baseline stability
 
-Pass 13S is accepted only if it matches Pass 12R frame pacing and improves source/camera/shutdown behavior. Any repeatable FPS regression means the pass must be rejected or reduced further.
-
-## A. Baseline frame pacing
-
-- [ ] Load the same test video used to validate Pass 12R.
-- [ ] Run with all effects neutral for at least five minutes.
-- [ ] Compare visible FPS and playback smoothness with Pass 12R.
+- [ ] Launch the application and load the same video used to validate Pass 13S.
+- [ ] Confirm normal playback feels identical to committed Pass 13S.
 - [ ] Confirm audio remains stable.
-- [ ] Confirm the profiler being hidden produces normal performance.
-- [ ] Open the profiler and record render FPS, decode FPS, and ring FPS.
-- [ ] Close the profiler and confirm performance returns to baseline.
+- [ ] Confirm transport, seeking, looping, and speed controls work.
+- [ ] Confirm the working Blob URL + p5 `createVideo()` path remains intact.
 
-## B. File replacement
+## B. Clean playback and copy path
 
-- [ ] Load file A, then file B after A is fully playing.
-- [ ] Replace files rapidly ten times.
-- [ ] Replace a file before it reaches `canplay`.
-- [ ] Replace a file while autoplay is waiting for a gesture.
-- [ ] Confirm no old source begins playing after replacement.
-- [ ] Confirm one active frame pump remains.
-- [ ] Confirm the previous Blob URL is released.
-- [ ] Confirm seeking, loop, rate, volume, pause, and resume still work.
+- [ ] Test a source whose dimensions match the render canvas.
+- [ ] Test a source whose dimensions differ from the render canvas.
+- [ ] Compare clean-playback FPS against Pass 13S with the same footage and window size.
+- [ ] Confirm aspect handling and scaling are visually unchanged.
+- [ ] Toggle the profiler and record `_pushToRing`, frame time, and render FPS.
 
-## C. Camera lifecycle
+## C. Temporal history
 
-- [ ] Start the default camera.
-- [ ] Stop it and confirm the camera indicator turns off.
-- [ ] Start camera, then immediately load a file.
-- [ ] Start one camera, then quickly select another.
-- [ ] Deny camera permission and confirm clean recovery.
-- [ ] Confirm no stale camera becomes active later.
-- [ ] Confirm camera tracks stop after switching to a file.
-- [ ] Repeat camera/file switching at least twenty times.
+- [ ] Let a video play until the ring reaches capacity.
+- [ ] Enable Glitch and verify historical tile selection is unchanged.
+- [ ] Test low, medium, and maximum DEPTH.
+- [ ] Enable Flow Pulse and test several frame offsets.
+- [ ] Seek while temporal effects are active.
+- [ ] Replace the source and confirm old history does not leak into the new source.
+- [ ] Confirm history remains captured at decoded-frame cadence.
 
-## D. Mirror transport
+## D. Ring allocation and release
 
-- [ ] Run with no canvas receiver and confirm mirror capture remains idle.
-- [ ] Open the canvas receiver and confirm frames resume.
-- [ ] Close and reopen the receiver repeatedly.
-- [ ] Use the profiler to observe mirror sent/drop values.
-- [ ] Confirm Syphon remains independent while the canvas receiver is closed.
-- [ ] Close the application while the mirror is reconnecting.
-- [ ] Confirm no reconnect activity or process remains after exit.
+- [ ] Open the backtick profiler.
+- [ ] Observe `ring mem` while the history fills.
+- [ ] Observe `ring MiB` at 720p and 1080p.
+- [ ] Lower QUALITY and confirm allocated slots fall to the new capacity.
+- [ ] Raise QUALITY and confirm slots grow lazily as new frames arrive.
+- [ ] Resize the window repeatedly between small and large dimensions.
+- [ ] Confirm old-resolution slots are released after each size change.
+- [ ] Run at least twenty resize/fullscreen cycles and watch WebView memory.
 
-## E. Effects regression
+## E. Clustered glitch
 
-- [ ] Glitch
+- [ ] Test one and many cluster centers.
+- [ ] Test bounce and wrap boundaries.
+- [ ] Test STEER, SPEED, INERTIA, DRIFT, PULSE, BREATHE, and COHERENCE.
+- [ ] Compare seeded output against Pass 13S using the same source and controls.
+- [ ] Confirm no new cluster jump, reset, or random-order change.
+- [ ] Run a heavy clustered-glitch scene for at least twenty minutes.
+
+## F. Other effects and outputs
+
 - [ ] Scanlines
 - [ ] Luma Key
 - [ ] Feedback
@@ -56,30 +55,31 @@ Pass 13S is accepted only if it matches Pass 12R frame pacing and improves sourc
 - [ ] Symmetry
 - [ ] Solarize
 - [ ] Global Mix
-- [ ] Base Mix
-- [ ] Combined heavy-effect scene
-- [ ] Temporal history selection after seeking
+- [ ] Canvas mirror connected and disconnected
+- [ ] Syphon connected and disconnected
+- [ ] Spout on Windows when available
 
-## F. Shutdown
+## G. Shutdown
 
-- [ ] Exit while a file is playing.
-- [ ] Exit while paused.
-- [ ] Exit while a camera is active.
-- [ ] Exit while waiting for autoplay unlock.
-- [ ] Exit while a readiness poll is active.
-- [ ] Exit with mirror receiver connected.
-- [ ] Exit with Syphon active.
-- [ ] Confirm no HUFF process accumulation.
-- [ ] Confirm camera and audio resources release immediately.
+- [ ] Exit with a full temporal ring.
+- [ ] Exit while video is playing.
+- [ ] Exit while camera is active.
+- [ ] Exit with mirror and Syphon active.
+- [ ] Confirm the HUFF process exits completely.
+- [ ] Confirm no camera, audio, worker, or output resource remains.
 
 ## Static validation completed
 
-- [x] Working Blob URL + p5 `createVideo()` path retained.
-- [x] Independent transport, mirror, and profiler schedulers retained.
-- [x] Rejected `_afterRenderFrame()` path absent.
-- [x] Aggressive `removeAttribute('src')` and cleanup `load()` absent.
-- [x] Source-generation guards present.
-- [x] Stale-camera track shutdown present.
-- [x] Pagehide/beforeunload cleanup present.
-- [x] Existing Pass 9, Pass 10, and Pass 11 validators pass.
-- [x] Pass 13S lifecycle-boundary validator passes.
+- [x] JavaScript syntax validation.
+- [x] Inline HTML script syntax validation.
+- [x] JSON parsing.
+- [x] TOML parsing.
+- [x] Shell syntax validation.
+- [x] Pass 9 Flow validator.
+- [x] Pass 10 Scanline validator.
+- [x] Pass 11 neutral-path validator.
+- [x] Pass 13S lifecycle validator.
+- [x] Pass 14 ring/copy/physics validator.
+- [x] `src-tauri` unchanged from Pass 13S.
+- [x] bundled Syphon framework unchanged and present.
+- [x] ZIP integrity validation.

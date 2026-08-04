@@ -18,6 +18,8 @@
 //    every frame.
 //  - Pass 11 neutral Solarize states return before scratch allocation/readback;
 //    the draw dispatcher also skips neutral Flow/Feedback/Symmetry/Mix stages.
+//  - Pass 14 exact-size canvas copies avoid Canvas2D scaling setup, and the
+//    cluster-physics updater is reused instead of recreated inside applyGlitch.
 
 // ─── Temporal ring drawing ───────────────────────────────────────────────────
 // FrameRing stores reusable canvas snapshots, so historical frames remain
@@ -36,7 +38,13 @@ function copyCanvasFrame(ctx, source, width, height) {
   try {
     ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = 'copy';
-    ctx.drawImage(source, 0, 0, width, height);
+    const sourceWidth  = source.videoWidth  || source.width  || 0;
+    const sourceHeight = source.videoHeight || source.height || 0;
+    if (sourceWidth === width && sourceHeight === height) {
+      ctx.drawImage(source, 0, 0);
+    } else {
+      ctx.drawImage(source, 0, 0, width, height);
+    }
   } finally {
     ctx.globalCompositeOperation = prevOp || 'source-over';
     ctx.globalAlpha = prevAlpha;
@@ -169,6 +177,79 @@ function ensureClusterTileCapacity(center, required) {
   if (center.tileRadii)  radii.set(center.tileRadii);
   center.tileAngles = angles;
   center.tileRadii  = radii;
+}
+
+// Reused cluster-physics updater. Pass 13S recreated this function and its
+// closure on every glitch frame even though the implementation and captured
+// state were stable. Positional arguments avoid replacing that closure with a
+// per-frame options object. Random/noise call order and equations are unchanged.
+function updateClusterPhysics(
+  cluCenters, cluSpeedVar, cluSteer, cluPulse, cluTravel,
+  cluInertia, cluDrift, cluBounce, canvasWidth, canvasHeight
+) {
+  while (_cluPhysics.length < cluCenters) {
+    _cluPhysics.push({
+      x: random(canvasWidth),
+      y: random(canvasHeight),
+      vx: (random() - 0.5) * 2,
+      vy: (random() - 0.5) * 2,
+      noiseOffX: random(1000),
+      noiseOffY: random(1000),
+      speedMul: 1 + (random() - 0.5) * 2 * cluSpeedVar,
+      tileAngles: new Float64Array(0),
+      tileRadii:  new Float64Array(0),
+      tileCount: 0,
+    });
+  }
+  _cluPhysics.length = cluCenters;
+
+  _cluPhysT += cluSteer * 0.004;
+
+  if (cluPulse > 0) {
+    const pulseInterval = Math.max(0.2, 3 - cluPulse * 0.25);
+    const nowSec = millis() / 1000;
+    if (!_cluPhysics._lastPulse) _cluPhysics._lastPulse = nowSec;
+    if (nowSec - _cluPhysics._lastPulse >= pulseInterval) {
+      _cluPhysics._lastPulse = nowSec;
+      for (const c of _cluPhysics) {
+        const ang = random(TWO_PI);
+        const force = cluPulse * cluTravel * 0.6;
+        c.vx += Math.cos(ang) * force;
+        c.vy += Math.sin(ang) * force;
+      }
+    }
+  }
+
+  for (const c of _cluPhysics) {
+    const effectiveSpeed = cluTravel * (c.speedMul ?? 1);
+    const steerAng = noise(c.noiseOffX + _cluPhysT * 0.7,
+                           c.noiseOffY + _cluPhysT * 0.5) * TWO_PI * 2;
+    const desiredVx = Math.cos(steerAng) * effectiveSpeed;
+    const desiredVy = Math.sin(steerAng) * effectiveSpeed;
+
+    c.vx = c.vx * cluInertia + desiredVx * (1 - cluInertia);
+    c.vy = c.vy * cluInertia + desiredVy * (1 - cluInertia);
+
+    if (cluDrift > 0) {
+      c.vx += (noise(c.noiseOffX * 2.1 + _cluPhysT * 1.3) - 0.5) * cluDrift * 0.5;
+      c.vy += (noise(c.noiseOffY * 2.1 + _cluPhysT * 1.1) - 0.5) * cluDrift * 0.5;
+    }
+
+    const nxp = c.x + c.vx;
+    const nyp = c.y + c.vy;
+    if (cluBounce) {
+      if      (nxp < 0)           { c.x = -nxp;                    c.vx = -c.vx; }
+      else if (nxp > canvasWidth) { c.x = 2 * canvasWidth - nxp;  c.vx = -c.vx; }
+      else                        { c.x = nxp; }
+      if      (nyp < 0)            { c.y = -nyp;                     c.vy = -c.vy; }
+      else if (nyp > canvasHeight) { c.y = 2 * canvasHeight - nyp;  c.vy = -c.vy; }
+      else                         { c.y = nyp; }
+    } else {
+      c.x = (nxp % canvasWidth  + canvasWidth)  % canvasWidth;
+      c.y = (nyp % canvasHeight + canvasHeight) % canvasHeight;
+    }
+  }
+  return _cluPhysics;
 }
 
 // Self-contained — initialises _ringCanvas itself rather than relying on
@@ -520,82 +601,8 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0, glitchPriority = 1.0, 
   const cluPulse    = rs.cluPulse;
 
   // ── Cluster center physics ─────────────────────────────────────────────────
-  function getPhysicsCenters() {
-    while (_cluPhysics.length < cluCenters) {
-      _cluPhysics.push({
-        x: random(width),
-        y: random(height),
-        vx: (random() - 0.5) * 2,
-        vy: (random() - 0.5) * 2,
-        noiseOffX: random(1000),
-        noiseOffY: random(1000),
-        // Per-center speed multiplier — randomized once on creation so each
-        // center has its own characteristic speed even at the same cluSpeed.
-        // cluSpeedVar=0 → all centers same speed; =1 → range 0×–2× of cluSpeed.
-        speedMul: 1 + (random() - 0.5) * 2 * cluSpeedVar,
-        tileAngles: new Float64Array(0),
-        tileRadii:  new Float64Array(0),
-        tileCount: 0,   // persistent center-relative offsets (COHERENCE)
-      });
-    }
-    _cluPhysics.length = cluCenters;
-
-    _cluPhysT += cluSteer * 0.004;   // heading-sweep rate — decoupled from travel SPEED
-
-    // Pulse: every pulseInterval seconds, kick all centers with a random
-    // velocity burst. Creates sudden lurching motion that steady inertia alone
-    // can't produce. cluPulse=0 disables; higher values = stronger kicks.
-    if (cluPulse > 0) {
-      const pulseInterval = Math.max(0.2, 3 - cluPulse * 0.25); // 3s down to 0.5s
-      const nowSec = millis() / 1000;
-      if (!_cluPhysics._lastPulse) _cluPhysics._lastPulse = nowSec;
-      if (nowSec - _cluPhysics._lastPulse >= pulseInterval) {
-        _cluPhysics._lastPulse = nowSec;
-        for (const c of _cluPhysics) {
-          const ang = random(TWO_PI);
-          const force = cluPulse * cluTravel * 0.6;
-          c.vx += Math.cos(ang) * force;
-          c.vy += Math.sin(ang) * force;
-        }
-      }
-    }
-
-    for (const c of _cluPhysics) {
-      const effectiveSpeed = cluTravel * (c.speedMul ?? 1);
-      const steerAng = noise(c.noiseOffX + _cluPhysT * 0.7,
-                             c.noiseOffY + _cluPhysT * 0.5) * TWO_PI * 2;
-      const desiredVx = Math.cos(steerAng) * effectiveSpeed;
-      const desiredVy = Math.sin(steerAng) * effectiveSpeed;
-
-      c.vx = c.vx * cluInertia + desiredVx * (1 - cluInertia);
-      c.vy = c.vy * cluInertia + desiredVy * (1 - cluInertia);
-
-      if (cluDrift > 0) {
-        c.vx += (noise(c.noiseOffX * 2.1 + _cluPhysT * 1.3) - 0.5) * cluDrift * 0.5;
-        c.vy += (noise(c.noiseOffY * 2.1 + _cluPhysT * 1.1) - 0.5) * cluDrift * 0.5;
-      }
-
-      const nxp = c.x + c.vx;
-      const nyp = c.y + c.vy;
-      if (cluBounce) {
-        // Reflect position and velocity at the edges — momentum (INERTIA) carries
-        // the center away from the wall, giving real side-to-side travel with no
-        // teleport. Reversed heading persists until steering eases it back.
-        if      (nxp < 0)      { c.x = -nxp;             c.vx = -c.vx; }
-        else if (nxp > width)  { c.x = 2 * width - nxp;  c.vx = -c.vx; }
-        else                   { c.x = nxp; }
-        if      (nyp < 0)      { c.y = -nyp;             c.vy = -c.vy; }
-        else if (nyp > height) { c.y = 2 * height - nyp; c.vy = -c.vy; }
-        else                   { c.y = nyp; }
-      } else {
-        c.x = (nxp % width  + width)  % width;
-        c.y = (nyp % height + height) % height;
-      }
-    }
-    return _cluPhysics;
-  }
-
-
+  // Updated by a module-level helper so normal glitch frames do not allocate a
+  // new closure. The call remains at the same point in the seeded random stream.
 
   // ── Tile placement ─────────────────────────────────────────────────────────
   if (useCluTiles && cluCenters > 0) {
@@ -603,7 +610,10 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0, glitchPriority = 1.0, 
     // so centres gradually stop and hold position via inertia.
     // getStaticCenters() called random() every frame causing re-randomisation
     // even at speed=0 — that looked like movement when there should be none.
-    const centers = getPhysicsCenters();
+    const centers = updateClusterPhysics(
+      cluCenters, cluSpeedVar, cluSteer, cluPulse, cluTravel,
+      cluInertia, cluDrift, cluBounce, width, height
+    );
     const biasCount  = Math.round(count * cluBias);
     const per        = Math.max(1, Math.floor(biasCount / cluCenters));
 

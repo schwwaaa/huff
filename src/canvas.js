@@ -17,6 +17,8 @@
  *    avoids redundant background/buffer copies while decoded-frame state stays current
  *  - Pass 13S: source-generation guards and owned async cleanup harden file,
  *    camera, autoplay, and shutdown lifecycle without changing frame scheduling
+ *  - Pass 14: exact-size Canvas2D copies use the non-scaling draw path;
+ *    temporal ring backing stores are explicitly released on shrink/resize/exit
  */
 
 // ─── Module-local DOM helpers ─────────────────────────────────────────────────
@@ -279,6 +281,33 @@ class FrameRing {
     return { canvas, ctx };
   }
 
+  _releaseFrame(frame) {
+    if (!frame?.canvas) return;
+    // Dropping a canvas reference does not guarantee that WebKit immediately
+    // releases its backing store. Collapse retired slots first so resize,
+    // quality reduction, and shutdown do not temporarily retain full frames.
+    try { frame.canvas.width = 1; frame.canvas.height = 1; } catch {}
+    frame.ctx = null;
+    frame.canvas = null;
+  }
+
+  get allocatedSlots() {
+    let count = 0;
+    for (let i = 0; i < this._buf.length; i++) {
+      if (this._buf[i]?.canvas) count++;
+    }
+    return count;
+  }
+
+  get estimatedBytes() {
+    let total = 0;
+    for (let i = 0; i < this._buf.length; i++) {
+      const canvas = this._buf[i]?.canvas;
+      if (canvas) total += canvas.width * canvas.height * 4;
+    }
+    return total;
+  }
+
   // Store an owned snapshot without GPU→CPU readback. Each ring slot is a
   // reusable canvas backing store. drawImage() copies the decoded frame into the
   // slot once, and temporal effects later sample that canvas directly.
@@ -299,7 +328,14 @@ class FrameRing {
     }
 
     try {
-      frame.ctx.drawImage(source, 0, 0, width, height);
+      // Ring captures currently receive gCur's canvas at identical dimensions.
+      // Use Canvas2D's exact-size path so the browser does not enter its scaling
+      // setup for every decoded frame. Retain the scaled fallback for safety.
+      if (source.width === width && source.height === height) {
+        frame.ctx.drawImage(source, 0, 0);
+      } else {
+        frame.ctx.drawImage(source, 0, 0, width, height);
+      }
     } catch (e) {
       return false;
     }
@@ -320,8 +356,18 @@ class FrameRing {
 
     const keep   = Math.min(this._size, newCap);
     const newBuf = new Array(newCap).fill(null);
+    const retained = new Set();
     for (let i = 0; i < keep; i++) {
-      newBuf[keep - 1 - i] = this._buf[(this._head - 1 - i + this._cap * 2) % this._cap];
+      const frame = this._buf[(this._head - 1 - i + this._cap * 2) % this._cap];
+      newBuf[keep - 1 - i] = frame;
+      if (frame) retained.add(frame);
+    }
+
+    // Explicitly collapse slots discarded by a lower quality setting or a
+    // memory-budget resize. This keeps the newest frames and releases only the
+    // retired backing stores.
+    for (const frame of this._buf) {
+      if (frame && !retained.has(frame)) this._releaseFrame(frame);
     }
 
     this._buf  = newBuf;
@@ -334,9 +380,16 @@ class FrameRing {
   // stores are eligible for collection immediately instead of lingering until
   // every ring slot has been overwritten at the new dimensions.
   clear(release = false) {
-    if (release) this._buf.fill(null);
+    if (release) {
+      for (const frame of this._buf) this._releaseFrame(frame);
+      this._buf.fill(null);
+    }
     this._head = 0;
     this._size = 0;
+  }
+
+  dispose() {
+    this.clear(true);
   }
 }
 
@@ -689,7 +742,13 @@ function _copyFullFrame(ctx, source, width, height) {
   try {
     ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = 'copy';
-    ctx.drawImage(source, 0, 0, width, height);
+    const sourceWidth  = source.videoWidth  || source.width  || 0;
+    const sourceHeight = source.videoHeight || source.height || 0;
+    if (sourceWidth === width && sourceHeight === height) {
+      ctx.drawImage(source, 0, 0);
+    } else {
+      ctx.drawImage(source, 0, 0, width, height);
+    }
     return true;
   } finally {
     ctx.globalCompositeOperation = prevOp || 'source-over';
@@ -1875,6 +1934,7 @@ function _shutdownMediaLifecycle() {
   try { _audioSrc?.disconnect?.(); } catch {}
   try { _gainNode?.disconnect?.(); } catch {}
   try { _audioCtx?.close?.(); } catch {}
+  try { frameRing?.dispose?.(); } catch {}
   _audioSrc = null;
   _gainNode = null;
   _audioCtx = null;
@@ -2253,6 +2313,8 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
         'frame      ' + frameMs.toFixed(2).padStart(6) + ' ms\n' +
         'decode     ' + decodeFps.toFixed(1).padStart(6) + ' fps\n' +
         'ring       ' + ringFps.toFixed(1).padStart(6) + ' fps\n' +
+        'ring mem   ' + `${frameRing.allocatedSlots}/${frameRing.capacity}`.padStart(6) + ' slots\n' +
+        'ring MiB   ' + (frameRing.estimatedBytes / 1048576).toFixed(1).padStart(6) + '\n' +
         'mirror     ' + `${mirrorSentDelta}/${mirrorDroppedDelta}`.padStart(6) + ' sent/drop\n' +
         '──────────────────────\n' +
         (rows.length ? rows.map(function (r) { return fmt(r[0], r[1]); }).join('\n')

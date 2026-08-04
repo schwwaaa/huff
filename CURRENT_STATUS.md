@@ -1,62 +1,52 @@
-# HUFF Classic Current Status — Pass 13S
+# HUFF Classic Current Status — Pass 14
 
 ## Authoritative baseline
 
-**HUFF Classic Optimization Pass 13S is the stable Pass 12R / Pass 11 renderer with narrowly scoped lifecycle hardening.**
+**HUFF Classic Optimization Pass 14 is Pass 13S plus an isolated Canvas2D copy and temporal-ring resource pass.**
 
-Rejected Pass 13 scheduling changes are not included.
+The rejected Pass 13 scheduler consolidation and Pass 12 asset-protocol decoder migration remain excluded.
 
 ## Working architecture
 
 ```text
 controls WebView
   → File input / Blob URL / p5 createVideo decode
-  → p5.js + Canvas2D renderer
-  → bounded temporal history
-  → independent receiver-aware JPEG mirror
-  → independent Syphon / Spout output paths
+  → decoded-frame gCur update
+  → bounded full-resolution temporal ring
+  → p5.js + Canvas2D effect pipeline
+  → independent JPEG canvas mirror
+  → independent Syphon / Spout outputs
 ```
 
-## Retained optimization work
+## Pass 14 additions
 
-- bounded reusable temporal history;
-- latest-frame-wins output transport and backpressure;
-- receiver-aware mirror and Syphon suspension;
-- reusable native Syphon resources and framework packaging checks;
-- reduced full-frame copies and pixel allocations;
-- typed render-state cache;
-- reusable glitch/cluster workspaces;
-- consolidated full-resolution scratch buffers;
-- in-place canvas resizing;
-- cached Flow and Scanline geometry;
-- neutral-stage and clean-path bypasses.
+- exact-size full-frame Canvas2D copy dispatch;
+- exact-size temporal-history capture path;
+- explicit history backing-store retirement on shrink, resize, and exit;
+- newest-frame retention during ring-capacity reduction;
+- temporal-ring allocation and estimated-memory profiler rows;
+- reusable clustered-glitch physics updater;
+- Pass 14 deterministic validation.
 
-## Pass 13S additions
+## Preserved stability boundaries
 
-- source-generation guards;
-- globally owned readiness polling;
-- globally owned autoplay unlock listeners;
-- stale camera completion rejection;
-- conservative media/audio/Blob retirement;
-- idempotent pagehide/beforeunload cleanup;
-- mirror shutdown without reconnect;
-- profiler-only decode/ring/mirror telemetry.
-
-## Rejected work
-
-- renderer-window decoder ownership;
-- native path loading through Tauri asset protocol;
-- auxiliary services attached to the end of `draw()`;
-- aggressive decoder reset during ordinary source replacement.
+- Blob URL + p5 `createVideo()` media path;
+- controls-window decoder ownership;
+- independent p5, transport, mirror, and profiler clocks;
+- full-rate history capture;
+- existing history capacity and memory-budget policy;
+- fixed effect order and formulas;
+- Pass 13S source-generation and cleanup guards;
+- Syphon, Spout, Rust relay, and mandatory framework packaging.
 
 ## Next optimization boundary
 
-Runtime-test Pass 13S first. After confirmation, return to isolated Canvas2D measurements using the profiler:
+Runtime-test Pass 14 before changing another subsystem. The next measured candidates are:
 
-1. temporal-ring capture cost;
-2. mirror capture pressure with and without a receiver;
-3. CPU pixel readback in Solarize and Luma Key;
-4. draw-call cost in Glitch, Scanlines, and Flow;
-5. long-session memory behavior.
+1. mirror capture staging and full-canvas snapshot cost;
+2. Solarize CPU readback and upload;
+3. Pipeline Luma Key CPU mask work;
+4. high-density Glitch draw-call cost;
+5. temporal-history capture policy only if a behavioral tradeoff is explicitly approved.
 
-Only one expensive subsystem should change per pass.
+The next pass must continue from whichever of Pass 13S or Pass 14 proves more stable in target testing.

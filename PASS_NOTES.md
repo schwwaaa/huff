@@ -1,102 +1,130 @@
-# HUFF Classic Optimization Pass 13S — Stability-Safe Lifecycle Hardening
+# HUFF Classic Optimization Pass 14 — Canvas Copy and Temporal-Ring Resource Pass
 
-**Baseline:** HUFF Classic Pass 12R / Pass 11 runtime  
-**Status:** Implementation and static validation complete; target-runtime testing required  
-**Supersedes:** Rejected Pass 13 scheduler/lifecycle rewrite
+**Baseline:** committed HUFF Classic Pass 13S  
+**Status:** implementation and static validation complete; target-runtime testing required  
+**Runtime files changed:** `src/canvas.js`, `src/effects.js`
 
 ## Purpose
 
-Pass 13S salvages only the low-risk lifecycle improvements from the rejected Pass 13 while preserving the frame pacing and decoder behavior that made Pass 12R significantly more stable.
+Pass 14 returns to isolated Canvas2D and buffer work after Pass 13S stabilized source lifecycle handling. It does not change the decoder, frame clocks, effect routing, or temporal-history cadence.
 
-This is a stability pass, not an effects-performance rewrite. It is intended to prevent hidden source, camera, listener, timer, audio, and mirror resources from accumulating during repeated use without placing additional work in `draw()`.
+The pass targets two recurring costs:
+
+1. full-frame canvas copies that were always expressed as scaling operations, even when source and destination dimensions were identical;
+2. large temporal-history canvas backing stores that could remain allocated after history-capacity reduction, render-size changes, or application shutdown.
+
+It also removes one function/closure allocation from every active clustered-glitch frame.
 
 ## Changes
 
-### 1. Source-generation guards
+### 1. Exact-size Canvas2D copy path
 
-Each file or camera source receives a generation number. Async callbacks verify that their generation and media element are still authoritative before changing playback state.
+The shared full-frame copy helpers now inspect the source dimensions.
 
-Guarded callbacks include:
+When source and destination match, HUFF uses:
 
-- file readiness events;
-- readiness polling;
-- delayed `play()` resolution;
-- autoplay gesture unlock;
-- `seeked` events;
-- video errors;
-- camera initialization;
-- camera metadata readiness.
+```javascript
+ctx.drawImage(source, 0, 0);
+```
 
-Late callbacks from replaced sources now exit without restarting playback or creating another frame-pump chain.
+Only genuinely scaled copies use:
 
-### 2. Owned readiness poller
+```javascript
+ctx.drawImage(source, 0, 0, width, height);
+```
 
-The active source-readiness interval is now stored globally and explicitly cleared when:
+This affects recurring copies such as:
 
-- the source becomes ready;
-- the poll limit is reached;
-- another source replaces it;
-- camera mode begins;
-- the app shuts down.
+- decoded frame to `gCur` when render and source dimensions match;
+- `gCur` to `gBuf` synchronization;
+- feedback and shared scratch snapshots;
+- Solarize and luma scratch copies;
+- decoded-frame capture into the temporal ring.
 
-This prevents orphaned intervals after rapid source replacement.
+The visual result and Canvas2D `copy` compositing semantics are unchanged.
 
-### 3. Owned autoplay unlock listeners
+### 2. Temporal-ring exact-size capture
 
-The currently installed pointer and keyboard autoplay handlers are tracked and removed on replacement or shutdown. An unlock handler also confirms that its original media element is still current before calling `play()`.
+`FrameRing.pushFrom()` now uses the non-scaling draw path for the current `gCur` canvas, which is already the same size as each history slot.
 
-### 4. Stale camera rejection
+History is still captured:
 
-A camera request that completes after the user has stopped the camera, selected a file, or requested another device is immediately retired. Its tracks are stopped, `srcObject` is cleared, and its capture element is removed.
+- once per genuine decoded frame under `requestVideoFrameCallback`;
+- at the existing compatibility cadence when rVFC is unavailable;
+- at full render resolution;
+- with the same capacity formula and 192 MiB estimated budget;
+- in the same newest-to-oldest order.
 
-### 5. Conservative source retirement
+No demand-driven capture, frame skipping, reduced-resolution history, or history warm-up behavior was introduced.
 
-Ordinary replacement now:
+### 3. Explicit temporal-ring backing-store release
 
-- invalidates the previous decode callback chain;
-- clears the owned poller and gesture listeners;
-- pauses the previous media element;
-- stops camera tracks;
-- clears camera `srcObject`;
-- disconnects that element from Web Audio;
-- removes the p5 media wrapper;
-- revokes the previous Blob URL.
+Retired history canvases are collapsed before references are discarded. This happens when:
 
-It deliberately does **not** call `removeAttribute('src')` or force `media.load()` during replacement. Those aggressive decoder resets from rejected Pass 13 remain excluded.
+- ring capacity shrinks after a QUALITY or memory-budget change;
+- render resolution changes and history is released;
+- application shutdown disposes the ring.
 
-### 6. Idempotent shutdown
+When capacity shrinks, the newest valid history frames are retained in the same order. Only discarded slots are released.
 
-`pagehide` and `beforeunload` share one guarded cleanup path for media, tracks, Blob URLs, source audio, the AudioContext, mirror worker, and mirror WebSocket.
+This is intended to reduce WebKit backing-store retention and transient memory pressure. It does not reduce the configured history depth while normal playback continues.
 
-The mirror no longer schedules a reconnect after shutdown begins.
+### 4. Temporal-ring profiler rows
 
-### 7. Profiler-only telemetry
+The existing backtick profiler now reports:
 
-The existing independent backtick profiler now displays:
+- allocated history slots versus configured capacity;
+- estimated raw history backing memory in MiB.
 
-- render-loop FPS;
-- decoded-frame FPS when `requestVideoFrameCallback` is available;
-- temporal-ring capture FPS;
-- mirror frames sent and dropped by backpressure.
+The values are calculated only while the profiler is visible. The memory figure is an estimate of `width × height × 4` per allocated slot, not a claim about total WebView memory.
 
-These counters are enabled only while the profiler is visible and are never sampled from `draw()`.
+### 5. Reused cluster-physics updater
+
+The clustered-glitch physics routine was previously declared inside `applyGlitch()`, recreating a function and closure on every active glitch frame.
+
+It is now a module-level function using positional arguments. The following remain unchanged:
+
+- random-call order;
+- noise-call order;
+- center creation order;
+- pulse behavior;
+- steering, inertia, drift, bounce, and wrap equations;
+- tile-offset state;
+- call position within the seeded glitch path.
+
+## Junkpile influence
+
+Pass 14 continues the resource-discipline demonstrated by the Junkpile Tauri v1 examples:
+
+- the feedback and video-texture examples retain ping-pong resources instead of allocating them every frame;
+- framebuffer size changes explicitly retire old GPU resources;
+- recording and switching examples delay large transfers and revoke owned resources at clear lifecycle boundaries.
+
+HUFF Classic remains Canvas2D. This pass imports the resource-ownership principle, not the Junkpile WebGL renderer.
 
 ## Explicitly unchanged
 
 - File → Blob URL → p5 `createVideo()` decoding
-- controls WebView decoder ownership
-- p5 `draw()` scheduling
-- independent transport animation loop
-- independent mirror animation loop
-- independent profiler animation loop
-- mirror encoding format and target rate
-- effect formulas and effect order
-- Canvas2D buffer topology
-- temporal-history semantics
-- MIDI, OSC, presets, and undo
-- Syphon, Spout, Rust relay, and Tauri configuration
+- controls-window decoder ownership
+- p5 render scheduling
+- independent transport loop
+- independent mirror loop
+- independent profiler loop
+- temporal capture cadence and capacity formula
+- temporal sample selection
+- effect formulas and fixed order
+- controls, presets, MIDI, OSC, and undo
+- Syphon and Spout client code
+- Rust/Tauri native code
 - bundled `Syphon.framework`
 
-## Why this meets the current goal
+## Expected benefit
 
-Pass 12R demonstrated that frame pacing is more important than consolidating small scheduler callbacks. Pass 13S therefore changes ownership and cleanup only at source transitions and shutdown. It does not move transport, mirror, diagnostics, or source lifecycle work behind each rendered frame.
+The expected improvements are:
+
+- less Canvas2D scaling setup for exact-size full-frame copies;
+- lower allocation pressure during clustered glitch rendering;
+- more deterministic release of large history surfaces after resize, quality reduction, or exit;
+- clearer measurement of actual temporal-ring allocation.
+
+No FPS or memory improvement is claimed until measured in the target macOS application.

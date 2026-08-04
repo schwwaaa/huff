@@ -1,0 +1,22 @@
+HUFF CLASSIC OPTIMIZATION PASS 14
+
+Baseline: committed Pass 13S
+Purpose: exact-size Canvas2D copy paths and temporal-ring memory release
+
+Added:
+- non-scaling drawImage path for exact-size full-frame copies
+- exact-size temporal-ring capture path
+- explicit release of retired ring canvas backing stores
+- retained newest history frames when ring capacity shrinks
+- temporal-ring allocation and estimated-memory profiler rows
+- reusable module-level cluster-physics updater
+- Pass 14 deterministic validator
+
+Preserved:
+- Blob URL + p5 createVideo decoding
+- independent p5, transport, mirror, and profiler clocks
+- full-rate decoded-frame history capture and temporal behavior
+- fixed Classic effect order and formulas
+- Syphon, Spout, Rust relay, and framework packaging
+
+Read DOCUMENTATION_INDEX.md first.

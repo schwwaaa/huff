@@ -1,42 +1,42 @@
-# Git Commit Message — HUFF Classic Pass 13S
+# Git Commit Message — HUFF Classic Pass 14
 
 ## Title
 
 ```text
-fix: harden HUFF Classic source lifecycle without changing frame pacing
+perf: streamline HUFF Classic canvas copies and history release
 ```
 
 ## Body
 
 ```text
-Branch from the stable Pass 12R / Pass 11 renderer and keep the proven Blob URL plus p5 createVideo decoder path.
+Continue from the committed Pass 13S baseline without changing decoder ownership or frame scheduling.
 
-Add source-generation guards so stale readiness, autoplay, seek, error, and camera callbacks cannot reactivate replaced media.
+Use Canvas2D's non-scaling drawImage path when full-frame source and destination dimensions match, while retaining the scaled fallback for mismatched media.
 
-Own and clear the active readiness interval and autoplay gesture listeners across replacement and shutdown.
+Apply the exact-size path to temporal-ring capture and shared buffer/scratch copies.
 
-Reject stale camera completions by stopping their tracks, clearing srcObject, and removing abandoned capture elements.
+Explicitly collapse and release discarded temporal-ring canvas backing stores during capacity reduction, render-size changes, and application shutdown.
 
-Add conservative idempotent media, audio, Blob URL, mirror Worker, and WebSocket shutdown cleanup without forcing decoder reset during normal source changes.
+Preserve the newest history frames and existing temporal capture cadence, capacity formula, sample ordering, and 192 MiB estimated budget.
 
-Keep p5 draw, transport, mirror, and profiler requestAnimationFrame loops independent and keep mirror capture out of the render boundary.
+Move clustered-glitch physics updating to a reusable module-level function while preserving seeded random order and motion equations.
 
-Add profiler-only decode, temporal-ring, and mirror backpressure telemetry plus a lifecycle-boundary validator.
+Add profiler rows for allocated history slots and estimated raw history memory.
 
-Preserve effects, buffer topology, MIDI, OSC, presets, Syphon, Spout, Rust transport, and mandatory framework packaging.
+Add deterministic Pass 14 validation and preserve the Pass 13S lifecycle, independent clocks, effects, Syphon, Spout, Rust relay, and framework packaging.
 ```
 
 ## Command
 
 ```bash
 git add . && git commit \
-  -m "fix: harden HUFF Classic source lifecycle without changing frame pacing" \
-  -m "Branch from the stable Pass 12R / Pass 11 renderer and keep the proven Blob URL plus p5 createVideo decoder path." \
-  -m "Add source-generation guards so stale readiness, autoplay, seek, error, and camera callbacks cannot reactivate replaced media." \
-  -m "Own and clear the active readiness interval and autoplay gesture listeners across replacement and shutdown." \
-  -m "Reject stale camera completions by stopping their tracks, clearing srcObject, and removing abandoned capture elements." \
-  -m "Add conservative idempotent media, audio, Blob URL, mirror Worker, and WebSocket shutdown cleanup without forcing decoder reset during normal source changes." \
-  -m "Keep p5 draw, transport, mirror, and profiler requestAnimationFrame loops independent and keep mirror capture out of the render boundary." \
-  -m "Add profiler-only decode, temporal-ring, and mirror backpressure telemetry plus a lifecycle-boundary validator." \
-  -m "Preserve effects, buffer topology, MIDI, OSC, presets, Syphon, Spout, Rust transport, and mandatory framework packaging."
+  -m "perf: streamline HUFF Classic canvas copies and history release" \
+  -m "Continue from the committed Pass 13S baseline without changing decoder ownership or frame scheduling." \
+  -m "Use Canvas2D's non-scaling drawImage path when full-frame source and destination dimensions match, while retaining the scaled fallback for mismatched media." \
+  -m "Apply the exact-size path to temporal-ring capture and shared buffer/scratch copies." \
+  -m "Explicitly collapse and release discarded temporal-ring canvas backing stores during capacity reduction, render-size changes, and application shutdown." \
+  -m "Preserve the newest history frames and existing temporal capture cadence, capacity formula, sample ordering, and 192 MiB estimated budget." \
+  -m "Move clustered-glitch physics updating to a reusable module-level function while preserving seeded random order and motion equations." \
+  -m "Add profiler rows for allocated history slots and estimated raw history memory." \
+  -m "Add deterministic Pass 14 validation and preserve the Pass 13S lifecycle, independent clocks, effects, Syphon, Spout, Rust relay, and framework packaging."
 ```
