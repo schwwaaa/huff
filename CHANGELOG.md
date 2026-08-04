@@ -2,6 +2,23 @@
 
 This changelog tracks the optimization series for the legacy Tauri v1 + p5.js/Canvas2D edition. It intentionally excludes the native-wgpu HUFF project.
 
+## Pass 18 — Glitch blit hot-path optimization and draw-call telemetry
+
+**Date:** 2026-08-04  
+**Status:** implementation and deterministic validation complete; target-runtime visual and performance testing pending
+
+- Removed the per-blit Glitch helper and dispatched base/smear tiles directly through the cached Canvas2D context.
+- Added a versioned FrameRing mutation counter and reusable temporal source-reference table.
+- Replaced one `frameRing.fromEnd()` call per tile with a cache rebuilt only after ring mutation or requested-depth change.
+- Added reusable typed X/Y smear-offset buffers.
+- Reduced smear rounding from `2 × tiles × SMEAR` to `2 × SMEAR` operations per Glitch frame while preserving original multiplication order.
+- Calculated constant tile span once per Glitch invocation.
+- Added profiler-only Glitch tile, draw-call, and ring-cache rebuild/reuse telemetry.
+- Preserved tile placement, seeded random/noise order, temporal selection, draw rectangles, paint order, cluster motion, alpha, and artistic draw count.
+- Applied Junkpile's persistent-resource, explicit-invalidation, and draw-call-accounting principles without importing WebGL or wgpu.
+- Added `npm run validate:pass18` with 4,832 checks and 3,474,837 exact ordered draw-operation comparisons.
+- Preserved the stable Blob URL decoder, independent clocks, Pass 16S Syphon bootstrap, Spout, native transport, and framework packaging.
+
 ## Pass 17 — One-scratch Pipeline Luma Key acceleration
 
 **Date:** 2026-08-03  

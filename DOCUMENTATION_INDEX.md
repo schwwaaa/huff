@@ -1,12 +1,26 @@
-# HUFF Classic Pass 17 Documentation Index
+# HUFF Classic Optimization Pass 18 — Documentation Index
 
-- `PASS_NOTES.md` — exact Pass 17 scope, changes, boundaries, and runtime priorities.
-- `CHANGED_FILES.md` — exact runtime, tooling, documentation, and unchanged-file boundaries.
-- `PIPELINE_LUMA_KEY_AUDIT.md` — old/new processing paths, cache ownership, pixel equivalence, and remaining cost.
-- `TESTING_CHECKLIST.md` — visual, performance, combined-effect, Syphon, and soak tests.
-- `VALIDATION_REPORT.md` — deterministic results, precision finding, retained-suite checks, and environment limits.
-- `CURRENT_STATUS.md` — authoritative baseline, acceptance gate, and deferred Syphon optimization.
-- `CHANGELOG.md` — cumulative HUFF Classic optimization history.
-- `OPTIMIZATION_ROADMAP.md` — remaining mandatory optimization and release work.
-- `GIT_COMMIT_MESSAGE.md` — ready-to-use commit title, body, and command.
-- `HUFF_CLASSIC_OPTIMIZATION_PASS_17.txt` — compact package marker.
+## Start here
+
+- `PASS_NOTES.md` — complete Pass 18 implementation summary and boundaries
+- `CURRENT_STATUS.md` — authoritative current baseline and acceptance gate
+
+## Technical investigation
+
+- `GLITCH_DRAW_CALL_AUDIT.md` — current draw-call cost, reductions, limits, profiler interpretation, and Junkpile influence
+- `CHANGED_FILES.md` — exact runtime, validation, and documentation file changes
+
+## Validation and testing
+
+- `VALIDATION_REPORT.md` — deterministic comparisons, static checks, and untested runtime boundary
+- `TESTING_CHECKLIST.md` — macOS parity, profiler, history, Syphon, and endurance tests
+
+## Project tracking
+
+- `CHANGELOG.md` — cumulative HUFF Classic optimization history
+- `OPTIMIZATION_ROADMAP.md` — mandatory work after Pass 18
+- `GIT_COMMIT_MESSAGE.md` — ready-to-use Git commit command and subject
+
+## Pass marker
+
+- `HUFF_CLASSIC_OPTIMIZATION_PASS_18.txt`

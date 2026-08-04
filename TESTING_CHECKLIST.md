@@ -1,61 +1,82 @@
-# HUFF Classic Pass 17 — Testing Checklist
+# HUFF Classic Optimization Pass 18 — Testing Checklist
 
-## Baseline comparison
+## A. Baseline stability
 
-- [ ] Confirm ordinary playback matches committed Pass 16S with Luma Key disabled.
-- [ ] Confirm FPS and audio stability are unchanged with all effects disabled.
-- [ ] Confirm the canvas mirror remains stable.
+- [ ] Launch Pass 18 and load the same video used to validate Pass 17.
+- [ ] Confirm playback and audio are as stable as Pass 17 with Glitch disabled.
+- [ ] Confirm no video decode error.
+- [ ] Confirm normal shutdown leaves no HUFF process buildup.
 
-## Pipeline Luma Key parity
+## B. Glitch visual parity
 
-- [ ] Enable Luma Key without Glitch and verify clean-region behavior.
-- [ ] Enable Glitch + Luma Key and compare the boundary against Pass 16S.
-- [ ] Sweep threshold from 0 to 1 slowly.
-- [ ] Test threshold endpoints 0 and 1.
-- [ ] Toggle Invert at several threshold values.
-- [ ] Sweep Mix from 0 to 1.
-- [ ] Confirm Mix 0 remains a true no-op.
-- [ ] Test bright footage, dark footage, and high-contrast footage.
-- [ ] Confirm glitch trails remain visible only in the intended regions.
-- [ ] Confirm the cached patch updates on every new decoded frame.
-- [ ] Pause video and verify the cached key remains stable.
-- [ ] Seek and verify the patch updates after the decoded frame changes.
+Compare directly against Pass 17 using the same seed and controls.
 
-## Combined effects
+- [ ] Glitch with SMEAR 0.
+- [ ] Glitch with default SMEAR 6.
+- [ ] Glitch with high SMEAR values.
+- [ ] DEPTH and DEPTH SCATTER across low, medium, and high values.
+- [ ] SPATIAL GAP enabled and disabled.
+- [ ] Cluster Tiles disabled.
+- [ ] Cluster Tiles enabled with stationary centers.
+- [ ] Cluster travel, steering, inertia, bounce, pulse, breathe, and coherence.
+- [ ] Negative and positive Glitch Base X/Y offsets.
+- [ ] Glitch combined with Pipeline Luma Key and Scanlines.
+- [ ] Glitch combined with Feedback and Flow Pulse.
 
-- [ ] Glitch + Luma Key + Scanlines.
-- [ ] Luma Key + Feedback.
-- [ ] Luma Key + Flow.
-- [ ] Luma Key + Solarize.
-- [ ] Luma Key + Solarize + Feedback under sustained load.
+Expected result: identical tile selection, history selection, smear positions, alpha, overlap behavior, and cluster motion.
 
-## Profiler
+## C. Profiler checks
 
-- [ ] Open the backtick profiler.
-- [ ] Record `applyPipelineLumaKey` average time on Pass 16S.
-- [ ] Record the same scene on Pass 17.
-- [ ] Observe `luma read`, `luma xform`, `luma upload`, and `luma pres`.
-- [ ] Confirm `luma cache` shows reuse when render FPS exceeds decode FPS.
-- [ ] Close the profiler and confirm normal performance returns.
+Toggle the profiler with backtick.
 
-## Syphon regression
+- [ ] `gl tiles` rises and falls with CORRUPT, BLOCK, GAP, and cluster settings.
+- [ ] `gl draws` equals approximately `gl tiles × (1 + SMEAR)`.
+- [ ] `gl ring` shows rebuilds after decoded frames and reuses between them.
+- [ ] Profiler hidden performance remains equal to or better than Pass 17.
+- [ ] Record `applyGlitch` time at representative draw counts.
 
-- [ ] Start Syphon before opening OBS.
-- [ ] Confirm the one-fps bootstrap publishes while no receiver is attached.
-- [ ] Select `huff` in OBS and confirm live frames appear.
-- [ ] Confirm the selected 30/60 fps rate resumes after attachment.
-- [ ] Run Luma Key while Syphon is connected.
-- [ ] Confirm no black-frame or zero-frame regression.
-- [ ] Disconnect and reconnect OBS.
+Suggested measurements:
 
-## Long-session stability
+| Resolution | BLOCK | CORRUPT | SMEAR | gl tiles | gl draws | applyGlitch ms | FPS |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| 720p |  |  | 0 |  |  |  |  |
+| 720p |  |  | 6 |  |  |  |  |
+| 1080p |  |  | 0 |  |  |  |  |
+| 1080p |  |  | 6 |  |  |  |  |
+| 1080p |  |  | 20 |  |  |  |  |
 
-- [ ] Run video for at least 30 minutes with Luma Key active.
-- [ ] Repeat threshold and invert changes.
-- [ ] Replace the video source several times.
-- [ ] Watch CPU, memory, audio, and frame pacing.
-- [ ] Confirm the application closes without process buildup.
+## D. Temporal-ring invalidation
 
-## Acceptance rule
+- [ ] Play normally and verify history moves forward.
+- [ ] Pause and resume.
+- [ ] Seek to a different point.
+- [ ] Change QUALITY so ring capacity changes.
+- [ ] Resize the renderer repeatedly.
+- [ ] Replace the video source.
+- [ ] Confirm Glitch never displays frozen references from a retired ring generation.
 
-Retain Pass 17 only when visual behavior is unchanged and target-runtime stability is equal to or better than committed Pass 16S.
+## E. Output regression
+
+- [ ] Start Syphon before selecting OBS source.
+- [ ] Confirm the one-fps bootstrap appears and OBS receives frames.
+- [ ] Confirm full selected Syphon rate after attachment.
+- [ ] Test Glitch with high SMEAR while Syphon is connected.
+- [ ] Disconnect and reconnect the Syphon receiver.
+- [ ] Confirm canvas mirror still works.
+- [ ] Confirm Spout code was not changed; runtime verification remains a Windows task.
+
+## F. Endurance
+
+- [ ] Run Glitch at a representative heavy setting for at least 30 minutes.
+- [ ] Watch FPS, `applyGlitch`, ring memory, and Syphon drops.
+- [ ] Confirm no progressive latency, memory climb, audio degradation, or output black frame.
+
+## Acceptance gate
+
+Pass 18 becomes the next stable baseline only when:
+
+1. normal playback remains as stable as Pass 17;
+2. Glitch visuals match Pass 17;
+3. Syphon remains functional;
+4. profiler-hidden performance is equal or better;
+5. no stale temporal frames appear after source, resize, or QUALITY changes.

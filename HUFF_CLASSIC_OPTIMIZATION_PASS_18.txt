@@ -1,0 +1,25 @@
+HUFF CLASSIC OPTIMIZATION PASS 18
+
+Baseline: committed Pass 17
+Date: 2026-08-04
+
+Scope:
+- Direct Canvas2D Glitch tile/smear dispatch
+- Versioned temporal-ring source-reference cache
+- Reusable typed smear-offset workspace
+- Constant tile-span calculation
+- Profiler-only Glitch tile/draw/cache telemetry
+
+Preserved:
+- working Blob URL + p5 createVideo decoder
+- independent frame clocks
+- exact Glitch placement, temporal selection, geometry, paint order, and alpha
+- Pass 16S Syphon bootstrap and native output path
+- Spout, Rust/Tauri tree, and bundled Syphon.framework
+
+Validation:
+- 4,832 Pass 18 checks
+- 3,474,837 exact ordered draw-operation comparisons
+- all retained deterministic validators passed
+
+Runtime target testing remains required.

@@ -272,10 +272,12 @@ class FrameRing {
     this._buf  = new Array(this._cap).fill(null);
     this._head = 0;
     this._size = 0;
+    this._version = 0;
   }
 
   get length()   { return this._size; }
   get capacity() { return this._cap;  }
+  get version()  { return this._version; }
 
   _makeFrame(width, height) {
     const canvas = document.createElement('canvas');
@@ -350,6 +352,7 @@ class FrameRing {
 
     this._head = (this._head + 1) % this._cap;
     if (this._size < this._cap) this._size++;
+    this._version++;
     return true;
   }
 
@@ -382,6 +385,7 @@ class FrameRing {
     this._head = keep % newCap;
     this._size = keep;
     this._cap  = newCap;
+    this._version++;
   }
 
   // release=true is used after a render-resolution change so old large backing
@@ -394,6 +398,7 @@ class FrameRing {
     }
     this._head = 0;
     this._size = 0;
+    this._version++;
   }
 
   dispose() {
@@ -2339,8 +2344,8 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
 (function () {
   let visible = false;
 
-  // Top-level draw() calls only — NOT their internal sub-calls (e.g. drawRingRegion
-  // inside trails/glitch) so nothing is double-counted. _pushToRing runs on the
+  // Top-level draw() calls only — NOT their internal Canvas2D tile blits, so
+  // nothing is double-counted. _pushToRing runs on the
   // video-decode callback, so its number
   // is the ring-snapshot cost amortised across render frames.
   const NAMES = [
@@ -2412,10 +2417,22 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
     };
   }
 
+  function glitchTelemetrySnapshot() {
+    const t = window.__huffGlitchTelemetry || {};
+    return {
+      frames: t.frames || 0,
+      tiles: t.tiles || 0,
+      drawCalls: t.drawCalls || 0,
+      ringRebuilds: t.ringRebuilds || 0,
+      ringReuses: t.ringReuses || 0,
+    };
+  }
+
   let frames = 0, lastReport = performance.now();
   let lastTelemetry = { ..._profileTelemetry };
   let lastSolarTelemetry = solarTelemetrySnapshot();
   let lastLumaTelemetry = lumaTelemetrySnapshot();
+  let lastGlitchTelemetry = glitchTelemetrySnapshot();
 
   function report() {
     const now = performance.now();
@@ -2466,6 +2483,14 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
         ? (lumaNow.presentMs - lastLumaTelemetry.presentMs) / lumaPresentSamples : 0;
       const lumaRebuiltDelta = lumaNow.rebuiltFrames - lastLumaTelemetry.rebuiltFrames;
       const lumaReusedDelta = lumaNow.reusedFrames - lastLumaTelemetry.reusedFrames;
+      const glitchNow = glitchTelemetrySnapshot();
+      const glitchFramesDelta = glitchNow.frames - lastGlitchTelemetry.frames;
+      const glitchTilesDelta = glitchNow.tiles - lastGlitchTelemetry.tiles;
+      const glitchDrawCallsDelta = glitchNow.drawCalls - lastGlitchTelemetry.drawCalls;
+      const glitchRingRebuildDelta = glitchNow.ringRebuilds - lastGlitchTelemetry.ringRebuilds;
+      const glitchRingReuseDelta = glitchNow.ringReuses - lastGlitchTelemetry.ringReuses;
+      const glitchTilesAvg = glitchFramesDelta > 0 ? glitchTilesDelta / glitchFramesDelta : 0;
+      const glitchDrawCallsAvg = glitchFramesDelta > 0 ? glitchDrawCallsDelta / glitchFramesDelta : 0;
       const decodeFps = decodedDelta * 1000 / dt;
       const ringFps = ringDelta * 1000 / dt;
       const rows = NAMES.map(function (n) { return [n, acc[n] / f]; })
@@ -2498,6 +2523,9 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
         'luma upload' + lumaUploadAvg.toFixed(2).padStart(6) + ' ms\n' +
         'luma pres  ' + lumaPresentAvg.toFixed(2).padStart(6) + ' ms\n' +
         'luma cache ' + `${lumaRebuiltDelta}/${lumaReusedDelta}`.padStart(6) + ' rebuild/reuse\n' +
+        'gl tiles   ' + glitchTilesAvg.toFixed(0).padStart(6) + ' / frame\n' +
+        'gl draws   ' + glitchDrawCallsAvg.toFixed(0).padStart(6) + ' / frame\n' +
+        'gl ring    ' + `${glitchRingRebuildDelta}/${glitchRingReuseDelta}`.padStart(6) + ' rebuild/reuse\n' +
         '──────────────────────\n' +
         (rows.length ? rows.map(function (r) { return fmt(r[0], r[1]); }).join('\n')
                      : '(no effects active)') + '\n' +
@@ -2512,6 +2540,7 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
       lastTelemetry = { ..._profileTelemetry };
       lastSolarTelemetry = solarTelemetrySnapshot();
       lastLumaTelemetry = lumaTelemetrySnapshot();
+      lastGlitchTelemetry = glitchTelemetrySnapshot();
     }
   }
 
@@ -2528,6 +2557,7 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
     lastTelemetry = { ..._profileTelemetry };
     lastSolarTelemetry = solarTelemetrySnapshot();
     lastLumaTelemetry = lumaTelemetrySnapshot();
+    lastGlitchTelemetry = glitchTelemetrySnapshot();
     if (!visible) overlay.textContent = '';
   }
 

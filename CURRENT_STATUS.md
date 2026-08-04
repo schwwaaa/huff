@@ -1,43 +1,57 @@
-# HUFF Classic Current Status — Pass 17
+# HUFF Classic Current Status — Pass 18
 
 ## Authoritative baseline
 
-Pass 17 continues from the working and committed Pass 16S baseline.
+Pass 18 continues from the working and committed Pass 17 baseline.
 
-Pass 16S remains the known Syphon repair boundary. Pass 17 modifies only Pipeline Luma Key Canvas2D processing and profiler reporting; it does not change the native Syphon implementation or startup policy.
+The stable decoder, independent schedulers, Pass 16S Syphon bootstrap repair, and Pass 17 Luma Key optimization remain intact.
+
+## Pass 18 state
+
+- Glitch tile and smear draws now call the cached Canvas2D context directly.
+- Temporal history source references are cached by FrameRing mutation generation and requested depth.
+- Smear offsets are rounded once per smear step in reusable typed buffers.
+- Constant tile span is calculated once per Glitch invocation.
+- The profiler reports Glitch tile count, draw-call count, and ring-cache rebuild/reuse behavior.
+- Artistic draw count, order, geometry, and compositing remain unchanged.
 
 ## Retained stable systems
 
 - File → Blob URL → p5 `createVideo()` decoding
-- Independent p5 render, transport, mirror, and profiler clocks
-- Source-generation lifecycle guards
-- Consolidated `gCur`, `gBuf`, and `gScratch` topology
-- Canvas-backed temporal history
-- Cached Flow and Scanline geometry
-- Neutral-stage bypass
-- Packed Solarize processing
-- Receiver-aware JPEG mirror
-- One-fps Syphon bootstrap before attachment
-- Full selected Syphon rate after attachment
+- independent p5, transport, mirror, and profiler clocks
+- source-generation lifecycle guards
+- consolidated `gCur`, `gBuf`, and `gScratch` topology
+- canvas-backed temporal history and memory release
+- cached Flow and Scanline geometry
+- neutral-stage bypass
+- packed Solarize processing
+- one-scratch Pipeline Luma Key
+- receiver-aware JPEG mirror
+- one-fps Syphon bootstrap before attachment
+- selected full Syphon rate after attachment
 - Spout native path
-- Mandatory bundled universal `Syphon.framework`
+- mandatory universal bundled `Syphon.framework`
 
-## Pass 17 state
+## Current performance boundary
 
-- Pipeline Luma Key now uses one bounded scratch instead of two.
-- One clean-source copy and one `destination-in` pass are removed from each patch rebuild.
-- Packed and byte fallback pixel paths are present.
-- Luma Key phase telemetry is available only while the profiler is visible.
+Glitch's remaining dominant cost is the number of Canvas2D `drawImage()` operations:
+
+```text
+accepted tiles × (1 + SMEAR)
+```
+
+Pass 18 reduces surrounding JavaScript overhead and exposes that count. It does not silently reduce tiles or smear copies.
 
 ## Acceptance gate
 
-Pass 17 becomes the next committed baseline only after:
+Pass 18 should be committed as the next baseline only after:
 
-1. key-boundary visual parity against Pass 16S;
-2. equal or better playback stability;
-3. no Syphon black-frame regression;
-4. acceptable performance with Luma Key combined with Glitch, Scanlines, Feedback, and Solarize.
+1. visual parity with Pass 17;
+2. equal or better normal playback stability;
+3. no Syphon regression;
+4. equal or lower `applyGlitch` time at the same `gl draws` count;
+5. correct temporal history after seek, resize, QUALITY change, and source replacement.
 
-## Deferred Syphon optimization
+## Next mandatory target
 
-Syphon is working again under Pass 16S. Further Syphon optimization remains mandatory, but it is deferred to the dedicated output-capture pass so the functioning bootstrap path is not casually disturbed during effect optimization.
+Pass 19: output-capture budget and Syphon optimization, preserving the working bootstrap and black-frame repair.

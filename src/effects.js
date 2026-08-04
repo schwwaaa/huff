@@ -26,16 +26,14 @@
 //  - Pass 17 builds the Pipeline Luma Key clean patch directly in one bounded
 //    scratch canvas, removing the separate mask canvas, duplicate clean copy,
 //    and destination-in composition while preserving the same alpha gate.
+//  - Pass 18 keeps Glitch blits on the cached Canvas2D context, reuses prepared
+//    smear offsets, and resolves temporal-ring slots once per ring generation
+//    instead of repeating helper/context/ring lookups for every tile draw.
 
 // ─── Temporal ring drawing ───────────────────────────────────────────────────
 // FrameRing stores reusable canvas snapshots, so historical frames remain
 // directly drawable. This avoids the old getImageData() readback on capture and
 // the later putImageData() upload/cache needed before every temporal sample.
-
-function drawRingRegion(target, frameCanvas, sx, sy, sw, sh, dx, dy, dw, dh) {
-  if (!frameCanvas) return;
-  target.drawingContext.drawImage(frameCanvas, sx, sy, sw, sh, dx, dy, dw, dh);
-}
 
 function copyCanvasFrame(ctx, source, width, height) {
   if (!ctx || !source || width <= 0 || height <= 0) return;
@@ -172,6 +170,77 @@ class GlitchPlacementWorkspace {
 }
 
 const _glitchTargets = new GlitchPlacementWorkspace();
+
+// ─── Reusable glitch blit workspace ─────────────────────────────────────────
+// Glitch can issue hundreds or thousands of Canvas2D drawImage calls per frame.
+// Keep everything around those irreducible blits as cheap as possible:
+//   - temporal ring slots are resolved once per ring generation;
+//   - smear offsets are rounded once per smear step, not once per tile;
+//   - the hot loop calls the cached Canvas2D context directly.
+class GlitchBlitWorkspace {
+  constructor() {
+    this.ringVersion = -1;
+    this.ringMaxBack = -1;
+    this.ringFrames = [null];
+    this.smearX = new Int32Array(0);
+    this.smearY = new Int32Array(0);
+    this.ringRebuilt = false;
+  }
+
+  prepareRing(ring, maxBack) {
+    const version = ring?.version ?? -1;
+    if (this.ringVersion === version && this.ringMaxBack === maxBack) {
+      this.ringRebuilt = false;
+      return this.ringFrames;
+    }
+
+    this.ringFrames.length = maxBack + 1;
+    this.ringFrames[0] = null;
+    for (let i = 1; i <= maxBack; i++) {
+      this.ringFrames[i] = ring.fromEnd(i);
+    }
+    this.ringVersion = version;
+    this.ringMaxBack = maxBack;
+    this.ringRebuilt = true;
+    return this.ringFrames;
+  }
+
+  prepareSmear(length, dxUnit, dyUnit, block) {
+    if (length <= 0) return;
+    const required = length + 1;
+    if (this.smearX.length < required) {
+      let cap = Math.max(8, this.smearX.length || 0);
+      while (cap < required) cap *= 2;
+      this.smearX = new Int32Array(cap);
+      this.smearY = new Int32Array(cap);
+    }
+    // Preserve the original multiplication order exactly:
+    // Math.round(dxUnit * s * block), not Math.round((dxUnit * block) * s).
+    for (let s = 1; s <= length; s++) {
+      this.smearX[s] = Math.round(dxUnit * s * block);
+      this.smearY[s] = Math.round(dyUnit * s * block);
+    }
+  }
+}
+
+const _glitchBlits = new GlitchBlitWorkspace();
+const _glitchTelemetry = window.__huffGlitchTelemetry || {
+  frames: 0,
+  tiles: 0,
+  drawCalls: 0,
+  ringRebuilds: 0,
+  ringReuses: 0,
+};
+window.__huffGlitchTelemetry = _glitchTelemetry;
+
+function _glitchProfileFrame(tileCount, smearLength, ringRebuilt) {
+  if (window.__huffProfilerActive !== true) return;
+  _glitchTelemetry.frames++;
+  _glitchTelemetry.tiles += tileCount;
+  _glitchTelemetry.drawCalls += tileCount * (1 + smearLength);
+  if (ringRebuilt) _glitchTelemetry.ringRebuilds++;
+  else _glitchTelemetry.ringReuses++;
+}
 
 function ensureClusterTileCapacity(center, required) {
   if ((center.tileAngles?.length || 0) >= required) return;
@@ -674,6 +743,11 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0, glitchPriority = 1.0, 
 
   const ctx = gBuf.drawingContext;
   const prevAlpha = ctx.globalAlpha;
+  const ringFrames = _glitchBlits.prepareRing(frameRing, maxBack);
+  const tileSpan = block * (size / 20);
+  if (smearLen > 0) _glitchBlits.prepareSmear(smearLen, dxUnit, dyUnit, block);
+  const smearX = _glitchBlits.smearX;
+  const smearY = _glitchBlits.smearY;
 
   // tileAlpha is constant for all tiles — set once, restore once.
   // glitchPriority scales contribution relative to scanlines (A/B mix).
@@ -688,8 +762,8 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0, glitchPriority = 1.0, 
     cx = (cx + ox + width)  % width;
     cy = (cy + oy + height) % height;
 
-    const w = Math.min(block * (size / 20), width  - cx);
-    const h = Math.min(block * (size / 20), height - cy);
+    const w = Math.min(tileSpan, width  - cx);
+    const h = Math.min(tileSpan, height - cy);
     if (w <= 0 || h <= 0) continue;
 
     const dstX = Math.max(0, Math.min(width  - w, cx + baseDX));
@@ -705,21 +779,22 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0, glitchPriority = 1.0, 
     const randBack  = Math.max(1, ((_vfc * 1664525 + i * 1013904223) >>> 0) % maxBack + 1);
     const blendBack = Math.round(baseBack + (randBack - baseBack) * depthScatter);
     const idx       = Math.max(1, Math.min(maxBack, blendBack));
-    const src       = frameRing.fromEnd(idx);
+    const src       = ringFrames[idx];
     if (!src) continue;
 
-    drawRingRegion(gBuf, src, cx, cy, w, h, dstX, dstY, w, h);
+    ctx.drawImage(src, cx, cy, w, h, dstX, dstY, w, h);
 
     if (smearLen > 0) {
       for (let s = 1; s <= smearLen; s++) {
-        const sx2 = Math.max(0, Math.min(width  - w, dstX + Math.round(dxUnit * s * block)));
-        const sy2 = Math.max(0, Math.min(height - h, dstY + Math.round(dyUnit * s * block)));
-        drawRingRegion(gBuf, src, cx, cy, w, h, sx2, sy2, w, h);
+        const sx2 = Math.max(0, Math.min(width  - w, dstX + smearX[s]));
+        const sy2 = Math.max(0, Math.min(height - h, dstY + smearY[s]));
+        ctx.drawImage(src, cx, cy, w, h, sx2, sy2, w, h);
       }
     }
   }
 
   ctx.globalAlpha = prevAlpha;
+  _glitchProfileFrame(targets.count, smearLen, _glitchBlits.ringRebuilt);
 }
 
 // ─── Flow warp ────────────────────────────────────────────────────────────────
