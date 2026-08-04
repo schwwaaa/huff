@@ -23,6 +23,9 @@
 //  - Pass 16 processes Solarize pixels through a little-endian Uint32 path,
 //    keeps the byte path as fallback, and presents the cached 640px result
 //    directly instead of maintaining a second full-resolution cache canvas.
+//  - Pass 17 builds the Pipeline Luma Key clean patch directly in one bounded
+//    scratch canvas, removing the separate mask canvas, duplicate clean copy,
+//    and destination-in composition while preserving the same alpha gate.
 
 // ─── Temporal ring drawing ───────────────────────────────────────────────────
 // FrameRing stores reusable canvas snapshots, so historical frames remain
@@ -1155,26 +1158,97 @@ function applySymmetry(src, dst, mode = 'v', pos = 0.5) {
 // Gates how much of the glitch output (gBuf) shows through based on the
 // luminance of the clean source (gCur).
 //
-// thresh=0 → nothing keyed (all glitch shows) 
+// thresh=0 → nothing keyed (all glitch shows)
 // thresh=1 → everything keyed (all clean shows)
 // invert   → flips: dark areas show glitch, bright areas stay clean
 //
 // Operates at 640px max width for performance.
+//
+// Pass 17 uses one bounded scratch canvas as both the readback source and the
+// cached clean-area patch. The old path built a second white alpha-mask canvas,
+// copied the clean frame again, then applied destination-in. Directly replacing
+// the copied clean frame's alpha is visually equivalent: destination-in keeps
+// the destination RGB and multiplies only its alpha by the mask alpha.
 
 let _plkCanvas = null, _plkCtx = null;
-let _plkBufCanvas = null, _plkBufCtx = null;
 let _plkCacheFrame = -1;
 let _plkCacheThresh = NaN;
 let _plkCacheInvert = false;
+
+const _plkTelemetry = window.__huffLumaKeyTelemetry || {
+  readbackMs: 0,
+  readbackSamples: 0,
+  transformMs: 0,
+  transformSamples: 0,
+  uploadMs: 0,
+  uploadSamples: 0,
+  presentMs: 0,
+  presentSamples: 0,
+  rebuiltFrames: 0,
+  reusedFrames: 0,
+};
+window.__huffLumaKeyTelemetry = _plkTelemetry;
+
+function _plkProfileAdd(name, amount = 1) {
+  _plkTelemetry[name] = (_plkTelemetry[name] || 0) + amount;
+}
+
+function _pipelineLumaMaskAlpha(lum, threshold, invert) {
+  const roll = Math.max(0, Math.min(1, (lum - threshold) / 64));
+  // Preserve the original operation order exactly. Do not simplify the
+  // inverted branch algebraically: floating-point cancellation at boundary
+  // values can otherwise change the final byte by one.
+  const reveal = invert ? (1 - roll) : roll;
+  return ((1 - reveal) * 255 + 0.5) | 0;
+}
+
+function _multiplyByteAlpha(sourceAlpha, maskAlpha) {
+  // gCur is normally opaque video/camera content, so the common path is exact
+  // and avoids a multiply. Preserve destination-in semantics for any partially
+  // transparent source that reaches this function.
+  if (sourceAlpha === 255) return maskAlpha;
+  if (sourceAlpha === 0 || maskAlpha === 0) return 0;
+  return Math.floor((sourceAlpha * maskAlpha + 127) / 255);
+}
+
+function _pipelineLumaPixelsBytes(pix, threshold, invert) {
+  for (let i = 0; i < pix.length; i += 4) {
+    const r = pix[i], g = pix[i + 1], b = pix[i + 2];
+    const lum = _lumaR[r] + _lumaG[g] + _lumaB[b];
+    const maskAlpha = _pipelineLumaMaskAlpha(lum, threshold, invert);
+    pix[i + 3] = _multiplyByteAlpha(pix[i + 3], maskAlpha);
+  }
+}
+
+function _pipelineLumaPixelsWords(pix, threshold, invert) {
+  // RGBA ImageData bytes are packed as 0xAABBGGRR on little-endian targets.
+  // Keep RGB verbatim and replace only the alpha byte of the cached clean patch.
+  const words = new Uint32Array(
+    pix.buffer,
+    pix.byteOffset,
+    pix.byteLength >>> 2
+  );
+  for (let i = 0; i < words.length; i++) {
+    const packed = words[i];
+    const r = packed & 0xff;
+    const g = (packed >>> 8) & 0xff;
+    const b = (packed >>> 16) & 0xff;
+    const sourceAlpha = packed >>> 24;
+    const lum = _lumaR[r] + _lumaG[g] + _lumaB[b];
+    const maskAlpha = _pipelineLumaMaskAlpha(lum, threshold, invert);
+    const outputAlpha = _multiplyByteAlpha(sourceAlpha, maskAlpha);
+    words[i] = ((packed & 0x00ffffff) | (outputAlpha << 24)) >>> 0;
+  }
+}
 
 function applyPipelineLumaKey(thresh, mix, invert, sourceFrameSerial = -1) {
   if (mix <= 0) return;
 
   const W = gBuf.width, H = gBuf.height;
-  const MAX_W  = 640;
-  const scale  = W > MAX_W ? MAX_W / W : 1;
-  const sw     = Math.max(1, Math.round(W * scale));
-  const sh     = Math.max(1, Math.round(H * scale));
+  const MAX_W = 640;
+  const scale = W > MAX_W ? MAX_W / W : 1;
+  const sw = Math.max(1, Math.round(W * scale));
+  const sh = Math.max(1, Math.round(H * scale));
   if (!_plkCanvas) {
     _plkCanvas = document.createElement('canvas');
     _plkCtx = _plkCanvas.getContext('2d', { willReadFrequently: true });
@@ -1182,64 +1256,64 @@ function applyPipelineLumaKey(thresh, mix, invert, sourceFrameSerial = -1) {
   if (_plkCanvas.width !== sw || _plkCanvas.height !== sh) {
     _plkCanvas.width = sw;
     _plkCanvas.height = sh;
-    _plkCtx = _plkCanvas.getContext('2d', { willReadFrequently: true });
-    _plkCacheFrame = -1;
-  }
-  if (!_plkBufCanvas) {
-    _plkBufCanvas = document.createElement('canvas');
-    _plkBufCtx = _plkBufCanvas.getContext('2d', { alpha:true, desynchronized:true });
-  }
-  if (_plkBufCanvas.width !== sw || _plkBufCanvas.height !== sh) {
-    _plkBufCanvas.width = sw;
-    _plkBufCanvas.height = sh;
-    _plkBufCtx = _plkBufCanvas.getContext('2d', { alpha:true, desynchronized:true });
     _plkCacheFrame = -1;
   }
 
   const gCurEl = gCur.elt ?? gCur.drawingContext?.canvas;
   if (!gCurEl) return;
 
-  // The mask and masked clean patch depend only on the decoded clean frame,
-  // threshold, invert state, and dimensions. At a 60 Hz render rate with a
-  // 30 fps source this avoids rebuilding the same pixel mask twice.
+  // The cached clean patch depends only on the decoded clean frame, threshold,
+  // invert state, and dimensions. At 60 Hz render with 30 fps media this avoids
+  // rebuilding the same patch twice.
   const rebuild = sourceFrameSerial !== _plkCacheFrame
     || thresh !== _plkCacheThresh
     || invert !== _plkCacheInvert;
+  const profile = window.__huffProfilerActive === true;
 
   if (rebuild) {
+    let phaseStart = profile ? performance.now() : 0;
     copyCanvasFrame(_plkCtx, gCurEl, sw, sh);
-    const maskData = _plkCtx.getImageData(0, 0, sw, sh);
-    const sp = maskData.data;
-    const n = sp.length;
-
-    // Build luma mask: alpha = how much glitch should show at each pixel.
-    const t = (1 - thresh) * 255;
-    const rollRange = 64;
-    for (let i = 0; i < n; i += 4) {
-      const r = sp[i], g = sp[i + 1], b = sp[i + 2];
-      const lum    = _lumaR[r] + _lumaG[g] + _lumaB[b];
-      const roll   = Math.max(0, Math.min(1, (lum - t) / rollRange));
-      const reveal = invert ? (1 - roll) : roll;
-      sp[i] = sp[i + 1] = sp[i + 2] = 255;
-      sp[i + 3] = ((1 - reveal) * 255 + 0.5) | 0;
+    const patchData = _plkCtx.getImageData(0, 0, sw, sh);
+    if (profile) {
+      _plkProfileAdd('readbackMs', performance.now() - phaseStart);
+      _plkProfileAdd('readbackSamples');
     }
-    _plkCtx.putImageData(maskData, 0, 0);
 
-    copyCanvasFrame(_plkBufCtx, gCurEl, sw, sh);
-    _plkBufCtx.globalCompositeOperation = 'destination-in';
-    _plkBufCtx.drawImage(_plkCanvas, 0, 0, sw, sh);
-    _plkBufCtx.globalCompositeOperation = 'source-over';
+    const threshold = (1 - thresh) * 255;
+    phaseStart = profile ? performance.now() : 0;
+    if (_solLittleEndian) _pipelineLumaPixelsWords(patchData.data, threshold, invert);
+    else _pipelineLumaPixelsBytes(patchData.data, threshold, invert);
+    if (profile) {
+      _plkProfileAdd('transformMs', performance.now() - phaseStart);
+      _plkProfileAdd('transformSamples');
+    }
 
-    _plkCacheFrame  = sourceFrameSerial;
+    phaseStart = profile ? performance.now() : 0;
+    _plkCtx.putImageData(patchData, 0, 0);
+    if (profile) {
+      _plkProfileAdd('uploadMs', performance.now() - phaseStart);
+      _plkProfileAdd('uploadSamples');
+      _plkProfileAdd('rebuiltFrames');
+    }
+
+    _plkCacheFrame = sourceFrameSerial;
     _plkCacheThresh = thresh;
     _plkCacheInvert = invert;
+  } else if (profile) {
+    _plkProfileAdd('reusedFrames');
   }
 
-  // Overlay the cached clean-area patch onto gBuf at mix strength.
-  // Glitch areas are untouched — gBuf content (trails, feedback) preserved.
+  // Overlay the cached clean-area patch onto gBuf at mix strength. Glitch areas
+  // remain untouched, preserving existing trails and feedback underneath.
   const ctx = gBuf.drawingContext;
+  const presentStart = profile ? performance.now() : 0;
   ctx.save();
   ctx.globalAlpha = mix;
-  ctx.drawImage(_plkBufCanvas, 0, 0, W, H);
+  if (sw === W && sh === H) ctx.drawImage(_plkCanvas, 0, 0);
+  else ctx.drawImage(_plkCanvas, 0, 0, W, H);
   ctx.restore();
+  if (profile) {
+    _plkProfileAdd('presentMs', performance.now() - presentStart);
+    _plkProfileAdd('presentSamples');
+  }
 }

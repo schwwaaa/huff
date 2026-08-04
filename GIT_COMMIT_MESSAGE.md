@@ -1,27 +1,42 @@
-# Git Commit Message
+# HUFF Classic Pass 17 — Git Commit Message
+
+## Title
 
 ```text
-fix: bootstrap HUFF Classic Syphon frame publication
+perf: streamline HUFF Classic pipeline luma key
+```
 
-Supersede Pass 16 after OBS discovered the HUFF Syphon server but received a black source with no advancing frames.
+## Body
 
-Remove the duplicate native hasClients gate and publish one bounded bootstrap frame per second until a receiver is confirmed.
+```text
+Continue from the committed Pass 16S baseline without changing decoder ownership, frame scheduling, or the working Syphon bootstrap path.
 
-Switch immediately to the selected Syphon frame rate after attachment while preserving one-frame acknowledgements, WebSocket backpressure, Worker readback, persistent Metal textures, and receiver-aware full-rate pacing.
+Build the bounded Pipeline Luma Key clean patch directly in one CPU-readable scratch canvas instead of maintaining a separate white mask canvas and masked-clean canvas.
 
-Request Syphon output dimensions during ImageBitmap capture when supported and retain the proven full-size Worker fallback.
+Remove one clean-source copy and the destination-in composition pass from each patch rebuild while preserving the existing decoded-frame, threshold, invert, and dimension cache keys.
 
-Preserve the Pass 16 Solarize optimization, stable Blob URL decoder, independent render clocks, temporal history, canvas mirror, Spout, and mandatory framework packaging.
+Use a packed little-endian Uint32 pixel path that retains clean RGB and replaces only alpha, with a byte-oriented fallback and partial-source-alpha handling.
+
+Preserve the original luma coefficients, 64-level rolloff, invert floating-point operation order, mix behavior, effect position, and 640-pixel scratch bound.
+
+Add profiler-only Luma Key readback, transform, upload, presentation, and cache telemetry.
+
+Preserve Blob URL media loading, independent render/transport/mirror/profiler clocks, Solarize, temporal history, canvas mirror, Syphon, Spout, Rust transport, and mandatory framework packaging.
+
+Add deterministic Pass 17 validation with 17,715,200 exact pixel comparisons.
 ```
 
 ## Command
 
 ```bash
 git add . && git commit \
-  -m "fix: bootstrap HUFF Classic Syphon frame publication" \
-  -m "Supersede Pass 16 after OBS discovered the HUFF Syphon server but received a black source with no advancing frames." \
-  -m "Remove the duplicate native hasClients gate and publish one bounded bootstrap frame per second until a receiver is confirmed." \
-  -m "Switch immediately to the selected Syphon frame rate after attachment while preserving one-frame acknowledgements, WebSocket backpressure, Worker readback, persistent Metal textures, and receiver-aware full-rate pacing." \
-  -m "Request Syphon output dimensions during ImageBitmap capture when supported and retain the proven full-size Worker fallback." \
-  -m "Preserve the Pass 16 Solarize optimization, stable Blob URL decoder, independent render clocks, temporal history, canvas mirror, Spout, and mandatory framework packaging."
+  -m "perf: streamline HUFF Classic pipeline luma key" \
+  -m "Continue from the committed Pass 16S baseline without changing decoder ownership, frame scheduling, or the working Syphon bootstrap path." \
+  -m "Build the bounded Pipeline Luma Key clean patch directly in one CPU-readable scratch canvas instead of maintaining a separate white mask canvas and masked-clean canvas." \
+  -m "Remove one clean-source copy and the destination-in composition pass from each patch rebuild while preserving the existing decoded-frame, threshold, invert, and dimension cache keys." \
+  -m "Use a packed little-endian Uint32 pixel path that retains clean RGB and replaces only alpha, with a byte-oriented fallback and partial-source-alpha handling." \
+  -m "Preserve the original luma coefficients, 64-level rolloff, invert floating-point operation order, mix behavior, effect position, and 640-pixel scratch bound." \
+  -m "Add profiler-only Luma Key readback, transform, upload, presentation, and cache telemetry." \
+  -m "Preserve Blob URL media loading, independent render/transport/mirror/profiler clocks, Solarize, temporal history, canvas mirror, Syphon, Spout, Rust transport, and mandatory framework packaging." \
+  -m "Add deterministic Pass 17 validation with 17,715,200 exact pixel comparisons."
 ```

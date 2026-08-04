@@ -2,6 +2,21 @@
 
 This changelog tracks the optimization series for the legacy Tauri v1 + p5.js/Canvas2D edition. It intentionally excludes the native-wgpu HUFF project.
 
+## Pass 17 — One-scratch Pipeline Luma Key acceleration
+
+**Date:** 2026-08-03  
+**Status:** implementation and deterministic validation complete; target-runtime parity and performance testing pending
+
+- Removed the second bounded Pipeline Luma Key canvas and context.
+- Built the cached clean-area patch directly in the CPU-readable scratch canvas.
+- Removed one clean-source copy and one `destination-in` composition from every patch rebuild.
+- Added packed little-endian RGBA processing with a byte fallback.
+- Preserved source RGB, partial source alpha, threshold behavior, invert behavior, mix, decoded-frame caching, and effect order.
+- Preserved the original inverted floating-point operation order after validation caught a one-byte boundary difference from algebraic simplification.
+- Added profiler-only Luma Key phase and cache telemetry.
+- Added `npm run validate:pass17` with 1,293 checks and 17,715,200 exact pixel comparisons.
+- Preserved the Pass 16S Syphon bootstrap repair, stable decoder, independent clocks, Spout, native transport, and framework packaging.
+
 ## Pass 16S — Syphon bootstrap publication repair
 
 **Date:** 2026-08-03  

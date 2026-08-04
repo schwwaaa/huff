@@ -1,32 +1,43 @@
-# HUFF Classic Current Status — Pass 16S
+# HUFF Classic Current Status — Pass 17
 
 ## Authoritative baseline
 
-Pass 16S supersedes Pass 16.
+Pass 17 continues from the working and committed Pass 16S baseline.
 
-It retains the stable Pass 13S lifecycle and Pass 14–16 Canvas2D improvements while repairing the Syphon black/zero-frame startup condition.
+Pass 16S remains the known Syphon repair boundary. Pass 17 modifies only Pipeline Luma Key Canvas2D processing and profiler reporting; it does not change the native Syphon implementation or startup policy.
 
-## Stable systems retained
+## Retained stable systems
 
 - File → Blob URL → p5 `createVideo()` decoding
 - Independent p5 render, transport, mirror, and profiler clocks
+- Source-generation lifecycle guards
+- Consolidated `gCur`, `gBuf`, and `gScratch` topology
 - Canvas-backed temporal history
-- Consolidated full-resolution buffer topology
 - Cached Flow and Scanline geometry
 - Neutral-stage bypass
-- Reduced Solarize surface/copy cost
+- Packed Solarize processing
 - Receiver-aware JPEG mirror
-- Source-generation lifecycle guards
-- Mandatory bundled universal `Syphon.framework`
+- One-fps Syphon bootstrap before attachment
+- Full selected Syphon rate after attachment
 - Spout native path
+- Mandatory bundled universal `Syphon.framework`
 
-## Pass 16S repair state
+## Pass 17 state
 
-- Syphon server discovery remains unchanged.
-- No-client output now publishes one bounded bootstrap frame per second.
-- Connected clients receive the selected output frame rate.
-- Browser and native layers no longer apply a mutually blocking `hasClients` gate.
+- Pipeline Luma Key now uses one bounded scratch instead of two.
+- One clean-source copy and one `destination-in` pass are removed from each patch rebuild.
+- Packed and byte fallback pixel paths are present.
+- Luma Key phase telemetry is available only while the profiler is visible.
 
-## Release gate
+## Acceptance gate
 
-Pass 16S is not accepted as the next committed baseline until OBS displays live frames and the published-frame counter advances under target macOS testing.
+Pass 17 becomes the next committed baseline only after:
+
+1. key-boundary visual parity against Pass 16S;
+2. equal or better playback stability;
+3. no Syphon black-frame regression;
+4. acceptable performance with Luma Key combined with Glitch, Scanlines, Feedback, and Solarize.
+
+## Deferred Syphon optimization
+
+Syphon is working again under Pass 16S. Further Syphon optimization remains mandatory, but it is deferred to the dedicated output-capture pass so the functioning bootstrap path is not casually disturbed during effect optimization.

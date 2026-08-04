@@ -2396,9 +2396,26 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
     };
   }
 
+  function lumaTelemetrySnapshot() {
+    const t = window.__huffLumaKeyTelemetry || {};
+    return {
+      readbackMs: t.readbackMs || 0,
+      readbackSamples: t.readbackSamples || 0,
+      transformMs: t.transformMs || 0,
+      transformSamples: t.transformSamples || 0,
+      uploadMs: t.uploadMs || 0,
+      uploadSamples: t.uploadSamples || 0,
+      presentMs: t.presentMs || 0,
+      presentSamples: t.presentSamples || 0,
+      rebuiltFrames: t.rebuiltFrames || 0,
+      reusedFrames: t.reusedFrames || 0,
+    };
+  }
+
   let frames = 0, lastReport = performance.now();
   let lastTelemetry = { ..._profileTelemetry };
   let lastSolarTelemetry = solarTelemetrySnapshot();
+  let lastLumaTelemetry = lumaTelemetrySnapshot();
 
   function report() {
     const now = performance.now();
@@ -2434,6 +2451,21 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
         ? (solarNow.presentMs - lastSolarTelemetry.presentMs) / solarPresentSamples : 0;
       const solarProcessedDelta = solarNow.processedFrames - lastSolarTelemetry.processedFrames;
       const solarReusedDelta = solarNow.reusedFrames - lastSolarTelemetry.reusedFrames;
+      const lumaNow = lumaTelemetrySnapshot();
+      const lumaReadbackSamples = lumaNow.readbackSamples - lastLumaTelemetry.readbackSamples;
+      const lumaTransformSamples = lumaNow.transformSamples - lastLumaTelemetry.transformSamples;
+      const lumaUploadSamples = lumaNow.uploadSamples - lastLumaTelemetry.uploadSamples;
+      const lumaPresentSamples = lumaNow.presentSamples - lastLumaTelemetry.presentSamples;
+      const lumaReadbackAvg = lumaReadbackSamples > 0
+        ? (lumaNow.readbackMs - lastLumaTelemetry.readbackMs) / lumaReadbackSamples : 0;
+      const lumaTransformAvg = lumaTransformSamples > 0
+        ? (lumaNow.transformMs - lastLumaTelemetry.transformMs) / lumaTransformSamples : 0;
+      const lumaUploadAvg = lumaUploadSamples > 0
+        ? (lumaNow.uploadMs - lastLumaTelemetry.uploadMs) / lumaUploadSamples : 0;
+      const lumaPresentAvg = lumaPresentSamples > 0
+        ? (lumaNow.presentMs - lastLumaTelemetry.presentMs) / lumaPresentSamples : 0;
+      const lumaRebuiltDelta = lumaNow.rebuiltFrames - lastLumaTelemetry.rebuiltFrames;
+      const lumaReusedDelta = lumaNow.reusedFrames - lastLumaTelemetry.reusedFrames;
       const decodeFps = decodedDelta * 1000 / dt;
       const ringFps = ringDelta * 1000 / dt;
       const rows = NAMES.map(function (n) { return [n, acc[n] / f]; })
@@ -2461,6 +2493,11 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
         'sol upload ' + solarUploadAvg.toFixed(2).padStart(6) + ' ms\n' +
         'sol present' + solarPresentAvg.toFixed(2).padStart(6) + ' ms\n' +
         'sol cache  ' + `${solarProcessedDelta}/${solarReusedDelta}`.padStart(6) + ' process/reuse\n' +
+        'luma read  ' + lumaReadbackAvg.toFixed(2).padStart(6) + ' ms\n' +
+        'luma xform ' + lumaTransformAvg.toFixed(2).padStart(6) + ' ms\n' +
+        'luma upload' + lumaUploadAvg.toFixed(2).padStart(6) + ' ms\n' +
+        'luma pres  ' + lumaPresentAvg.toFixed(2).padStart(6) + ' ms\n' +
+        'luma cache ' + `${lumaRebuiltDelta}/${lumaReusedDelta}`.padStart(6) + ' rebuild/reuse\n' +
         '──────────────────────\n' +
         (rows.length ? rows.map(function (r) { return fmt(r[0], r[1]); }).join('\n')
                      : '(no effects active)') + '\n' +
@@ -2474,6 +2511,7 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
       lastReport = now;
       lastTelemetry = { ..._profileTelemetry };
       lastSolarTelemetry = solarTelemetrySnapshot();
+      lastLumaTelemetry = lumaTelemetrySnapshot();
     }
   }
 
@@ -2489,6 +2527,7 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
     lastReport = performance.now();
     lastTelemetry = { ..._profileTelemetry };
     lastSolarTelemetry = solarTelemetrySnapshot();
+    lastLumaTelemetry = lumaTelemetrySnapshot();
     if (!visible) overlay.textContent = '';
   }
 

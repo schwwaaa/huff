@@ -1,12 +1,12 @@
-# HUFF Classic Pass 16S Documentation Index
+# HUFF Classic Pass 17 Documentation Index
 
-- `PASS_NOTES.md` — exact Pass 16S scope and replacement rule.
-- `SYPHON_BLACK_FRAME_INCIDENT_REPORT.md` — symptom, comparison, and identified startup weakness.
-- `SYPHON_BOOTSTRAP_AUDIT.md` — corrected transport states and preserved optimizations.
-- `TESTING_CHECKLIST.md` — target-machine Syphon and regression tests.
-- `VALIDATION_REPORT.md` — static checks and environment limits.
-- `CURRENT_STATUS.md` — authoritative baseline and release gate.
+- `PASS_NOTES.md` — exact Pass 17 scope, changes, boundaries, and runtime priorities.
+- `CHANGED_FILES.md` — exact runtime, tooling, documentation, and unchanged-file boundaries.
+- `PIPELINE_LUMA_KEY_AUDIT.md` — old/new processing paths, cache ownership, pixel equivalence, and remaining cost.
+- `TESTING_CHECKLIST.md` — visual, performance, combined-effect, Syphon, and soak tests.
+- `VALIDATION_REPORT.md` — deterministic results, precision finding, retained-suite checks, and environment limits.
+- `CURRENT_STATUS.md` — authoritative baseline, acceptance gate, and deferred Syphon optimization.
 - `CHANGELOG.md` — cumulative HUFF Classic optimization history.
-- `OPTIMIZATION_ROADMAP.md` — remaining mandatory work.
+- `OPTIMIZATION_ROADMAP.md` — remaining mandatory optimization and release work.
 - `GIT_COMMIT_MESSAGE.md` — ready-to-use commit title, body, and command.
-- `HUFF_CLASSIC_OPTIMIZATION_PASS_16S.txt` — compact package marker.
+- `HUFF_CLASSIC_OPTIMIZATION_PASS_17.txt` — compact package marker.

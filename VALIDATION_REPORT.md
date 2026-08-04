@@ -1,37 +1,64 @@
-# HUFF Classic Pass 16S Validation Report
+# HUFF Classic Pass 17 — Validation Report
 
-## Static validation performed
+## Deterministic validator
 
-- 18 external JavaScript/module files passed syntax validation.
-- 12 inline HTML scripts passed extracted JavaScript syntax validation.
-- 29 project JSON files passed parsing.
-- 2 TOML files passed parsing.
-- 6 shell scripts passed `bash -n`.
-- Pass 9 Flow validator passed: 1,728 cases and 4,385,502 exact tile comparisons.
-- Pass 10 Scanline validator passed: 2,400 cases and 28,342 exact band comparisons.
-- Pass 11 neutral-stage validator passed.
-- Pass 13S lifecycle validator passed.
-- Pass 14 history/copy/physics validator passed: 31,497 checks.
-- Pass 15 mirror validator passed: 38 checks.
-- Pass 16 Solarize validator passed: 644 checks and 8,391,032 exact pixel comparisons.
-- Pass 16S Syphon bootstrap validator passed: 22 checks.
-- Framework presence, unchanged SHA-256, and universal `x86_64 + arm64` architecture were verified.
+Command:
 
-## Pass 16S boundary checks
+```bash
+npm run validate:pass17
+```
 
-The validator confirms:
+Result:
 
-- Blob URL + p5 `createVideo()` remains.
-- Rejected `_afterRenderFrame()` scheduler remains absent.
-- Independent mirror and transport clocks remain.
-- Pass 16 Solarize processing remains.
-- No-client Syphon pacing is exactly one frame per second.
-- Full-rate pacing resumes for a confirmed receiver.
-- The strict browser-side `receiverConnected` return is absent.
-- The duplicate native `hasClients` return is absent.
-- Native Metal publication and frame counting remain.
-- ImageBitmap resize requests retain a full-size fallback.
+```text
+Pass 17 validation passed: 1,293 checks, 17,715,200 exact pixel comparisons
+```
+
+The validator covers:
+
+- stable Blob URL + p5 decoder ownership;
+- independent render, transport, mirror, and profiler clocks;
+- continued Pass 16S Syphon bootstrap behavior;
+- removal of the second Luma Key scratch canvas;
+- removal of the separate `destination-in` pass;
+- decoded-frame, threshold, and invert cache keys;
+- packed and byte-oriented transform paths;
+- exact RGB preservation;
+- opaque and partial-alpha behavior;
+- all public threshold steps for grayscale boundary samples;
+- both invert states;
+- profiler-only phase instrumentation.
+
+## Precision correction discovered during validation
+
+An initial implementation simplified the inverted clean-alpha expression algebraically. The boundary tests found a one-byte mismatch at an exact threshold due to floating-point cancellation. The implementation was corrected to retain the original operation order before packaging.
+
+## Additional validation
+
+The complete retained validator suite was rerun:
+
+- Pass 9 Flow equivalence
+- Pass 10 Scanline equivalence
+- Pass 11 neutral-stage logic
+- Pass 13S lifecycle boundaries
+- Pass 14 history/copy/cluster behavior
+- Pass 15 mirror staging
+- Pass 16 Solarize pixel equivalence
+- Pass 16S Syphon bootstrap policy
+- Pass 17 Pipeline Luma Key equivalence
+
+Also checked:
+
+- 19 external JavaScript/module files passed syntax validation;
+- 32 inline HTML scripts passed syntax validation;
+- 29 JSON files parsed successfully;
+- 1 TOML file parsed successfully;
+- 6 shell scripts passed `bash -n`;
+- ZIP integrity passed;
+- the entire `src-tauri` tree is byte-for-byte unchanged from Pass 16S;
+- the Syphon framework binary is unchanged with SHA-256 `6e2a8c948824da62b24eb2139ec28ba635a0a70f31d6b0480adcfb890710d7eb`;
+- the framework remains a universal Mach-O binary containing `x86_64` and `arm64`.
 
 ## Environment limitation
 
-Cargo, macOS, Syphon, and OBS are unavailable in the validation environment. Native compilation and visible Syphon output require target-machine testing.
+Cargo and the macOS Tauri/OBS runtime are unavailable in this environment. Native compilation, WKWebView timing, visual parity, audio behavior, and live Syphon output require target-machine testing.

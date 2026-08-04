@@ -1,4 +1,4 @@
-# HUFF Classic Optimization Roadmap — After Pass 16S
+# HUFF Classic Optimization Roadmap — After Pass 17
 
 ## Completed and retained
 
@@ -13,41 +13,37 @@
 - Pass 12R: restored working Blob URL decoder after rejected Pass 12 migration
 - Pass 13S: lifecycle hardening without frame-clock changes
 - Pass 14: exact-size canvas copies and explicit temporal-ring backing-store release
-- Pass 15: bounded mirror ImageBitmap staging with automatic compatibility fallback
-- Pass 16: packed Solarize pixel transform, direct bounded-scratch presentation, and phase telemetry
-- Pass 16S: bounded Syphon bootstrap publication to prevent discoverable black/zero-frame startup
+- Pass 15: bounded mirror ImageBitmap staging with compatibility fallback
+- Pass 16: packed Solarize transform and direct bounded-scratch presentation
+- Pass 16S: bootstrap-safe Syphon publication
+- Pass 17: one-scratch Pipeline Luma Key patch construction and phase telemetry
 
 ## Rejected branches
 
-- Pass 12 direct renderer/window ownership migration: rejected due video decode failure
-- Pass 13 scheduler consolidation: rejected due worse playback and frame pacing
-
-## Immediate acceptance gate
-
-Pass 16S must first show live frames in OBS, advance the native published-frame counter, reconnect cleanly, and retain Pass 16 playback performance. Do not begin another renderer optimization until this output regression is closed.
+- Pass 12 direct renderer/window ownership migration: video decode regression
+- Pass 13 scheduler consolidation: worse playback and frame pacing
 
 ## Next mandatory optimization passes
 
-### Pass 17 — Pipeline Luma Key acceleration
-
-- Measure clean-source downscale/readback, mask transform, cached patch construction, and final composite separately.
-- Preserve decoded-frame serial invalidation.
-- Preserve threshold, inversion, mix, and current effect position exactly.
-- Remove redundant full-resolution or low-resolution copies where target-runtime parity permits.
-- Retain the existing Canvas2D implementation as the stable fallback.
-
 ### Pass 18 — Glitch draw-call ceiling
 
-- Profile tile count, smear length, spatial gap, and cluster modes.
-- Reduce context/property work without changing insertion or paint order.
-- Establish the Canvas2D draw-call ceiling for 720p and 1080p.
+- Profile tile count, smear length, spatial gap, and cluster modes independently.
+- Reduce repeated Canvas2D state/property changes without changing insertion or paint order.
+- Cache stable source references and recurring dimensions.
+- Avoid per-tile work that does not change the resulting draw.
+- Establish the practical Canvas2D ceiling for 720p and 1080p.
 
-### Pass 19 — Output capture budget
+### Pass 19 — Output capture budget, including Syphon
 
-- Audit simultaneous mirror, Syphon, and Spout capture.
-- Prevent unbounded or redundant staging.
-- Preserve independent output rates and dimensions.
-- Add readback, dropped-frame, and receiver diagnostics.
+Syphon is working, but this dedicated pass must optimize it without reintroducing black startup:
+
+- retain the one-fps bootstrap and immediate full-rate attachment;
+- measure browser capture, Worker readback, WebSocket transfer, Rust upload, and native publish time;
+- audit simultaneous mirror, Syphon, and Spout capture;
+- prevent redundant final-frame staging where safe;
+- preserve independent output dimensions and rates;
+- verify disconnect/reconnect and no-receiver behavior;
+- add clear dropped-frame and backpressure diagnostics.
 
 ### Pass 20 — Cross-platform stabilization
 
@@ -59,17 +55,15 @@ Pass 16S must first show live frames in OBS, advance the native published-frame 
 
 - 720p30, 720p60, 1080p30, and 1080p60 tiers
 - light, medium, and worst-case scenes
-- long playback, repeated source switching, resize cycling, and output reconnects
+- long playback and repeated source switching
+- resize/fullscreen cycling
+- output disconnect/reconnect
 - release-blocking fixes only after feature freeze
 
-## Runtime acceptance rule
+## Acceptance rule
 
-Every remaining optimization must be compared against the last accepted stable pass. Structural reductions are not sufficient evidence by themselves. A pass is retained only when it preserves visual behavior and provides equal or better target-runtime stability.
+Every pass must be compared with the last committed stable baseline. A structural reduction is not enough; visual behavior and target-runtime stability must remain equal or improve.
 
-## Solarize boundary after Pass 16
+## Held behavioral proposal
 
-Solarize still uses synchronous `getImageData()` and `putImageData()` on a bounded 640px-wide scratch canvas. Pass 16 reduces work around that boundary and exposes its phase costs. A Worker or WebGL replacement is not approved without measured evidence and exact visual-parity testing.
-
-## Behavioral proposal held for explicit approval
-
-Demand-driven or reduced-cadence temporal-history capture could lower clean-playback bandwidth, but it changes the history available immediately after enabling Glitch or Flow Pulse. It will not be introduced silently.
+Demand-driven or reduced-cadence temporal-history capture could reduce clean-playback bandwidth, but it changes the history immediately available when Glitch or Flow Pulse is enabled. It remains excluded unless explicitly approved.

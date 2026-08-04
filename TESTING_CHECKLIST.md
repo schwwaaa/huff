@@ -1,41 +1,61 @@
-# HUFF Classic Pass 16S Testing Checklist
+# HUFF Classic Pass 17 — Testing Checklist
 
-## Blocking Syphon verification
+## Baseline comparison
 
-- [ ] Launch HUFF and load the same video that rendered cleanly in Pass 16.
-- [ ] Start Syphon before opening or selecting the OBS Syphon source.
-- [ ] Confirm the HUFF status shows bootstrap frames increasing at approximately one per second.
-- [ ] Select `huff` in OBS.
-- [ ] Confirm the source changes from black to the HUFF image.
-- [ ] Confirm HUFF reports `receiver connected`.
-- [ ] Confirm the native published-frame count increases continuously.
-- [ ] Test 1280×720 at 30 fps.
-- [ ] Test 1920×1080 at 30 fps.
-- [ ] Test the preferred 60 fps setting where supported.
-- [ ] Stop and restart Syphon while OBS remains open.
-- [ ] Remove and re-add the OBS Syphon source.
-- [ ] Start OBS before HUFF and repeat.
-- [ ] Start HUFF before OBS and repeat.
+- [ ] Confirm ordinary playback matches committed Pass 16S with Luma Key disabled.
+- [ ] Confirm FPS and audio stability are unchanged with all effects disabled.
+- [ ] Confirm the canvas mirror remains stable.
 
-## Rendering regression
+## Pipeline Luma Key parity
 
-- [ ] Compare ordinary video playback against Pass 16 with Syphon stopped.
-- [ ] Confirm no FPS change while Syphon is stopped.
-- [ ] Confirm Solarize remains visually identical to Pass 16.
-- [ ] Confirm Glitch, Scanlines, Feedback, Flow, Symmetry, and Luma Key remain intact.
-- [ ] Confirm audio remains synchronized and stable.
+- [ ] Enable Luma Key without Glitch and verify clean-region behavior.
+- [ ] Enable Glitch + Luma Key and compare the boundary against Pass 16S.
+- [ ] Sweep threshold from 0 to 1 slowly.
+- [ ] Test threshold endpoints 0 and 1.
+- [ ] Toggle Invert at several threshold values.
+- [ ] Sweep Mix from 0 to 1.
+- [ ] Confirm Mix 0 remains a true no-op.
+- [ ] Test bright footage, dark footage, and high-contrast footage.
+- [ ] Confirm glitch trails remain visible only in the intended regions.
+- [ ] Confirm the cached patch updates on every new decoded frame.
+- [ ] Pause video and verify the cached key remains stable.
+- [ ] Seek and verify the patch updates after the decoded frame changes.
 
-## Output interaction
+## Combined effects
 
-- [ ] Run the canvas mirror and Syphon simultaneously.
-- [ ] Confirm the canvas mirror remains clean.
-- [ ] Confirm Syphon remains clean while the mirror opens and closes.
-- [ ] Confirm Syphon stop releases the OBS source cleanly.
-- [ ] Confirm application exit leaves no HUFF process.
+- [ ] Glitch + Luma Key + Scanlines.
+- [ ] Luma Key + Feedback.
+- [ ] Luma Key + Flow.
+- [ ] Luma Key + Solarize.
+- [ ] Luma Key + Solarize + Feedback under sustained load.
 
-## Diagnostic interpretation
+## Profiler
 
-- Published-frame count remains zero: browser/WebSocket sender is not reaching Rust.
-- Published-frame count advances but OBS is black: inspect pixel content, Metal publication, and OBS version/client behavior.
-- Bootstrap count advances then receiver connects: the repaired startup path is working.
-- Receiver connects but FPS is low: profile Worker capture/readback separately from Canvas2D rendering.
+- [ ] Open the backtick profiler.
+- [ ] Record `applyPipelineLumaKey` average time on Pass 16S.
+- [ ] Record the same scene on Pass 17.
+- [ ] Observe `luma read`, `luma xform`, `luma upload`, and `luma pres`.
+- [ ] Confirm `luma cache` shows reuse when render FPS exceeds decode FPS.
+- [ ] Close the profiler and confirm normal performance returns.
+
+## Syphon regression
+
+- [ ] Start Syphon before opening OBS.
+- [ ] Confirm the one-fps bootstrap publishes while no receiver is attached.
+- [ ] Select `huff` in OBS and confirm live frames appear.
+- [ ] Confirm the selected 30/60 fps rate resumes after attachment.
+- [ ] Run Luma Key while Syphon is connected.
+- [ ] Confirm no black-frame or zero-frame regression.
+- [ ] Disconnect and reconnect OBS.
+
+## Long-session stability
+
+- [ ] Run video for at least 30 minutes with Luma Key active.
+- [ ] Repeat threshold and invert changes.
+- [ ] Replace the video source several times.
+- [ ] Watch CPU, memory, audio, and frame pacing.
+- [ ] Confirm the application closes without process buildup.
+
+## Acceptance rule
+
+Retain Pass 17 only when visual behavior is unchanged and target-runtime stability is equal to or better than committed Pass 16S.
