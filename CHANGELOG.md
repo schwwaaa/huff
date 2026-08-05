@@ -387,3 +387,12 @@ This changelog tracks the optimization series for the legacy Tauri v1 + p5.js/Ca
 - One-frame-in-flight backpressure.
 - Blob URL decoder and independent clocks.
 - Effects, temporal history, mirror, Spout, and bundled Syphon framework.
+
+## HUFF Classic Optimization Pass 23 — Constrained Pipeline Modularity Audit
+
+- Reset development authority to the exact user-supplied Pass 22 runtime.
+- Discarded all experimental post-Pass-22 Flow branches from the development lineage.
+- Froze Flow at its exact Pass 22 implementation for the infrastructure sequence.
+- Added a complete audit of current pipeline order, source ownership, buffer contracts, legal serial modularity, and routes that require additional storage.
+- Defined Passes 24–29 for stage contracts, validated recipes, stability instrumentation, output endurance, and release packaging.
+- Changed no runtime files and claimed no performance improvement.

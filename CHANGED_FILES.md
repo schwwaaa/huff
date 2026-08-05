@@ -1,58 +1,34 @@
-# HUFF Classic Pass 22 — Changed Files
+# HUFF Classic Optimization Pass 23 — Changed Files
 
 ## Runtime files
 
-### `src/effects.js`
+```text
+None
+```
 
-- Added Scanline drift/shift preparation variants selected before the band loop.
-- Cached phase and focus scalars per Scanline pass.
-- Used direct zero-offset rectangles for neutral SHIFT/SKEW.
-- Resolved prepared typed arrays once before dispatch.
-- Added exact-horizontal Canvas2D dispatch without transform-stack operations.
-- Cached Scanline transform constants by geometry.
-- Added profiler-gated Scanline geometry, preparation, and path telemetry.
+The complete `src/` and `src-tauri/` trees are byte-for-byte identical to the user-supplied Pass 22 baseline.
 
-### `src/canvas.js`
+## Added or updated documentation
 
-- Added profiler snapshot/delta/display support for the new Scanline telemetry.
-- No rendering, decoder, scheduler, mirror, or output clock was changed.
+```text
+BASELINE_INTEGRITY_MANIFEST.md
+PIPELINE_MODULARITY_AUDIT.md
+DOCUMENTATION_INDEX.md
+PASS_NOTES.md
+CHANGELOG.md
+CHANGED_FILES.md
+TESTING_CHECKLIST.md
+VALIDATION_REPORT.md
+CURRENT_STATUS.md
+OPTIMIZATION_ROADMAP.md
+GIT_COMMIT_MESSAGE.md
+HUFF_CLASSIC_OPTIMIZATION_PASS_23.txt
+```
 
-### `package.json`
+## Added validation
 
-- Added `npm run validate:pass22`.
+```text
+scripts/validate-pass23.mjs
+```
 
-### `scripts/validate-pass22.mjs`
-
-- Added deterministic equivalence validation for all four preparation variants.
-- Added exact noise-call-count validation.
-- Added exact prepared-band field comparison.
-- Added zero-angle transform-cancellation validation.
-- Added source-boundary assertions for the stable decoder and profiler additions.
-
-## Documentation files
-
-- `PASS_NOTES.md`
-- `SCANLINE_DISPATCH_STATE_AUDIT.md`
-- `CHANGED_FILES.md`
-- `TESTING_CHECKLIST.md`
-- `VALIDATION_REPORT.md`
-- `CURRENT_STATUS.md`
-- `CHANGELOG.md`
-- `OPTIMIZATION_ROADMAP.md`
-- `GIT_COMMIT_MESSAGE.md`
-- `DOCUMENTATION_INDEX.md`
-- `HUFF_CLASSIC_OPTIMIZATION_PASS_22.txt`
-- `README.md`
-
-## Confirmed unchanged runtime areas
-
-- stable Blob URL decoder path;
-- frame scheduling;
-- media lifecycle;
-- canvas buffer topology;
-- temporal ring;
-- Glitch, Flow, Feedback, Symmetry, Solarize, and Luma algorithms;
-- mirror transport;
-- Syphon bootstrap and native publication;
-- Spout;
-- bundled framework binary.
+The validator does not participate in the application runtime.

@@ -1,114 +1,59 @@
-# HUFF Classic Optimization Roadmap — After Pass 22
+# HUFF Classic Optimization Roadmap — After Pass 23
 
-## Completed and retained
+## Authoritative rule
 
-- Passes 1–4: bounded transport, reusable resources, native output foundations, framework packaging
-- Pass 5: full-frame copy, Flow, Solarize, Luma, and Feedback hot paths
-- Pass 6: typed render-state cache
-- Pass 7: reusable Glitch placement workspaces
-- Pass 8: consolidated full-resolution Canvas2D buffers
-- Pass 9: Flow static geometry cache, ring context reuse, receiver-aware mirror
-- Pass 10: Scanline typed workspace
-- Pass 11: neutral-stage and clean-path bypass
-- Pass 12R: restored working Blob URL decoder
-- Pass 13S: lifecycle hardening without frame-clock changes
-- Pass 14: exact-size copies and history backing-store release
-- Pass 15: bounded mirror ImageBitmap staging
-- Pass 16/16S: Solarize optimization and bootstrap-safe Syphon publication
-- Pass 17: one-scratch Pipeline Luma Key
-- Pass 18: Glitch dispatch/source/smear optimization
-- Pass 19: Syphon control-plane reduction and phase telemetry
-- Pass 20: direct hot-path range arithmetic and draw-count telemetry
-- Pass 21: Flow frequency, SWIRL, clipping-bound, and typed-field caching
-- Pass 22: Scanline preparation specialization and exact-horizontal dispatch
+Pass 22 is the exact behavioral baseline. Pass 23 changes documentation only.
 
-## Rejected branches
+Flow is frozen and excluded from optimization or feature work during the infrastructure sequence.
 
-- Pass 12 renderer-window ownership migration: video decode regression
-- Pass 13 scheduler consolidation: worse playback and frame pacing
+## Pass 24 — Stage Contract Registry
 
-## Next safe decision gate — Pass 23
+- add internal metadata for existing stages;
+- preserve the exact fixed Pass 22 route;
+- add deterministic stage-order and buffer-contract validation;
+- no user controls;
+- no effect algorithm changes;
+- no Flow changes.
 
-### Candidate A — Flow branch specialization
+## Pass 25 — Validated Serial Recipe Foundation
 
-Proceed when Flow time remains high while `flow draws` are moderate.
+- execute the existing route through a validated recipe structure;
+- preserve default dispatch and buffer swaps exactly;
+- reject illegal routes before rendering;
+- no user-facing routing;
+- no Flow changes.
 
-Safe scope:
+## Pass 26 — Existing Front-Stage Priority Formalization
 
-- select TURBULENCE/SWIRL/IMPLODE loop variants outside the tile loop;
-- retain exact p5 noise call count and order;
-- preserve animated vector trigonometry and `Math.fround` quantization;
-- preserve source/destination rectangles and tile paint order;
-- keep a deterministic old/new draw-operation validator.
+- formalize the existing Glitch/Scanline priority relationship;
+- preserve all current defaults and presets;
+- avoid new routes that require another full-resolution buffer;
+- no Flow changes.
 
-### Candidate B — output-capture phase two
+## Pass 27 — Capability and Stability Instrumentation
 
-Proceed only from measured mirror/Syphon timing.
+- 720p30 / 720p60 / 1080p30 / 1080p60 matrix;
+- light, moderate, and worst-case effect scenes;
+- mirror and Syphon/Spout phase measurements;
+- source replacement and resize diagnostics;
+- long-session state and resource telemetry.
 
-Potential work behind strict fallbacks:
+## Pass 28 — Output Endurance and Shutdown
 
-- Worker-owned Syphon WebSocket to avoid Worker → main-thread RGBA transfer;
-- compatible capture sharing only when dimensions and cadence match exactly;
-- adaptive output tiers based on measured target capability.
+- Syphon reconnect and soak tests;
+- Spout validation;
+- mirror backpressure endurance;
+- deterministic source/output cleanup;
+- process-exit verification.
 
-Mandatory boundaries:
+## Pass 29 — Platform Packaging Freeze
 
-- retain one-fps moving-frame bootstrap;
-- retain one frame in flight;
-- never reintroduce a discoverable-but-black Syphon source.
+- macOS universal framework verification;
+- signing and notarization;
+- Windows installer validation;
+- Linux codec and package matrix;
+- final known-issues and capability documentation.
 
-### Candidate C — temporal history bandwidth
+## Feature work
 
-Requires explicit behavior approval because reducing capture while temporal effects are inactive changes immediate PULSE/history response.
-
-Potential investigations:
-
-- resolution-dependent history tiers;
-- optional reduced-rate history capture;
-- delayed allocation with an explicit warm-up state;
-- cross-platform real-memory measurement.
-
-### Candidate D — stabilization and capability matrix
-
-Begin when remaining code-path gains become smaller than runtime variance.
-
-Measure:
-
-- 720p30
-- 720p60
-- 1080p30
-- 1080p60
-
-For each:
-
-- light scene
-- moderate scene
-- worst-case scene
-- mirror off/on
-- Syphon or Spout off/on
-
-## Mandatory platform stabilization
-
-### macOS
-
-- WKWebView soak tests
-- Syphon reconnect and endurance
-- universal bundle verification
-- signing and notarization
-
-### Windows
-
-- WebView2 playback and Canvas2D parity
-- Spout validation
-- installer and shutdown testing
-
-### Linux
-
-- WebKitGTK/GStreamer codec matrix
-- camera and audio validation
-- AppImage/deb packaging
-- process cleanup
-
-## Acceptance rule
-
-Every pass is compared against the last committed stable baseline. A structural reduction is retained only when playback, frame pacing, visual output, and output reliability remain equal or improve.
+New effects and Flow feature changes remain deferred until the infrastructure and release sequence is complete.

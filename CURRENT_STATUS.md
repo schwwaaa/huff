@@ -1,55 +1,30 @@
-# HUFF Classic — Current Status After Optimization Pass 22
+# HUFF Classic — Current Status After Optimization Pass 23
 
-## Current candidate baseline
+## Authoritative runtime baseline
 
-**HUFF Classic Optimization Pass 22** branches directly from the user-confirmed working Pass 21 package.
+**Pass 22 remains the exact runtime baseline.**
 
-Pass 22 is a focused Scanline CPU/state-dispatch optimization. It does not change media loading, frame scheduling, canvas-buffer ownership, output transport, or artistic draw count.
+Pass 23 is a documentation and architecture-audit package. It contains no runtime changes.
 
-## Confirmed inherited foundation
+## Frozen area
 
-- Blob URL + p5 `createVideo()` decoder
-- independent p5, transport, mirror, and profiler clocks
-- Pass 13S source lifecycle cleanup
-- consolidated full-resolution Canvas2D buffers
-- bounded canvas-backed temporal history
-- neutral-stage bypasses
-- optimized Glitch, Flow, Solarize, Luma, mirror, and Syphon paths
-- Pass 16S Syphon bootstrap repair
-- Pass 19 Syphon control-plane reduction
-- Pass 20 hot-path arithmetic reductions
-- Pass 21 Flow field caching
-- mandatory universal `Syphon.framework`
+Flow is frozen at the exact Pass 22 implementation. No future infrastructure or modularity pass may alter:
 
-## Pass 22 candidate changes
+- Flow rendering;
+- Flow controls;
+- Flow preset fields;
+- Flow source ownership;
+- Flow FrameRing access;
+- Flow noise order;
+- Flow tile order;
+- Flow buffer input/output behavior.
 
-- four Scanline preparation variants selected outside the band loop;
-- cached phase and focus scalars;
-- direct neutral-shift rectangle preparation;
-- local typed-array references during band dispatch;
-- exact-horizontal direct Canvas2D path;
-- cached transform constants;
-- profiler telemetry for geometry, preparation, and dispatch path;
-- deterministic Pass 22 validator.
+## Next pass
 
-## Rejected architecture remains rejected
+**Pass 24 — Stage Contract Registry**
 
-- renderer-window video ownership;
-- Tauri asset-protocol replacement for Blob URL media;
-- render-boundary scheduler consolidation;
-- transport, mirror, or profiler work inside `draw()`.
+The goal is to describe the existing fixed pipeline through internal stage metadata while retaining the exact Pass 22 route and behavior. There will be no user-facing routing and no Flow changes.
 
-## Remaining optimization boundary
+## Release state
 
-The largest remaining costs are increasingly irreducible or require measured decision gates:
-
-- one Canvas2D draw per visible Scanline band;
-- one Canvas2D draw per Flow tile;
-- Glitch tile and smear draw volume;
-- Solarize/Luma synchronous readback;
-- temporal-history full-frame copy bandwidth;
-- independent mirror/Syphon/Spout capture paths.
-
-## Release readiness
-
-Not release-frozen. Cross-platform runtime validation, capability tiers, long-session soak testing, packaging, signing/notarization, and process-cleanup testing remain mandatory.
+Not release-frozen. Platform stabilization, output endurance, shutdown cleanup, installer validation, signing/notarization, and a capability matrix remain required after the constrained pipeline foundation.

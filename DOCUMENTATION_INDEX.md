@@ -1,18 +1,19 @@
-# HUFF Classic Optimization Pass 22 — Documentation Index
+# HUFF Classic Optimization Pass 23 — Documentation Index
 
 ## Current-pass documents
 
-- `PASS_NOTES.md` — complete implementation summary and boundaries
-- `SCANLINE_DISPATCH_STATE_AUDIT.md` — Scanline preparation, transform, and remaining-ceiling analysis
-- `CHANGED_FILES.md` — exact runtime, validator, and documentation file changes
-- `TESTING_CHECKLIST.md` — target-runtime comparison and regression checklist
-- `VALIDATION_REPORT.md` — deterministic and static validation results
-- `CURRENT_STATUS.md` — current stable foundation and remaining work
-- `OPTIMIZATION_ROADMAP.md` — mandatory next optimization and stabilization gates
-- `GIT_COMMIT_MESSAGE.md` — ready-to-use Git commit command
-- `CHANGELOG.md` — cumulative HUFF Classic optimization history
-- `HUFF_CLASSIC_OPTIMIZATION_PASS_22.txt` — compact archive marker
+- `PASS_NOTES.md` — pass scope and exact baseline decision
+- `BASELINE_INTEGRITY_MANIFEST.md` — hashes of the user-supplied Pass 22 runtime
+- `PIPELINE_MODULARITY_AUDIT.md` — exact pipeline, stage contracts, and safe modularity boundary
+- `CHANGED_FILES.md` — confirms no runtime files changed
+- `TESTING_CHECKLIST.md` — integrity and inherited validation checklist
+- `VALIDATION_REPORT.md` — validation results and non-claims
+- `CURRENT_STATUS.md` — current baseline and frozen Flow rule
+- `OPTIMIZATION_ROADMAP.md` — Passes 24–29 infrastructure sequence
+- `GIT_COMMIT_MESSAGE.md` — ready-to-use commit command
+- `CHANGELOG.md` — cumulative optimization history
+- `HUFF_CLASSIC_OPTIMIZATION_PASS_23.txt` — compact archive marker
 
-## Historical technical audits retained
+## Historical documents
 
-The archive also retains prior canvas, buffer, history, lifecycle, mirror, Solarize, Luma, Glitch, Flow, Syphon, and incident documents for continuity.
+All Pass 22 and earlier technical audits, incident reports, validators, and optimization records are retained unchanged unless listed above.
