@@ -1,76 +1,60 @@
-# HUFF Classic Optimization Pass 19 — Validation Report
+# HUFF Classic Pass 20 — Validation Report
 
-## Deterministic Pass 19 validator
+## Pass-specific deterministic validation
 
 Command:
 
 ```bash
-npm run validate:pass19
+npm run validate:pass20
 ```
 
 Result:
 
 ```text
-56 checks passed
+Pass 20 validation passed: 27 checks, 2,500,000 exact arithmetic comparisons
 ```
 
-The validator verifies:
+Covered:
 
-- stable Blob URL + p5 `createVideo()` decoder ownership;
-- independent p5, transport, mirror, and profiler clocks;
-- retained one-fps Syphon bootstrap;
-- retained full-rate attachment behavior;
-- absence of the duplicate native receiver publication gate;
-- four-hertz UI coalescing structure;
-- healthy-ACK suppression of redundant Tauri polling;
-- cached FPS parsing;
-- Worker draw/readback phase timing;
-- sampled native upload/publish timing;
-- connected receiver-state sampling near four hertz at both 30 and 60 fps;
-- disconnected receiver checks on every bootstrap frame.
+- persistence-decay range conversion;
+- Scanline shift conversion with positive and negative ranges;
+- Glitch smear X/Y conversion;
+- Glitch smear-angle jitter;
+- Glitch per-tile jitter for block sizes 1–512;
+- source tokens enforcing removal of the old p5 `map()` calls;
+- profiler gating and Scanline/Flow telemetry presence.
 
 ## Retained deterministic validators
 
-All retained validators passed:
+Passed:
 
-- Pass 9 Flow: 1,728 cases; 4,385,502 exact tile comparisons
-- Pass 10 Scanlines: 2,400 cases; 28,342 exact band comparisons
-- Pass 11 neutral-stage validation
-- Pass 13S lifecycle validation: 27 checks
-- Pass 14 ring/copy/physics validation: 31,497 checks
-- Pass 15 mirror validation: 38 checks
-- Pass 16 Solarize: 644 checks; 8,391,032 exact pixel comparisons
-- Pass 16S Syphon bootstrap: 22 checks
-- Pass 17 Luma Key: 1,293 checks; 17,715,200 exact pixel comparisons
-- Pass 18 Glitch: 4,832 checks; 3,474,837 exact ordered draw operations
-- Pass 19 output control-plane validation: 56 checks
+- Pass 9 Flow geometry and displacement equivalence: 4,385,502 comparisons
+- Pass 10 Scanline band equivalence: 28,342 comparisons
+- Pass 11 neutral-stage and bypass validation
+- Pass 13S lifecycle-boundary validation
+- Pass 14 ring/copy/cluster validation: 31,497 checks
+- Pass 15 mirror staging validation: 38 checks
+- Pass 16 Solarize validation: 8,391,032 pixel comparisons
+- Pass 16S Syphon bootstrap validation: 22 checks
+- Pass 17 Pipeline Luma Key validation: 17,715,200 pixel comparisons
+- Pass 18 Glitch ordered-draw validation: 3,474,837 comparisons
+- Pass 19 Syphon control-plane validation: 56 checks
 
-## Static validation
+## Static source validation
 
-Completed after implementation:
+Completed:
 
-- 21 external JavaScript/module files passed syntax checks;
-- 25 HTML files were scanned and 32 inline scripts passed syntax checks;
-- 29 JSON files parsed successfully;
-- 1 TOML file parsed successfully;
-- 6 shell scripts passed `bash -n`;
-- 4 Rust files passed lexical delimiter checks;
-- mandatory Syphon framework presence and architecture checks;
-- ZIP integrity verification.
+- all project JavaScript and Worker files passed `node --check`;
+- all inline HTML scripts passed JavaScript syntax validation;
+- all project JSON files parsed;
+- TOML files parsed with Python `tomllib`;
+- shell scripts passed `bash -n`;
+- ZIP integrity passed;
+- bundled `Syphon.framework` executable remains present;
+- native source was not modified from Pass 19.
 
-## Native boundary
+## Environment limitation
 
-Pass 19 intentionally changes the macOS Rust relay and native Syphon publisher to reduce receiver-query frequency and add sampled timings.
+Cargo and the target macOS Tauri/WKWebView runtime are unavailable in this environment. No claim is made that static validation substitutes for application runtime testing.
 
-Cargo, Rust compilation, and a macOS GUI runtime are unavailable in this environment. Therefore the following require the user's Mac:
-
-- Tauri/Rust compilation;
-- real Objective-C/Syphon receiver-state behavior;
-- actual Metal timing validity;
-- OBS moving-frame startup;
-- disconnect/reconnect behavior;
-- measured FPS and latency.
-
-## Claim boundary
-
-The validation proves the intended scheduling and sampling structure. It does not claim a measured FPS increase. The expected gain is reduced control-plane overhead while Syphon is active; actual impact depends on whether Canvas readback, WebSocket transfer, or Metal upload remains the dominant cost on the target machine.
+Required runtime evidence is listed in `TESTING_CHECKLIST.md`.

@@ -783,6 +783,7 @@ huff/
 - **`drawRingRegion`** samples the reusable history canvases directly with native `drawImage` cropping. It performs no per-tile pixel upload or allocation.
 - **Solarize** downsamples to a 640px-wide scratch canvas before the pixel pass. The processed scratch is presented directly back into the active buffer, avoiding a second full-resolution Solarize cache canvas and one full-resolution copy on processed frames. Little-endian targets use a packed Uint32 pixel loop with an exact byte-loop fallback.
 - **Flow warp** renders in tiles rather than per-pixel — the tile size is set by the SCALE parameter. Static tile geometry, normalized coordinates, radial vectors, and swirl angles are cached until render size or SCALE changes. Larger tiles = faster but coarser warp.
+- **Hot-path math** uses direct arithmetic for unit-range remapping in Glitch, Scanlines, and persistence decay. This avoids p5 `map()` parameter validation inside per-band and per-tile loops while preserving the exact formulas.
 - **QUALITY slider** controls temporal-ring depth. Solarize uses a separate adaptive load guard that reuses its cached processed scratch only when sustained frame time exceeds the healthy range.
 - **Feedback** uses `drawingContext.drawImage` directly rather than `p5.get()`, eliminating one full-canvas copy per frame.
 - **Full-resolution surfaces** are limited to `gCur`, `gBuf`, and one shared `gScratch` ping-pong target. Feedback, Flow Warp, and Symmetry reuse `gScratch` instead of retaining separate full-size buffers.
@@ -918,3 +919,20 @@ This build isolates the Solarize CPU path. It removes the dedicated full-resolut
 ## HUFF Classic Optimization Pass 16S
 
 Pass 16S supersedes Pass 16 after a Syphon client could discover the `huff` server but remain black with no advancing frames. The browser and native publisher no longer apply mutually blocking `hasClients` gates. HUFF publishes one bounded bootstrap frame per second until a receiver is confirmed, then resumes the selected Syphon frame rate. One-frame acknowledgements, WebSocket backpressure, Worker-assisted readback, persistent Metal textures, the Pass 16 Solarize optimization, and all stable decoder/render-clock boundaries remain intact.
+
+
+## HUFF Classic Optimization Pass 17
+
+This build creates the Pipeline Luma Key clean patch in one bounded scratch canvas. It removes the second scratch surface, duplicate clean-source copy, and destination-in composition while preserving threshold, invert, mix, cache, and effect-order behavior.
+
+## HUFF Classic Optimization Pass 18
+
+This build reduces JavaScript overhead around Glitch's irreducible Canvas2D tile draws. Temporal ring sources are resolved once per ring generation, smear offsets are prepared once per smear step, and base/smear blits dispatch through the cached Canvas2D context without the former helper lookup. Tile placement, random order, history choice, and draw order remain unchanged.
+
+## HUFF Classic Optimization Pass 19
+
+This build reduces Syphon control-plane overhead without changing the working bootstrap path. Status DOM writes and connected-client checks are bounded to four hertz, redundant runtime polling pauses while acknowledgements are healthy, and profiler-gated phase timing covers capture, Worker readback, Metal upload, and publication.
+
+## HUFF Classic Optimization Pass 20
+
+This build removes p5 `map()` dispatch from active persistence, Scanline shift, Glitch smear-direction, and per-tile jitter paths. The exact p5 arithmetic remains unchanged, but the hottest loops no longer enter p5 parameter validation. Profiler-only Scanline band/draw counts and Flow tile/draw/grid-cache counts were added so remaining Canvas2D limits can be ranked from actual runtime data. Decoder ownership, frame scheduling, effect order, Syphon, Spout, and native packaging remain unchanged.

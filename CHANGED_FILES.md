@@ -1,59 +1,37 @@
-# HUFF Classic Pass 19 — Changed Files
+# HUFF Classic Pass 20 — Changed Files
 
-## Runtime
+## Runtime source
 
-### `src/index.html`
+### `src/effects.js`
 
-- Coalesces Syphon status UI updates to four hertz.
-- Avoids DOM assignments when the displayed values are unchanged.
-- Caches the selected Syphon FPS.
-- Suspends redundant Tauri runtime-state polling while acknowledgements are healthy.
-- Removes duplicate runtime-state application.
-- Sends the fallback RGBA `ArrayBuffer` directly.
-- Adds profiler-gated capture, pipeline, skip, and UI counters.
-- Receives sampled native upload/publish timings.
-
-### `src/syphon-stream-worker.js`
-
-- Adds profiler-gated OffscreenCanvas draw and `getImageData` phase timing.
-- Returns only small timing fields alongside the existing transferable RGBA buffer.
+- Replaced p5 `map()` calls in active Scanline and Glitch paths with exact direct arithmetic.
+- Prepared Scanline shift span outside the band loop.
+- Prepared Glitch jitter range outside the tile loop.
+- Added profiler-gated Scanline band/draw counters.
+- Added profiler-gated Flow tile/draw/grid-cache counters.
+- Made Flow grid configuration return whether geometry was rebuilt for telemetry.
 
 ### `src/canvas.js`
 
-- Adds Syphon output telemetry to the existing backtick profiler.
-- Reports capture, Worker draw/readback, end-to-end pipeline, native upload/publish, backpressure skips, and UI update counts.
-
-### `src-tauri/src/main.rs`
-
-- Caches positive Syphon receiver state per dedicated sender connection.
-- Samples `hasClients` at four hertz while connected and every bootstrap frame while disconnected.
-- Samples native timing every 30 published frames.
-- Keeps ordinary acknowledgements compact and adds timing fields only to sampled acknowledgements.
-
-### `src-tauri/src/syphon.rs`
-
-- Adds a profiled push result containing publication state and sampled native timing.
-- Measures Metal upload and publish phases only when requested by the relay.
-- Retains the original `push_pixels()` API for legacy packet support.
+- Replaced persistence-decay p5 `map()` with exact direct arithmetic.
+- Added Scanline and Flow profiler snapshot/delta/display handling.
 
 ## Validation
 
-### `scripts/validate-pass19.mjs`
+### `scripts/validate-pass20.mjs`
 
-- Enforces the stable decoder, independent clocks, bootstrap, and publication boundaries.
-- Verifies browser UI/polling reductions.
-- Verifies Worker and native phase telemetry.
-- Models connected receiver queries and status UI writes at 30 and 60 fps.
-- Verifies disconnected bootstrap frames continue checking receiver state.
+- Enforces removal of the legacy hot-path p5 `map()` calls.
+- Checks required Pass 20 telemetry boundaries.
+- Performs 2,500,000 exact arithmetic comparisons.
 
 ### `package.json`
 
-- Adds `npm run validate:pass19`.
+- Added `npm run validate:pass20`.
 
 ## Documentation
 
 - `PASS_NOTES.md`
-- `SYPHON_OUTPUT_BUDGET_AUDIT.md`
+- `HOT_PATH_MATH_AND_CEILING_AUDIT.md`
 - `CHANGED_FILES.md`
 - `TESTING_CHECKLIST.md`
 - `VALIDATION_REPORT.md`
@@ -62,4 +40,16 @@
 - `OPTIMIZATION_ROADMAP.md`
 - `GIT_COMMIT_MESSAGE.md`
 - `DOCUMENTATION_INDEX.md`
-- `HUFF_CLASSIC_OPTIMIZATION_PASS_19.txt`
+- `HUFF_CLASSIC_OPTIMIZATION_PASS_20.txt`
+- `README.md`
+
+## Explicitly unchanged
+
+- complete `src-tauri` tree;
+- `src/syphon-stream-worker.js`;
+- native Syphon and Spout implementation;
+- bundled `Syphon.framework` binary;
+- media-loading and source-lifecycle code;
+- frame scheduling;
+- effect order and controls;
+- presets, MIDI, and OSC.

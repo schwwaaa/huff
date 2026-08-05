@@ -1743,7 +1743,7 @@ function draw() {
     const ctx = gBuf.drawingContext;
     ctx.save();
     ctx.globalCompositeOperation = 'destination-out';
-    ctx.fillStyle = `rgba(0,0,0,${map(1 - pers, 0, 1, 1, 20) / 255})`;
+    ctx.fillStyle = `rgba(0,0,0,${(((1 - pers) * (20 - 1)) + 1) / 255})`;
     ctx.fillRect(0, 0, gBuf.width, gBuf.height);
     ctx.restore();
   }
@@ -2428,6 +2428,26 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
     };
   }
 
+  function scanlineTelemetrySnapshot() {
+    const t = window.__huffScanlineTelemetry || {};
+    return {
+      frames: t.frames || 0,
+      bands: t.bands || 0,
+      drawCalls: t.drawCalls || 0,
+    };
+  }
+
+  function flowTelemetrySnapshot() {
+    const t = window.__huffFlowTelemetry || {};
+    return {
+      frames: t.frames || 0,
+      tiles: t.tiles || 0,
+      drawCalls: t.drawCalls || 0,
+      gridRebuilds: t.gridRebuilds || 0,
+      gridReuses: t.gridReuses || 0,
+    };
+  }
+
   function syphonTelemetrySnapshot() {
     const t = window.__huffSyphonTelemetry || {};
     return {
@@ -2452,6 +2472,8 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
   let lastSolarTelemetry = solarTelemetrySnapshot();
   let lastLumaTelemetry = lumaTelemetrySnapshot();
   let lastGlitchTelemetry = glitchTelemetrySnapshot();
+  let lastScanlineTelemetry = scanlineTelemetrySnapshot();
+  let lastFlowTelemetry = flowTelemetrySnapshot();
   let lastSyphonTelemetry = syphonTelemetrySnapshot();
 
   function report() {
@@ -2511,6 +2533,20 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
       const glitchRingReuseDelta = glitchNow.ringReuses - lastGlitchTelemetry.ringReuses;
       const glitchTilesAvg = glitchFramesDelta > 0 ? glitchTilesDelta / glitchFramesDelta : 0;
       const glitchDrawCallsAvg = glitchFramesDelta > 0 ? glitchDrawCallsDelta / glitchFramesDelta : 0;
+      const scanlineNow = scanlineTelemetrySnapshot();
+      const scanlineFramesDelta = scanlineNow.frames - lastScanlineTelemetry.frames;
+      const scanlineBandsDelta = scanlineNow.bands - lastScanlineTelemetry.bands;
+      const scanlineDrawCallsDelta = scanlineNow.drawCalls - lastScanlineTelemetry.drawCalls;
+      const scanlineBandsAvg = scanlineFramesDelta > 0 ? scanlineBandsDelta / scanlineFramesDelta : 0;
+      const scanlineDrawCallsAvg = scanlineFramesDelta > 0 ? scanlineDrawCallsDelta / scanlineFramesDelta : 0;
+      const flowNow = flowTelemetrySnapshot();
+      const flowFramesDelta = flowNow.frames - lastFlowTelemetry.frames;
+      const flowTilesDelta = flowNow.tiles - lastFlowTelemetry.tiles;
+      const flowDrawCallsDelta = flowNow.drawCalls - lastFlowTelemetry.drawCalls;
+      const flowGridRebuildDelta = flowNow.gridRebuilds - lastFlowTelemetry.gridRebuilds;
+      const flowGridReuseDelta = flowNow.gridReuses - lastFlowTelemetry.gridReuses;
+      const flowTilesAvg = flowFramesDelta > 0 ? flowTilesDelta / flowFramesDelta : 0;
+      const flowDrawCallsAvg = flowFramesDelta > 0 ? flowDrawCallsDelta / flowFramesDelta : 0;
       const syphonNow = syphonTelemetrySnapshot();
       const syphonCaptureSamples = syphonNow.captureSamples - lastSyphonTelemetry.captureSamples;
       const syphonWorkerSamples = syphonNow.workerSamples - lastSyphonTelemetry.workerSamples;
@@ -2574,6 +2610,11 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
         'gl tiles   ' + glitchTilesAvg.toFixed(0).padStart(6) + ' / frame\n' +
         'gl draws   ' + glitchDrawCallsAvg.toFixed(0).padStart(6) + ' / frame\n' +
         'gl ring    ' + `${glitchRingRebuildDelta}/${glitchRingReuseDelta}`.padStart(6) + ' rebuild/reuse\n' +
+        'scan bands ' + scanlineBandsAvg.toFixed(0).padStart(6) + ' / frame\n' +
+        'scan draws ' + scanlineDrawCallsAvg.toFixed(0).padStart(6) + ' / frame\n' +
+        'flow tiles ' + flowTilesAvg.toFixed(0).padStart(6) + ' / frame\n' +
+        'flow draws ' + flowDrawCallsAvg.toFixed(0).padStart(6) + ' / frame\n' +
+        'flow grid  ' + `${flowGridRebuildDelta}/${flowGridReuseDelta}`.padStart(6) + ' rebuild/reuse\n' +
         '──────────────────────\n' +
         (rows.length ? rows.map(function (r) { return fmt(r[0], r[1]); }).join('\n')
                      : '(no effects active)') + '\n' +
@@ -2589,6 +2630,8 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
       lastSolarTelemetry = solarTelemetrySnapshot();
       lastLumaTelemetry = lumaTelemetrySnapshot();
       lastGlitchTelemetry = glitchTelemetrySnapshot();
+      lastScanlineTelemetry = scanlineTelemetrySnapshot();
+      lastFlowTelemetry = flowTelemetrySnapshot();
       lastSyphonTelemetry = syphonTelemetrySnapshot();
     }
   }
@@ -2607,6 +2650,8 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
     lastSolarTelemetry = solarTelemetrySnapshot();
     lastLumaTelemetry = lumaTelemetrySnapshot();
     lastGlitchTelemetry = glitchTelemetrySnapshot();
+    lastScanlineTelemetry = scanlineTelemetrySnapshot();
+    lastFlowTelemetry = flowTelemetrySnapshot();
     lastSyphonTelemetry = syphonTelemetrySnapshot();
     if (!visible) overlay.textContent = '';
   }

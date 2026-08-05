@@ -1,75 +1,89 @@
-# HUFF Classic Optimization Pass 19 — Testing Checklist
+# HUFF Classic Pass 20 — Runtime Testing Checklist
 
-## A. Baseline playback
+Compare Pass 20 directly against the committed Pass 19 baseline using the same source, render size, control state, and output configuration.
 
-- [ ] Launch Pass 19 with Syphon stopped.
-- [ ] Load the same video used for Pass 18 acceptance.
-- [ ] Confirm playback, audio, seeking, loop, speed, and effects remain equal to Pass 18.
-- [ ] Confirm no FPS regression with Syphon stopped.
+## Required baseline check
 
-## B. Black-frame startup protection
+- [ ] Load the same video used to validate Pass 19.
+- [ ] Confirm playback and audio are as stable as Pass 19 with all effects disabled.
+- [ ] Confirm no video decode error.
+- [ ] Confirm seeking, looping, pause, resume, and file replacement.
 
-- [ ] Start Syphon before adding/selecting the source in OBS.
-- [ ] Confirm OBS discovers `huff`.
-- [ ] Confirm the first moving frame appears; the source must not remain black.
-- [ ] Confirm the HUFF panel reports one-fps bootstrap frames while no receiver is attached.
-- [ ] Confirm HUFF switches to the selected rate after OBS attaches.
+## Glitch parity
 
-## C. Receiver reconnect
+- [ ] Test low and high tile counts.
+- [ ] Test JITTER at 0, middle, and maximum.
+- [ ] Test SMEAR with angle 0.
+- [ ] Test SMEAR with a fixed nonzero angle.
+- [ ] Test temporal DEPTH and DEPTH SCATTER.
+- [ ] Test cluster tiles, coherence, bounce/wrap, and movement.
+- [ ] Confirm tile positions and temporal behavior match Pass 19.
 
-- [ ] Remove or deactivate the OBS Syphon source.
-- [ ] Confirm HUFF returns to waiting/bootstrap mode within approximately one second.
-- [ ] Re-enable or recreate the OBS source.
-- [ ] Confirm moving frames resume without restarting HUFF or Syphon.
-- [ ] Repeat at least ten times.
+## Scanline parity
 
-## D. Output-rate comparison
+- [ ] Test static Scanlines with SPEED 0.
+- [ ] Test moving Scanlines with SHIFT enabled.
+- [ ] Test positive and negative SKEW if available in the control range.
+- [ ] Test SPIN LEFT and SPIN RIGHT.
+- [ ] Confirm band positions, clipping, and motion match Pass 19.
 
-Run the same scene at:
+## Persistence parity
 
-- [ ] 1280×720 at 30 fps
-- [ ] 1280×720 at 60 fps
-- [ ] 1920×1080 at 30 fps
-- [ ] 1920×1080 at 60 fps, when the machine can sustain it
+- [ ] Test PERSISTENCE near 0, middle, near 1, and exactly 1.
+- [ ] Confirm decay appearance matches Pass 19.
+- [ ] Combine persistence with Glitch, Feedback, and Scanlines.
 
-For each:
+## Flow parity and telemetry
 
-- [ ] record HUFF render FPS;
-- [ ] observe OBS motion continuity;
-- [ ] record `sy cap`, `sy draw`, `sy read`, and `sy pipe`;
-- [ ] record `sy upload` and `sy publish` after several samples;
-- [ ] record `sy skips`;
-- [ ] compare light effects with the same heavy Glitch/Flow/Luma scene.
+- [ ] Test several SCALE values.
+- [ ] Confirm Flow output matches Pass 19.
+- [ ] Open the backtick profiler.
+- [ ] Confirm `flow tiles` equals `flow draws` for ordinary active Flow frames.
+- [ ] Confirm `flow grid` shows reuse during a stable SCALE/resolution state.
+- [ ] Change SCALE and confirm a grid rebuild is reported.
 
-## E. UI/control-plane behavior
+## Scanline telemetry
 
-- [ ] Confirm the Syphon frame count still advances visibly.
-- [ ] Confirm receiver-connected/waiting text changes immediately enough for operation.
-- [ ] Confirm changing 30 ↔ 60 fps while active changes output pacing.
-- [ ] Confirm Start/Stop remains reliable.
-- [ ] Confirm no accumulating console errors.
+- [ ] Confirm `scan bands` and `scan draws` appear only when Scanlines are active.
+- [ ] Confirm the two values match for an ordinary frame.
+- [ ] Confirm profiler hidden/visible state does not change the visual output.
 
-## F. Simultaneous outputs
+## Output regression
 
-- [ ] Run Syphon alone.
-- [ ] Run the JPEG canvas mirror alone.
-- [ ] Run both simultaneously.
-- [ ] Compare render FPS and profiler timings.
-- [ ] Confirm neither output creates growing latency.
+- [ ] Start Syphon before attaching OBS.
+- [ ] Confirm the one-fps bootstrap produces a moving current frame after attachment.
+- [ ] Confirm Pass 19's Syphon status and timing telemetry remains functional.
+- [ ] Test 30 fps and 60 fps Syphon output.
+- [ ] Test the JPEG canvas mirror.
+- [ ] On Windows, test Spout when available.
 
-## G. Long-session stability
+## Performance comparison
 
-- [ ] Run Syphon with OBS attached for at least 30 minutes.
-- [ ] Switch files repeatedly.
-- [ ] Seek repeatedly.
-- [ ] Resize/fullscreen the HUFF window.
-- [ ] Stop and restart Syphon repeatedly.
-- [ ] Confirm frame counters continue advancing.
-- [ ] Confirm memory and latency do not grow continuously.
+Record profiler values for Pass 19 and Pass 20 under identical states:
 
-## H. Shutdown
+- [ ] Glitch only: `applyGlitch`, `gl tiles`, `gl draws`.
+- [ ] Scanlines only: `applyScanlines`, `scan bands`, `scan draws`.
+- [ ] Flow only: `applyFlowWarp`, `flow tiles`, `flow draws`.
+- [ ] Glitch + Scanlines + Flow.
+- [ ] Outputs disabled.
+- [ ] Syphon connected.
+- [ ] Mirror connected.
+- [ ] Syphon + mirror connected.
 
-- [ ] Close HUFF while Syphon is active.
-- [ ] Confirm OBS loses the source cleanly.
-- [ ] Confirm no HUFF process remains.
-- [ ] Relaunch and confirm Syphon can start again.
+## Soak and shutdown
+
+- [ ] Run for at least 20 minutes with video and active effects.
+- [ ] Change files repeatedly.
+- [ ] Resize and toggle fullscreen repeatedly.
+- [ ] Disconnect and reconnect Syphon/OBS.
+- [ ] Close HUFF and confirm no lingering process, camera track, or output server.
+
+## Rejection criteria
+
+Reject Pass 20 if any of the following occurs:
+
+- playback is less stable than Pass 19;
+- Glitch, Scanline, persistence, or Flow output visibly changes;
+- Syphon returns to black/no-frame behavior;
+- profiler telemetry changes output or pacing when hidden;
+- repeated source changes or shutdown regress.

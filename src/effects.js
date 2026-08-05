@@ -29,6 +29,8 @@
 //  - Pass 18 keeps Glitch blits on the cached Canvas2D context, reuses prepared
 //    smear offsets, and resolves temporal-ring slots once per ring generation
 //    instead of repeating helper/context/ring lookups for every tile draw.
+//  - Pass 20 removes p5 map() dispatch from active Scanline/Glitch/persistence
+//    hot paths and adds profiler-only Scanline/Flow draw-count telemetry.
 
 // ─── Temporal ring drawing ───────────────────────────────────────────────────
 // FrameRing stores reusable canvas snapshots, so historical frames remain
@@ -466,6 +468,9 @@ class ScanlineBandWorkspace {
     const focusDistance = Math.abs(focus - 0.5);
     const gridStep = Math.max(1, bandSize + scanGap);
     const shiftRange = cross * shiftScale;
+    // p5 map(noise, 0, 1, -shiftRange, shiftRange) performs parameter
+    // validation on every band. Preserve the exact arithmetic locally.
+    const shiftSpan = shiftRange - (-shiftRange);
     const noShift = shiftScale === 0 && scanSkew === 0;
     const noFastJitter = driftAmt === 0;
     let count = 0;
@@ -493,9 +498,8 @@ class ScanlineBandWorkspace {
       let shift = 0;
       if (!noShift) {
         const skewOffset = Math.floor(scanSkew * bandStart);
-        shift = Math.floor(
-          map(noise(this.shiftSeed[n] + phX * 0.5), 0, 1, -shiftRange, shiftRange)
-        ) + skewOffset;
+        const shiftNoise = noise(this.shiftSeed[n] + phX * 0.5);
+        shift = Math.floor(shiftNoise * shiftSpan + (-shiftRange)) + skewOffset;
       }
 
       const sourceOffset = Math.max(0, shift < 0 ? -shift : 0);
@@ -531,6 +535,20 @@ class ScanlineBandWorkspace {
 
 const _scanlineBands = new ScanlineBandWorkspace();
 window.invalidateScanlineCache = () => _scanlineBands.invalidate();
+
+const _scanlineTelemetry = window.__huffScanlineTelemetry || {
+  frames: 0,
+  bands: 0,
+  drawCalls: 0,
+};
+window.__huffScanlineTelemetry = _scanlineTelemetry;
+
+function _scanlineProfileFrame(bandCount) {
+  if (window.__huffProfilerActive !== true) return;
+  _scanlineTelemetry.frames++;
+  _scanlineTelemetry.bands += bandCount;
+  _scanlineTelemetry.drawCalls += bandCount;
+}
 
 function applyScanlines(density, angleOverride = null, scanPriority = 1.0, state = window.HUFF_RENDER_STATE) {
   const rs = state || window.HUFF_RENDER_STATE || {};
@@ -591,6 +609,7 @@ function applyScanlines(density, angleOverride = null, scanPriority = 1.0, state
     );
   }
 
+  _scanlineProfileFrame(bandCount);
   ctx.restore();
 }
 
@@ -610,11 +629,15 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0, glitchPriority = 1.0, 
   const smearAngleDeg = rs.glitchSmearAngle;
   let dxUnit, dyUnit;
   if (smearAngleDeg === 0) {
-    dxUnit = map(noise(nPhaseX), 0, 1, -1, 1);
-    dyUnit = map(noise(nPhaseY), 0, 1, -1, 1);
+    // Exact p5 map(noise, 0, 1, -1, 1) arithmetic without the framework
+    // parameter-validation dispatch on every active Glitch frame.
+    dxUnit = noise(nPhaseX) * (1 - (-1)) + (-1);
+    dyUnit = noise(nPhaseY) * (1 - (-1)) + (-1);
   } else {
+    const smearAngleMin = -Math.PI / 6;
+    const smearAngleMax =  Math.PI / 6;
     const rad = (smearAngleDeg * Math.PI / 180)
-      + map(noise(nPhaseX * 0.5), 0, 1, -Math.PI / 6, Math.PI / 6);
+      + noise(nPhaseX * 0.5) * (smearAngleMax - smearAngleMin) + smearAngleMin;
     dxUnit = Math.cos(rad);
     dyUnit = Math.sin(rad);
   }
@@ -753,12 +776,20 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0, glitchPriority = 1.0, 
   // glitchPriority scales contribution relative to scanlines (A/B mix).
   ctx.globalAlpha = (tileAlpha / 255) * glitchPriority;
 
+  const jitterMin = -block * 2;
+  const jitterMax =  block * 2;
+  const jitterSpan = jitterMax - jitterMin;
+
   for (let i = 0; i < targets.count; i++) {
     let cx = targets.x[i];
     let cy = targets.y[i];
 
-    const ox = Math.floor(map(noise(nPhaseX + i * 0.013), 0, 1, -block * 2, block * 2) * jitter);
-    const oy = Math.floor(map(noise(nPhaseY + i * 0.017), 0, 1, -block * 2, block * 2) * jitter);
+    // This is the exact p5 map(noise, 0, 1, jitterMin, jitterMax) formula,
+    // kept inline so the hottest per-tile loop avoids p5 validation overhead.
+    const oxNoise = noise(nPhaseX + i * 0.013);
+    const oyNoise = noise(nPhaseY + i * 0.017);
+    const ox = Math.floor((oxNoise * jitterSpan + jitterMin) * jitter);
+    const oy = Math.floor((oyNoise * jitterSpan + jitterMin) * jitter);
     cx = (cx + ox + width)  % width;
     cy = (cy + oy + height) % height;
 
@@ -837,7 +868,7 @@ class FlowGridWorkspace {
   }
 
   configure(width, height, cell) {
-    if (this.width === width && this.height === height && this.cell === cell) return;
+    if (this.width === width && this.height === height && this.cell === cell) return false;
     this.width = width;
     this.height = height;
     this.cell = cell;
@@ -872,10 +903,28 @@ class FlowGridWorkspace {
       }
     }
     this.count = required;
+    return true;
   }
 }
 
 const _flowGrid = new FlowGridWorkspace();
+const _flowTelemetry = window.__huffFlowTelemetry || {
+  frames: 0,
+  tiles: 0,
+  drawCalls: 0,
+  gridRebuilds: 0,
+  gridReuses: 0,
+};
+window.__huffFlowTelemetry = _flowTelemetry;
+
+function _flowProfileFrame(tileCount, gridRebuilt) {
+  if (window.__huffProfilerActive !== true) return;
+  _flowTelemetry.frames++;
+  _flowTelemetry.tiles += tileCount;
+  _flowTelemetry.drawCalls += tileCount;
+  if (gridRebuilt) _flowTelemetry.gridRebuilds++;
+  else _flowTelemetry.gridReuses++;
+}
 
 function applyFlowWarp(src, dst, strength = 6, scale = 80, pulse = 0, implode = 0, speed = 1, turb = 0, swirl = 0, spread = 1) {
   let srcFrame = src;
@@ -902,7 +951,7 @@ function applyFlowWarp(src, dst, strength = 6, scale = 80, pulse = 0, implode = 
   // genuinely fast top end. speed=1 maps to the original tempo; speed=0 freezes.
   const t    = frameCount * 0.005 * Math.pow(Math.max(0, speed), 1.6);
   const w = width, h = height;
-  _flowGrid.configure(w, h, cell);
+  const flowGridRebuilt = _flowGrid.configure(w, h, cell);
 
   // SPREAD scales the flow-field noise frequency: low = large coherent zones all
   // drifting together (watery), high = many small independent eddies.
@@ -949,6 +998,7 @@ function applyFlowWarp(src, dst, strength = 6, scale = 80, pulse = 0, implode = 
     const sy2   = Math.max(0, Math.min(h - tileH, Math.floor(y + dy2)));
     dctx.drawImage(srcEl, sx2, sy2, tileW, tileH, x, y, tileW, tileH);
   }
+  _flowProfileFrame(_flowGrid.count, flowGridRebuilt);
   dctx.restore();
 }
 

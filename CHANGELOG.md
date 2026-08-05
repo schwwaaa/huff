@@ -2,6 +2,23 @@
 
 This changelog tracks the optimization series for the legacy Tauri v1 + p5.js/Canvas2D edition. It intentionally excludes the native-wgpu HUFF project.
 
+## Pass 20 — Direct hot-path range arithmetic and remaining-ceiling telemetry
+
+**Date:** 2026-08-05  
+**Status:** implementation and deterministic validation complete; target-runtime comparison against Pass 19 pending
+
+- Removed p5 `map()` dispatch from active persistence decay.
+- Removed p5 `map()` dispatch from Scanline per-band shift preparation.
+- Removed p5 `map()` dispatch from Glitch smear direction and angle jitter.
+- Removed two p5 `map()` calls per accepted Glitch tile from the jitter loop.
+- Prepared Scanline and Glitch range spans outside their inner loops.
+- Preserved exact p5 arithmetic, noise coordinates, flooring, clipping, temporal selection, and paint order.
+- Added profiler-only Scanline band and draw counts.
+- Added profiler-only Flow tile, draw, and grid rebuild/reuse counts.
+- Added `npm run validate:pass20` with 27 source-boundary checks and 2,500,000 exact arithmetic comparisons.
+- Updated README performance notes and cumulative pass summaries.
+- Preserved Blob URL decoding, independent clocks, Pass 13S lifecycle cleanup, Pass 16S Syphon bootstrap, Pass 19 Syphon control-plane behavior, Spout, Rust/Tauri source, and framework packaging.
+
 ## Pass 18 — Glitch blit hot-path optimization and draw-call telemetry
 
 **Date:** 2026-08-04  

@@ -1,63 +1,51 @@
-# HUFF Classic Current Status — Pass 19
+# HUFF Classic — Current Status After Optimization Pass 20
 
-## Authoritative baseline
+## Current baseline
 
-Pass 19 continues from the working and committed Pass 18 baseline.
+**HUFF Classic Optimization Pass 20** is the current candidate baseline.
 
-The stable decoder, independent clocks, Pass 16S black-frame repair, Solarize/Luma optimization, and Glitch hot-path optimization remain intact.
+It branches directly from the runtime-confirmed Pass 19 package. Pass 20 must still be compared against Pass 19 on the target Mac before it becomes the next committed stable baseline.
 
-## Pass 19 state
+## Confirmed stable foundation inherited from Pass 19
 
-- Syphon acknowledgements remain one per accepted frame.
-- Visible Syphon status updates are coalesced to four hertz.
-- Native receiver checks run every bootstrap frame while disconnected and four times per second while connected.
-- Redundant Tauri runtime polling is suspended during healthy acknowledgement flow.
-- Native upload and publication timing is sampled at low rate.
-- The profiler now separates browser capture, Worker draw/readback, total pipeline, Metal upload, and Syphon publication.
-- Output image data, dimensions, orientation, pacing options, and backpressure behavior remain unchanged.
+- working Blob URL + p5 `createVideo()` decode path;
+- independent p5, transport, mirror, and profiler schedules;
+- source-generation and shutdown cleanup from Pass 13S;
+- consolidated `gCur`, `gBuf`, and shared `gScratch` topology;
+- canvas-backed bounded temporal history;
+- optimized Flow, Scanline, Glitch, Solarize, and Pipeline Luma paths;
+- neutral-stage and clean-frame bypass;
+- receiver-aware JPEG mirror;
+- working Pass 16S Syphon bootstrap;
+- Pass 19 Syphon control-plane reduction and phase telemetry;
+- mandatory bundled universal Syphon framework.
 
-## Retained stable systems
+## Pass 20 candidate changes
 
-- File → Blob URL → p5 `createVideo()` decoding
-- independent p5, transport, mirror, profiler, and Syphon clocks
-- source-generation lifecycle guards
-- consolidated `gCur`, `gBuf`, and `gScratch` topology
-- canvas-backed temporal history
-- cached Flow and Scanline geometry
-- neutral-stage bypass
-- packed Solarize and one-scratch Luma Key
-- optimized Glitch dispatch and temporal source cache
-- receiver-aware JPEG mirror
-- one-fps Syphon bootstrap before attachment
-- selected 30/60 fps rate after attachment
-- one-frame-in-flight Syphon backpressure
-- persistent Metal texture ring
-- Spout native path
-- mandatory universal bundled `Syphon.framework`
+- direct unit-range arithmetic replaces p5 `map()` in active persistence, Scanline shift, Glitch smear, and Glitch tile-jitter paths;
+- exact old/new arithmetic validated over 2,500,000 comparisons;
+- profiler-only Scanline band/draw telemetry;
+- profiler-only Flow tile/draw/grid-cache telemetry.
 
-## Current output boundary
+## Rejected architecture remains rejected
 
-HUFF Classic still performs a Canvas2D-to-CPU readback and CPU-to-Metal upload for Syphon. Pass 19 removes avoidable control-plane work and provides the measurements needed to decide whether the next output improvement should target:
+- Pass 12 renderer-window decode ownership;
+- Tauri asset-protocol replacement for Blob URL video loading;
+- Pass 13 render-boundary scheduler consolidation;
+- transport, mirror, or profiler work inside `draw()`.
 
-- main-thread bitmap capture;
-- Worker OffscreenCanvas draw;
-- Worker `getImageData`;
-- Worker-to-main RGBA transfer;
-- WebSocket transfer;
-- Metal upload;
-- Syphon publication.
+## Remaining performance boundary
 
-## Acceptance gate
+The dominant remaining work is increasingly the artistic Canvas2D workload itself:
 
-Commit Pass 19 only after:
+- Glitch base and smear draws;
+- Scanline band draws;
+- Flow tile draws and per-tile noise/trigonometry;
+- synchronous Solarize and Luma readback;
+- mirror/Syphon/Spout capture and upload.
 
-1. OBS receives moving frames from startup;
-2. no black-frame regression occurs;
-3. reconnect works repeatedly;
-4. Pass 18 playback stability is retained;
-5. 30 and 60 fps selections still operate;
-6. profiler values advance without destabilizing output.
+The new profiler fields are intended to identify which of these dominates on the actual target system.
 
-## Next mandatory target
+## Release readiness
 
-Pass 20: remaining Canvas2D ceiling review using the accumulated Flow, Scanline, Glitch, Solarize, Luma, mirror, and Syphon telemetry. Further Syphon transport ownership changes remain gated on Pass 19 runtime measurements.
+Not release-frozen yet. Cross-platform runtime validation, capability tiers, long-session soak testing, packaging, signing, and shutdown testing remain mandatory.
