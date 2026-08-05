@@ -1,79 +1,107 @@
-# HUFF Classic Optimization Pass 21 — Testing Checklist
+# HUFF Classic Optimization Pass 22 — Testing Checklist
 
-## Required baseline comparison
+Compare Pass 22 directly against the committed Pass 21 baseline using the same source, canvas size, controls, window layout, mirror state, and Syphon state.
 
-Compare Pass 21 directly with committed Pass 20 using the same source, render dimensions, controls, output state, and window size.
+## 1. Baseline playback
 
-## Video and audio
+- [ ] Load the same known-good video used for Pass 21.
+- [ ] Confirm decoding begins normally.
+- [ ] Confirm audio remains stable.
+- [ ] Confirm playback FPS and frame pacing are at least as stable as Pass 21 with Scanlines disabled.
+- [ ] Confirm repeated play/pause/seek behavior is unchanged.
 
-- [ ] Video loads through the existing file picker.
-- [ ] Playback begins normally.
-- [ ] Audio remains clean and synchronized.
-- [ ] Play, pause, loop, speed, and seek remain unchanged.
-- [ ] Replacing the source remains stable.
+## 2. Horizontal Scanline path
 
-## Flow visual parity
+Set ANGLE to exactly `0`.
 
-Test each control independently and in combination:
+- [ ] Confirm horizontal band position matches Pass 21.
+- [ ] Test low, medium, and maximum band counts.
+- [ ] Test ALPHA from low to full.
+- [ ] Test GAP at zero and nonzero values.
+- [ ] Test FOCUS at top, center, and bottom.
+- [ ] Test ROLL in both directions.
+- [ ] Confirm profiler `scan path` reports direct frames.
 
-- [ ] STRENGTH
-- [ ] SCALE
-- [ ] SPEED
-- [ ] TURBULENCE
-- [ ] SWIRL
-- [ ] IMPLODE
-- [ ] SPREAD
-- [ ] PULSE
+## 3. Drift/shift specialization matrix
 
-Specific parity tests:
+Test all four combinations:
 
-- [ ] SWIRL = 0 produces the same image as Pass 20.
-- [ ] Positive and negative SWIRL match Pass 20.
-- [ ] TURBULENCE = 0 and TURBULENCE > 0 match Pass 20.
-- [ ] Positive and negative IMPLODE match Pass 20.
-- [ ] Minimum and maximum SCALE match Pass 20.
-- [ ] Low and high SPREAD match Pass 20.
-- [ ] PULSE uses the same historical frames.
-- [ ] Edge tiles do not show clipping or stale pixels.
-- [ ] Changing SCALE while running rebuilds correctly.
-- [ ] Resizing/fullscreen while Flow is active rebuilds correctly.
+### Neutral DRIFT + neutral SHIFT/SKEW
 
-## Cache telemetry
+- [ ] DRIFT = 0
+- [ ] SHIFT = 0
+- [ ] SKEW = 0
+- [ ] Confirm output parity and stable motion/position.
 
-Open the profiler with backtick:
+### Neutral DRIFT + active SHIFT or SKEW
 
-- [ ] `flow grid` mostly reports reuse while size/SCALE remain stable.
-- [ ] `flow freq` mostly reports reuse while size/SCALE/SPREAD remain stable.
-- [ ] Changing SPREAD causes a frequency rebuild.
-- [ ] `flow swirl` mostly reports reuse while size/SCALE/SWIRL remain stable.
-- [ ] Changing SWIRL causes a SWIRL rebuild.
-- [ ] Changing SPEED, STRENGTH, TURBULENCE, IMPLODE, or PULSE does not unnecessarily rebuild frequency/SWIRL fields.
+- [ ] DRIFT = 0
+- [ ] Enable SHIFT.
+- [ ] Repeat with SKEW.
+- [ ] Confirm source clipping and displacement parity.
 
-## Combined effects
+### Active DRIFT + neutral SHIFT/SKEW
 
-- [ ] Flow + Glitch
-- [ ] Flow + Scanlines
-- [ ] Flow + Feedback
-- [ ] Flow + Solarize
-- [ ] Flow + Pipeline Luma Key
-- [ ] Flow + Glitch + Scanlines + Feedback
+- [ ] Enable DRIFT.
+- [ ] SHIFT = 0
+- [ ] SKEW = 0
+- [ ] Confirm slow/fast noise motion parity.
 
-## Outputs
+### Active DRIFT + active SHIFT/SKEW
 
-- [ ] Canvas mirror remains active and visually correct.
-- [ ] Syphon starts with moving frames; no black-source regression.
-- [ ] Syphon survives enabling/disabling Flow.
-- [ ] Syphon disconnect/reconnect remains functional.
-- [ ] Spout source path remains unchanged for later Windows validation.
+- [ ] Enable DRIFT and SHIFT.
+- [ ] Add SKEW.
+- [ ] Confirm combined motion and clipping parity.
 
-## Stability
+## 4. Rotated paths
 
-- [ ] Run Flow continuously for at least 30 minutes.
-- [ ] Sweep SCALE, SPREAD, and SWIRL repeatedly.
-- [ ] Repeat window resize/fullscreen cycles.
-- [ ] Watch WebView memory for unbounded growth.
-- [ ] Close the application and confirm no HUFF process remains.
+- [ ] Test ANGLE = 45.
+- [ ] Test ANGLE = -45.
+- [ ] Test ANGLE = 90.
+- [ ] Test a very small nonzero angle.
+- [ ] Confirm profiler `scan path` reports transformed frames.
+- [ ] Confirm no clipping, offset, or alpha regression.
+
+## 5. Static prepared-band cache
+
+Use a state where Scanline phase does not advance.
+
+- [ ] Confirm `scan prep` shows reuse.
+- [ ] Change one Scanline parameter and confirm one rebuild.
+- [ ] Leave the control stable and confirm reuse resumes.
+- [ ] Change angle or render size and confirm `scan geom` rebuilds.
+
+## 6. Combined effect parity
+
+- [ ] Scanlines + Glitch, Scanline priority first.
+- [ ] Scanlines + Glitch, Glitch priority first.
+- [ ] Scanlines + Pipeline Luma Key.
+- [ ] Scanlines + Feedback.
+- [ ] Scanlines + Flow.
+- [ ] Scanlines + Solarize.
+- [ ] Heavy combined scene with the same preset used for Pass 21.
+
+## 7. Output regression
+
+- [ ] Mirror output remains active and moving.
+- [ ] Syphon starts with moving bootstrap frames.
+- [ ] OBS receives moving frames, not black.
+- [ ] Syphon remains stable while changing Scanline angle and count.
+- [ ] Spout code path remains unaffected on Windows when available.
+
+## 8. Resize and lifecycle
+
+- [ ] Resize repeatedly with Scanlines active.
+- [ ] Enter and leave fullscreen repeatedly.
+- [ ] Replace the video source while Scanlines are active.
+- [ ] Close the application and confirm no process buildup.
 
 ## Acceptance rule
 
-Commit Pass 21 only when normal playback is at least as stable as Pass 20 and Flow output remains visually equivalent across the tests above.
+Commit Pass 22 only when:
+
+- baseline playback remains at least as stable as Pass 21;
+- all four Scanline preparation combinations match visually;
+- horizontal and rotated paths remain correct;
+- Syphon continues to publish moving frames;
+- no new shutdown or source-replacement regression appears.

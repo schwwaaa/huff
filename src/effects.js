@@ -33,6 +33,8 @@
 //    hot paths and adds profiler-only Scanline/Flow draw-count telemetry.
 //  - Pass 21 caches Flow noise-coordinate products, per-tile source clip bounds,
 //    and radial swirl sin/cos values in persistent typed workspaces.
+//  - Pass 22 specializes Scanline band preparation by neutral shift/drift state,
+//    caches phase/focus scalars, and uses a direct horizontal blit path.
 
 // ─── Temporal ring drawing ───────────────────────────────────────────────────
 // FrameRing stores reusable canvas snapshots, so historical frames remain
@@ -363,6 +365,14 @@ class ScanlineBandWorkspace {
     this.absC = 1;
     this.dim = 0;
     this.cross = 0;
+    this.halfWidth = 0;
+    this.halfHeight = 0;
+    this.negativeHalfWidth = 0;
+    this.negativeHalfDim = 0;
+    this.rotatePattern = false;
+    this.directHorizontal = false;
+    this.geometryRebuilt = false;
+    this.bandsRebuilt = false;
 
     this.cacheValid = false;
     this.cacheBands = -1;
@@ -428,7 +438,10 @@ class ScanlineBandWorkspace {
       this.geometryWidth === canvasWidth &&
       this.geometryHeight === canvasHeight &&
       this.geometryAngle === angleDeg
-    ) return this;
+    ) {
+      this.geometryRebuilt = false;
+      return this;
+    }
 
     this.geometryWidth = canvasWidth;
     this.geometryHeight = canvasHeight;
@@ -438,6 +451,15 @@ class ScanlineBandWorkspace {
     this.absC = Math.abs(Math.cos(this.angleRad));
     this.dim = canvasWidth * this.absS + canvasHeight * this.absC;
     this.cross = canvasWidth * this.absC + canvasHeight * this.absS;
+    this.halfWidth = canvasWidth / 2;
+    this.halfHeight = canvasHeight / 2;
+    this.negativeHalfWidth = -this.halfWidth;
+    this.negativeHalfDim = -this.dim / 2;
+    this.rotatePattern = Math.abs(this.angleRad) > 0.001;
+    // With an exact zero angle, the old pair of translations cancelled to the
+    // incoming transform. Draw directly and restore only the alpha we modify.
+    this.directHorizontal = angleDeg === 0;
+    this.geometryRebuilt = true;
     this.cacheValid = false;
     return this;
   }
@@ -461,6 +483,7 @@ class ScanlineBandWorkspace {
   prepare(scanBands, bandSize, scanGap, scanSkew, focus, roll, shiftScale, driftAmt, phX, phY) {
     this._ensureCapacity(scanBands);
     if (this._matches(scanBands, bandSize, scanGap, scanSkew, focus, roll, shiftScale, driftAmt, phX, phY)) {
+      this.bandsRebuilt = false;
       return this.count;
     }
 
@@ -468,57 +491,140 @@ class ScanlineBandWorkspace {
     const cross = this.cross;
     const rollOffset = (phY * roll * 80) % dim;
     const focusDistance = Math.abs(focus - 0.5);
+    const focusBias = focusDistance * 1.4;
+    const slowScale = 1 - focusBias;
+    const focusOffset = (focus * dim) * focusDistance * 1.4;
     const gridStep = Math.max(1, bandSize + scanGap);
+    const snapToGrid = scanGap > 0;
     const shiftRange = cross * shiftScale;
     // p5 map(noise, 0, 1, -shiftRange, shiftRange) performs parameter
     // validation on every band. Preserve the exact arithmetic locally.
     const shiftSpan = shiftRange - (-shiftRange);
     const noShift = shiftScale === 0 && scanSkew === 0;
     const noFastJitter = driftAmt === 0;
+    // These expressions were previously identical inside every band iteration.
+    // Keep their original left-to-right arithmetic, but resolve them once.
+    const slowPhase = phY * 0.25 * driftAmt;
+    const fastPhase = phY * 1.8 * driftAmt;
+    const shiftPhase = phX * 0.5;
+
+    const slowSeed = this.slowSeed;
+    const fastSeed = this.fastSeed;
+    const shiftSeed = this.shiftSeed;
+    const starts = this.start;
+    const lengths = this.length;
+    const sourceOffsets = this.srcOff;
+    const destinationOffsets = this.dstOff;
+    const crossLengths = this.crossLength;
     let count = 0;
 
-    for (let n = 0; n < scanBands; n++) {
-      const slowDrift = noise(this.slowSeed[n] + phY * 0.25 * driftAmt) * dim;
-      const fastJitter = noFastJitter
-        ? 0
-        : (noise(this.fastSeed[n] + phY * 1.8 * driftAmt) - 0.5) * dim * 0.12 * driftAmt;
+    // Select the neutral/dynamic variants once per Scanline pass rather than
+    // re-testing drift and shift state for every requested band.
+    if (noFastJitter) {
+      if (noShift) {
+        for (let n = 0; n < scanBands; n++) {
+          const slowDrift = noise(slowSeed[n] + slowPhase) * dim;
+          const biased = slowDrift * slowScale + focusOffset;
+          const rawPos = ((biased + rollOffset) % dim + dim) % dim;
+          const gridPos = snapToGrid
+            ? Math.floor(rawPos / gridStep) * gridStep
+            : rawPos;
+          const bandStart = Math.max(0, Math.floor(gridPos));
+          const bandEnd = Math.min(dim, bandStart + bandSize);
+          const bandLength = bandEnd - bandStart;
+          if (bandLength <= 0) continue;
 
-      const biased = slowDrift * (1 - focusDistance * 1.4)
-                   + (focus * dim) * focusDistance * 1.4
-                   + fastJitter;
+          starts[count] = bandStart;
+          lengths[count] = bandLength;
+          sourceOffsets[count] = 0;
+          destinationOffsets[count] = 0;
+          crossLengths[count] = cross;
+          count++;
+        }
+      } else {
+        for (let n = 0; n < scanBands; n++) {
+          const slowDrift = noise(slowSeed[n] + slowPhase) * dim;
+          const biased = slowDrift * slowScale + focusOffset;
+          const rawPos = ((biased + rollOffset) % dim + dim) % dim;
+          const gridPos = snapToGrid
+            ? Math.floor(rawPos / gridStep) * gridStep
+            : rawPos;
+          const bandStart = Math.max(0, Math.floor(gridPos));
+          const bandEnd = Math.min(dim, bandStart + bandSize);
+          const bandLength = bandEnd - bandStart;
+          if (bandLength <= 0) continue;
 
-      const rawPos = ((biased + rollOffset) % dim + dim) % dim;
-      const gridPos = scanGap > 0
-        ? Math.floor(rawPos / gridStep) * gridStep
-        : rawPos;
+          const skewOffset = Math.floor(scanSkew * bandStart);
+          const shiftNoise = noise(shiftSeed[n] + shiftPhase);
+          const shift = Math.floor(shiftNoise * shiftSpan + (-shiftRange)) + skewOffset;
+          const sourceOffset = Math.max(0, shift < 0 ? -shift : 0);
+          const destinationOffset = Math.max(0, shift > 0 ? shift : 0);
+          const bandCross = cross - Math.abs(shift);
+          if (bandCross <= 0) continue;
 
-      const bandStart = Math.max(0, Math.floor(gridPos));
-      const bandEnd = Math.min(dim, bandStart + bandSize);
-      const bandLength = bandEnd - bandStart;
-      if (bandLength <= 0) continue;
-
-      let shift = 0;
-      if (!noShift) {
-        const skewOffset = Math.floor(scanSkew * bandStart);
-        const shiftNoise = noise(this.shiftSeed[n] + phX * 0.5);
-        shift = Math.floor(shiftNoise * shiftSpan + (-shiftRange)) + skewOffset;
+          starts[count] = bandStart;
+          lengths[count] = bandLength;
+          sourceOffsets[count] = sourceOffset;
+          destinationOffsets[count] = destinationOffset;
+          crossLengths[count] = bandCross;
+          count++;
+        }
       }
+    } else if (noShift) {
+      for (let n = 0; n < scanBands; n++) {
+        const slowDrift = noise(slowSeed[n] + slowPhase) * dim;
+        const fastJitter = (noise(fastSeed[n] + fastPhase) - 0.5) * dim * 0.12 * driftAmt;
+        const biased = slowDrift * slowScale + focusOffset + fastJitter;
+        const rawPos = ((biased + rollOffset) % dim + dim) % dim;
+        const gridPos = snapToGrid
+          ? Math.floor(rawPos / gridStep) * gridStep
+          : rawPos;
+        const bandStart = Math.max(0, Math.floor(gridPos));
+        const bandEnd = Math.min(dim, bandStart + bandSize);
+        const bandLength = bandEnd - bandStart;
+        if (bandLength <= 0) continue;
 
-      const sourceOffset = Math.max(0, shift < 0 ? -shift : 0);
-      const destinationOffset = Math.max(0, shift > 0 ? shift : 0);
-      const bandCross = cross - Math.abs(shift);
-      if (bandCross <= 0) continue;
+        starts[count] = bandStart;
+        lengths[count] = bandLength;
+        sourceOffsets[count] = 0;
+        destinationOffsets[count] = 0;
+        crossLengths[count] = cross;
+        count++;
+      }
+    } else {
+      for (let n = 0; n < scanBands; n++) {
+        const slowDrift = noise(slowSeed[n] + slowPhase) * dim;
+        const fastJitter = (noise(fastSeed[n] + fastPhase) - 0.5) * dim * 0.12 * driftAmt;
+        const biased = slowDrift * slowScale + focusOffset + fastJitter;
+        const rawPos = ((biased + rollOffset) % dim + dim) % dim;
+        const gridPos = snapToGrid
+          ? Math.floor(rawPos / gridStep) * gridStep
+          : rawPos;
+        const bandStart = Math.max(0, Math.floor(gridPos));
+        const bandEnd = Math.min(dim, bandStart + bandSize);
+        const bandLength = bandEnd - bandStart;
+        if (bandLength <= 0) continue;
 
-      this.start[count] = bandStart;
-      this.length[count] = bandLength;
-      this.srcOff[count] = sourceOffset;
-      this.dstOff[count] = destinationOffset;
-      this.crossLength[count] = bandCross;
-      count++;
+        const skewOffset = Math.floor(scanSkew * bandStart);
+        const shiftNoise = noise(shiftSeed[n] + shiftPhase);
+        const shift = Math.floor(shiftNoise * shiftSpan + (-shiftRange)) + skewOffset;
+        const sourceOffset = Math.max(0, shift < 0 ? -shift : 0);
+        const destinationOffset = Math.max(0, shift > 0 ? shift : 0);
+        const bandCross = cross - Math.abs(shift);
+        if (bandCross <= 0) continue;
+
+        starts[count] = bandStart;
+        lengths[count] = bandLength;
+        sourceOffsets[count] = sourceOffset;
+        destinationOffsets[count] = destinationOffset;
+        crossLengths[count] = bandCross;
+        count++;
+      }
     }
 
     this.count = count;
     this.cacheValid = true;
+    this.bandsRebuilt = true;
     this.cacheBands = scanBands;
     this.cacheBandSize = bandSize;
     this.cacheGap = scanGap;
@@ -542,14 +648,27 @@ const _scanlineTelemetry = window.__huffScanlineTelemetry || {
   frames: 0,
   bands: 0,
   drawCalls: 0,
+  geometryRebuilds: 0,
+  geometryReuses: 0,
+  bandRebuilds: 0,
+  bandReuses: 0,
+  directFrames: 0,
+  transformedFrames: 0,
 };
 window.__huffScanlineTelemetry = _scanlineTelemetry;
 
 function _scanlineProfileFrame(bandCount) {
   if (window.__huffProfilerActive !== true) return;
+  const workspace = _scanlineBands;
   _scanlineTelemetry.frames++;
   _scanlineTelemetry.bands += bandCount;
   _scanlineTelemetry.drawCalls += bandCount;
+  if (workspace.geometryRebuilt) _scanlineTelemetry.geometryRebuilds++;
+  else _scanlineTelemetry.geometryReuses++;
+  if (workspace.bandsRebuilt) _scanlineTelemetry.bandRebuilds++;
+  else _scanlineTelemetry.bandReuses++;
+  if (workspace.directHorizontal) _scanlineTelemetry.directFrames++;
+  else _scanlineTelemetry.transformedFrames++;
 }
 
 function applyScanlines(density, angleOverride = null, scanPriority = 1.0, state = window.HUFF_RENDER_STATE) {
@@ -594,20 +713,49 @@ function applyScanlines(density, angleOverride = null, scanPriority = 1.0, state
 
   const ctx = gBuf.drawingContext;
   const sourceCanvas = gCur.drawingContext.canvas;
+  const starts = workspace.start;
+  const lengths = workspace.length;
+  const sourceOffsets = workspace.srcOff;
+  const destinationOffsets = workspace.dstOff;
+  const crossLengths = workspace.crossLength;
+
+  if (workspace.directHorizontal) {
+    // At exact 0°, the legacy translate pair is a mathematical identity.
+    // Avoid save/translate/translate/restore and restore only globalAlpha.
+    const previousAlpha = ctx.globalAlpha;
+    try {
+      ctx.globalAlpha = bandAlpha;
+      for (let i = 0; i < bandCount; i++) {
+        const bandStart = starts[i];
+        const bandLength = lengths[i];
+        const bandCross = crossLengths[i];
+        ctx.drawImage(
+          sourceCanvas,
+          sourceOffsets[i], bandStart, bandCross, bandLength,
+          destinationOffsets[i], bandStart, bandCross, bandLength,
+        );
+      }
+    } finally {
+      ctx.globalAlpha = previousAlpha;
+    }
+    _scanlineProfileFrame(bandCount);
+    return;
+  }
+
   ctx.save();
-  ctx.translate(gBuf.width / 2, gBuf.height / 2);
-  if (Math.abs(workspace.angleRad) > 0.001) ctx.rotate(workspace.angleRad);
-  ctx.translate(-gBuf.width / 2, -dim / 2);
+  ctx.translate(workspace.halfWidth, workspace.halfHeight);
+  if (workspace.rotatePattern) ctx.rotate(workspace.angleRad);
+  ctx.translate(workspace.negativeHalfWidth, workspace.negativeHalfDim);
   ctx.globalAlpha = bandAlpha;
 
   for (let i = 0; i < bandCount; i++) {
-    const bandStart = workspace.start[i];
-    const bandLength = workspace.length[i];
-    const bandCross = workspace.crossLength[i];
+    const bandStart = starts[i];
+    const bandLength = lengths[i];
+    const bandCross = crossLengths[i];
     ctx.drawImage(
       sourceCanvas,
-      workspace.srcOff[i], bandStart, bandCross, bandLength,
-      workspace.dstOff[i], bandStart, bandCross, bandLength,
+      sourceOffsets[i], bandStart, bandCross, bandLength,
+      destinationOffsets[i], bandStart, bandCross, bandLength,
     );
   }
 

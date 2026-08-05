@@ -940,3 +940,7 @@ This build removes p5 `map()` dispatch from active persistence, Scanline shift, 
 ## HUFF Classic Optimization Pass 21
 
 This build reduces Flow Warp CPU preparation without changing its tile draws or visual field. Persistent typed workspaces cache spread-dependent noise coordinates, turbulence coordinates, radial swirl sine/cosine values, and per-tile source clipping bounds. The cache rebuilds only when Flow SCALE, SPREAD, SWIRL, or render geometry changes. The stable Blob URL decoder, independent clocks, effects order, temporal history, Syphon bootstrap/control path, Spout, and native packaging remain unchanged.
+
+## HUFF Classic Optimization Pass 22
+
+This build reduces Scanline preparation and Canvas2D state overhead without changing band count or visual formulas. Neutral/active DRIFT and SHIFT/SKEW variants are selected before the band loop, stable phase/focus terms are prepared once, and neutral shift states write direct full-cross rectangles. At an exact horizontal angle, HUFF skips the legacy identity transform stack and restores only `globalAlpha`; every nonzero angle retains the established transformed path. The profiler now reports Scanline geometry/preparation reuse and direct/transformed dispatch. Decoder ownership, independent clocks, temporal history, mirror, Syphon, Spout, and native packaging remain unchanged.

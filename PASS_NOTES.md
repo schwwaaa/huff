@@ -1,157 +1,166 @@
-# HUFF Classic Optimization Pass 21 — Pass Notes
+# HUFF Classic Optimization Pass 22 — Pass Notes
 
 **Date:** 2026-08-05  
-**Baseline:** runtime-confirmed Pass 20  
-**Scope:** Flow Warp dynamic-field preparation cache
+**Baseline:** runtime-confirmed Pass 21  
+**Scope:** Scanline preparation and Canvas2D dispatch reduction
 
 ## Summary
 
-Pass 21 continues from the working Pass 20 baseline. It does not change HUFF Classic's video decoder, frame clocks, Canvas2D buffer topology, effect order, temporal history, mirror transport, Syphon, Spout, or native packaging.
+Pass 22 continues directly from the working Pass 21 baseline. It does not alter HUFF Classic's media decoder, independent frame clocks, canvas-buffer topology, temporal history, effect order, mirror transport, Syphon bootstrap/control behavior, Spout, or native packaging.
 
-The pass targets CPU preparation inside `applyFlowWarp()`. Pass 9 already cached static grid geometry by render dimensions and Flow SCALE. Pass 21 extends that persistent-workspace model to terms that remain constant across ordinary frames but were still recalculated for every Flow tile:
-
-- SPREAD-dependent primary noise coordinates;
-- SPREAD-dependent turbulence noise coordinates;
-- SWIRL-dependent radial sine and cosine values;
-- per-tile maximum legal source X/Y positions;
-- repeated workspace property resolution inside the tile loop.
-
-The artistic Flow draw count is unchanged. Noise sampling, animated angle generation, displacement trigonometry, Float32-equivalent quantization, clipping, source rectangles, destination rectangles, temporal PULSE selection, and tile paint order remain intact.
+The pass targets the remaining JavaScript and Canvas2D state overhead around Scanlines. The actual artistic cost—one `drawImage()` for every visible Scanline band—remains unchanged.
 
 ## Runtime changes
 
-### 1. Flow grid generations
+### 1. Scanline preparation variants selected once per pass
 
-`FlowGridWorkspace` now increments a generation counter whenever render width, render height, or Flow SCALE rebuilds the static tile grid.
-
-Dependent caches use this generation to invalidate themselves deterministically.
-
-### 2. Persistent frequency workspace
-
-A new `FlowFieldWorkspace` retains four `Float64Array` fields:
+The previous prepared-band loop re-tested two stable conditions for every requested band:
 
 ```text
-noise X / Y
-TURBULENCE noise X / Y
+DRIFT == 0?
+SHIFT == 0 and SKEW == 0?
 ```
 
-They rebuild only when:
-
-- the Flow grid generation changes; or
-- the effective SPREAD frequency changes.
-
-During ordinary frames with a stable SCALE and SPREAD, the per-tile loop no longer repeats the normalized-coordinate frequency multiplications.
-
-### 3. Persistent SWIRL workspace
-
-The workspace also retains one cosine and one sine per Flow tile.
-
-They rebuild only when:
-
-- the Flow grid generation changes; or
-- SWIRL changes.
-
-With nonzero, stable SWIRL, this removes two radial trigonometric calls per tile per rendered frame. The animated flow-vector cosine and sine remain because their angle changes continuously.
-
-### 4. Cached source clipping bounds
-
-The static grid now records:
+Pass 22 selects one of four preparation paths before entering the band loop:
 
 ```text
-maximum source X = render width  - tile width
-maximum source Y = render height - tile height
+neutral drift + neutral shift
+neutral drift + active shift/skew
+active drift + neutral shift
+active drift + active shift/skew
 ```
 
-The clipping result is unchanged, but the two subtractions no longer occur inside every Flow tile draw.
+This preserves the exact number and order of p5 `noise()` calls for each state while removing repeated state tests from the inner loop.
 
-### 5. Local typed-array references
+### 2. Neutral shift path avoids unnecessary offset work
 
-`applyFlowWarp()` resolves grid and field arrays once per pass. The inner loop no longer repeatedly performs object-property walks for X/Y positions, tile sizes, inward vectors, noise coordinates, SWIRL values, and clipping bounds.
+When both SHIFT and SKEW are neutral, each band is known to use:
 
-### 6. Profiler cache telemetry
+```text
+source X      = 0
+destination X = 0
+cross length  = full rotated cross span
+```
+
+Pass 22 writes those values directly. It no longer calculates zero shift, two offset clamps, and an absolute-value subtraction for every band.
+
+### 3. Phase and focus terms are prepared once
+
+The following terms were identical for every band in one Scanline pass and are now calculated once:
+
+- slow-drift phase;
+- fast-jitter phase;
+- shift-noise phase;
+- focus bias;
+- slow-drift focus scale;
+- focus offset.
+
+The original floating-point association is preserved and validated with exact comparisons.
+
+### 4. Typed arrays are resolved once per pass
+
+The prepared start, length, source-offset, destination-offset, and cross-length arrays are assigned to local references before drawing. The draw loop no longer repeatedly walks the workspace object for each field.
+
+### 5. Direct horizontal dispatch
+
+At an exact Scanline angle of `0`, the old transform sequence was:
+
+```text
+save
+translate(+width/2, +height/2)
+translate(-width/2, -height/2)
+draw bands
+restore
+```
+
+The two translations cancel exactly and rotation is skipped. Pass 22 therefore draws horizontal bands directly, preserving and restoring only `globalAlpha`.
+
+This removes from each active exact-horizontal Scanline frame:
+
+- one Canvas2D `save()`;
+- two Canvas2D `translate()` calls;
+- one Canvas2D `restore()`.
+
+Nonzero-angle Scanlines retain the proven save/translate/rotate/translate/restore path.
+
+### 6. Geometry constants retained in the workspace
+
+Half-width, half-height, negative half-width, negative half-dimension, rotation-state, and direct-horizontal-state are calculated only when render dimensions or Scanline angle change.
+
+### 7. Profiler telemetry
 
 The backtick profiler adds:
 
 ```text
-flow freq    frequency-cache rebuild/reuse count
-flow swirl   SWIRL-cache rebuild/reuse count
+scan geom   geometry rebuild / reuse
+scan prep   prepared-band rebuild / reuse
+scan path   direct-horizontal / transformed frames
 ```
 
-The existing Flow tile, draw, and grid readings remain.
+The existing band and draw counts remain.
 
 ## Structural reduction
 
-For `N` Flow tiles during a stable frame:
+For `N` requested bands, Pass 22 moves stable phase/focus preparation outside the loop and removes drift/shift state tests from ordinary band iterations.
 
-```text
-SPREAD coordinate multiplication:
-  without TURBULENCE: 2 × N per frame → 0
-  with TURBULENCE:    6 × N per frame → 0
+In the common neutral SHIFT/SKEW state, it also removes per-band offset clamps and `Math.abs()` work.
 
-SWIRL radial trigonometry when SWIRL != 0:
-  2 × N calls per frame → 0
+At exact horizontal angle, the renderer avoids four Canvas2D state-stack/transform calls per active Scanline frame.
 
-source clipping-bound subtraction:
-  2 × N per frame → 0
-```
+These are structural reductions, not claimed target-platform FPS measurements.
 
-The cache work moves to explicit control/geometry invalidation rather than recurring every render frame.
+## Visual and timing behavior preserved
 
-## Memory cost
-
-The new retained fields use approximately 56 bytes per Flow tile:
-
-```text
-6 Float64 fields = 48 bytes
-2 Int32 bounds   =  8 bytes
-```
-
-Representative raw workspace sizes:
-
-- 1080p at SCALE 80: roughly 336 tiles, about 18.4 KiB;
-- 1080p at minimum SCALE 8: roughly 32,400 tiles, about 1.73 MiB.
-
-This is bounded, reusable memory traded for lower repeated CPU work. No full-resolution image surface was added.
+- Slow drift and fast jitter noise coordinates
+- Noise call count and order
+- Focus bias
+- Roll position
+- Gap snapping
+- Shift and skew calculation
+- Band clipping
+- Source and destination rectangles
+- Band draw count
+- Band paint order
+- Alpha and Scanline priority
+- Static prepared-band caching
+- Scanline phase progression
+- Glitch/Scanline priority routing
 
 ## Junkpile influence
 
-Pass 21 applies Junkpile's persistent-resource model to the Classic web renderer:
+Pass 22 continues the resource discipline demonstrated by Junkpile's render examples:
 
-- retain typed workspaces;
-- rebuild only on explicit dimension or parameter invalidation;
-- keep ordinary frames allocation-free;
-- expose cache behavior through diagnostics;
-- preserve the instrument's visible behavior.
+- decide pipeline variants before the hot loop;
+- keep stable geometry and state in persistent workspaces;
+- avoid repeated general-purpose state setup;
+- retain explicit telemetry for rebuild and dispatch behavior;
+- do not replace a stable renderer merely to gain a theoretical optimization.
 
-No WebGL or wgpu renderer was imported.
+No WebGL or wgpu renderer was imported into HUFF Classic.
 
 ## Deliberately unchanged
 
 - File → Blob URL → p5 `createVideo()` decoding
 - p5 render clock
 - independent transport, mirror, and profiler clocks
-- source lifecycle from Pass 13S
-- Flow noise calls and animated time coordinates
-- Flow animated vector cosine/sine
-- Flow PULSE history selection
-- Flow tile count and `drawImage()` count
-- Float32 displacement quantization
-- source/destination clipping and tile paint order
-- all other effects
-- canvas mirror transport
+- Pass 13S lifecycle cleanup
+- canvas buffer allocation and resize behavior
+- temporal history capture and sampling
+- all non-Scanline effects
+- JPEG mirror transport
 - Pass 16S Syphon bootstrap repair
 - Pass 19 Syphon control-plane behavior
 - Spout
 - Rust/Tauri source
-- bundled `Syphon.framework`
+- bundled universal `Syphon.framework`
 
 ## Expected benefit
 
-The largest benefit should appear when Flow uses:
+The strongest benefit should appear with:
 
-- a small SCALE, producing many tiles;
-- nonzero SWIRL;
-- nonzero TURBULENCE;
-- stable SCALE, SPREAD, and SWIRL controls over multiple frames.
+- horizontal Scanlines;
+- high band counts;
+- neutral SHIFT/SKEW;
+- stable Scanline controls that reuse prepared bands.
 
-No target-platform FPS claim is made. The irreducible Flow tile draws and animated noise/trigonometry remain.
+The irreducible cost remains one Canvas2D `drawImage()` per visible band.

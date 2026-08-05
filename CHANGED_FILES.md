@@ -1,40 +1,38 @@
-# HUFF Classic Pass 21 — Changed Files
+# HUFF Classic Pass 22 — Changed Files
 
-## Runtime
+## Runtime files
 
 ### `src/effects.js`
 
-- Added Flow grid generation tracking.
-- Added cached maximum source X/Y bounds.
-- Added reusable `FlowFieldWorkspace` typed arrays.
-- Cached SPREAD-derived primary and turbulence noise coordinates.
-- Cached SWIRL-derived radial sine/cosine values.
-- Resolved Flow typed-array references once per pass.
-- Added profiler-gated frequency and SWIRL cache counters.
+- Added Scanline drift/shift preparation variants selected before the band loop.
+- Cached phase and focus scalars per Scanline pass.
+- Used direct zero-offset rectangles for neutral SHIFT/SKEW.
+- Resolved prepared typed arrays once before dispatch.
+- Added exact-horizontal Canvas2D dispatch without transform-stack operations.
+- Cached Scanline transform constants by geometry.
+- Added profiler-gated Scanline geometry, preparation, and path telemetry.
 
 ### `src/canvas.js`
 
-- Added Flow frequency/SWIRL cache telemetry snapshots.
-- Added profiler rows for cache rebuild/reuse counts.
-
-## Validation and metadata
-
-### `scripts/validate-pass21.mjs`
-
-- Added cache-key, invalidation, floating-point field, noise-coordinate, clipping, and ordered draw-rectangle equivalence tests.
+- Added profiler snapshot/delta/display support for the new Scanline telemetry.
+- No rendering, decoder, scheduler, mirror, or output clock was changed.
 
 ### `package.json`
 
-- Added `npm run validate:pass21`.
+- Added `npm run validate:pass22`.
 
-### `README.md`
+### `scripts/validate-pass22.mjs`
 
-- Added the Pass 21 optimization summary.
+- Added deterministic equivalence validation for all four preparation variants.
+- Added exact noise-call-count validation.
+- Added exact prepared-band field comparison.
+- Added zero-angle transform-cancellation validation.
+- Added source-boundary assertions for the stable decoder and profiler additions.
 
-## Documentation
+## Documentation files
 
 - `PASS_NOTES.md`
-- `FLOW_DYNAMIC_FIELD_CACHE_AUDIT.md`
+- `SCANLINE_DISPATCH_STATE_AUDIT.md`
 - `CHANGED_FILES.md`
 - `TESTING_CHECKLIST.md`
 - `VALIDATION_REPORT.md`
@@ -43,4 +41,18 @@
 - `OPTIMIZATION_ROADMAP.md`
 - `GIT_COMMIT_MESSAGE.md`
 - `DOCUMENTATION_INDEX.md`
-- `HUFF_CLASSIC_OPTIMIZATION_PASS_21.txt`
+- `HUFF_CLASSIC_OPTIMIZATION_PASS_22.txt`
+- `README.md`
+
+## Confirmed unchanged runtime areas
+
+- stable Blob URL decoder path;
+- frame scheduling;
+- media lifecycle;
+- canvas buffer topology;
+- temporal ring;
+- Glitch, Flow, Feedback, Symmetry, Solarize, and Luma algorithms;
+- mirror transport;
+- Syphon bootstrap and native publication;
+- Spout;
+- bundled framework binary.

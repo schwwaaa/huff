@@ -2,6 +2,23 @@
 
 This changelog tracks the optimization series for the legacy Tauri v1 + p5.js/Canvas2D edition. It intentionally excludes the native-wgpu HUFF project.
 
+## Pass 22 — Scanline preparation specialization and horizontal dispatch
+
+**Date:** 2026-08-05  
+**Status:** implementation and deterministic validation complete; target-runtime comparison against Pass 21 pending
+
+- Selected four Scanline preparation variants outside the band loop for neutral/active DRIFT and SHIFT-SKEW states.
+- Preserved exact p5 noise call count and order for every variant.
+- Cached slow, fast, and shift phase values plus focus bias/scale/offset once per pass.
+- Prepared direct zero-offset full-cross rectangles when SHIFT and SKEW are neutral.
+- Resolved prepared typed arrays once before Canvas2D dispatch.
+- Cached Scanline transform constants by render dimensions and angle.
+- Added an exact-horizontal path that avoids `save()`, two `translate()` calls, and `restore()`, while restoring only `globalAlpha`.
+- Retained the established transformed path for every nonzero angle.
+- Added profiler-only geometry rebuild/reuse, prepared-band rebuild/reuse, and direct/transformed path telemetry.
+- Added `npm run validate:pass22` with 12,000 cases, 760,519 bands, and 3,802,595 exact field comparisons.
+- Preserved Blob URL decoding, independent clocks, temporal history, Pass 16S Syphon bootstrap, Pass 19 Syphon control behavior, Spout, Rust/Tauri source, and framework packaging.
+
 ## Pass 21 — Flow dynamic-field preparation cache
 
 **Date:** 2026-08-05  

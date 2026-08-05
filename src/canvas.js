@@ -2434,6 +2434,12 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
       frames: t.frames || 0,
       bands: t.bands || 0,
       drawCalls: t.drawCalls || 0,
+      geometryRebuilds: t.geometryRebuilds || 0,
+      geometryReuses: t.geometryReuses || 0,
+      bandRebuilds: t.bandRebuilds || 0,
+      bandReuses: t.bandReuses || 0,
+      directFrames: t.directFrames || 0,
+      transformedFrames: t.transformedFrames || 0,
     };
   }
 
@@ -2541,6 +2547,12 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
       const scanlineFramesDelta = scanlineNow.frames - lastScanlineTelemetry.frames;
       const scanlineBandsDelta = scanlineNow.bands - lastScanlineTelemetry.bands;
       const scanlineDrawCallsDelta = scanlineNow.drawCalls - lastScanlineTelemetry.drawCalls;
+      const scanlineGeometryRebuildDelta = scanlineNow.geometryRebuilds - lastScanlineTelemetry.geometryRebuilds;
+      const scanlineGeometryReuseDelta = scanlineNow.geometryReuses - lastScanlineTelemetry.geometryReuses;
+      const scanlineBandRebuildDelta = scanlineNow.bandRebuilds - lastScanlineTelemetry.bandRebuilds;
+      const scanlineBandReuseDelta = scanlineNow.bandReuses - lastScanlineTelemetry.bandReuses;
+      const scanlineDirectDelta = scanlineNow.directFrames - lastScanlineTelemetry.directFrames;
+      const scanlineTransformedDelta = scanlineNow.transformedFrames - lastScanlineTelemetry.transformedFrames;
       const scanlineBandsAvg = scanlineFramesDelta > 0 ? scanlineBandsDelta / scanlineFramesDelta : 0;
       const scanlineDrawCallsAvg = scanlineFramesDelta > 0 ? scanlineDrawCallsDelta / scanlineFramesDelta : 0;
       const flowNow = flowTelemetrySnapshot();
@@ -2620,6 +2632,9 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
         'gl ring    ' + `${glitchRingRebuildDelta}/${glitchRingReuseDelta}`.padStart(6) + ' rebuild/reuse\n' +
         'scan bands ' + scanlineBandsAvg.toFixed(0).padStart(6) + ' / frame\n' +
         'scan draws ' + scanlineDrawCallsAvg.toFixed(0).padStart(6) + ' / frame\n' +
+        'scan geom  ' + `${scanlineGeometryRebuildDelta}/${scanlineGeometryReuseDelta}`.padStart(6) + ' rebuild/reuse\n' +
+        'scan prep  ' + `${scanlineBandRebuildDelta}/${scanlineBandReuseDelta}`.padStart(6) + ' rebuild/reuse\n' +
+        'scan path  ' + `${scanlineDirectDelta}/${scanlineTransformedDelta}`.padStart(6) + ' direct/xform\n' +
         'flow tiles ' + flowTilesAvg.toFixed(0).padStart(6) + ' / frame\n' +
         'flow draws ' + flowDrawCallsAvg.toFixed(0).padStart(6) + ' / frame\n' +
         'flow grid  ' + `${flowGridRebuildDelta}/${flowGridReuseDelta}`.padStart(6) + ' rebuild/reuse\n' +

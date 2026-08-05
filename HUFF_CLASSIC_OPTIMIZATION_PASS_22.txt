@@ -1,0 +1,25 @@
+HUFF Classic Optimization Pass 22
+Date: 2026-08-05
+Baseline: user-confirmed working Pass 21
+
+Focus:
+- Scanline drift/shift preparation specialization
+- per-pass phase and focus scalar caching
+- neutral-shift direct rectangle preparation
+- exact-horizontal Canvas2D dispatch
+- Scanline geometry/preparation/path telemetry
+
+Preserved:
+- Blob URL + p5 createVideo decoder
+- independent frame clocks
+- visual formulas and noise order
+- one artistic draw per visible band
+- temporal history
+- mirror, Syphon, and Spout behavior
+- Rust/Tauri source and framework packaging
+
+Validation:
+- 12,000 deterministic cases
+- 760,519 bands
+- 3,802,595 exact field comparisons
+- all inherited validators passed
