@@ -1,0 +1,8 @@
+HUFF Classic Optimization Pass 24
+Stage Contract Registry
+
+- Adds immutable machine-readable metadata for the exact Pass 22 pipeline.
+- Adds complete Pass 22 src and src-tauri file manifests.
+- Changes no loaded runtime file, effect, control, preset, clock, buffer, or output.
+- Flow remains byte-for-byte Pass 22 and frozen.
+- Prepares Pass 25 validated serial recipe work.

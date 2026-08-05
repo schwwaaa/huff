@@ -1,13 +1,8 @@
-# HUFF Classic Pass 23 — Baseline Integrity Manifest
+# HUFF Classic Pass 24 — Baseline Integrity Manifest
 
-This package was created directly from the user-supplied archive:
+The authoritative behavioral runtime remains the user-supplied Pass 22 archive used to create Pass 23.
 
-```text
-huff-classic-optimization-pass-22-documented(2).zip
-SHA-256: 2fd2d0a53c1cb684458af455ef3337f300852c1c6b5ea2de58730bf39e38bcb6
-```
-
-## Exact retained runtime hashes
+## Exact retained core hashes
 
 ```text
 src/canvas.js
@@ -23,16 +18,23 @@ package.json
 cf608e2bcdf638c613e9480f2df01d46dcadde138be4696f7ae7943a47640b2d
 ```
 
-## Exact retained tree hashes
-
-The tree hashes below are produced by hashing the sorted `sha256sum` manifest for every file under the named directory.
+## Complete retained file manifests
 
 ```text
-src tree
-bb672b6c79f13ccedd95fa32161e97a261cda1f2c9c6036ec20fa8dfae60c557
-
-src-tauri tree
-c37da23ce4ea7c554cff81f5024496d6fccdef6d43a66cda7941444126506dc8
+baseline/pass22-src.sha256
+baseline/pass22-src-tauri.sha256
 ```
 
-No Pass 23 runtime file differs from the supplied Pass 22 baseline.
+The manifests record every file or symbolic-link target under the authoritative Pass 22 `src/` and `src-tauri/` trees. `scripts/validate-pass24.mjs` verifies every entry and rejects missing, changed, or additional files.
+
+## Pass 24 additions outside the runtime trees
+
+```text
+pipeline/stage-contracts.mjs
+baseline/pass22-src.sha256
+baseline/pass22-src-tauri.sha256
+scripts/validate-pass24.mjs
+Pass 24 documentation
+```
+
+No Pass 24 file is imported or loaded by the application runtime.

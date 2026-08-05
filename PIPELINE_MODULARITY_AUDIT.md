@@ -295,3 +295,8 @@ Broader feature expansion should resume only after the infrastructure sequence i
 HUFF Classic can support modest modularity in Canvas2D, but only as a constrained serial recipe system. The current buffer topology supports validated stage ordering and named insertion zones. It does not safely support a general node graph or arbitrary parallel processing.
 
 Pass 23 changes no runtime code. Pass 22 remains the exact behavioral baseline.
+
+
+## Pass 24 implementation status
+
+Pass 24 implements the proposed registry as detached immutable metadata in `pipeline/stage-contracts.mjs`. It does not load the registry into the renderer. The fixed Pass 22 route and all runtime files remain unchanged. Runtime recipe execution remains deferred to Pass 25.

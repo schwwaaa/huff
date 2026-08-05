@@ -1,34 +1,28 @@
-# HUFF Classic Optimization Roadmap — After Pass 23
+# HUFF Classic Optimization Roadmap — After Pass 24
 
 ## Authoritative rule
 
-Pass 22 is the exact behavioral baseline. Pass 23 changes documentation only.
+Pass 22 remains the exact behavioral baseline. Passes 23 and 24 establish modularity documentation and machine-readable contracts without changing runtime behavior.
 
-Flow is frozen and excluded from optimization or feature work during the infrastructure sequence.
-
-## Pass 24 — Stage Contract Registry
-
-- add internal metadata for existing stages;
-- preserve the exact fixed Pass 22 route;
-- add deterministic stage-order and buffer-contract validation;
-- no user controls;
-- no effect algorithm changes;
-- no Flow changes.
+Flow is frozen throughout the infrastructure sequence.
 
 ## Pass 25 — Validated Serial Recipe Foundation
 
-- execute the existing route through a validated recipe structure;
-- preserve default dispatch and buffer swaps exactly;
-- reject illegal routes before rendering;
-- no user-facing routing;
-- no Flow changes.
+- execute the existing fixed route through a validated recipe structure;
+- validate recipes before the first affected frame;
+- preserve exact Pass 22 dispatch order and buffer swaps;
+- preserve current front-stage priority and Global Mix positions;
+- provide no user-facing routing controls;
+- allocate no additional full-resolution buffer;
+- make no Flow changes.
 
 ## Pass 26 — Existing Front-Stage Priority Formalization
 
-- formalize the existing Glitch/Scanline priority relationship;
-- preserve all current defaults and presets;
-- avoid new routes that require another full-resolution buffer;
-- no Flow changes.
+- formalize the current Glitch/Luma and Scanline ordering group;
+- preserve scan, glitch, neutral, and pulse behavior;
+- preserve all defaults and presets;
+- reject routes requiring parallel branches or another full-resolution buffer;
+- make no Flow changes.
 
 ## Pass 27 — Capability and Stability Instrumentation
 
@@ -54,6 +48,6 @@ Flow is frozen and excluded from optimization or feature work during the infrast
 - Linux codec and package matrix;
 - final known-issues and capability documentation.
 
-## Feature work
+## Deferred feature work
 
-New effects and Flow feature changes remain deferred until the infrastructure and release sequence is complete.
+New effects and Flow changes remain deferred until infrastructure and release work are complete.

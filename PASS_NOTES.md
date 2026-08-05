@@ -1,46 +1,46 @@
-# HUFF Classic Optimization Pass 23 — Pass Notes
+# HUFF Classic Optimization Pass 24 — Pass Notes
 
 **Date:** 2026-08-05  
-**Authoritative baseline:** user-supplied Pass 22 archive  
-**Scope:** constrained pipeline modularity audit  
-**Runtime changes:** none
-
-## Decision
-
-All experimental Flow branches after Pass 22 are discarded and are not ancestors of this package.
-
-Pass 22 is the only authoritative runtime baseline.
-
-Flow is frozen. Pass 23 does not modify Flow or any other effect.
+**Authoritative runtime baseline:** user-supplied Pass 22 archive  
+**Scope:** immutable stage contract registry  
+**Runtime behavior changes:** none
 
 ## Work completed
 
-- mapped the exact Pass 22 render order;
-- classified stages by buffer and source ownership;
-- documented legal serial modularity boundaries;
-- documented routes that would require additional full-resolution storage;
-- defined a constrained recipe model rather than an unrestricted graph;
-- defined mandatory exact-parity gates for future structural passes;
-- established the next infrastructure sequence.
+- added a machine-readable resource registry;
+- added 12 named serial pipeline zones matching Pass 22;
+- added immutable contracts for 11 existing runtime stages;
+- recorded the existing Glitch/Luma versus Scanline priority relationship;
+- recorded the four existing Global Mix insertion positions;
+- recorded Feedback snapshot/clear ownership;
+- recorded Flow and Symmetry ping-pong ownership;
+- explicitly froze Flow's algorithm and routing contract;
+- added complete Pass 22 source and native file manifests;
+- added deterministic registry and route validation.
 
 ## Runtime preservation
 
-The following are byte-for-byte identical to the user-supplied Pass 22 archive:
+The registry is deliberately detached from the application runtime in Pass 24.
 
-- complete `src/` tree;
-- complete `src-tauri/` tree;
-- `src/canvas.js`;
-- `src/effects.js`;
-- `src/index.html`;
-- controls and presets;
-- `package.json`;
-- Flow implementation and controls;
-- media loading and lifecycle;
-- independent render, transport, mirror, and profiler clocks;
-- FrameRing capture and storage;
-- gCur / gBuf / gScratch topology;
-- mirror, Syphon, and Spout paths.
+The following remain byte-for-byte identical to the authoritative Pass 22 runtime:
+
+```text
+complete src/ tree
+complete src-tauri/ tree
+src/canvas.js
+src/effects.js
+src/index.html
+package.json
+controls
+presets
+Flow
+media loading and lifecycle
+render / transport / mirror / profiler clocks
+FrameRing
+gCur / gBuf / gScratch
+mirror / Syphon / Spout
+```
 
 ## Result
 
-This pass is intentionally documentation-only. It provides the technical boundary for Pass 24 without risking another visual regression.
+Pass 24 establishes enforceable ownership metadata without risking visual or pacing regressions. Pass 25 can now build a validated serial recipe around the existing route rather than inferring buffer behavior from effect names.

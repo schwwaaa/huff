@@ -1,5 +1,18 @@
 # HUFF Classic Optimization Changelog
 
+## Pass 24 — Stage contract registry
+
+**Date:** 2026-08-05  
+**Status:** metadata and deterministic validation complete; loaded runtime unchanged
+
+- Added immutable machine-readable contracts for the exact Pass 22 pipeline stages.
+- Registered the existing resources, 12 serial zones, stage classes, reads, writes, scratch ownership, destination clearing, and buffer swaps.
+- Recorded the existing Glitch/Luma versus Scanline priority contract and four Global Mix positions.
+- Marked Flow frozen at its exact Pass 22 input, FrameRing dependency, output, and ping-pong swap contract.
+- Added complete Pass 22 `src/` and `src-tauri/` file manifests.
+- Added `scripts/validate-pass24.mjs` for contract, route, integrity, and runtime-inertness validation.
+- Kept the registry detached from application entrypoints; no rendering, control, preset, clock, decoder, buffer, output, or native behavior changed.
+
 This changelog tracks the optimization series for the legacy Tauri v1 + p5.js/Canvas2D edition. It intentionally excludes the native-wgpu HUFF project.
 
 ## Pass 22 — Scanline preparation specialization and horizontal dispatch
