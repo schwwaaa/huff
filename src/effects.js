@@ -31,6 +31,8 @@
 //    instead of repeating helper/context/ring lookups for every tile draw.
 //  - Pass 20 removes p5 map() dispatch from active Scanline/Glitch/persistence
 //    hot paths and adds profiler-only Scanline/Flow draw-count telemetry.
+//  - Pass 21 caches Flow noise-coordinate products, per-tile source clip bounds,
+//    and radial swirl sin/cos values in persistent typed workspaces.
 
 // ─── Temporal ring drawing ───────────────────────────────────────────────────
 // FrameRing stores reusable canvas snapshots, so historical frames remain
@@ -840,10 +842,13 @@ class FlowGridWorkspace {
     this.cell = 0;
     this.count = 0;
     this.capacity = 0;
+    this.generation = 0;
     this.x = new Int32Array(0);
     this.y = new Int32Array(0);
     this.tileW = new Int32Array(0);
     this.tileH = new Int32Array(0);
+    this.maxSourceX = new Int32Array(0);
+    this.maxSourceY = new Int32Array(0);
     this.nx = new Float64Array(0);
     this.ny = new Float64Array(0);
     this.inwardX = new Float64Array(0);
@@ -860,6 +865,8 @@ class FlowGridWorkspace {
     this.y = new Int32Array(cap);
     this.tileW = new Int32Array(cap);
     this.tileH = new Int32Array(cap);
+    this.maxSourceX = new Int32Array(cap);
+    this.maxSourceY = new Int32Array(cap);
     this.nx = new Float64Array(cap);
     this.ny = new Float64Array(cap);
     this.inwardX = new Float64Array(cap);
@@ -895,6 +902,8 @@ class FlowGridWorkspace {
         this.y[i] = y;
         this.tileW[i] = Math.min(cell, width - x);
         this.tileH[i] = Math.min(cell, height - y);
+        this.maxSourceX[i] = width - this.tileW[i];
+        this.maxSourceY[i] = height - this.tileH[i];
         this.nx[i] = (x + 0.5 * cell) / width * 2.0;
         this.ny[i] = (y + 0.5 * cell) / height * 2.0;
         this.inwardX[i] = vx / length;
@@ -903,17 +912,100 @@ class FlowGridWorkspace {
       }
     }
     this.count = required;
+    this.generation++;
+    return true;
+  }
+}
+
+// Dynamic Flow terms that depend on stable grid geometry plus slowly changing
+// controls. Keeping them in reusable typed arrays follows the same persistent-
+// resource discipline used throughout the Junkpile examples and avoids repeating
+// frequency multiplication and radial sin/cos work for every tile on every frame.
+class FlowFieldWorkspace {
+  constructor() {
+    this.capacity = 0;
+    this.frequencyGeneration = -1;
+    this.frequency = NaN;
+    this.swirlGeneration = -1;
+    this.swirl = NaN;
+    this.noiseX = new Float64Array(0);
+    this.noiseY = new Float64Array(0);
+    this.turbulenceX = new Float64Array(0);
+    this.turbulenceY = new Float64Array(0);
+    this.swirlCos = new Float64Array(0);
+    this.swirlSin = new Float64Array(0);
+  }
+
+  _ensureCapacity(required) {
+    if (this.capacity >= required) return;
+    let cap = Math.max(32, this.capacity || 0);
+    while (cap < required) cap *= 2;
+    this.capacity = cap;
+    this.noiseX = new Float64Array(cap);
+    this.noiseY = new Float64Array(cap);
+    this.turbulenceX = new Float64Array(cap);
+    this.turbulenceY = new Float64Array(cap);
+    this.swirlCos = new Float64Array(cap);
+    this.swirlSin = new Float64Array(cap);
+    this.frequencyGeneration = -1;
+    this.swirlGeneration = -1;
+  }
+
+  configureFrequency(grid, frequency) {
+    this._ensureCapacity(grid.count);
+    if (this.frequencyGeneration === grid.generation && this.frequency === frequency) return false;
+    this.frequencyGeneration = grid.generation;
+    this.frequency = frequency;
+    const nx = grid.nx;
+    const ny = grid.ny;
+    const noiseX = this.noiseX;
+    const noiseY = this.noiseY;
+    const turbulenceX = this.turbulenceX;
+    const turbulenceY = this.turbulenceY;
+    for (let i = 0; i < grid.count; i++) {
+      const fx = nx[i] * frequency;
+      const fy = ny[i] * frequency;
+      noiseX[i] = fx;
+      noiseY[i] = fy;
+      // Preserve the original left-associated nx * frequency * 4 operation.
+      turbulenceX[i] = fx * 4;
+      turbulenceY[i] = fy * 4;
+    }
+    return true;
+  }
+
+  configureSwirl(grid, swirl) {
+    this._ensureCapacity(grid.count);
+    if (this.swirlGeneration === grid.generation && this.swirl === swirl) return false;
+    this.swirlGeneration = grid.generation;
+    this.swirl = swirl;
+    if (swirl === 0) return true;
+    const radialAngle = grid.radialAngle;
+    const swirlCos = this.swirlCos;
+    const swirlSin = this.swirlSin;
+    for (let i = 0; i < grid.count; i++) {
+      const angle = radialAngle[i] * swirl;
+      swirlCos[i] = Math.cos(angle);
+      swirlSin[i] = Math.sin(angle);
+    }
     return true;
   }
 }
 
 const _flowGrid = new FlowGridWorkspace();
+const _flowField = new FlowFieldWorkspace();
+let _flowLastFrequencyRebuilt = false;
+let _flowLastSwirlRebuilt = false;
 const _flowTelemetry = window.__huffFlowTelemetry || {
   frames: 0,
   tiles: 0,
   drawCalls: 0,
   gridRebuilds: 0,
   gridReuses: 0,
+  frequencyRebuilds: 0,
+  frequencyReuses: 0,
+  swirlRebuilds: 0,
+  swirlReuses: 0,
 };
 window.__huffFlowTelemetry = _flowTelemetry;
 
@@ -924,6 +1016,10 @@ function _flowProfileFrame(tileCount, gridRebuilt) {
   _flowTelemetry.drawCalls += tileCount;
   if (gridRebuilt) _flowTelemetry.gridRebuilds++;
   else _flowTelemetry.gridReuses++;
+  if (_flowLastFrequencyRebuilt) _flowTelemetry.frequencyRebuilds++;
+  else _flowTelemetry.frequencyReuses++;
+  if (_flowLastSwirlRebuilt) _flowTelemetry.swirlRebuilds++;
+  else _flowTelemetry.swirlReuses++;
 }
 
 function applyFlowWarp(src, dst, strength = 6, scale = 80, pulse = 0, implode = 0, speed = 1, turb = 0, swirl = 0, spread = 1) {
@@ -956,34 +1052,57 @@ function applyFlowWarp(src, dst, strength = 6, scale = 80, pulse = 0, implode = 
   // SPREAD scales the flow-field noise frequency: low = large coherent zones all
   // drifting together (watery), high = many small independent eddies.
   const freq = 0.9 * Math.max(0.05, spread);
+  _flowLastFrequencyRebuilt = _flowField.configureFrequency(_flowGrid, freq);
+  _flowLastSwirlRebuilt = _flowField.configureSwirl(_flowGrid, swirl);
+
   const turbulenceMix = turb * 0.5;
+  const turbulenceBaseMix = 1 - turbulenceMix;
   const implodeScale = off * implode;
+  const angleScale = TWO_PI * 2.0;
+  const turbulenceTimeX = t * 1.3;
+  const turbulenceTimeY = t * 0.9;
 
-  for (let i = 0; i < _flowGrid.count; i++) {
-    const x = _flowGrid.x[i];
-    const y = _flowGrid.y[i];
-    const nx = _flowGrid.nx[i];
-    const ny = _flowGrid.ny[i];
+  // Resolve reusable typed arrays once per pass rather than repeatedly walking
+  // workspace properties inside the per-tile loop.
+  const count = _flowGrid.count;
+  const xs = _flowGrid.x;
+  const ys = _flowGrid.y;
+  const tileWidths = _flowGrid.tileW;
+  const tileHeights = _flowGrid.tileH;
+  const maxSourceXs = _flowGrid.maxSourceX;
+  const maxSourceYs = _flowGrid.maxSourceY;
+  const inwardXs = _flowGrid.inwardX;
+  const inwardYs = _flowGrid.inwardY;
+  const noiseXs = _flowField.noiseX;
+  const noiseYs = _flowField.noiseY;
+  const turbulenceXs = _flowField.turbulenceX;
+  const turbulenceYs = _flowField.turbulenceY;
+  const swirlCosines = _flowField.swirlCos;
+  const swirlSines = _flowField.swirlSin;
 
-    let a = noise(nx * freq + t, ny * freq) * TWO_PI * 2.0;
+  for (let i = 0; i < count; i++) {
+    const x = xs[i];
+    const y = ys[i];
+
+    let a = noise(noiseXs[i] + t, noiseYs[i]) * angleScale;
     if (turb > 0) {
-      const a2 = noise(nx * freq * 4 + t * 1.3 + 100, ny * freq * 4 + t * 0.9) * TWO_PI * 2.0;
-      a = a * (1 - turbulenceMix) + a2 * turbulenceMix;
+      const a2 = noise(turbulenceXs[i] + turbulenceTimeX + 100, turbulenceYs[i] + turbulenceTimeY) * angleScale;
+      a = a * turbulenceBaseMix + a2 * turbulenceMix;
     }
 
     let dx2 = Math.cos(a) * off;
     let dy2 = Math.sin(a) * off;
 
     if (implode !== 0) {
-      dx2 += _flowGrid.inwardX[i] * implodeScale;
-      dy2 += _flowGrid.inwardY[i] * implodeScale;
+      dx2 += inwardXs[i] * implodeScale;
+      dy2 += inwardYs[i] * implodeScale;
     }
 
     if (swirl !== 0) {
-      const ang = _flowGrid.radialAngle[i] * swirl;
-      const cs  = Math.cos(ang), sn = Math.sin(ang);
-      const rx  = dx2 * cs - dy2 * sn;
-      const ry  = dx2 * sn + dy2 * cs;
+      const cs = swirlCosines[i];
+      const sn = swirlSines[i];
+      const rx = dx2 * cs - dy2 * sn;
+      const ry = dx2 * sn + dy2 * cs;
       dx2 = rx; dy2 = ry;
     }
 
@@ -992,10 +1111,10 @@ function applyFlowWarp(src, dst, strength = 6, scale = 80, pulse = 0, implode = 
     // not shift at floating-point boundaries.
     dx2 = Math.fround(dx2);
     dy2 = Math.fround(dy2);
-    const tileW = _flowGrid.tileW[i];
-    const tileH = _flowGrid.tileH[i];
-    const sx2   = Math.max(0, Math.min(w - tileW, Math.floor(x + dx2)));
-    const sy2   = Math.max(0, Math.min(h - tileH, Math.floor(y + dy2)));
+    const tileW = tileWidths[i];
+    const tileH = tileHeights[i];
+    const sx2 = Math.max(0, Math.min(maxSourceXs[i], Math.floor(x + dx2)));
+    const sy2 = Math.max(0, Math.min(maxSourceYs[i], Math.floor(y + dy2)));
     dctx.drawImage(srcEl, sx2, sy2, tileW, tileH, x, y, tileW, tileH);
   }
   _flowProfileFrame(_flowGrid.count, flowGridRebuilt);

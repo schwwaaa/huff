@@ -2445,6 +2445,10 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
       drawCalls: t.drawCalls || 0,
       gridRebuilds: t.gridRebuilds || 0,
       gridReuses: t.gridReuses || 0,
+      frequencyRebuilds: t.frequencyRebuilds || 0,
+      frequencyReuses: t.frequencyReuses || 0,
+      swirlRebuilds: t.swirlRebuilds || 0,
+      swirlReuses: t.swirlReuses || 0,
     };
   }
 
@@ -2545,6 +2549,10 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
       const flowDrawCallsDelta = flowNow.drawCalls - lastFlowTelemetry.drawCalls;
       const flowGridRebuildDelta = flowNow.gridRebuilds - lastFlowTelemetry.gridRebuilds;
       const flowGridReuseDelta = flowNow.gridReuses - lastFlowTelemetry.gridReuses;
+      const flowFrequencyRebuildDelta = flowNow.frequencyRebuilds - lastFlowTelemetry.frequencyRebuilds;
+      const flowFrequencyReuseDelta = flowNow.frequencyReuses - lastFlowTelemetry.frequencyReuses;
+      const flowSwirlRebuildDelta = flowNow.swirlRebuilds - lastFlowTelemetry.swirlRebuilds;
+      const flowSwirlReuseDelta = flowNow.swirlReuses - lastFlowTelemetry.swirlReuses;
       const flowTilesAvg = flowFramesDelta > 0 ? flowTilesDelta / flowFramesDelta : 0;
       const flowDrawCallsAvg = flowFramesDelta > 0 ? flowDrawCallsDelta / flowFramesDelta : 0;
       const syphonNow = syphonTelemetrySnapshot();
@@ -2615,6 +2623,8 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
         'flow tiles ' + flowTilesAvg.toFixed(0).padStart(6) + ' / frame\n' +
         'flow draws ' + flowDrawCallsAvg.toFixed(0).padStart(6) + ' / frame\n' +
         'flow grid  ' + `${flowGridRebuildDelta}/${flowGridReuseDelta}`.padStart(6) + ' rebuild/reuse\n' +
+        'flow freq  ' + `${flowFrequencyRebuildDelta}/${flowFrequencyReuseDelta}`.padStart(6) + ' rebuild/reuse\n' +
+        'flow swirl ' + `${flowSwirlRebuildDelta}/${flowSwirlReuseDelta}`.padStart(6) + ' rebuild/reuse\n' +
         '──────────────────────\n' +
         (rows.length ? rows.map(function (r) { return fmt(r[0], r[1]); }).join('\n')
                      : '(no effects active)') + '\n' +

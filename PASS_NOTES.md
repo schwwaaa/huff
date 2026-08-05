@@ -1,102 +1,157 @@
-# HUFF Classic Optimization Pass 20 — Pass Notes
+# HUFF Classic Optimization Pass 21 — Pass Notes
 
 **Date:** 2026-08-05  
-**Baseline:** committed and runtime-confirmed Pass 19  
-**Scope:** direct hot-path arithmetic and profiler-only Canvas2D ceiling telemetry
+**Baseline:** runtime-confirmed Pass 20  
+**Scope:** Flow Warp dynamic-field preparation cache
 
 ## Summary
 
-Pass 20 continues from the working Pass 19 source without changing media decoding, frame scheduling, buffer ownership, effect order, or native output behavior.
+Pass 21 continues from the working Pass 20 baseline. It does not change HUFF Classic's video decoder, frame clocks, Canvas2D buffer topology, effect order, temporal history, mirror transport, Syphon, Spout, or native packaging.
 
-The pass removes p5 `map()` dispatch from active persistence, Scanline, and Glitch paths. p5's `map()` implementation performs parameter validation before evaluating a simple range conversion. In the Glitch jitter loop and moving Scanline preparation, that framework dispatch could occur hundreds of times per rendered frame.
+The pass targets CPU preparation inside `applyFlowWarp()`. Pass 9 already cached static grid geometry by render dimensions and Flow SCALE. Pass 21 extends that persistent-workspace model to terms that remain constant across ordinary frames but were still recalculated for every Flow tile:
 
-The replacement expressions use the same operation order as p5 `map()` for a `[0, 1]` input range. Deterministic validation compared 2,500,000 old/new arithmetic results with exact JavaScript equality.
+- SPREAD-dependent primary noise coordinates;
+- SPREAD-dependent turbulence noise coordinates;
+- SWIRL-dependent radial sine and cosine values;
+- per-tile maximum legal source X/Y positions;
+- repeated workspace property resolution inside the tile loop.
 
-Pass 20 also adds profiler-only Scanline and Flow draw-count telemetry so the remaining Canvas2D ceiling can be ranked from target-runtime evidence rather than speculation.
+The artistic Flow draw count is unchanged. Noise sampling, animated angle generation, displacement trigonometry, Float32-equivalent quantization, clipping, source rectangles, destination rectangles, temporal PULSE selection, and tile paint order remain intact.
 
 ## Runtime changes
 
-### 1. Persistence decay
+### 1. Flow grid generations
 
-Before:
+`FlowGridWorkspace` now increments a generation counter whenever render width, render height, or Flow SCALE rebuilds the static tile grid.
 
-```javascript
-map(1 - persistence, 0, 1, 1, 20) / 255
-```
+Dependent caches use this generation to invalidate themselves deterministically.
 
-After:
+### 2. Persistent frequency workspace
 
-```javascript
-(((1 - persistence) * (20 - 1)) + 1) / 255
-```
-
-The decay alpha is unchanged. The p5 helper and its validation path are removed from the active persistent-render path.
-
-### 2. Scanline shift remapping
-
-Per-band shift noise now uses local unit-range arithmetic instead of p5 `map()`.
-
-The shift range and span are prepared once before the band loop. Noise sampling, flooring, skew addition, clipping, band order, and draw rectangles remain unchanged.
-
-### 3. Glitch smear direction
-
-The zero-angle X/Y noise conversion and the angle-jitter conversion now use direct arithmetic. Noise calls and trigonometric calculations remain at the same positions.
-
-### 4. Glitch per-tile jitter
-
-The jitter minimum, maximum, and span are prepared once per Glitch invocation. Each tile now performs only the noise samples, direct range conversion, jitter multiplication, and floor.
-
-The following remain unchanged:
-
-- noise coordinates;
-- block-derived range;
-- jitter amount;
-- flooring order;
-- wrapped tile position;
-- history selection;
-- source and destination rectangles;
-- tile and smear draw order.
-
-### 5. Remaining-ceiling telemetry
-
-The backtick profiler now includes:
+A new `FlowFieldWorkspace` retains four `Float64Array` fields:
 
 ```text
-scan bands   average prepared Scanline bands per active frame
-scan draws   average Scanline drawImage calls per active frame
-flow tiles   average Flow tiles per active frame
-flow draws   average Flow drawImage calls per active frame
-flow grid    Flow grid rebuild/reuse count
+noise X / Y
+TURBULENCE noise X / Y
 ```
 
-These counters update only while the profiler is visible.
+They rebuild only when:
+
+- the Flow grid generation changes; or
+- the effective SPREAD frequency changes.
+
+During ordinary frames with a stable SCALE and SPREAD, the per-tile loop no longer repeats the normalized-coordinate frequency multiplications.
+
+### 3. Persistent SWIRL workspace
+
+The workspace also retains one cosine and one sine per Flow tile.
+
+They rebuild only when:
+
+- the Flow grid generation changes; or
+- SWIRL changes.
+
+With nonzero, stable SWIRL, this removes two radial trigonometric calls per tile per rendered frame. The animated flow-vector cosine and sine remain because their angle changes continuously.
+
+### 4. Cached source clipping bounds
+
+The static grid now records:
+
+```text
+maximum source X = render width  - tile width
+maximum source Y = render height - tile height
+```
+
+The clipping result is unchanged, but the two subtractions no longer occur inside every Flow tile draw.
+
+### 5. Local typed-array references
+
+`applyFlowWarp()` resolves grid and field arrays once per pass. The inner loop no longer repeatedly performs object-property walks for X/Y positions, tile sizes, inward vectors, noise coordinates, SWIRL values, and clipping bounds.
+
+### 6. Profiler cache telemetry
+
+The backtick profiler adds:
+
+```text
+flow freq    frequency-cache rebuild/reuse count
+flow swirl   SWIRL-cache rebuild/reuse count
+```
+
+The existing Flow tile, draw, and grid readings remain.
+
+## Structural reduction
+
+For `N` Flow tiles during a stable frame:
+
+```text
+SPREAD coordinate multiplication:
+  without TURBULENCE: 2 × N per frame → 0
+  with TURBULENCE:    6 × N per frame → 0
+
+SWIRL radial trigonometry when SWIRL != 0:
+  2 × N calls per frame → 0
+
+source clipping-bound subtraction:
+  2 × N per frame → 0
+```
+
+The cache work moves to explicit control/geometry invalidation rather than recurring every render frame.
+
+## Memory cost
+
+The new retained fields use approximately 56 bytes per Flow tile:
+
+```text
+6 Float64 fields = 48 bytes
+2 Int32 bounds   =  8 bytes
+```
+
+Representative raw workspace sizes:
+
+- 1080p at SCALE 80: roughly 336 tiles, about 18.4 KiB;
+- 1080p at minimum SCALE 8: roughly 32,400 tiles, about 1.73 MiB.
+
+This is bounded, reusable memory traded for lower repeated CPU work. No full-resolution image surface was added.
 
 ## Junkpile influence
 
-Pass 20 applies the same rule used throughout the Junkpile examples: once a parameter is in an active per-frame or per-element path, avoid routing simple operations through general-purpose framework helpers. Keep the creative model in p5.js, but perform the irreducible Canvas2D work with explicit state, direct arithmetic, persistent workspaces, and measurable draw counts.
+Pass 21 applies Junkpile's persistent-resource model to the Classic web renderer:
+
+- retain typed workspaces;
+- rebuild only on explicit dimension or parameter invalidation;
+- keep ordinary frames allocation-free;
+- expose cache behavior through diagnostics;
+- preserve the instrument's visible behavior.
 
 No WebGL or wgpu renderer was imported.
 
 ## Deliberately unchanged
 
 - File → Blob URL → p5 `createVideo()` decoding
-- p5 draw clock
+- p5 render clock
 - independent transport, mirror, and profiler clocks
-- media lifecycle from Pass 13S
-- full-resolution buffer topology
-- temporal-ring capture and memory policy
-- Glitch placement, cluster motion, history selection, and artistic draw count
-- Scanline band generation, noise sequence, geometry, and paint order
-- Flow formulas, tile geometry, Float32 displacement quantization, and paint order
-- Solarize and Pipeline Luma Key
-- JPEG mirror transport
+- source lifecycle from Pass 13S
+- Flow noise calls and animated time coordinates
+- Flow animated vector cosine/sine
+- Flow PULSE history selection
+- Flow tile count and `drawImage()` count
+- Float32 displacement quantization
+- source/destination clipping and tile paint order
+- all other effects
+- canvas mirror transport
 - Pass 16S Syphon bootstrap repair
-- Pass 19 Syphon control-plane optimization
+- Pass 19 Syphon control-plane behavior
 - Spout
-- Rust/Tauri source and bundled `Syphon.framework`
+- Rust/Tauri source
+- bundled `Syphon.framework`
 
 ## Expected benefit
 
-This pass removes framework parameter validation from the hottest Glitch and Scanline remapping paths. The largest structural reduction occurs when Glitch uses many tiles and Scanlines uses many moving bands.
+The largest benefit should appear when Flow uses:
 
-No target-platform FPS claim is made until runtime comparison against Pass 19.
+- a small SCALE, producing many tiles;
+- nonzero SWIRL;
+- nonzero TURBULENCE;
+- stable SCALE, SPREAD, and SWIRL controls over multiple frames.
+
+No target-platform FPS claim is made. The irreducible Flow tile draws and animated noise/trigonometry remain.

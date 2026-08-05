@@ -936,3 +936,7 @@ This build reduces Syphon control-plane overhead without changing the working bo
 ## HUFF Classic Optimization Pass 20
 
 This build removes p5 `map()` dispatch from active persistence, Scanline shift, Glitch smear-direction, and per-tile jitter paths. The exact p5 arithmetic remains unchanged, but the hottest loops no longer enter p5 parameter validation. Profiler-only Scanline band/draw counts and Flow tile/draw/grid-cache counts were added so remaining Canvas2D limits can be ranked from actual runtime data. Decoder ownership, frame scheduling, effect order, Syphon, Spout, and native packaging remain unchanged.
+
+## HUFF Classic Optimization Pass 21
+
+This build reduces Flow Warp CPU preparation without changing its tile draws or visual field. Persistent typed workspaces cache spread-dependent noise coordinates, turbulence coordinates, radial swirl sine/cosine values, and per-tile source clipping bounds. The cache rebuilds only when Flow SCALE, SPREAD, SWIRL, or render geometry changes. The stable Blob URL decoder, independent clocks, effects order, temporal history, Syphon bootstrap/control path, Spout, and native packaging remain unchanged.

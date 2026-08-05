@@ -2,6 +2,21 @@
 
 This changelog tracks the optimization series for the legacy Tauri v1 + p5.js/Canvas2D edition. It intentionally excludes the native-wgpu HUFF project.
 
+## Pass 21 — Flow dynamic-field preparation cache
+
+**Date:** 2026-08-05  
+**Status:** implementation and deterministic validation complete; target-runtime Flow comparison pending
+
+- Added Flow grid-generation tracking for deterministic dependent-cache invalidation.
+- Cached SPREAD-derived primary and turbulence noise coordinates in persistent Float64 workspaces.
+- Cached SWIRL-derived radial sine/cosine values until grid geometry or SWIRL changes.
+- Cached per-tile maximum source X/Y clipping bounds.
+- Resolved Flow typed-array references once per pass instead of repeatedly walking workspace properties inside the tile loop.
+- Preserved p5 noise calls, animated time coordinates, displacement formulas, floating-point association, Math.fround quantization, clipping, temporal source selection, draw count, and paint order.
+- Added profiler-only Flow frequency and SWIRL cache rebuild/reuse telemetry.
+- Added `npm run validate:pass21` with 32 checks, 5,000 randomized Flow cases, and 4,417,878 exact comparisons.
+- Preserved Blob URL decoding, independent clocks, Pass 13S lifecycle cleanup, Pass 16S Syphon bootstrap, Pass 19 Syphon behavior, Spout, Rust/Tauri source, and framework packaging.
+
 ## Pass 20 — Direct hot-path range arithmetic and remaining-ceiling telemetry
 
 **Date:** 2026-08-05  

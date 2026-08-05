@@ -1,31 +1,24 @@
-# HUFF Classic Pass 20 — Documentation Index
+# HUFF Classic Optimization Pass 21 — Documentation Index
 
 ## Start here
 
-- `PASS_NOTES.md` — exact Pass 20 implementation and boundaries
-- `TESTING_CHECKLIST.md` — required target-runtime comparison against Pass 19
-- `GIT_COMMIT_MESSAGE.md` — ready-to-use Git commit
+- `PASS_NOTES.md` — complete Pass 21 implementation summary
+- `CURRENT_STATUS.md` — current baseline and remaining boundaries
+- `TESTING_CHECKLIST.md` — target-runtime acceptance tests
+- `GIT_COMMIT_MESSAGE.md` — ready-to-use Git commit command
 
-## Technical records
+## Technical detail
 
-- `HOT_PATH_MATH_AND_CEILING_AUDIT.md` — p5 `map()` analysis and remaining Canvas2D limits
-- `CHANGED_FILES.md` — exact source and documentation file scope
+- `FLOW_DYNAMIC_FIELD_CACHE_AUDIT.md` — cache ownership, invalidation, exactness, and remaining Flow cost
+- `CHANGED_FILES.md` — files changed in this pass
 - `VALIDATION_REPORT.md` — deterministic and static validation results
 
-## Project tracking
+## Cumulative tracking
 
-- `CURRENT_STATUS.md` — current candidate baseline and release status
-- `CHANGELOG.md` — cumulative optimization history
-- `OPTIMIZATION_ROADMAP.md` — next profiler-guided decision gate and later stabilization work
+- `CHANGELOG.md` — optimization history
+- `OPTIMIZATION_ROADMAP.md` — next safe targets and release work
+- `README.md` — public project documentation and pass summary
 
-## Historical incident records retained
+## Pass marker
 
-- `VIDEO_DECODE_INCIDENT_REPORT.md`
-- `SYPHON_BLACK_FRAME_INCIDENT_REPORT.md`
-- `SYPHON_BOOTSTRAP_AUDIT.md`
-
-## Validation command
-
-```bash
-npm run validate:pass20
-```
+- `HUFF_CLASSIC_OPTIMIZATION_PASS_21.txt`

@@ -1,89 +1,79 @@
-# HUFF Classic Pass 20 — Runtime Testing Checklist
+# HUFF Classic Optimization Pass 21 — Testing Checklist
 
-Compare Pass 20 directly against the committed Pass 19 baseline using the same source, render size, control state, and output configuration.
+## Required baseline comparison
 
-## Required baseline check
+Compare Pass 21 directly with committed Pass 20 using the same source, render dimensions, controls, output state, and window size.
 
-- [ ] Load the same video used to validate Pass 19.
-- [ ] Confirm playback and audio are as stable as Pass 19 with all effects disabled.
-- [ ] Confirm no video decode error.
-- [ ] Confirm seeking, looping, pause, resume, and file replacement.
+## Video and audio
 
-## Glitch parity
+- [ ] Video loads through the existing file picker.
+- [ ] Playback begins normally.
+- [ ] Audio remains clean and synchronized.
+- [ ] Play, pause, loop, speed, and seek remain unchanged.
+- [ ] Replacing the source remains stable.
 
-- [ ] Test low and high tile counts.
-- [ ] Test JITTER at 0, middle, and maximum.
-- [ ] Test SMEAR with angle 0.
-- [ ] Test SMEAR with a fixed nonzero angle.
-- [ ] Test temporal DEPTH and DEPTH SCATTER.
-- [ ] Test cluster tiles, coherence, bounce/wrap, and movement.
-- [ ] Confirm tile positions and temporal behavior match Pass 19.
+## Flow visual parity
 
-## Scanline parity
+Test each control independently and in combination:
 
-- [ ] Test static Scanlines with SPEED 0.
-- [ ] Test moving Scanlines with SHIFT enabled.
-- [ ] Test positive and negative SKEW if available in the control range.
-- [ ] Test SPIN LEFT and SPIN RIGHT.
-- [ ] Confirm band positions, clipping, and motion match Pass 19.
+- [ ] STRENGTH
+- [ ] SCALE
+- [ ] SPEED
+- [ ] TURBULENCE
+- [ ] SWIRL
+- [ ] IMPLODE
+- [ ] SPREAD
+- [ ] PULSE
 
-## Persistence parity
+Specific parity tests:
 
-- [ ] Test PERSISTENCE near 0, middle, near 1, and exactly 1.
-- [ ] Confirm decay appearance matches Pass 19.
-- [ ] Combine persistence with Glitch, Feedback, and Scanlines.
+- [ ] SWIRL = 0 produces the same image as Pass 20.
+- [ ] Positive and negative SWIRL match Pass 20.
+- [ ] TURBULENCE = 0 and TURBULENCE > 0 match Pass 20.
+- [ ] Positive and negative IMPLODE match Pass 20.
+- [ ] Minimum and maximum SCALE match Pass 20.
+- [ ] Low and high SPREAD match Pass 20.
+- [ ] PULSE uses the same historical frames.
+- [ ] Edge tiles do not show clipping or stale pixels.
+- [ ] Changing SCALE while running rebuilds correctly.
+- [ ] Resizing/fullscreen while Flow is active rebuilds correctly.
 
-## Flow parity and telemetry
+## Cache telemetry
 
-- [ ] Test several SCALE values.
-- [ ] Confirm Flow output matches Pass 19.
-- [ ] Open the backtick profiler.
-- [ ] Confirm `flow tiles` equals `flow draws` for ordinary active Flow frames.
-- [ ] Confirm `flow grid` shows reuse during a stable SCALE/resolution state.
-- [ ] Change SCALE and confirm a grid rebuild is reported.
+Open the profiler with backtick:
 
-## Scanline telemetry
+- [ ] `flow grid` mostly reports reuse while size/SCALE remain stable.
+- [ ] `flow freq` mostly reports reuse while size/SCALE/SPREAD remain stable.
+- [ ] Changing SPREAD causes a frequency rebuild.
+- [ ] `flow swirl` mostly reports reuse while size/SCALE/SWIRL remain stable.
+- [ ] Changing SWIRL causes a SWIRL rebuild.
+- [ ] Changing SPEED, STRENGTH, TURBULENCE, IMPLODE, or PULSE does not unnecessarily rebuild frequency/SWIRL fields.
 
-- [ ] Confirm `scan bands` and `scan draws` appear only when Scanlines are active.
-- [ ] Confirm the two values match for an ordinary frame.
-- [ ] Confirm profiler hidden/visible state does not change the visual output.
+## Combined effects
 
-## Output regression
+- [ ] Flow + Glitch
+- [ ] Flow + Scanlines
+- [ ] Flow + Feedback
+- [ ] Flow + Solarize
+- [ ] Flow + Pipeline Luma Key
+- [ ] Flow + Glitch + Scanlines + Feedback
 
-- [ ] Start Syphon before attaching OBS.
-- [ ] Confirm the one-fps bootstrap produces a moving current frame after attachment.
-- [ ] Confirm Pass 19's Syphon status and timing telemetry remains functional.
-- [ ] Test 30 fps and 60 fps Syphon output.
-- [ ] Test the JPEG canvas mirror.
-- [ ] On Windows, test Spout when available.
+## Outputs
 
-## Performance comparison
+- [ ] Canvas mirror remains active and visually correct.
+- [ ] Syphon starts with moving frames; no black-source regression.
+- [ ] Syphon survives enabling/disabling Flow.
+- [ ] Syphon disconnect/reconnect remains functional.
+- [ ] Spout source path remains unchanged for later Windows validation.
 
-Record profiler values for Pass 19 and Pass 20 under identical states:
+## Stability
 
-- [ ] Glitch only: `applyGlitch`, `gl tiles`, `gl draws`.
-- [ ] Scanlines only: `applyScanlines`, `scan bands`, `scan draws`.
-- [ ] Flow only: `applyFlowWarp`, `flow tiles`, `flow draws`.
-- [ ] Glitch + Scanlines + Flow.
-- [ ] Outputs disabled.
-- [ ] Syphon connected.
-- [ ] Mirror connected.
-- [ ] Syphon + mirror connected.
+- [ ] Run Flow continuously for at least 30 minutes.
+- [ ] Sweep SCALE, SPREAD, and SWIRL repeatedly.
+- [ ] Repeat window resize/fullscreen cycles.
+- [ ] Watch WebView memory for unbounded growth.
+- [ ] Close the application and confirm no HUFF process remains.
 
-## Soak and shutdown
+## Acceptance rule
 
-- [ ] Run for at least 20 minutes with video and active effects.
-- [ ] Change files repeatedly.
-- [ ] Resize and toggle fullscreen repeatedly.
-- [ ] Disconnect and reconnect Syphon/OBS.
-- [ ] Close HUFF and confirm no lingering process, camera track, or output server.
-
-## Rejection criteria
-
-Reject Pass 20 if any of the following occurs:
-
-- playback is less stable than Pass 19;
-- Glitch, Scanline, persistence, or Flow output visibly changes;
-- Syphon returns to black/no-frame behavior;
-- profiler telemetry changes output or pacing when hidden;
-- repeated source changes or shutdown regress.
+Commit Pass 21 only when normal playback is at least as stable as Pass 20 and Flow output remains visually equivalent across the tests above.

@@ -1,37 +1,40 @@
-# HUFF Classic Pass 20 — Changed Files
+# HUFF Classic Pass 21 — Changed Files
 
-## Runtime source
+## Runtime
 
 ### `src/effects.js`
 
-- Replaced p5 `map()` calls in active Scanline and Glitch paths with exact direct arithmetic.
-- Prepared Scanline shift span outside the band loop.
-- Prepared Glitch jitter range outside the tile loop.
-- Added profiler-gated Scanline band/draw counters.
-- Added profiler-gated Flow tile/draw/grid-cache counters.
-- Made Flow grid configuration return whether geometry was rebuilt for telemetry.
+- Added Flow grid generation tracking.
+- Added cached maximum source X/Y bounds.
+- Added reusable `FlowFieldWorkspace` typed arrays.
+- Cached SPREAD-derived primary and turbulence noise coordinates.
+- Cached SWIRL-derived radial sine/cosine values.
+- Resolved Flow typed-array references once per pass.
+- Added profiler-gated frequency and SWIRL cache counters.
 
 ### `src/canvas.js`
 
-- Replaced persistence-decay p5 `map()` with exact direct arithmetic.
-- Added Scanline and Flow profiler snapshot/delta/display handling.
+- Added Flow frequency/SWIRL cache telemetry snapshots.
+- Added profiler rows for cache rebuild/reuse counts.
 
-## Validation
+## Validation and metadata
 
-### `scripts/validate-pass20.mjs`
+### `scripts/validate-pass21.mjs`
 
-- Enforces removal of the legacy hot-path p5 `map()` calls.
-- Checks required Pass 20 telemetry boundaries.
-- Performs 2,500,000 exact arithmetic comparisons.
+- Added cache-key, invalidation, floating-point field, noise-coordinate, clipping, and ordered draw-rectangle equivalence tests.
 
 ### `package.json`
 
-- Added `npm run validate:pass20`.
+- Added `npm run validate:pass21`.
+
+### `README.md`
+
+- Added the Pass 21 optimization summary.
 
 ## Documentation
 
 - `PASS_NOTES.md`
-- `HOT_PATH_MATH_AND_CEILING_AUDIT.md`
+- `FLOW_DYNAMIC_FIELD_CACHE_AUDIT.md`
 - `CHANGED_FILES.md`
 - `TESTING_CHECKLIST.md`
 - `VALIDATION_REPORT.md`
@@ -40,16 +43,4 @@
 - `OPTIMIZATION_ROADMAP.md`
 - `GIT_COMMIT_MESSAGE.md`
 - `DOCUMENTATION_INDEX.md`
-- `HUFF_CLASSIC_OPTIMIZATION_PASS_20.txt`
-- `README.md`
-
-## Explicitly unchanged
-
-- complete `src-tauri` tree;
-- `src/syphon-stream-worker.js`;
-- native Syphon and Spout implementation;
-- bundled `Syphon.framework` binary;
-- media-loading and source-lifecycle code;
-- frame scheduling;
-- effect order and controls;
-- presets, MIDI, and OSC.
+- `HUFF_CLASSIC_OPTIMIZATION_PASS_21.txt`
