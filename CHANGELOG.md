@@ -310,3 +310,31 @@ This changelog tracks the optimization series for the legacy Tauri v1 + p5.js/Ca
 - No new effects or feature expansion during optimization.
 - macOS, Windows, and Linux remain the intended public platforms, with platform-specific output capabilities.
 
+
+---
+
+## Pass 19 — Syphon control-plane budget and phase telemetry
+
+### Added
+
+- Profiler breakdown for Syphon capture, Worker draw/readback, total pipeline, Metal upload, native publish, backpressure skips, and status UI updates.
+- Low-rate sampled native upload/publish timing.
+- Deterministic Pass 19 validator.
+
+### Changed
+
+- Coalesced Syphon status DOM updates to four hertz while retaining per-frame acknowledgements.
+- Cached selected Syphon output FPS.
+- Suspended redundant Tauri state polling during healthy acknowledgement flow.
+- Sampled native receiver presence at four hertz while connected.
+- Preserved receiver checks on every disconnected bootstrap frame.
+- Kept ordinary acknowledgements compact; timing fields appear only on sampled frames.
+- Sent the fallback RGBA `ArrayBuffer` directly.
+
+### Preserved
+
+- Pass 16S one-fps bootstrap and black-frame repair.
+- Immediate full-rate output after receiver attachment.
+- One-frame-in-flight backpressure.
+- Blob URL decoder and independent clocks.
+- Effects, temporal history, mirror, Spout, and bundled Syphon framework.

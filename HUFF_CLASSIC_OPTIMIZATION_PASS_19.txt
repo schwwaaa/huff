@@ -1,0 +1,25 @@
+HUFF Classic Optimization Pass 19
+Date: 2026-08-04
+Baseline: committed Pass 18
+
+Focus:
+- reduce per-frame Syphon status/control overhead
+- retain bootstrap-safe moving-frame startup
+- bound native receiver queries while connected
+- add complete output phase telemetry
+
+Runtime files changed:
+- src/index.html
+- src/canvas.js
+- src/syphon-stream-worker.js
+- src-tauri/src/main.rs
+- src-tauri/src/syphon.rs
+
+Run validation:
+  npm run validate:pass19
+
+Required runtime acceptance:
+- OBS receives moving frames from startup
+- no black-frame regression
+- reconnect succeeds repeatedly
+- playback remains equal to Pass 18

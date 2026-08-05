@@ -1,85 +1,76 @@
-# HUFF Classic Optimization Pass 18 — Validation Report
+# HUFF Classic Optimization Pass 19 — Validation Report
 
-## Deterministic Pass 18 validator
+## Deterministic Pass 19 validator
 
 Command:
 
 ```bash
-npm run validate:pass18
+npm run validate:pass19
 ```
 
 Result:
 
 ```text
-4,832 checks
-3,474,837 exact draw operations compared
+56 checks passed
 ```
 
-The validator compares the previous and optimized Glitch blit preparation paths across randomized:
+The validator verifies:
 
-- ring capacities and fill levels;
-- history indices;
-- render dimensions;
-- BLOCK and SIZE values;
-- SMEAR lengths and directions;
-- base offsets;
-- tile positions.
-
-It compares the complete ordered Canvas2D draw argument sequence:
-
-```text
-source reference
-source x/y/width/height
-destination x/y/width/height
-base and smear draw order
-```
-
-It also verifies:
-
-- zero ring lookups when a cached generation is reused;
-- cache rebuild after every new ring push;
-- stable decoder and scheduler boundaries;
-- retained Pass 16S Syphon bootstrap structure.
+- stable Blob URL + p5 `createVideo()` decoder ownership;
+- independent p5, transport, mirror, and profiler clocks;
+- retained one-fps Syphon bootstrap;
+- retained full-rate attachment behavior;
+- absence of the duplicate native receiver publication gate;
+- four-hertz UI coalescing structure;
+- healthy-ACK suppression of redundant Tauri polling;
+- cached FPS parsing;
+- Worker draw/readback phase timing;
+- sampled native upload/publish timing;
+- connected receiver-state sampling near four hertz at both 30 and 60 fps;
+- disconnected receiver checks on every bootstrap frame.
 
 ## Retained deterministic validators
 
+All retained validators passed:
+
 - Pass 9 Flow: 1,728 cases; 4,385,502 exact tile comparisons
 - Pass 10 Scanlines: 2,400 cases; 28,342 exact band comparisons
-- Pass 11 neutral-stage validation: passed
-- Pass 13S lifecycle validation: 27 checks passed
-- Pass 14 ring/copy/physics validation: 31,497 checks passed
-- Pass 15 mirror validation: 38 checks passed
-- Pass 16 Solarize validation: 644 checks; 8,391,032 exact pixel comparisons
-- Pass 16S Syphon bootstrap validation: 22 checks passed
-- Pass 17 Luma Key validation: 1,293 checks; 17,715,200 exact pixel comparisons
+- Pass 11 neutral-stage validation
+- Pass 13S lifecycle validation: 27 checks
+- Pass 14 ring/copy/physics validation: 31,497 checks
+- Pass 15 mirror validation: 38 checks
+- Pass 16 Solarize: 644 checks; 8,391,032 exact pixel comparisons
+- Pass 16S Syphon bootstrap: 22 checks
+- Pass 17 Luma Key: 1,293 checks; 17,715,200 exact pixel comparisons
+- Pass 18 Glitch: 4,832 checks; 3,474,837 exact ordered draw operations
+- Pass 19 output control-plane validation: 56 checks
 
 ## Static validation
 
-Completed:
+Completed after implementation:
 
-- 20 external JavaScript/module files passed syntax validation;
-- 25 HTML files were scanned and 32 inline scripts passed syntax validation;
+- 21 external JavaScript/module files passed syntax checks;
+- 25 HTML files were scanned and 32 inline scripts passed syntax checks;
 - 29 JSON files parsed successfully;
-- 2 TOML files parsed successfully;
+- 1 TOML file parsed successfully;
 - 6 shell scripts passed `bash -n`;
-- 4 Rust files passed lexical delimiter validation;
-- mandatory Syphon framework presence verified;
-- the framework binary remains universal `x86_64 + arm64`;
-- ZIP integrity verification is performed after packaging.
+- 4 Rust files passed lexical delimiter checks;
+- mandatory Syphon framework presence and architecture checks;
+- ZIP integrity verification.
 
 ## Native boundary
 
-The complete `src-tauri` tree is byte-for-byte unchanged from Pass 17.
+Pass 19 intentionally changes the macOS Rust relay and native Syphon publisher to reduce receiver-query frequency and add sampled timings.
 
-Cargo and a macOS GUI runtime are unavailable in this environment, so the following were not performed here:
+Cargo, Rust compilation, and a macOS GUI runtime are unavailable in this environment. Therefore the following require the user's Mac:
 
 - Tauri/Rust compilation;
-- real WKWebView frame-time measurement;
-- visual output comparison;
-- OBS/Syphon runtime testing;
-- Windows Spout testing;
-- Linux media testing.
+- real Objective-C/Syphon receiver-state behavior;
+- actual Metal timing validity;
+- OBS moving-frame startup;
+- disconnect/reconnect behavior;
+- measured FPS and latency.
 
 ## Claim boundary
 
-The report proves ordered-operation equivalence for the modeled Glitch hot-path changes. It does not claim a measured FPS improvement on target hardware. Runtime performance must be compared against committed Pass 17 with the profiler hidden and visible.
+The validation proves the intended scheduling and sampling structure. It does not claim a measured FPS increase. The expected gain is reduced control-plane overhead while Syphon is active; actual impact depends on whether Canvas readback, WebSocket transfer, or Metal upload remains the dominant cost on the target machine.

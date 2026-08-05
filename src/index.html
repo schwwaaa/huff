@@ -2030,6 +2030,44 @@
         let sourceCanvas = null;
         let nativeFrames = 0;
         let bootstrapFrames = 0;
+        let outputFps = parseInt(fpsSelect.value, 10) || 30;
+        let lastAckAt = 0;
+        let statePollTimer = null;
+
+        // Output telemetry is sampled only while the existing backtick profiler
+        // is visible. Keeping the counters on window lets canvas.js report the
+        // complete browser → Worker → WebSocket → native publish budget without
+        // coupling Syphon scheduling to the p5 render clock.
+        const syphonTelemetry = window.__huffSyphonTelemetry = {
+            captureMs: 0,
+            captureSamples: 0,
+            workerDrawMs: 0,
+            workerReadMs: 0,
+            workerSamples: 0,
+            endToEndMs: 0,
+            endToEndSamples: 0,
+            nativeUploadMs: 0,
+            nativePublishMs: 0,
+            nativeSamples: 0,
+            inFlightSkips: 0,
+            bufferedSkips: 0,
+            uiUpdates: 0,
+        };
+        function profileAdd(name, amount = 1) {
+            if (!window.__huffProfilerActive) return;
+            syphonTelemetry[name] = (syphonTelemetry[name] || 0) + amount;
+        }
+
+        // ACKs arrive at the selected output rate. Updating multiple DOM nodes
+        // for every ACK adds avoidable main-thread work, so UI refreshes are
+        // coalesced to four per second while transport acknowledgements remain
+        // per-frame and unchanged.
+        const DISPLAY_PERIOD_MS = 250;
+        let displayDirty = true;
+        let lastDisplayAt = -Infinity;
+        let lastStatusText = '';
+        let lastFrameText = '';
+        let lastStatusClass = '';
 
         // Some Syphon clients discover the server before they fully attach to
         // its current surface. A strict hasClients gate on both the browser and
@@ -2053,27 +2091,49 @@
         let fallbackCtx = null;
         let statePollBusy = false;
 
-        function updateDisplay() {
+        function updateDisplay(force = false) {
             if (!active) return;
-            if (receiverConnected) {
-                statusBox.textContent = `Syphon active — receiver connected — streaming ${outputW}×${outputH}.`;
-                statusBox.className = 'active';
-            } else {
-                statusBox.textContent = `Syphon active — waiting for a receiver. Publishing a 1 fps bootstrap frame.`;
-                statusBox.className = 'active';
+            displayDirty = true;
+            const now = performance.now();
+            if (!force && now - lastDisplayAt < DISPLAY_PERIOD_MS) return;
+
+            const statusText = receiverConnected
+                ? `Syphon active — receiver connected — streaming ${outputW}×${outputH}.`
+                : `Syphon active — waiting for a receiver. Publishing a 1 fps bootstrap frame.`;
+            const statusClass = 'active';
+            const mode = workerReady ? 'worker' : 'main-thread fallback';
+            const bootstrap = receiverConnected ? '' : ` · ${bootstrapFrames} bootstrap`;
+            const frameText = `${nativeFrames} frames published${bootstrap} · ${mode}`;
+
+            if (statusText !== lastStatusText) {
+                statusBox.textContent = statusText;
+                lastStatusText = statusText;
             }
-            if (frameLabel) {
-                const mode = workerReady ? 'worker' : 'main-thread fallback';
-                const bootstrap = receiverConnected ? '' : ` · ${bootstrapFrames} bootstrap`;
-                frameLabel.textContent = `${nativeFrames} frames published${bootstrap} · ${mode}`;
+            if (statusClass !== lastStatusClass) {
+                statusBox.className = statusClass;
+                lastStatusClass = statusClass;
             }
+            if (frameLabel && frameText !== lastFrameText) {
+                frameLabel.textContent = frameText;
+                lastFrameText = frameText;
+            }
+
+            displayDirty = false;
+            lastDisplayAt = now;
+            profileAdd('uiUpdates');
+        }
+
+        function flushDisplayIfDue() {
+            if (displayDirty) updateDisplay(false);
         }
 
         function applyRuntimeState(state) {
             if (!state || !active) return;
-            receiverConnected = !!state.hasClients;
+            const nextConnected = !!state.hasClients;
+            const connectionChanged = nextConnected !== receiverConnected;
+            receiverConnected = nextConnected;
             nativeFrames = Number(state.frames) || 0;
-            updateDisplay();
+            updateDisplay(connectionChanged);
         }
 
         function closeSyphWS() {
@@ -2093,11 +2153,25 @@
                     return;
                 }
                 if (message.type === 'syphon-ack') {
+                    const now = performance.now();
                     frameInFlight = false;
-                    receiverConnected = !!message.hasClients;
+                    lastAckAt = now;
+                    const nextConnected = !!message.hasClients;
+                    const connectionChanged = nextConnected !== receiverConnected;
+                    receiverConnected = nextConnected;
                     nativeFrames = Number(message.frames) || nativeFrames;
                     if (!receiverConnected && message.published) bootstrapFrames++;
-                    updateDisplay();
+
+                    if (window.__huffProfilerActive && frameStartedAt > 0) {
+                        profileAdd('endToEndMs', Math.max(0, now - frameStartedAt));
+                        profileAdd('endToEndSamples');
+                        if (message.nativeSample) {
+                            profileAdd('nativeUploadMs', (Number(message.nativeUploadUs) || 0) / 1000);
+                            profileAdd('nativePublishMs', (Number(message.nativePublishUs) || 0) / 1000);
+                            profileAdd('nativeSamples');
+                        }
+                    }
+                    updateDisplay(connectionChanged);
                 }
             } catch {}
         }
@@ -2175,7 +2249,7 @@
                     const message = event.data || {};
                     if (message.type === 'configured') {
                         workerReady = true;
-                        updateDisplay();
+                        updateDisplay(true);
                         return;
                     }
                     if (message.type === 'error') {
@@ -2183,10 +2257,16 @@
                         frameInFlight = false;
                         workerDisabled = true;
                         destroyWorker();
-                        updateDisplay();
+                        updateDisplay(true);
                         return;
                     }
                     if (message.type !== 'pixels') return;
+
+                    if (window.__huffProfilerActive && message.profiled) {
+                        profileAdd('workerDrawMs', Number(message.drawMs) || 0);
+                        profileAdd('workerReadMs', Number(message.readMs) || 0);
+                        profileAdd('workerSamples');
+                    }
 
                     if (!active || !wsReady || syphWS?.readyState !== WebSocket.OPEN) {
                         frameInFlight = false;
@@ -2240,13 +2320,19 @@
                 frameInFlight = false;
                 return;
             }
+            const profiled = !!window.__huffProfilerActive;
+            const started = profiled ? performance.now() : 0;
             try {
                 fallbackCtx.globalAlpha = 1;
                 fallbackCtx.globalCompositeOperation = 'copy';
                 fallbackCtx.drawImage(source, 0, 0, outputW, outputH);
                 fallbackCtx.globalCompositeOperation = 'source-over';
                 const imageData = fallbackCtx.getImageData(0, 0, outputW, outputH);
-                syphWS.send(imageData.data);
+                if (profiled) {
+                    profileAdd('captureMs', performance.now() - started);
+                    profileAdd('captureSamples');
+                }
+                syphWS.send(imageData.data.buffer);
             } catch (error) {
                 console.warn('[huff syphon] capture failed:', error);
                 frameInFlight = false;
@@ -2255,6 +2341,8 @@
 
         async function captureWorker(source, id) {
             let bitmap = null;
+            const profiled = !!window.__huffProfilerActive;
+            const started = profiled ? performance.now() : 0;
             try {
                 const needsScale = source.width !== outputW || source.height !== outputH;
                 if (needsScale) {
@@ -2270,6 +2358,11 @@
                 }
                 if (!bitmap) bitmap = await createImageBitmap(source);
 
+                if (profiled) {
+                    profileAdd('captureMs', performance.now() - started);
+                    profileAdd('captureSamples');
+                }
+
                 if (!active || !worker || !wsReady) {
                     try { bitmap.close?.(); } catch {}
                     frameInFlight = false;
@@ -2280,6 +2373,7 @@
                     id,
                     width: outputW,
                     height: outputH,
+                    profile: profiled,
                     bitmap,
                 }, [bitmap]);
             } catch (error) {
@@ -2294,6 +2388,7 @@
         function sendFrame(ts) {
             if (!active) return;
             rafId = requestAnimationFrame(sendFrame);
+            flushDisplayIfDue();
 
             if (!wsReady) {
                 ensureSyphWS();
@@ -2302,6 +2397,7 @@
 
             // A lost socket/ACK must not permanently freeze output.
             if (frameInFlight) {
+                profileAdd('inFlightSkips');
                 if (ts - frameStartedAt > 2500) {
                     frameInFlight = false;
                     closeSyphWS();
@@ -2310,15 +2406,16 @@
                 return;
             }
 
-            if (syphWS.bufferedAmount > 0) return;
+            if (syphWS.bufferedAmount > 0) {
+                profileAdd('bufferedSkips');
+                return;
+            }
 
             // Full-rate publishing begins as soon as Syphon confirms a client.
             // Before that, publish one bounded bootstrap frame per second. This
             // prevents a discoverable-but-black source when a client waits for a
             // first frame before completing attachment.
-            const fpsCap = receiverConnected
-                ? (parseInt(fpsSelect.value, 10) || 30)
-                : BOOTSTRAP_FPS;
+            const fpsCap = receiverConnected ? outputFps : BOOTSTRAP_FPS;
             const period = 1000 / fpsCap;
             if (ts - lastTs < period) return;
 
@@ -2337,8 +2434,13 @@
             }
         }
 
-        async function pollRuntimeState() {
+        async function pollRuntimeState(force = false) {
             if (!active || statePollBusy) return;
+            // Healthy per-frame ACKs already carry current native state. Avoid
+            // a redundant Tauri command and Objective-C hasClients query while
+            // the output socket is advancing normally.
+            const now = performance.now();
+            if (!force && wsReady && lastAckAt > 0 && now - lastAckAt < 1500) return;
             statePollBusy = true;
             try {
                 const state = await invoke('syphon_runtime_state');
@@ -2363,11 +2465,18 @@
                 nativeFrames = 0;
                 bootstrapFrames = 0;
                 lastTs = 0;
+                lastAckAt = 0;
                 frameInFlight = false;
                 workerDisabled = false;
+                outputFps = parseInt(fpsSelect.value, 10) || 30;
+                displayDirty = true;
+                lastDisplayAt = -Infinity;
+                lastStatusText = '';
+                lastFrameText = '';
+                lastStatusClass = '';
                 ensureWorker();
                 ensureSyphWS();
-                await pollRuntimeState();
+                await pollRuntimeState(true);
 
                 statusBox.textContent = `${message}\nWaiting for a receiver; publishing a 1 fps bootstrap frame until one connects.`;
                 statusBox.className = 'active';
@@ -2375,7 +2484,7 @@
                 pill.style.color = 'rgba(180,100,255,.9)';
                 toggleBtn.textContent = '■ Stop';
                 toggleBtn.classList.add('active');
-                updateDisplay();
+                updateDisplay(true);
 
                 rafId = requestAnimationFrame(sendFrame);
             } catch (error) {
@@ -2416,10 +2525,17 @@
         toggleBtn.addEventListener('click', () => {
             active ? stopSyphon() : startSyphon();
         });
+        fpsSelect.addEventListener('change', () => {
+            outputFps = parseInt(fpsSelect.value, 10) || 30;
+        });
 
-        setInterval(pollRuntimeState, 500);
+        statePollTimer = setInterval(() => pollRuntimeState(false), 1000);
         window.addEventListener('beforeunload', () => {
             active = false;
+            if (statePollTimer) {
+                clearInterval(statePollTimer);
+                statePollTimer = null;
+            }
             closeSyphWS();
             destroyWorker();
         }, { once: true });

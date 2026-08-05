@@ -21,6 +21,7 @@ use std::ffi::CString;
 use std::os::raw::c_void;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
+use std::time::Instant;
 
 #[link(name = "Metal", kind = "framework")]
 extern "C" {
@@ -96,6 +97,14 @@ unsafe impl Send for SyphonState {}
 static SYPHON: Lazy<Mutex<Option<SyphonState>>> = Lazy::new(|| Mutex::new(None));
 
 pub static FRAME_COUNT: AtomicU64 = AtomicU64::new(0);
+
+#[derive(Copy, Clone, Default)]
+pub struct SyphonPushResult {
+    pub published: bool,
+    pub upload_micros: u64,
+    pub publish_micros: u64,
+    pub native_sample: bool,
+}
 
 /// Tokio's worker threads do not automatically own a Cocoa autorelease pool.
 /// Syphon and Metal return autoreleased Objective-C objects (notably command
@@ -397,7 +406,12 @@ pub fn status() -> String {
 /// selected frame rate only while a client is attached, but it may send a
 /// one-frame-per-second bootstrap probe before attachment so lazy clients do not
 /// remain stuck on a discoverable black source.
-pub fn push_pixels(width: u32, height: u32, pixels: &[u8]) -> bool {
+pub fn push_pixels_profiled(
+    width: u32,
+    height: u32,
+    pixels: &[u8],
+    measure_native: bool,
+) -> SyphonPushResult {
     let expected = (width as usize)
         .saturating_mul(height as usize)
         .saturating_mul(4);
@@ -406,16 +420,16 @@ pub fn push_pixels(width: u32, height: u32, pixels: &[u8]) -> bool {
             "[syphon] bad frame: {width}×{height} needs {expected} bytes, got {}",
             pixels.len()
         );
-        return false;
+        return SyphonPushResult::default();
     }
 
     let mut guard = SYPHON.lock().unwrap();
     let Some(state) = guard.as_mut() else {
-        return false;
+        return SyphonPushResult::default();
     };
 
     if width != state.width || height != state.height {
-        return false;
+        return SyphonPushResult::default();
     }
 
     unsafe {
@@ -436,6 +450,11 @@ pub fn push_pixels(width: u32, height: u32, pixels: &[u8]) -> bool {
                 },
             };
 
+            // Native timing is sampled by the relay rather than measured on
+            // every output frame. That keeps the normal publication path free
+            // from timer calls while still exposing representative upload and
+            // publish costs in the development profiler.
+            let upload_started = measure_native.then(Instant::now);
             let _: () = msg_send![
                 texture,
                 replaceRegion: region
@@ -443,11 +462,19 @@ pub fn push_pixels(width: u32, height: u32, pixels: &[u8]) -> bool {
                 withBytes: pixels.as_ptr() as *const c_void
                 bytesPerRow: (width * 4) as u64
             ];
+            let upload_micros = upload_started
+                .map(|started| started.elapsed().as_micros().min(u64::MAX as u128) as u64)
+                .unwrap_or(0);
 
+            let publish_started = measure_native.then(Instant::now);
             let command_buffer: *mut Object = msg_send![state.queue, commandBuffer];
             if command_buffer.is_null() {
                 eprintln!("[syphon] commandBuffer returned nil");
-                return false;
+                return SyphonPushResult {
+                    upload_micros,
+                    native_sample: measure_native,
+                    ..SyphonPushResult::default()
+                };
             }
 
             let rect = NSRect {
@@ -466,11 +493,23 @@ pub fn push_pixels(width: u32, height: u32, pixels: &[u8]) -> bool {
                 flipped: YES
             ];
             let _: () = msg_send![command_buffer, commit];
+            let publish_micros = publish_started
+                .map(|started| started.elapsed().as_micros().min(u64::MAX as u128) as u64)
+                .unwrap_or(0);
 
             FRAME_COUNT.fetch_add(1, Ordering::Relaxed);
-            true
+            SyphonPushResult {
+                published: true,
+                upload_micros,
+                publish_micros,
+                native_sample: measure_native,
+            }
         })
     }
+}
+
+pub fn push_pixels(width: u32, height: u32, pixels: &[u8]) -> bool {
+    push_pixels_profiled(width, height, pixels, false).published
 }
 
 pub fn push_frame(data: &[u8]) -> bool {

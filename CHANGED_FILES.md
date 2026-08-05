@@ -1,41 +1,59 @@
-# HUFF Classic Pass 18 — Changed Files
+# HUFF Classic Pass 19 — Changed Files
 
 ## Runtime
 
-### `src/effects.js`
+### `src/index.html`
 
-- Removed the per-blit `drawRingRegion()` helper.
-- Added reusable `GlitchBlitWorkspace`.
-- Added versioned temporal-ring source-reference caching.
-- Added reusable typed smear-offset buffers.
-- Cached the constant tile span per Glitch invocation.
-- Dispatched Glitch draws directly through the cached Canvas2D context.
-- Added profiler-gated Glitch tile, draw-call, and ring-cache telemetry.
+- Coalesces Syphon status UI updates to four hertz.
+- Avoids DOM assignments when the displayed values are unchanged.
+- Caches the selected Syphon FPS.
+- Suspends redundant Tauri runtime-state polling while acknowledgements are healthy.
+- Removes duplicate runtime-state application.
+- Sends the fallback RGBA `ArrayBuffer` directly.
+- Adds profiler-gated capture, pipeline, skip, and UI counters.
+- Receives sampled native upload/publish timings.
+
+### `src/syphon-stream-worker.js`
+
+- Adds profiler-gated OffscreenCanvas draw and `getImageData` phase timing.
+- Returns only small timing fields alongside the existing transferable RGBA buffer.
 
 ### `src/canvas.js`
 
-- Added a `FrameRing.version` mutation counter.
-- Incremented the version after successful capture, resize, and clear.
-- Added Glitch telemetry rows to the existing profiler.
-- Updated a stale profiler comment after helper removal.
+- Adds Syphon output telemetry to the existing backtick profiler.
+- Reports capture, Worker draw/readback, end-to-end pipeline, native upload/publish, backpressure skips, and UI update counts.
+
+### `src-tauri/src/main.rs`
+
+- Caches positive Syphon receiver state per dedicated sender connection.
+- Samples `hasClients` at four hertz while connected and every bootstrap frame while disconnected.
+- Samples native timing every 30 published frames.
+- Keeps ordinary acknowledgements compact and adds timing fields only to sampled acknowledgements.
+
+### `src-tauri/src/syphon.rs`
+
+- Adds a profiled push result containing publication state and sampled native timing.
+- Measures Metal upload and publish phases only when requested by the relay.
+- Retains the original `push_pixels()` API for legacy packet support.
 
 ## Validation
 
-### `scripts/validate-pass18.mjs`
+### `scripts/validate-pass19.mjs`
 
-- Enforces stable decoder, scheduler, and Syphon boundaries.
-- Verifies the new Glitch workspace and direct-blit structure.
-- Compares old and new blit operation sequences exactly.
-- Verifies temporal-ring cache reuse and invalidation.
+- Enforces the stable decoder, independent clocks, bootstrap, and publication boundaries.
+- Verifies browser UI/polling reductions.
+- Verifies Worker and native phase telemetry.
+- Models connected receiver queries and status UI writes at 30 and 60 fps.
+- Verifies disconnected bootstrap frames continue checking receiver state.
 
 ### `package.json`
 
-- Added `npm run validate:pass18`.
+- Adds `npm run validate:pass19`.
 
 ## Documentation
 
 - `PASS_NOTES.md`
-- `GLITCH_DRAW_CALL_AUDIT.md`
+- `SYPHON_OUTPUT_BUDGET_AUDIT.md`
 - `CHANGED_FILES.md`
 - `TESTING_CHECKLIST.md`
 - `VALIDATION_REPORT.md`
@@ -44,4 +62,4 @@
 - `OPTIMIZATION_ROADMAP.md`
 - `GIT_COMMIT_MESSAGE.md`
 - `DOCUMENTATION_INDEX.md`
-- `HUFF_CLASSIC_OPTIMIZATION_PASS_18.txt`
+- `HUFF_CLASSIC_OPTIMIZATION_PASS_19.txt`

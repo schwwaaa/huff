@@ -2428,11 +2428,31 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
     };
   }
 
+  function syphonTelemetrySnapshot() {
+    const t = window.__huffSyphonTelemetry || {};
+    return {
+      captureMs: t.captureMs || 0,
+      captureSamples: t.captureSamples || 0,
+      workerDrawMs: t.workerDrawMs || 0,
+      workerReadMs: t.workerReadMs || 0,
+      workerSamples: t.workerSamples || 0,
+      endToEndMs: t.endToEndMs || 0,
+      endToEndSamples: t.endToEndSamples || 0,
+      nativeUploadMs: t.nativeUploadMs || 0,
+      nativePublishMs: t.nativePublishMs || 0,
+      nativeSamples: t.nativeSamples || 0,
+      inFlightSkips: t.inFlightSkips || 0,
+      bufferedSkips: t.bufferedSkips || 0,
+      uiUpdates: t.uiUpdates || 0,
+    };
+  }
+
   let frames = 0, lastReport = performance.now();
   let lastTelemetry = { ..._profileTelemetry };
   let lastSolarTelemetry = solarTelemetrySnapshot();
   let lastLumaTelemetry = lumaTelemetrySnapshot();
   let lastGlitchTelemetry = glitchTelemetrySnapshot();
+  let lastSyphonTelemetry = syphonTelemetrySnapshot();
 
   function report() {
     const now = performance.now();
@@ -2491,6 +2511,26 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
       const glitchRingReuseDelta = glitchNow.ringReuses - lastGlitchTelemetry.ringReuses;
       const glitchTilesAvg = glitchFramesDelta > 0 ? glitchTilesDelta / glitchFramesDelta : 0;
       const glitchDrawCallsAvg = glitchFramesDelta > 0 ? glitchDrawCallsDelta / glitchFramesDelta : 0;
+      const syphonNow = syphonTelemetrySnapshot();
+      const syphonCaptureSamples = syphonNow.captureSamples - lastSyphonTelemetry.captureSamples;
+      const syphonWorkerSamples = syphonNow.workerSamples - lastSyphonTelemetry.workerSamples;
+      const syphonEndToEndSamples = syphonNow.endToEndSamples - lastSyphonTelemetry.endToEndSamples;
+      const syphonNativeSamples = syphonNow.nativeSamples - lastSyphonTelemetry.nativeSamples;
+      const syphonCaptureAvg = syphonCaptureSamples > 0
+        ? (syphonNow.captureMs - lastSyphonTelemetry.captureMs) / syphonCaptureSamples : 0;
+      const syphonWorkerDrawAvg = syphonWorkerSamples > 0
+        ? (syphonNow.workerDrawMs - lastSyphonTelemetry.workerDrawMs) / syphonWorkerSamples : 0;
+      const syphonWorkerReadAvg = syphonWorkerSamples > 0
+        ? (syphonNow.workerReadMs - lastSyphonTelemetry.workerReadMs) / syphonWorkerSamples : 0;
+      const syphonEndToEndAvg = syphonEndToEndSamples > 0
+        ? (syphonNow.endToEndMs - lastSyphonTelemetry.endToEndMs) / syphonEndToEndSamples : 0;
+      const syphonNativeUploadAvg = syphonNativeSamples > 0
+        ? (syphonNow.nativeUploadMs - lastSyphonTelemetry.nativeUploadMs) / syphonNativeSamples : 0;
+      const syphonNativePublishAvg = syphonNativeSamples > 0
+        ? (syphonNow.nativePublishMs - lastSyphonTelemetry.nativePublishMs) / syphonNativeSamples : 0;
+      const syphonInFlightSkips = syphonNow.inFlightSkips - lastSyphonTelemetry.inFlightSkips;
+      const syphonBufferedSkips = syphonNow.bufferedSkips - lastSyphonTelemetry.bufferedSkips;
+      const syphonUiUpdates = syphonNow.uiUpdates - lastSyphonTelemetry.uiUpdates;
       const decodeFps = decodedDelta * 1000 / dt;
       const ringFps = ringDelta * 1000 / dt;
       const rows = NAMES.map(function (n) { return [n, acc[n] / f]; })
@@ -2513,6 +2553,14 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
         'mir cap    ' + mirrorCaptureAvg.toFixed(2).padStart(6) + ' ms\n' +
         'mir enc    ' + mirrorEncodeAvg.toFixed(2).padStart(6) + ' ms\n' +
         'mir stage  ' + `${mirrorScaledDelta}/${mirrorFullDelta}`.padStart(6) + ' scaled/full\n' +
+        'sy cap     ' + syphonCaptureAvg.toFixed(2).padStart(6) + ' ms\n' +
+        'sy draw    ' + syphonWorkerDrawAvg.toFixed(2).padStart(6) + ' ms\n' +
+        'sy read    ' + syphonWorkerReadAvg.toFixed(2).padStart(6) + ' ms\n' +
+        'sy pipe    ' + syphonEndToEndAvg.toFixed(2).padStart(6) + ' ms\n' +
+        'sy upload  ' + syphonNativeUploadAvg.toFixed(2).padStart(6) + ' ms\n' +
+        'sy publish ' + syphonNativePublishAvg.toFixed(2).padStart(6) + ' ms\n' +
+        'sy skips   ' + `${syphonInFlightSkips}/${syphonBufferedSkips}`.padStart(6) + ' flight/buffer\n' +
+        'sy ui      ' + syphonUiUpdates.toFixed(0).padStart(6) + ' updates\n' +
         'sol read   ' + solarReadbackAvg.toFixed(2).padStart(6) + ' ms\n' +
         'sol xform  ' + solarTransformAvg.toFixed(2).padStart(6) + ' ms\n' +
         'sol upload ' + solarUploadAvg.toFixed(2).padStart(6) + ' ms\n' +
@@ -2541,6 +2589,7 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
       lastSolarTelemetry = solarTelemetrySnapshot();
       lastLumaTelemetry = lumaTelemetrySnapshot();
       lastGlitchTelemetry = glitchTelemetrySnapshot();
+      lastSyphonTelemetry = syphonTelemetrySnapshot();
     }
   }
 
@@ -2558,6 +2607,7 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
     lastSolarTelemetry = solarTelemetrySnapshot();
     lastLumaTelemetry = lumaTelemetrySnapshot();
     lastGlitchTelemetry = glitchTelemetrySnapshot();
+    lastSyphonTelemetry = syphonTelemetrySnapshot();
     if (!visible) overlay.textContent = '';
   }
 

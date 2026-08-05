@@ -1,26 +1,26 @@
-# HUFF Classic Optimization Pass 18 — Documentation Index
+# HUFF Classic Optimization Pass 19 — Documentation Index
 
 ## Start here
 
-- `PASS_NOTES.md` — complete Pass 18 implementation summary and boundaries
+- `PASS_NOTES.md` — complete Pass 19 implementation summary and stability boundaries
 - `CURRENT_STATUS.md` — authoritative current baseline and acceptance gate
 
 ## Technical investigation
 
-- `GLITCH_DRAW_CALL_AUDIT.md` — current draw-call cost, reductions, limits, profiler interpretation, and Junkpile influence
-- `CHANGED_FILES.md` — exact runtime, validation, and documentation file changes
+- `SYPHON_OUTPUT_BUDGET_AUDIT.md` — full capture/readback/transfer/upload path, reductions, limits, and profiler interpretation
+- `CHANGED_FILES.md` — exact runtime, validation, and documentation changes
 
 ## Validation and testing
 
-- `VALIDATION_REPORT.md` — deterministic comparisons, static checks, and untested runtime boundary
-- `TESTING_CHECKLIST.md` — macOS parity, profiler, history, Syphon, and endurance tests
+- `VALIDATION_REPORT.md` — deterministic checks, retained validators, static checks, and native test boundary
+- `TESTING_CHECKLIST.md` — startup, reconnect, 30/60 fps, profiler, simultaneous-output, soak, and shutdown tests
 
 ## Project tracking
 
 - `CHANGELOG.md` — cumulative HUFF Classic optimization history
-- `OPTIMIZATION_ROADMAP.md` — mandatory work after Pass 18
-- `GIT_COMMIT_MESSAGE.md` — ready-to-use Git commit command and subject
+- `OPTIMIZATION_ROADMAP.md` — mandatory work after Pass 19 and held Syphon phase-two candidates
+- `GIT_COMMIT_MESSAGE.md` — ready-to-use commit command and body
 
 ## Pass marker
 
-- `HUFF_CLASSIC_OPTIMIZATION_PASS_18.txt`
+- `HUFF_CLASSIC_OPTIMIZATION_PASS_19.txt`

@@ -1,22 +1,14 @@
-# Git Commit Message — HUFF Classic Optimization Pass 18
-
-## Commit command
+# HUFF Classic Pass 19 — Git Commit Message
 
 ```bash
 git add . && git commit \
-  -m "perf: streamline HUFF Classic glitch blit dispatch" \
-  -m "Continue from the committed Pass 17 baseline without changing decoder ownership, frame scheduling, effect behavior, or output transport." \
-  -m "Resolve temporal-ring source canvases once per FrameRing generation and requested depth instead of calling fromEnd for every Glitch tile." \
-  -m "Precompute exact smear offsets once per smear step in reusable typed buffers rather than rounding X and Y offsets for every tile copy." \
-  -m "Dispatch base and smear blits directly through the cached Canvas2D context and calculate the constant tile span once per Glitch invocation." \
-  -m "Preserve tile placement, seeded random and noise order, history selection, source and destination rectangles, paint order, alpha, cluster motion, and artistic draw count." \
-  -m "Add profiler-only Glitch tile, draw-call, and ring-cache telemetry following Junkpile draw-call diagnostics." \
-  -m "Preserve the stable Blob URL decoder, independent clocks, Pass 16S Syphon bootstrap, Spout, Rust transport, and mandatory framework packaging." \
-  -m "Add deterministic Pass 18 validation with 3,474,837 exact ordered draw-operation comparisons."
-```
-
-## Subject only
-
-```text
-perf: streamline HUFF Classic glitch blit dispatch
+  -m "perf: reduce HUFF Classic Syphon control overhead" \
+  -m "Continue from the committed Pass 18 baseline while preserving the Pass 16S one-fps bootstrap and moving-frame startup repair." \
+  -m "Coalesce Syphon status DOM updates to four hertz while retaining one acknowledgement per accepted frame and one-frame-in-flight backpressure." \
+  -m "Cache the selected output FPS and suspend redundant Tauri runtime-state polling while WebSocket acknowledgements remain healthy." \
+  -m "Sample native Syphon receiver presence at four hertz while connected and on every bootstrap frame while disconnected, avoiding 30/60 Objective-C hasClients calls per second without delaying attachment." \
+  -m "Add profiler-gated browser capture, Worker draw/readback, end-to-end pipeline, backpressure, and UI telemetry." \
+  -m "Add low-rate sampled Metal upload and Syphon publication timings while keeping ordinary acknowledgements compact." \
+  -m "Preserve the stable Blob URL decoder, independent clocks, Canvas2D effects, temporal history, mirror output, Spout, persistent Metal textures, and mandatory framework packaging." \
+  -m "Add deterministic Pass 19 validation for receiver sampling, UI coalescing, polling recovery, and retained bootstrap behavior."
 ```

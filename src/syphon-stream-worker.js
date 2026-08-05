@@ -56,17 +56,29 @@ self.onmessage = (event) => {
   if (message.type !== 'frame' || !message.bitmap) return;
 
   const bitmap = message.bitmap;
+  const profiled = !!message.profile;
   try {
     configure(message.width, message.height);
+    const drawStarted = profiled ? performance.now() : 0;
     ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = 'copy';
     ctx.drawImage(bitmap, 0, 0, width, height);
     ctx.globalCompositeOperation = 'source-over';
     bitmap.close?.();
+    const drawMs = profiled ? performance.now() - drawStarted : 0;
 
+    const readStarted = profiled ? performance.now() : 0;
     const imageData = ctx.getImageData(0, 0, width, height);
+    const readMs = profiled ? performance.now() - readStarted : 0;
     const buffer = imageData.data.buffer;
-    self.postMessage({ type: 'pixels', id: message.id, buffer }, [buffer]);
+    self.postMessage({
+      type: 'pixels',
+      id: message.id,
+      profiled,
+      drawMs,
+      readMs,
+      buffer,
+    }, [buffer]);
   } catch (error) {
     try { bitmap.close?.(); } catch {}
     self.postMessage({ type: 'error', id: message.id, message: String(error) });

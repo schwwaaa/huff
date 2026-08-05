@@ -1,82 +1,75 @@
-# HUFF Classic Optimization Pass 18 — Testing Checklist
+# HUFF Classic Optimization Pass 19 — Testing Checklist
 
-## A. Baseline stability
+## A. Baseline playback
 
-- [ ] Launch Pass 18 and load the same video used to validate Pass 17.
-- [ ] Confirm playback and audio are as stable as Pass 17 with Glitch disabled.
-- [ ] Confirm no video decode error.
-- [ ] Confirm normal shutdown leaves no HUFF process buildup.
+- [ ] Launch Pass 19 with Syphon stopped.
+- [ ] Load the same video used for Pass 18 acceptance.
+- [ ] Confirm playback, audio, seeking, loop, speed, and effects remain equal to Pass 18.
+- [ ] Confirm no FPS regression with Syphon stopped.
 
-## B. Glitch visual parity
+## B. Black-frame startup protection
 
-Compare directly against Pass 17 using the same seed and controls.
+- [ ] Start Syphon before adding/selecting the source in OBS.
+- [ ] Confirm OBS discovers `huff`.
+- [ ] Confirm the first moving frame appears; the source must not remain black.
+- [ ] Confirm the HUFF panel reports one-fps bootstrap frames while no receiver is attached.
+- [ ] Confirm HUFF switches to the selected rate after OBS attaches.
 
-- [ ] Glitch with SMEAR 0.
-- [ ] Glitch with default SMEAR 6.
-- [ ] Glitch with high SMEAR values.
-- [ ] DEPTH and DEPTH SCATTER across low, medium, and high values.
-- [ ] SPATIAL GAP enabled and disabled.
-- [ ] Cluster Tiles disabled.
-- [ ] Cluster Tiles enabled with stationary centers.
-- [ ] Cluster travel, steering, inertia, bounce, pulse, breathe, and coherence.
-- [ ] Negative and positive Glitch Base X/Y offsets.
-- [ ] Glitch combined with Pipeline Luma Key and Scanlines.
-- [ ] Glitch combined with Feedback and Flow Pulse.
+## C. Receiver reconnect
 
-Expected result: identical tile selection, history selection, smear positions, alpha, overlap behavior, and cluster motion.
+- [ ] Remove or deactivate the OBS Syphon source.
+- [ ] Confirm HUFF returns to waiting/bootstrap mode within approximately one second.
+- [ ] Re-enable or recreate the OBS source.
+- [ ] Confirm moving frames resume without restarting HUFF or Syphon.
+- [ ] Repeat at least ten times.
 
-## C. Profiler checks
+## D. Output-rate comparison
 
-Toggle the profiler with backtick.
+Run the same scene at:
 
-- [ ] `gl tiles` rises and falls with CORRUPT, BLOCK, GAP, and cluster settings.
-- [ ] `gl draws` equals approximately `gl tiles × (1 + SMEAR)`.
-- [ ] `gl ring` shows rebuilds after decoded frames and reuses between them.
-- [ ] Profiler hidden performance remains equal to or better than Pass 17.
-- [ ] Record `applyGlitch` time at representative draw counts.
+- [ ] 1280×720 at 30 fps
+- [ ] 1280×720 at 60 fps
+- [ ] 1920×1080 at 30 fps
+- [ ] 1920×1080 at 60 fps, when the machine can sustain it
 
-Suggested measurements:
+For each:
 
-| Resolution | BLOCK | CORRUPT | SMEAR | gl tiles | gl draws | applyGlitch ms | FPS |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| 720p |  |  | 0 |  |  |  |  |
-| 720p |  |  | 6 |  |  |  |  |
-| 1080p |  |  | 0 |  |  |  |  |
-| 1080p |  |  | 6 |  |  |  |  |
-| 1080p |  |  | 20 |  |  |  |  |
+- [ ] record HUFF render FPS;
+- [ ] observe OBS motion continuity;
+- [ ] record `sy cap`, `sy draw`, `sy read`, and `sy pipe`;
+- [ ] record `sy upload` and `sy publish` after several samples;
+- [ ] record `sy skips`;
+- [ ] compare light effects with the same heavy Glitch/Flow/Luma scene.
 
-## D. Temporal-ring invalidation
+## E. UI/control-plane behavior
 
-- [ ] Play normally and verify history moves forward.
-- [ ] Pause and resume.
-- [ ] Seek to a different point.
-- [ ] Change QUALITY so ring capacity changes.
-- [ ] Resize the renderer repeatedly.
-- [ ] Replace the video source.
-- [ ] Confirm Glitch never displays frozen references from a retired ring generation.
+- [ ] Confirm the Syphon frame count still advances visibly.
+- [ ] Confirm receiver-connected/waiting text changes immediately enough for operation.
+- [ ] Confirm changing 30 ↔ 60 fps while active changes output pacing.
+- [ ] Confirm Start/Stop remains reliable.
+- [ ] Confirm no accumulating console errors.
 
-## E. Output regression
+## F. Simultaneous outputs
 
-- [ ] Start Syphon before selecting OBS source.
-- [ ] Confirm the one-fps bootstrap appears and OBS receives frames.
-- [ ] Confirm full selected Syphon rate after attachment.
-- [ ] Test Glitch with high SMEAR while Syphon is connected.
-- [ ] Disconnect and reconnect the Syphon receiver.
-- [ ] Confirm canvas mirror still works.
-- [ ] Confirm Spout code was not changed; runtime verification remains a Windows task.
+- [ ] Run Syphon alone.
+- [ ] Run the JPEG canvas mirror alone.
+- [ ] Run both simultaneously.
+- [ ] Compare render FPS and profiler timings.
+- [ ] Confirm neither output creates growing latency.
 
-## F. Endurance
+## G. Long-session stability
 
-- [ ] Run Glitch at a representative heavy setting for at least 30 minutes.
-- [ ] Watch FPS, `applyGlitch`, ring memory, and Syphon drops.
-- [ ] Confirm no progressive latency, memory climb, audio degradation, or output black frame.
+- [ ] Run Syphon with OBS attached for at least 30 minutes.
+- [ ] Switch files repeatedly.
+- [ ] Seek repeatedly.
+- [ ] Resize/fullscreen the HUFF window.
+- [ ] Stop and restart Syphon repeatedly.
+- [ ] Confirm frame counters continue advancing.
+- [ ] Confirm memory and latency do not grow continuously.
 
-## Acceptance gate
+## H. Shutdown
 
-Pass 18 becomes the next stable baseline only when:
-
-1. normal playback remains as stable as Pass 17;
-2. Glitch visuals match Pass 17;
-3. Syphon remains functional;
-4. profiler-hidden performance is equal or better;
-5. no stale temporal frames appear after source, resize, or QUALITY changes.
+- [ ] Close HUFF while Syphon is active.
+- [ ] Confirm OBS loses the source cleanly.
+- [ ] Confirm no HUFF process remains.
+- [ ] Relaunch and confirm Syphon can start again.

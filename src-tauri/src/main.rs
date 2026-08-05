@@ -17,6 +17,8 @@ mod syphon;
 mod spout;
 
 use std::{collections::HashMap, net::SocketAddr, sync::Arc};
+#[cfg(target_os = "macos")]
+use std::time::{Duration, Instant};
 
 use futures_util::{SinkExt, StreamExt};
 use midir::{MidiInput, MidiInputConnection};
@@ -434,6 +436,10 @@ async fn handle_ws(
     let mut sender_role = String::from("unknown");
     let mut sender_width = 0u32;
     let mut sender_height = 0u32;
+    #[cfg(target_os = "macos")]
+    let mut syphon_clients_cached = false;
+    #[cfg(target_os = "macos")]
+    let mut syphon_clients_checked_at: Option<Instant> = None;
 
     while let Some(msg) = ws_rx.next().await {
       match msg {
@@ -464,10 +470,12 @@ async fn handle_ws(
 
               #[cfg(target_os = "macos")]
               if sender_role == "syphon-sender" {
+                syphon_clients_cached = syphon::has_clients();
+                syphon_clients_checked_at = Some(Instant::now());
                 let state = serde_json::json!({
                   "type": "syphon-state",
                   "active": syphon::is_active(),
-                  "hasClients": syphon::has_clients(),
+                  "hasClients": syphon_clients_cached,
                   "frames": syphon::FRAME_COUNT.load(std::sync::atomic::Ordering::Relaxed),
                 });
                 let _ = control_tx.send(Message::Text(state.to_string())).await;
@@ -484,13 +492,52 @@ async fn handle_ws(
           #[cfg(target_os = "macos")]
           {
             if sender_role == "syphon-sender" && sender_width > 0 && sender_height > 0 {
-              let published = syphon::push_pixels(sender_width, sender_height, &bin);
-              let ack = serde_json::json!({
-                "type": "syphon-ack",
-                "published": published,
-                "hasClients": syphon::has_clients(),
-                "frames": syphon::FRAME_COUNT.load(std::sync::atomic::Ordering::Relaxed),
-              });
+              // Native upload/publish timing is sampled at roughly 1–2 Hz rather
+              // than measured on every frame. Receiver presence is sampled at
+              // full bootstrap cadence while disconnected, then at 4 Hz while
+              // connected. This preserves fast attachment/disconnect behavior
+              // without issuing Objective-C hasClients calls at 30/60 fps.
+              let frame_before = syphon::FRAME_COUNT.load(std::sync::atomic::Ordering::Relaxed);
+              let measure_native = frame_before % 30 == 0;
+              let result = syphon::push_pixels_profiled(
+                sender_width,
+                sender_height,
+                &bin,
+                measure_native,
+              );
+
+              let now = Instant::now();
+              let should_check_clients = !syphon_clients_cached
+                || syphon_clients_checked_at
+                  .map(|last| now.duration_since(last) >= Duration::from_millis(250))
+                  .unwrap_or(true);
+              if should_check_clients {
+                syphon_clients_cached = syphon::has_clients();
+                syphon_clients_checked_at = Some(now);
+              }
+
+              let frames = syphon::FRAME_COUNT.load(std::sync::atomic::Ordering::Relaxed);
+              let ack = if result.native_sample {
+                serde_json::json!({
+                  "type": "syphon-ack",
+                  "published": result.published,
+                  "hasClients": syphon_clients_cached,
+                  "frames": frames,
+                  "nativeSample": true,
+                  "nativeUploadUs": result.upload_micros,
+                  "nativePublishUs": result.publish_micros,
+                })
+              } else {
+                // Keep ordinary per-frame acknowledgements as compact as the
+                // established Pass 16S protocol. Timing fields are attached
+                // only to the low-rate native samples.
+                serde_json::json!({
+                  "type": "syphon-ack",
+                  "published": result.published,
+                  "hasClients": syphon_clients_cached,
+                  "frames": frames,
+                })
+              };
               let _ = control_tx.send(Message::Text(ack.to_string())).await;
             } else if bin.starts_with(b"HUFFSYPH") {
               // Legacy packet support for older HUFF Classic frontends.

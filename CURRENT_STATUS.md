@@ -1,57 +1,63 @@
-# HUFF Classic Current Status — Pass 18
+# HUFF Classic Current Status — Pass 19
 
 ## Authoritative baseline
 
-Pass 18 continues from the working and committed Pass 17 baseline.
+Pass 19 continues from the working and committed Pass 18 baseline.
 
-The stable decoder, independent schedulers, Pass 16S Syphon bootstrap repair, and Pass 17 Luma Key optimization remain intact.
+The stable decoder, independent clocks, Pass 16S black-frame repair, Solarize/Luma optimization, and Glitch hot-path optimization remain intact.
 
-## Pass 18 state
+## Pass 19 state
 
-- Glitch tile and smear draws now call the cached Canvas2D context directly.
-- Temporal history source references are cached by FrameRing mutation generation and requested depth.
-- Smear offsets are rounded once per smear step in reusable typed buffers.
-- Constant tile span is calculated once per Glitch invocation.
-- The profiler reports Glitch tile count, draw-call count, and ring-cache rebuild/reuse behavior.
-- Artistic draw count, order, geometry, and compositing remain unchanged.
+- Syphon acknowledgements remain one per accepted frame.
+- Visible Syphon status updates are coalesced to four hertz.
+- Native receiver checks run every bootstrap frame while disconnected and four times per second while connected.
+- Redundant Tauri runtime polling is suspended during healthy acknowledgement flow.
+- Native upload and publication timing is sampled at low rate.
+- The profiler now separates browser capture, Worker draw/readback, total pipeline, Metal upload, and Syphon publication.
+- Output image data, dimensions, orientation, pacing options, and backpressure behavior remain unchanged.
 
 ## Retained stable systems
 
 - File → Blob URL → p5 `createVideo()` decoding
-- independent p5, transport, mirror, and profiler clocks
+- independent p5, transport, mirror, profiler, and Syphon clocks
 - source-generation lifecycle guards
 - consolidated `gCur`, `gBuf`, and `gScratch` topology
-- canvas-backed temporal history and memory release
+- canvas-backed temporal history
 - cached Flow and Scanline geometry
 - neutral-stage bypass
-- packed Solarize processing
-- one-scratch Pipeline Luma Key
+- packed Solarize and one-scratch Luma Key
+- optimized Glitch dispatch and temporal source cache
 - receiver-aware JPEG mirror
 - one-fps Syphon bootstrap before attachment
-- selected full Syphon rate after attachment
+- selected 30/60 fps rate after attachment
+- one-frame-in-flight Syphon backpressure
+- persistent Metal texture ring
 - Spout native path
 - mandatory universal bundled `Syphon.framework`
 
-## Current performance boundary
+## Current output boundary
 
-Glitch's remaining dominant cost is the number of Canvas2D `drawImage()` operations:
+HUFF Classic still performs a Canvas2D-to-CPU readback and CPU-to-Metal upload for Syphon. Pass 19 removes avoidable control-plane work and provides the measurements needed to decide whether the next output improvement should target:
 
-```text
-accepted tiles × (1 + SMEAR)
-```
-
-Pass 18 reduces surrounding JavaScript overhead and exposes that count. It does not silently reduce tiles or smear copies.
+- main-thread bitmap capture;
+- Worker OffscreenCanvas draw;
+- Worker `getImageData`;
+- Worker-to-main RGBA transfer;
+- WebSocket transfer;
+- Metal upload;
+- Syphon publication.
 
 ## Acceptance gate
 
-Pass 18 should be committed as the next baseline only after:
+Commit Pass 19 only after:
 
-1. visual parity with Pass 17;
-2. equal or better normal playback stability;
-3. no Syphon regression;
-4. equal or lower `applyGlitch` time at the same `gl draws` count;
-5. correct temporal history after seek, resize, QUALITY change, and source replacement.
+1. OBS receives moving frames from startup;
+2. no black-frame regression occurs;
+3. reconnect works repeatedly;
+4. Pass 18 playback stability is retained;
+5. 30 and 60 fps selections still operate;
+6. profiler values advance without destabilizing output.
 
 ## Next mandatory target
 
-Pass 19: output-capture budget and Syphon optimization, preserving the working bootstrap and black-frame repair.
+Pass 20: remaining Canvas2D ceiling review using the accumulated Flow, Scanline, Glitch, Solarize, Luma, mirror, and Syphon telemetry. Further Syphon transport ownership changes remain gated on Pass 19 runtime measurements.
