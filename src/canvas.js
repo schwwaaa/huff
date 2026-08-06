@@ -9,6 +9,7 @@
  *  - WS mirror JPEG quality and target FPS dynamically follow the quality slider
  *  - hookUI split into focused sub-functions
  *  - Pass 8: one shared full-resolution scratch buffer for feedback/flow/symmetry
+ *  - Pass 31: decoded-frame Glitch-only strobe; Luma Key and all other stages remain live
  *  - Pass 8: p5.Graphics and pixel-processing scratch canvases resize in place
  *  - Pass 8: final presentation uses direct Canvas2D blits
  *  - Pass 9: ring capture contexts stay in copy mode and capacity math is cached
@@ -157,6 +158,7 @@ function _retireCurrentSource({ revokeBlob = true } = {}) {
   _wasPlaying = false;
   _seekPending = false;
   _rvfcOwnsGCur = false;
+  _resetGlitchStrobeGate('source-retired');
 
   if (revokeBlob && currentBlobUrl) {
     try { URL.revokeObjectURL(currentBlobUrl); } catch {}
@@ -482,7 +484,7 @@ function toggleUI() {
 const PRESET_IDS = [
   'quality','depth','corrupt','block','glitchSpeed','glitchSpeedFine',
   'glitchSize','glitchSmear','glitchBaseX','glitchBaseY',
-  'glitchSpeedMul','glitchAlpha','glitchJitter','glitchSmearAngle','seed',
+  'glitchSpeedMul','glitchAlpha','glitchJitter','glitchSmearAngle','glitchStrobe','glitchStrobeEvery','seed',
   'corruptOn','feedback','persistence','fbX','fbY','fbZ','fbTheta',
   'clusters','clusterTiles','clusterCount','clusterRadius','spatialGap',
   'cluCenters','cluSpread','cluMinSpread','cluBias','cluDrift','cluSpeed','cluInertia',
@@ -538,6 +540,10 @@ function applyPreset(data) {
   if (!validRecipeIds.has(String(sourceData.pipelineRecipe || ''))) {
     sourceData.pipelineRecipe = 'classic';
   }
+  // Pass 31 is opt-in and belongs only to Glitch. Legacy presets must not
+  // inherit a currently active strobe state when recalled.
+  if (!('glitchStrobe' in sourceData)) sourceData.glitchStrobe = false;
+  if (!('glitchStrobeEvery' in sourceData)) sourceData.glitchStrobeEvery = '4';
 
   _suppressUndo = true;
   try {
@@ -997,6 +1003,7 @@ function windowResized() {
     allocBuffers();
     [gBuf, gScratch].forEach(_clearGraphics);
     frameRing.clear(true);
+    _resetGlitchStrobeGate('resize');
     seededOnce = false;
     _bypassSyncedVfc = -1;
     _renderWasBypassed = true;
@@ -1010,6 +1017,7 @@ function clearAll() {
   _capabilityInstrumentation?.count('clearAllCalls');
   [gBuf, gScratch].forEach(_clearGraphics);
   frameRing.clear();
+  _resetGlitchStrobeGate('clear');
   seededOnce = false;
   _bypassSyncedVfc = -1;
   _renderWasBypassed = true;
@@ -1034,7 +1042,8 @@ function hookUI() {
     'glitchSize','glitchSizeVal','glitchSmear','glitchSmearVal',
     'glitchBaseX','glitchBaseXVal','glitchBaseY','glitchBaseYVal',
     'glitchSpeedMul','glitchSpeedMulVal','glitchAlpha','glitchAlphaVal',
-    'glitchJitter','glitchJitterVal','glitchSmearAngle','glitchSmearAngleVal','seed',
+    'glitchJitter','glitchJitterVal','glitchSmearAngle','glitchSmearAngleVal',
+    'glitchStrobe','glitchStrobeEvery','glitchStrobeEveryVal','seed',
     'feedback','feedbackVal','persistence','persistenceVal',
     'fbX','fbXVal','fbY','fbYVal','fbZ','fbZVal','fbTheta','fbThetaVal',
     'clusters','clusterTiles','clusterCount','clusterCountVal',
@@ -1244,7 +1253,7 @@ function hookVolume() {
 function hookSliders() {
   const sliderIds = [
     'quality','depth','corrupt','block','glitchSpeed','glitchSpeedFine',
-    'glitchSize','glitchSmear','glitchBaseX','glitchBaseY',
+    'glitchSize','glitchSmear','glitchBaseX','glitchBaseY','glitchStrobeEvery',
     'feedback','persistence','fbX','fbY','fbZ','fbTheta',
     'spatialGap','clusterCount','clusterRadius','cluCenters','cluSpread',
     'cluMinSpread','cluBias','cluDrift','cluSpeed','cluSteer','cluInertia','cluCohere',
@@ -1262,7 +1271,7 @@ function hookSliders() {
   });
 
   // Checkboxes and selects also get snapshotted for undo
-  ['corruptOn','clusters','clusterTiles','flowOn','baseOn','symOn','solarizeOn',
+  ['corruptOn','glitchStrobe','clusters','clusterTiles','flowOn','baseOn','symOn','solarizeOn',
    'cluBounds','pipelineRecipe','layerPriority','seedOnLoad','bgMode','symMode',
    'lumaKeyOn','globalMixOn','globalMixBlend','globalMixPos','scanSpinLeft','scanSpinRight'].forEach(id => {
     _$(id)?.addEventListener('change', snapshotForUndo);
@@ -1271,6 +1280,14 @@ function hookSliders() {
   els.baseOn?.addEventListener('change', () => {
     if (els.baseMix) els.baseMix.disabled = !els.baseOn.checked;
     updateLabels();
+  });
+
+  els.glitchStrobe?.addEventListener('change', () => {
+    _resetGlitchStrobeGate('toggle');
+    updateLabels();
+  });
+  els.glitchStrobeEvery?.addEventListener('input', () => {
+    _resetGlitchStrobeGate('rate');
   });
 }
 
@@ -1379,6 +1396,7 @@ function updateLabels() {
   set(els.glitchAlpha,      els.glitchAlphaVal,      f2);
   set(els.glitchJitter,     els.glitchJitterVal,     f2);
   set(els.glitchSmearAngle, els.glitchSmearAngleVal, v => (v|0)+'°');
+  set(els.glitchStrobeEvery, els.glitchStrobeEveryVal, v => String(Math.max(1, Math.trunc(+v || 1))));
   set(els.scanAlpha,        els.scanAlphaVal,        f2);
   set(els.scanShift,        els.scanShiftVal,        f2);
   set(els.scanDrift,        els.scanDriftVal,        f2);
@@ -1407,6 +1425,9 @@ function updateLabels() {
   if (els.baseMix && els.baseMixVal) {
     els.baseMixVal.textContent = f2(els.baseMix.value);
     if (els.baseMix) els.baseMix.disabled = !els.baseOn?.checked;
+  }
+  if (els.glitchStrobeEvery) {
+    els.glitchStrobeEvery.disabled = !els.glitchStrobe?.checked;
   }
 }
 
@@ -1542,14 +1563,87 @@ function enableTransport(en) {
   });
 }
 
+// ─── Pass 31 Glitch-only strobe gate ────────────────────────────────────────
+// Gate only applyGlitch() on decoded source-frame buckets. Pipeline Luma Key
+// remains live every render frame, as do Scanlines, Feedback, Flow, Symmetry,
+// Solarize, Global Mix, clean-source presentation, transport, and outputs.
+// No additional image buffer or history system is allocated.
+const _glitchStrobeGate = Object.seal({
+  wasGlitchActive: false,
+  lastEnabled: false,
+  lastRate: 4,
+  lastBucket: -1,
+  updates: 0,
+  heldRenders: 0,
+  resets: 0,
+  lastResetReason: 'startup',
+});
+window.HUFF_GLITCH_STROBE_TELEMETRY = _glitchStrobeGate;
+
+function _glitchStrobeRate(value) {
+  const rate = Math.trunc(Number(value));
+  return Number.isFinite(rate) ? Math.max(1, Math.min(30, rate)) : 4;
+}
+
+function _resetGlitchStrobeGate(reason = 'reset') {
+  _glitchStrobeGate.wasGlitchActive = false;
+  _glitchStrobeGate.lastEnabled = false;
+  _glitchStrobeGate.lastRate = 4;
+  _glitchStrobeGate.lastBucket = -1;
+  _glitchStrobeGate.resets++;
+  _glitchStrobeGate.lastResetReason = String(reason);
+}
+
+function _shouldApplyGlitchThisRender(state) {
+  const gate = _glitchStrobeGate;
+  const glitchActive = !!state.corruptOn;
+  if (!glitchActive) {
+    gate.wasGlitchActive = false;
+    return false;
+  }
+
+  const enabled = !!state.glitchStrobe;
+  if (!enabled) {
+    gate.wasGlitchActive = true;
+    gate.lastEnabled = false;
+    gate.lastBucket = -1;
+    gate.updates++;
+    return true;
+  }
+
+  const rate = _glitchStrobeRate(state.glitchStrobeEvery);
+  const bucket = Math.floor(Math.max(0, _vfc) / rate);
+  const shouldUpdate =
+    !gate.wasGlitchActive ||
+    !gate.lastEnabled ||
+    gate.lastRate !== rate ||
+    gate.lastBucket !== bucket;
+
+  gate.wasGlitchActive = true;
+  gate.lastEnabled = true;
+  gate.lastRate = rate;
+
+  if (shouldUpdate) {
+    gate.lastBucket = bucket;
+    gate.updates++;
+    return true;
+  }
+
+  gate.heldRenders++;
+  return false;
+}
+
 // ─── draw loop ────────────────────────────────────────────────────────────────
 
 // ─── Draw-loop helpers ───────────────────────────────────────────────────────
 // Defined once rather than recreated as closures on every render frame.
 function _emitGlitchGroup(state, density, glitchPriority, lumaMix) {
-  if (state.corruptOn) {
+  if (_shouldApplyGlitchThisRender(state)) {
     applyGlitch(density, Math.trunc(state.glitchBaseX), Math.trunc(state.glitchBaseY), glitchPriority, state);
   }
+  // Luma Key intentionally remains real-time while Glitch is strobing. This
+  // preserves the live clean-source reveal against the held/persistent glitch
+  // material instead of freezing the complete composite.
   if (state.lumaKeyOn && lumaMix > 0) {
     applyPipelineLumaKey(state.lumaKeyAB, lumaMix, !!state.lumaKeyInvert, _vfc);
   }

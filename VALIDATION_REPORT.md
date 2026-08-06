@@ -1,4 +1,4 @@
-# HUFF Classic Optimization Pass 30 — Validation Report
+# HUFF Classic Optimization Pass 31 — Validation Report
 
 ## Result
 
@@ -6,38 +6,27 @@
 
 ## Proven
 
-- `CLASSIC` is the exact Pass 22 compatibility route.
-- `CRISP FINISH` changes only the serial position of the existing Glitch/Luma/Scanline group.
-- Both routes use the existing `gCur / gBuf / gScratch` topology.
-- Both routes declare no cycles and no additional scratch resource.
-- All stages and all four Global Mix slots occur exactly once where required.
-- Routes compile once and are selected atomically before any stage executes.
-- Unknown route IDs recover to `CLASSIC`.
-- Legacy presets cannot inherit an alternate active route.
-- `src/effects.js`, Flow, capability instrumentation, canvas mirror, presets, and the complete native tree remain unchanged.
+- only `applyGlitch()` is strobe-gated;
+- Pipeline Luma Key remains dispatched every active render frame;
+- scheduling is based on decoded-frame `_vfc` buckets;
+- STROBE off preserves normal Glitch dispatch;
+- first activation, rate changes, and Glitch re-enable force an update;
+- no whole-frame store or additional render buffer was added;
+- protected Pass 30 runtime and native files remain hash-identical.
 
-## Deterministic checks
+## Completed checks
 
 ```text
-Pass 30 validator:                         PASS
-Applicable Pass 9–22 validators:          PASS
-JavaScript / MJS / CJS syntax:             38 files PASS
-Inline HTML scripts:                       8 PASS
-JSON parsing:                              33 files PASS
-TOML parsing:                              2 files PASS
-Shell syntax:                              8 files PASS
-Release preflight:                         38 passed, 0 blockers
+Pass 31 validator:               32 checks PASS
+Pass 30 route validator:         PASS
+Applicable Pass 9–22 validators: PASS
+Release preflight:               38 passed, 0 blockers
+JavaScript syntax:               PASS
+JSON files:                      38 PASS
+TOML files:                      2 PASS
+Shell syntax:                    PASS
 ```
 
-## Not proven in this environment
+## Not proven here
 
-This environment did not run the packaged Tauri application or native platform builds. Runtime testing is still required for:
-
-- visual parity of CLASSIC against Pass 29;
-- the intended CRISP FINISH visual relationship;
-- repeated live route switching;
-- preset/undo interaction in the application;
-- Syphon, Spout, and mirror behavior while switching;
-- native installer and platform release candidates.
-
-No runtime performance improvement is claimed by this pass.
+The packaged Tauri application was not visually exercised in this environment. Runtime approval is required for visual feel, persistence interaction, luma-key composition, frame pacing, and platform outputs. No performance improvement is claimed.

@@ -1,73 +1,35 @@
-# HUFF Classic Optimization Pass 30 — Pass Notes
+# HUFF Classic Optimization Pass 31 — Pass Notes
 
 ## Name
 
-**Constrained Pipeline Switching Foundation**
+**Glitch Strobe Isolation**
 
 ## Baseline
 
-HUFF Classic Optimization Pass 29 — Platform Packaging Freeze.
+HUFF Classic Optimization Pass 30 — Constrained Pipeline Switching.
 
 ## Purpose
 
-Add a small validated serial recipe selector without turning HUFF Classic into a node graph and without changing any effect algorithm.
+Add strobing only to the existing Glitch stage. The complete output is never frozen. Pipeline Luma Key continues to evaluate the current clean source every render frame, allowing held/persistent glitch material to be revealed against real-time video.
 
-## User-facing recipes
-
-### CLASSIC
-
-The exact Pass 22 compatibility route:
+## Controls
 
 ```text
-source sync
-→ persistent decay
-→ Glitch / Pipeline Luma Key / Scanlines
-→ Global Mix: before
-→ Feedback
-→ Global Mix: after
-→ Flow
-→ Global Mix: afterflow
-→ Symmetry
-→ Solarize
-→ Global Mix: final
-→ presentation
+STROBE  off/on
+EVERY   1–30 decoded source frames
 ```
 
-### CRISP FINISH
+With STROBE off, Glitch follows the exact Pass 30 path. With STROBE on, `applyGlitch()` runs once per decoded-frame bucket. The existing persistent composite remains available between updates.
 
-The same stages and resources, with the existing Glitch/Luma/Scanline ordered group moved into a validated final overlay slot:
+## Explicitly live while Glitch strobes
 
-```text
-source sync
-→ persistent decay
-→ Global Mix: before
-→ Feedback
-→ Global Mix: after
-→ Flow
-→ Global Mix: afterflow
-→ Symmetry
-→ Solarize
-→ Glitch / Pipeline Luma Key / Scanlines
-→ Global Mix: final
-→ presentation
-```
+- Pipeline Luma Key and its clean-source mask;
+- Scanlines;
+- Feedback;
+- Flow;
+- Symmetry;
+- Solarize;
+- Global Mix;
+- media decode, transport, mirror, Syphon, and Spout.
 
-This allows Glitch, Luma Key, and Scanlines to remain visually crisp instead of being transformed by Flow, Symmetry, and Solarize.
-
-## Safety boundary
-
-- Both recipes compile once at startup.
-- One immutable recipe is selected before any stage executes for a frame.
-- Unknown route IDs recover to `CLASSIC`.
-- Both recipes declare exactly three full-resolution buffers.
-- Both recipes use only the existing `gScratch` scratch surface.
-- No recipe declares a cycle.
-- No effect implementation changed.
-- Flow remains the exact Pass 22 implementation.
-- No native, decoder, FrameRing, mirror, Syphon, Spout, shutdown, or packaging runtime changed.
-
-## Preset behavior
-
-- New presets save `pipelineRecipe`.
-- Presets created before Pass 30 load into `CLASSIC` regardless of the route currently selected.
-- Unknown imported recipe IDs recover to `CLASSIC` before control events are dispatched.
+No whole-frame LIVE/STROBE/HOLD system is included. The rejected Frame Store Pass 31 is not part of this package.

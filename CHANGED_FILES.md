@@ -1,54 +1,33 @@
-# HUFF Classic Optimization Pass 30 — Changed Files
+# HUFF Classic Optimization Pass 31 — Changed Files
 
 ## Browser runtime
 
-- `src/pipeline-runtime.js`
-  - adds two immutable validated recipe definitions;
-  - compiles a recipe registry once at startup;
-  - adds atomic recipe switching and `CLASSIC` fallback.
-- `src/canvas.js`
-  - selects one plan before frame dispatch;
-  - uses the selected plan for the complete frame;
-  - saves route selection in presets and undo;
-  - migrates legacy/unknown preset routes to `CLASSIC`.
-- `src/index.html`
-  - adds the `PIPELINE / RECIPE` selector with `CLASSIC` and `CRISP FINISH`.
-
-## Source contracts
-
-- `pipeline/stage-contracts.mjs`
-  - adds the `final-overlays` zone;
-  - permits the existing front overlay members in that zone;
-  - declares both recipe skeletons and their fixed resource budgets.
-
-## Validation and metadata
-
-- `scripts/validate-pass30.mjs`
-- `package.json`
-- `baseline/pass30-src.sha256`
-- `baseline/pass30-src-tauri.sha256`
+- `src/index.html` — adds Glitch `STROBE` and `EVERY` controls inside the Glitch group.
+- `src/canvas.js` — adds decoded-frame scheduling around `applyGlitch()` only; preserves real-time Pipeline Luma Key; adds preset/undo/UI and lifecycle reset plumbing.
 
 ## Documentation
 
-- `PIPELINE_SWITCHING_FOUNDATION_AUDIT.md`
-- `HUFF_CLASSIC_OPTIMIZATION_PASS_30.txt`
-- complete updated documentation suite
+- `docs/docs/parameter-reference.html`
+- `docs-v1/docs/parameter-reference.html`
+- `GLITCH_STROBE_ISOLATION_AUDIT.md`
+- complete Pass 31 documentation suite
+
+## Validation and metadata
+
+- `scripts/validate-pass31.mjs`
+- `package.json`
+- `baseline/pass31-src.sha256`
+- `baseline/pass31-src-tauri.sha256`
 
 ## Explicitly unchanged
 
 ```text
 src/effects.js
+src/pipeline-runtime.js
 src/capability-instrumentation.js
 src/canvas.html
 src/presets/**
 src-tauri/**
-Flow algorithm and controls
-all effect algorithms
-video decoder and source lifecycle
-FrameRing capture and memory policy
-render / transport / output clocks
-mirror / Syphon / Spout runtime
-shutdown behavior
-platform packaging definitions
+Flow and all effect algorithms
 full-resolution buffer count
 ```

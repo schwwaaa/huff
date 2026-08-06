@@ -1,51 +1,19 @@
-# HUFF Classic Roadmap — After Pass 30
+# HUFF Classic Roadmap — After Pass 31
 
 ## Completed
 
-Passes 1–30 complete the Classic optimization, infrastructure, packaging, and constrained pipeline-switching foundation.
+Passes 1–30: optimization, stability, packaging, and constrained pipeline switching.
 
-## Pass 31+ — Paired-down effect augmentation
+Pass 31: Glitch-only strobe with real-time Pipeline Luma Key.
 
-The next series returns to creative effect work with strict compatibility boundaries.
+## Immediate next pass
 
-Requirements for every augmentation:
+Pass 32 is reserved for refinement or correction of Glitch Strobe after runtime testing. It must not introduce a separate effect unless explicitly requested.
 
-- one effect or one tightly related behavior per pass;
-- existing behavior preserved behind neutral/default values;
-- exact authoritative baseline identified before coding;
-- CLASSIC and CRISP FINISH both tested;
-- no unrestricted routing graph;
-- no hidden full-resolution buffer allocation;
-- no new temporal store without an explicit bounded budget;
-- no change to Flow unless the user explicitly reopens Flow work;
-- deterministic validation where possible;
-- user visual approval before further optimization.
+## Later Classic augmentation
 
-Recommended sequence:
-
-```text
-Pass 31  augmentation scope and first selected effect
-Pass 32  refine and validate that approved effect
-Pass 33+ continue the curated Classic set
-Release  final cross-platform capability and installer validation
-```
-
-## HUFF Classic product boundary
-
-Classic remains the free, stabilized, paired-down instrument. It should offer a coherent collection of expressive effects and a small number of reliable pipeline recipes—not attempt to imitate the complete HUFF HD architecture.
+Continue one approved effect or tightly related behavior per pass. Keep Classic stable, paired down, and compatible with its three-buffer Canvas2D architecture.
 
 ## HUFF HD / wgpu
 
-The accepted creative ideas can expand fully in HUFF HD through:
-
-```text
-typed video / mask / key ports
-parallel branches
-explicit field / trail / feedback stores
-program and preview buses
-auxiliary sends
-legal temporal cycles
-GPU resource budgets
-high-resolution output
-full modular routing
-```
+Reserve unrestricted typed routing, parallel branches, dedicated field/trail stores, program/preview buses, higher-resolution processing, and full modular expansion for HUFF HD.

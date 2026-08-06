@@ -1,0 +1,4 @@
+HUFF Classic Optimization Pass 31
+Glitch Strobe Isolation
+
+Adds decoded-frame strobing only to the existing Glitch stage. Pipeline Luma Key and every other stage remain live. The rejected whole-frame Frame Store experiment is excluded.

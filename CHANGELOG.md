@@ -498,3 +498,13 @@ This changelog tracks the optimization series for the legacy Tauri v1 + p5.js/Ca
 - Extended the existing profiler without adding a render surface or scheduling clock.
 - Preserved exact Pass 22 effects/Flow, exact Pass 26 pipeline runtime, output pacing, controls, presets, and native code.
 - Added the Classic-to-wgpu constrained pipeline strategy and complete Pass 27 validation/documentation suite.
+
+
+## HUFF Classic Optimization Pass 31 — Glitch Strobe Isolation
+
+- Added Glitch-only STROBE and EVERY controls.
+- Gated only `applyGlitch()` using decoded-frame buckets.
+- Kept Pipeline Luma Key and all other stages real-time.
+- Added legacy-preset migration to strobe off and lifecycle resets.
+- Added no image buffer, history system, pipeline route, or native change.
+- Excluded the rejected whole-frame Frame Store experiment.

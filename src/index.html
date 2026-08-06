@@ -1167,6 +1167,12 @@
                 <div class="group-body">
                 <div class="group-row">
                     <div class="ctrl"><label>ON</label><input id="corruptOn" type="checkbox"></div>
+                    <div class="ctrl"><label>STROBE</label><input id="glitchStrobe" type="checkbox" title="Update only the Glitch layer at a decoded-frame interval. Luma Key, Scanlines, Feedback, Flow, and the clean source continue in real time."></div>
+                    <div class="ctrl">
+                        <label>EVERY</label>
+                        <input id="glitchStrobeEvery" type="range" min="1" max="30" step="1" value="4" disabled title="Apply a new Glitch update every N decoded source frames while STROBE is enabled.">
+                        <span class="val" id="glitchStrobeEveryVal">4</span>
+                    </div>
                     <div class="ctrl">
                         <label>DEPTH</label>
                         <input id="depth" type="range" min="0" max="0.5" step="0.01" value="0.5">
