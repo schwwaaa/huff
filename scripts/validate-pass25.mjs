@@ -143,7 +143,7 @@ verifyUnchangedFromManifest(
   'src',
   'baseline/pass24-src.sha256',
   ['canvas.js', 'index.html'],
-  ['pipeline-runtime.js'],
+  ['pipeline-runtime.js', 'capability-instrumentation.js'],
 );
 verifyUnchangedFromManifest('src-tauri', 'baseline/pass22-src-tauri.sha256', [], []);
 assert(hash('src/effects.js') === '2b352fa279c728ba292485fe22a0e580c6a3f36d669bd9741f79d5af4454dd44', 'Flow/effects implementation changed');

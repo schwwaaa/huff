@@ -1,42 +1,47 @@
-# HUFF Classic Optimization Pass 26 — Changed Files
+# HUFF Classic Optimization Pass 27 — Changed Files
 
 ## Runtime files
 
 ```text
-src/pipeline-runtime.js
+src/capability-instrumentation.js
 src/canvas.js
+src/index.html
 ```
 
-### `src/pipeline-runtime.js`
+### `src/capability-instrumentation.js`
 
-- advanced the constrained pipeline runtime to version 2;
-- added the immutable front-stage group and mode contract;
-- added exact Pass 22 priority-contract validation;
-- added the allocation-free priority-order resolver;
-- added the one-time front-stage group compiler;
-- attached the validated priority contract to the existing front-overlays recipe step.
+- adds immutable 720p/1080p at 30/60 fps capability profiles;
+- adds detached light, moderate, and worst-case scene definitions;
+- owns low-cost lifecycle counters and profiler-gated phase timing;
+- exposes snapshots only for diagnostics;
+- adds no clock, render surface, UI control, preset field, or route.
 
 ### `src/canvas.js`
 
-- split the existing front-stage renderer into stable Glitch/Luma and Scanline group handlers;
-- compiled those handlers once through `compileFrontStagePriority()`;
-- replaced the inline `glitchOnTop` calculation with the validated plan;
-- retained the existing priority inputs, contribution values, and render-frame timing.
+- records source replacement/readiness/error and resize/buffer counters;
+- times total render, source synchronization, and active pipeline only while the profiler is visible;
+- reports capability, uptime, render-path, lifecycle, optional heap, and Spout metrics;
+- preserves the exact Pass 26 pipeline dispatch and exact Pass 22 Flow call.
 
-## Contract, validation, and package metadata
+### `src/index.html`
+
+- loads the instrumentation before the existing pipeline/effects/canvas scripts;
+- adds profiler-gated Spout draw/read/send timing;
+- adds low-cost Spout sent/skip/socket/surface counters;
+- changes no controls, output cadence, frame format, or native protocol.
+
+## Validation and metadata
 
 ```text
-pipeline/stage-contracts.mjs
-baseline/pass25-src.sha256
+baseline/pass26-src.sha256
+baseline/pass26-src-tauri.sha256
 scripts/validate-pass25.mjs
 scripts/validate-pass26.mjs
+scripts/validate-pass27.mjs
 package.json
 ```
 
-- the source contract now records the existing fallback and pulse constants;
-- the Pass 25 validator accepts later compatible pipeline-runtime versions while retaining its original serial-foundation checks;
-- the new Pass 26 validator proves priority parity and constrained file integrity;
-- `package.json` exposes `npm run validate:pass26`.
+The Pass 25 and Pass 26 validators were updated only to permit the declared later instrumentation files while continuing to prove their original route and priority contracts.
 
 ## Documentation
 
@@ -51,9 +56,9 @@ CURRENT_STATUS.md
 OPTIMIZATION_ROADMAP.md
 GIT_COMMIT_MESSAGE.md
 BASELINE_INTEGRITY_MANIFEST.md
-STAGE_CONTRACT_REGISTRY.md
-FRONT_STAGE_PRIORITY_FORMALIZATION_AUDIT.md
-HUFF_CLASSIC_OPTIMIZATION_PASS_26.txt
+CAPABILITY_STABILITY_INSTRUMENTATION_AUDIT.md
+CLASSIC_TO_WGPU_PIPELINE_STRATEGY.md
+HUFF_CLASSIC_OPTIMIZATION_PASS_27.txt
 README.md
 ```
 
@@ -61,12 +66,11 @@ README.md
 
 ```text
 src/effects.js
-src/index.html
-src/canvas.html
+src/pipeline-runtime.js
 src/presets/**
 src/midi/**
 src/osc/**
 src-tauri/**
 ```
 
-Flow, every effect algorithm, every control, every preset, media loading, clocks, FrameRing capture, mirror, Syphon, Spout, and native packaging remain unchanged.
+Flow, effect algorithms, pipeline order, front-stage priority modes, controls, presets, media ownership, FrameRing cadence, mirror pacing, Syphon pacing, Spout pacing, and native code remain unchanged.

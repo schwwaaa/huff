@@ -1,38 +1,43 @@
-# HUFF Classic Optimization Roadmap — After Pass 26
+# HUFF Classic Optimization Roadmap — After Pass 27
 
 ## Authoritative rule
 
-Pass 22 remains the behavioral baseline. Pass 25 is the confirmed-working modular-runtime checkpoint. Pass 26 formalizes only the priority behavior already present in Pass 22.
+Pass 22 remains the behavioral baseline. Pass 26 is the confirmed-working modular-runtime checkpoint. Pass 27 adds measurement only.
 
-Flow remains frozen throughout the infrastructure sequence.
-
-## Pass 27 — Capability and Stability Instrumentation
-
-- define 720p30, 720p60, 1080p30, and 1080p60 test profiles;
-- define light, moderate, and worst-case effect scenes;
-- measure decode, render, mirror, and Syphon/Spout phases separately;
-- add source replacement and resize counters;
-- add long-session resource and state telemetry;
-- avoid new per-frame allocation and avoid visual-effect changes;
-- make no Flow changes.
+Flow remains frozen throughout Passes 28–29.
 
 ## Pass 28 — Output Endurance and Shutdown
 
-- Syphon reconnect and soak validation;
-- Spout validation;
-- mirror backpressure endurance;
-- deterministic source/output cleanup;
+- Syphon start/stop/reconnect and receiver detach/reattach testing;
+- bootstrap-to-full-rate transition soak;
+- Spout start/stop/reconnect and backpressure testing;
+- mirror receiver reconnect and latest-frame-wins endurance;
+- deterministic source, Worker, WebSocket, timer, and native-output cleanup;
 - process-exit and orphan-process verification;
-- make no Flow changes.
+- no effect or Flow changes.
 
 ## Pass 29 — Platform Packaging Freeze
 
 - macOS universal framework verification;
 - signing and notarization preparation;
-- Windows installer validation;
-- Linux codec, WebKit, GStreamer, and package matrix;
-- final capability and known-issues documentation.
+- Windows installer and Spout package validation;
+- Linux codec, WebKit, GStreamer, ALSA, and package matrix;
+- final 720p/1080p capability matrix;
+- release-known-issues and platform documentation;
+- final Classic infrastructure freeze.
 
-## Deferred feature work
+## Post-infrastructure feature sequence
 
-New effects, Flow changes, pixel sorting, datamosh expansion, and broader routing remain deferred until the infrastructure and release sequence is stable.
+### Pass 30 — Constrained Pipeline Switching Foundation
+
+- expose a small validated recipe list rather than a node graph;
+- preserve serial `gBuf` / `gScratch` ownership;
+- reject routes requiring undeclared buffers or unsafe cycles;
+- retain the original route as the default and compatibility fallback.
+
+### Pass 31+ — Paired-Down Effect Augmentation
+
+- add only effects that fit the Classic resource and stability budget;
+- validate each effect in every supported recipe;
+- keep the free Classic feature set coherent and intentionally limited;
+- reserve broad modular routing, high-resolution processing, and full experimentation for HUFF HD/wgpu.

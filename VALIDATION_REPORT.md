@@ -1,58 +1,43 @@
-# HUFF Classic Optimization Pass 26 — Validation Report
+# HUFF Classic Optimization Pass 27 — Validation Report
 
 ## Scope
 
-Pass 26 formalizes only the already-existing Glitch/Luma versus Scanline priority relationship inside the validated serial recipe runtime. It adds no route, effect position, control, preset field, or render resource.
+Pass 27 adds capability and stability instrumentation only. No effect behavior, route, control, preset, output pacing, render surface, or native code is changed.
 
-## Priority parity validation
+## Instrumentation contract validation
 
-`node scripts/validate-pass26.mjs` executes 46,880 comparisons between:
+`scripts/validate-pass27.mjs` executes the browser instrumentation in an isolated VM and confirms:
 
-1. a direct implementation of the Pass 22 inline `glitchOnTop` calculation; and
-2. the new immutable priority resolver.
+- the four profile definitions and frame budgets;
+- the three detached effect-load scene definitions;
+- frozen public registries;
+- exact profile selection for 720p30 and 1080p60;
+- lifecycle counter behavior;
+- profiler-gated timing behavior;
+- render total and maximum accumulation;
+- source/pipeline phase accumulation;
+- render-path counting;
+- source/canvas state snapshots;
+- uptime and optional heap snapshots.
 
-The matrix includes:
-
-```text
-scan
-glitch
-neutral
-pulse
-empty
-unknown
-undefined
-null
-```
-
-and pulse speeds from below the clamp through the UI maximum, plus undefined and `NaN` cases.
-
-Every case returned the same paint order.
-
-## Compiled group validation
-
-The validator confirms:
-
-- SCAN TOP executes Glitch/Luma then Scanlines;
-- GLITCH TOP executes Scanlines then Glitch/Luma;
-- NEUTRAL uses the original render-frame parity;
-- PULSE uses the original 60fps timing formula;
-- static order arrays are frozen and reused;
-- both handlers are required at compile time;
-- a modified SCAN TOP contract is rejected.
-
-## Runtime preservation checks
-
-- `src/effects.js` remains exact Pass 22:
+## Runtime preservation
 
 ```text
+src/effects.js
 2b352fa279c728ba292485fe22a0e580c6a3f36d669bd9741f79d5af4454dd44
+
+src/pipeline-runtime.js
+5124aa948fcf556ce5b00c8da1bfef8a86da850d278e680cc9a4e0a8ea3634b9
 ```
 
-- `src/index.html`, controls, presets, MIDI maps, OSC maps, media workers, and relay scripts match the Pass 25 source manifest;
-- the complete `src-tauri/` tree matches the Pass 22 native manifest;
-- Flow dispatch parameters and `gBuf`/`gScratch` swap remain unchanged;
-- the count of full-resolution p5 Graphics allocations remains unchanged;
-- rejected Melt and Sort-Mosh code remains absent.
+The validator also confirms:
+
+- every source file outside `canvas.js`, `index.html`, and the declared new instrumentation file matches the Pass 26 manifest;
+- the complete native tree matches the Pass 26 manifest;
+- no third p5 Graphics surface exists;
+- no new animation or polling clock exists in the instrumentation;
+- no closure or object-spread allocation was introduced inside `draw()`;
+- rejected Flow Melt and Sort-Mosh code remains absent.
 
 ## Validators completed
 
@@ -73,28 +58,28 @@ Pass 21
 Pass 22
 Pass 25
 Pass 26
+Pass 27
 ```
 
-Pass 23 and Pass 24 validators remain superseded by the runtime integration introduced in Pass 25.
+The Pass 25 and Pass 26 validators were made forward-compatible with the declared Pass 27 instrumentation files while retaining their original contract checks.
 
 ## Static validation
 
 The final package is checked for:
 
-- 30 project-owned JavaScript/ESM/CommonJS files with `node --check`;
-- 32 inline HTML scripts with `node --check`;
-- 29 JSON files parsed successfully;
-- 2 TOML files parsed successfully;
-- 6 shell scripts with `bash -n`;
-- complete Pass 25 source-manifest constraints;
-- complete Pass 22 native-manifest constraints;
-- bundled Syphon binary confirmed as universal `x86_64 + arm64`;
+- project-owned JavaScript syntax with `node --check`;
+- inline HTML script syntax;
+- JSON parsing;
+- TOML parsing;
+- shell syntax with `bash -n`;
+- Pass 26 source/native manifest constraints;
+- universal `x86_64 + arm64` Syphon framework binary;
 - ZIP integrity after packaging.
 
 ## Native validation
 
-`cargo check` was not run because Cargo and Rust are not installed in this environment. The native tree is unchanged and hash-verified.
+`cargo check` was not run because Cargo/Rust are unavailable in this environment. The native tree is unchanged and hash-verified.
 
 ## Runtime claims
 
-No FPS improvement is claimed. No visual change is intended. Actual WebView playback, visual parity, Syphon, Spout, and long-session behavior require testing in the packaged application.
+No FPS increase or capability tier is claimed. Runtime tests on the target machines must establish the final 720p/1080p matrix and output endurance.

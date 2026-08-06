@@ -1608,6 +1608,7 @@
     </header>
 
     <script defer src="p5.js"></script>
+    <script defer src="capability-instrumentation.js"></script>
     <script defer src="pipeline-runtime.js"></script>
     <script defer src="effects.js"></script>
     <script defer src="canvas.js"></script>
@@ -2599,6 +2600,33 @@
         let outputH      = 720;
         let spoutWS      = null;
 
+        // Pass 27 profiler telemetry. Timing is recorded only while the existing
+        // backtick profiler is visible; low-cost sent/skip counters remain useful
+        // during long-session output testing.
+        const spoutTelemetry = window.__huffSpoutTelemetry = {
+            drawMs: 0,
+            drawSamples: 0,
+            readMs: 0,
+            readSamples: 0,
+            sendMs: 0,
+            sendSamples: 0,
+            sentFrames: 0,
+            bufferedSkips: 0,
+            socketMisses: 0,
+            surfaceRebuilds: 0,
+            statusPolls: 0,
+            outputWidth: 0,
+            outputHeight: 0,
+            running: false,
+        };
+        function spoutCount(name, amount = 1) {
+            spoutTelemetry[name] = (spoutTelemetry[name] || 0) + amount;
+        }
+        function spoutProfile(name, amount) {
+            if (!window.__huffProfilerActive) return;
+            spoutCount(name, amount);
+        }
+
         // ── helpers ───────────────────────────────────────────────────────────
         function setStatus(text, cls = '') {
             if (statusBox) { statusBox.textContent = text; statusBox.className = cls; }
@@ -2665,10 +2693,16 @@
             if (ts - lastTs < period) return;
 
             ensureSpoutWS();
-            if (!spoutWS || spoutWS.readyState !== WebSocket.OPEN) return;
+            if (!spoutWS || spoutWS.readyState !== WebSocket.OPEN) {
+                spoutCount('socketMisses');
+                return;
+            }
 
             // One pending raw frame is already obsolete. Skip before readback.
-            if (spoutWS.bufferedAmount > 0) return;
+            if (spoutWS.bufferedAmount > 0) {
+                spoutCount('bufferedSkips');
+                return;
+            }
 
             lastTs = ts;
 
@@ -2676,6 +2710,7 @@
             if (!src) return;
 
             if (!spoutCanvas || spoutCanvas.width !== outputW || spoutCanvas.height !== outputH) {
+                spoutCount('surfaceRebuilds');
                 spoutCanvas = document.createElement('canvas');
                 spoutCanvas.width  = outputW;
                 spoutCanvas.height = outputH;
@@ -2686,18 +2721,35 @@
                 });
             }
 
+            const profiled = !!window.__huffProfilerActive;
+            let phaseStarted = profiled ? performance.now() : 0;
             spoutCtx.globalAlpha = 1;
             spoutCtx.globalCompositeOperation = 'copy';
             spoutCtx.drawImage(src, 0, 0, outputW, outputH);
             spoutCtx.globalCompositeOperation = 'source-over';
+            if (profiled) {
+                spoutProfile('drawMs', performance.now() - phaseStarted);
+                spoutProfile('drawSamples', 1);
+                phaseStarted = performance.now();
+            }
 
             let imageData;
             try { imageData = spoutCtx.getImageData(0, 0, outputW, outputH); }
             catch { return; }
+            if (profiled) {
+                spoutProfile('readMs', performance.now() - phaseStarted);
+                spoutProfile('readSamples', 1);
+                phaseStarted = performance.now();
+            }
 
             // Send the ImageData view directly. This removes the old second
             // frame-sized Uint8Array and .set() copy from every Spout frame.
             spoutWS.send(imageData.data);
+            if (profiled) {
+                spoutProfile('sendMs', performance.now() - phaseStarted);
+                spoutProfile('sendSamples', 1);
+            }
+            spoutCount('sentFrames');
             frameCount++;
             if (frameCountEl && (frameCount % 15 === 0)) {
                 frameCountEl.textContent = `${frameCount} frames`;
@@ -2716,6 +2768,9 @@
                 outputW    = Math.max(64, w);
                 outputH    = Math.max(64, h);
                 running    = true;
+                spoutTelemetry.running = true;
+                spoutTelemetry.outputWidth = outputW;
+                spoutTelemetry.outputHeight = outputH;
                 frameCount = 0;
                 lastTs     = 0;
                 ensureSpoutWS();
@@ -2730,6 +2785,7 @@
 
         async function stopSpout() {
             running = false;
+            spoutTelemetry.running = false;
             if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
             closeSpoutWS();
             spoutCanvas = null;
@@ -2753,6 +2809,7 @@
         // ── status poll ───────────────────────────────────────────────────────
         setInterval(async () => {
             if (!running) return;
+            spoutCount('statusPolls');
             try {
                 const s = await invoke('spout_status');
                 if (running) setStatus(s, 'active');

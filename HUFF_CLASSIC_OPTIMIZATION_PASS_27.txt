@@ -1,0 +1,11 @@
+HUFF Classic Optimization Pass 27
+Capability and Stability Instrumentation
+
+Behavioral authority: user-supplied Pass 22
+Confirmed predecessor: Pass 26
+Flow changes: none
+Effect changes: none
+Route changes: none
+Native changes: none
+
+Adds capability profiles, detached load scenes, profiler-gated render/output phase telemetry, and long-session lifecycle counters.

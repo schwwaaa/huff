@@ -134,7 +134,9 @@ function _sourceIsCurrent(generation, media) {
 }
 
 function _retireCurrentSource({ revokeBlob = true } = {}) {
+  const hadSource = !!videoEl || !!currentBlobUrl;
   const generation = ++_sourceGeneration;
+  if (hadSource) _capabilityInstrumentation?.count('sourceRetirements');
   // Invalidate only the decode callback chain. Independent render, transport,
   // mirror, and profiler schedulers remain exactly as they were in Pass 12R.
   _pumpSession++;
@@ -196,6 +198,7 @@ function _profileCount(name, amount = 1) {
   if (!window.__huffProfilerActive) return;
   _profileTelemetry[name] = (_profileTelemetry[name] || 0) + amount;
 }
+const _capabilityInstrumentation = window.HuffCapabilityInstrumentation || null;
 let gCur, gBuf, gScratch;
 let canvas, _mainCanvasEl = null, _mainCtx = null;
 let playing = false;
@@ -960,17 +963,25 @@ function setup() {
 window.setup = setup;
 
 function allocBuffers() {
+  const dimensionsChanged = !gCur || gCur.width !== width || gCur.height !== height ||
+    !gBuf || gBuf.width !== width || gBuf.height !== height ||
+    !gScratch || gScratch.width !== width || gScratch.height !== height;
   gCur     = _ensureGraphics(gCur,     width, height);
   gBuf     = _ensureGraphics(gBuf,     width, height);
   gScratch = _ensureGraphics(gScratch, width, height);
+  _capabilityInstrumentation?.count('bufferAllocationPasses');
+  if (dimensionsChanged) _capabilityInstrumentation?.count('bufferDimensionChanges');
+  _capabilityInstrumentation?.setCanvas(width, height);
 }
 
 let _resizeRaf = 0;
 function windowResized() {
+  _capabilityInstrumentation?.count('resizeRequests');
   if (_resizeRaf) cancelAnimationFrame(_resizeRaf);
   _resizeRaf = requestAnimationFrame(() => {
     _resizeRaf = 0;
     resizeCanvas(windowWidth, windowHeight, true);
+    _capabilityInstrumentation?.count('resizeCommits');
     _mainCanvasEl = canvas?.elt ?? _mainCanvasEl;
     _mainCtx = _mainCanvasEl?.getContext('2d', { alpha:true, desynchronized:true }) ?? _mainCtx;
     allocBuffers();
@@ -986,6 +997,7 @@ function windowResized() {
 window.windowResized = windowResized;
 
 function clearAll() {
+  _capabilityInstrumentation?.count('clearAllCalls');
   [gBuf, gScratch].forEach(_clearGraphics);
   frameRing.clear();
   seededOnce = false;
@@ -1404,6 +1416,10 @@ function onFile(ev) {
 
   // Preserve the stable Pass 12R decoder and scheduler. Only retire ownership
   // of the previous source and invalidate callbacks that may arrive later.
+  const replacingSource = !!videoEl;
+  _capabilityInstrumentation?.count('fileLoads');
+  if (replacingSource) _capabilityInstrumentation?.count('sourceReplacements');
+  _capabilityInstrumentation?.setSource('file-pending');
   const generation = _retireCurrentSource({ revokeBlob: true });
   enableTransport(false);
 
@@ -1448,6 +1464,8 @@ function onFile(ev) {
     }
     // play() may resolve after another file or camera has replaced this source.
     if (!sourceIsCurrent()) return;
+    _capabilityInstrumentation?.count('sourceReady');
+    _capabilityInstrumentation?.setSource('file', v.videoWidth, v.videoHeight);
 
     // #8: apply playback rate from UI
     const rateSelect = _$('playbackRate');
@@ -1495,6 +1513,8 @@ function onFile(ev) {
 
   v.addEventListener('error', () => {
     if (!sourceIsCurrent()) return;
+    _capabilityInstrumentation?.count('sourceErrors');
+    _capabilityInstrumentation?.setSource('file-error', v.videoWidth, v.videoHeight);
     _clearSourceReadyPoller();
     _clearSourceGestureUnlock();
     enableTransport(true);
@@ -1858,7 +1878,14 @@ const _pass22PipelinePlan = _pipelineRuntime.compileRecipe(
   _pipelineStageHandlers,
 );
 
+function _finishCapabilityRender(startedAt, path) {
+  if (!window.__huffProfilerActive || !startedAt) return;
+  _capabilityInstrumentation?.sample('render', performance.now() - startedAt);
+  _capabilityInstrumentation?.markRenderPath(path);
+}
+
 function draw() {
+  const capabilityRenderStarted = window.__huffProfilerActive ? performance.now() : 0;
   _tickFPS();
   const s = renderState;
   const bg = s.bgMode || 'black';
@@ -1866,6 +1893,7 @@ function draw() {
   if (!videoEl) {
     _paintMainBackground(bg);
     drawWaiting();
+    _finishCapabilityRender(capabilityRenderStarted, 'waiting');
     return;
   }
 
@@ -1873,7 +1901,11 @@ function draw() {
   // update it once per genuinely decoded source frame in pumpVideoFrames().
   _pipelineFrame.state = s;
   _pipelineFrame.bg = bg;
+  const sourceSyncStarted = window.__huffProfilerActive ? performance.now() : 0;
   _pass22PipelinePlan.executeSource(_pipelineFrame);
+  if (sourceSyncStarted) {
+    _capabilityInstrumentation?.sample('sourceSync', performance.now() - sourceSyncStarted);
+  }
 
   // Preserve phase progression even when the corresponding stage is currently
   // neutral. Re-enabling an effect therefore resumes at the same temporal point
@@ -1915,6 +1947,7 @@ function draw() {
     _syncBypassBuffer();
     _renderWasBypassed = true;
     _presentCleanFrame(_graphicsCanvas(gCur));
+    _finishCapabilityRender(capabilityRenderStarted, 'bypass');
     return;
   }
 
@@ -1930,6 +1963,7 @@ function draw() {
   if (activity.glitch) randomSeed(baseSeed + frameCount);
 
   _pipelineFrame.activity = activity;
+  const activePipelineStarted = window.__huffProfilerActive ? performance.now() : 0;
   _pass22PipelinePlan.executePersistent(_pipelineFrame);
 
   // Paint order remains the exact Classic layer-priority model. The validated
@@ -1945,6 +1979,10 @@ function draw() {
   _pipelineFrame.lumaMix = s.lumaKeyMix;
   _pipelineFrame.gmPos = s.globalMixPos || 'after';
   _pass22PipelinePlan.executeEffectsAndPresentation(_pipelineFrame);
+  if (activePipelineStarted) {
+    _capabilityInstrumentation?.sample('activePipeline', performance.now() - activePipelineStarted);
+  }
+  _finishCapabilityRender(capabilityRenderStarted, 'active');
 }
 function drawWaiting() {
   push();
@@ -1979,11 +2017,17 @@ async function listCameras() {
 }
 
 function stopCamera() {
+  _capabilityInstrumentation?.count('cameraStops');
+  _capabilityInstrumentation?.setSource('none');
   _retireCurrentSource({ revokeBlob: true });
   try { enableTransport(false); } catch {}
 }
 
 function startCamera(deviceId) {
+  const replacingSource = !!videoEl;
+  _capabilityInstrumentation?.count('cameraStarts');
+  if (replacingSource) _capabilityInstrumentation?.count('sourceReplacements');
+  _capabilityInstrumentation?.setSource('camera-pending');
   const generation = _retireCurrentSource({ revokeBlob: true });
   try { enableTransport(false); } catch {}
 
@@ -1998,6 +2042,7 @@ function startCamera(deviceId) {
       // the camera, or requested another device. Retire that stale stream
       // immediately instead of allowing a second hidden capture to remain live.
       if (!v || generation !== _sourceGeneration || videoEl !== capture) {
+        _capabilityInstrumentation?.count('staleCameraCompletions');
         try { v?.srcObject?.getTracks().forEach(track => track.stop()); } catch {}
         try { if (v?.srcObject) v.srcObject = null; } catch {}
         try { capture?.remove?.(); } catch {}
@@ -2009,6 +2054,8 @@ function startCamera(deviceId) {
       const kick = () => {
         if (generation !== _sourceGeneration || videoEl !== capture) return;
         try {
+          _capabilityInstrumentation?.count('sourceReady');
+          _capabilityInstrumentation?.setSource('camera', v.videoWidth, v.videoHeight);
           playing = true;
           v.play().catch(() => {});
           connectVideoAudio(v);
@@ -2022,6 +2069,8 @@ function startCamera(deviceId) {
     try { cloakVideo(videoEl); } catch {}
   } catch(e) {
     if (generation === _sourceGeneration) {
+      _capabilityInstrumentation?.count('sourceErrors');
+      _capabilityInstrumentation?.setSource('camera-error');
       _retireCurrentSource({ revokeBlob: true });
       console.warn('startCamera:', e);
       const msg = (e?.name === 'NotAllowedError') ? 'Camera permission denied'
@@ -2570,6 +2619,42 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
     };
   }
 
+  function spoutTelemetrySnapshot() {
+    const t = window.__huffSpoutTelemetry || {};
+    return {
+      drawMs: t.drawMs || 0,
+      drawSamples: t.drawSamples || 0,
+      readMs: t.readMs || 0,
+      readSamples: t.readSamples || 0,
+      sendMs: t.sendMs || 0,
+      sendSamples: t.sendSamples || 0,
+      sentFrames: t.sentFrames || 0,
+      bufferedSkips: t.bufferedSkips || 0,
+      socketMisses: t.socketMisses || 0,
+      surfaceRebuilds: t.surfaceRebuilds || 0,
+      statusPolls: t.statusPolls || 0,
+      outputWidth: t.outputWidth || 0,
+      outputHeight: t.outputHeight || 0,
+      running: !!t.running,
+    };
+  }
+
+  function capabilityTelemetrySnapshot() {
+    return _capabilityInstrumentation?.snapshot?.() || {
+      uptimeMs: 0, renderSamples: 0, renderMs: 0, renderMaxMs: 0,
+      sourceSyncSamples: 0, sourceSyncMs: 0, sourceSyncMaxMs: 0,
+      activePipelineSamples: 0, activePipelineMs: 0, activePipelineMaxMs: 0,
+    };
+  }
+
+  function formatUptime(milliseconds) {
+    const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+  }
+
   let frames = 0, lastReport = performance.now();
   let lastTelemetry = { ..._profileTelemetry };
   let lastSolarTelemetry = solarTelemetrySnapshot();
@@ -2578,6 +2663,8 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
   let lastScanlineTelemetry = scanlineTelemetrySnapshot();
   let lastFlowTelemetry = flowTelemetrySnapshot();
   let lastSyphonTelemetry = syphonTelemetrySnapshot();
+  let lastSpoutTelemetry = spoutTelemetrySnapshot();
+  let lastCapabilityTelemetry = capabilityTelemetrySnapshot();
 
   function report() {
     const now = performance.now();
@@ -2680,6 +2767,31 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
       const syphonInFlightSkips = syphonNow.inFlightSkips - lastSyphonTelemetry.inFlightSkips;
       const syphonBufferedSkips = syphonNow.bufferedSkips - lastSyphonTelemetry.bufferedSkips;
       const syphonUiUpdates = syphonNow.uiUpdates - lastSyphonTelemetry.uiUpdates;
+      const spoutNow = spoutTelemetrySnapshot();
+      const spoutDrawSamples = spoutNow.drawSamples - lastSpoutTelemetry.drawSamples;
+      const spoutReadSamples = spoutNow.readSamples - lastSpoutTelemetry.readSamples;
+      const spoutSendSamples = spoutNow.sendSamples - lastSpoutTelemetry.sendSamples;
+      const spoutDrawAvg = spoutDrawSamples > 0
+        ? (spoutNow.drawMs - lastSpoutTelemetry.drawMs) / spoutDrawSamples : 0;
+      const spoutReadAvg = spoutReadSamples > 0
+        ? (spoutNow.readMs - lastSpoutTelemetry.readMs) / spoutReadSamples : 0;
+      const spoutSendAvg = spoutSendSamples > 0
+        ? (spoutNow.sendMs - lastSpoutTelemetry.sendMs) / spoutSendSamples : 0;
+      const spoutSentDelta = spoutNow.sentFrames - lastSpoutTelemetry.sentFrames;
+      const spoutBufferedDelta = spoutNow.bufferedSkips - lastSpoutTelemetry.bufferedSkips;
+      const spoutSocketMissDelta = spoutNow.socketMisses - lastSpoutTelemetry.socketMisses;
+      const capabilityNow = capabilityTelemetrySnapshot();
+      const capabilityRenderSamples = capabilityNow.renderSamples - lastCapabilityTelemetry.renderSamples;
+      const capabilitySourceSamples = capabilityNow.sourceSyncSamples - lastCapabilityTelemetry.sourceSyncSamples;
+      const capabilityPipelineSamples = capabilityNow.activePipelineSamples - lastCapabilityTelemetry.activePipelineSamples;
+      const capabilityRenderAvg = capabilityRenderSamples > 0
+        ? (capabilityNow.renderMs - lastCapabilityTelemetry.renderMs) / capabilityRenderSamples : 0;
+      const capabilitySourceAvg = capabilitySourceSamples > 0
+        ? (capabilityNow.sourceSyncMs - lastCapabilityTelemetry.sourceSyncMs) / capabilitySourceSamples : 0;
+      const capabilityPipelineAvg = capabilityPipelineSamples > 0
+        ? (capabilityNow.activePipelineMs - lastCapabilityTelemetry.activePipelineMs) / capabilityPipelineSamples : 0;
+      const targetProfile = _capabilityInstrumentation?.closestProfile?.(width, height, fps);
+      const heapMiB = capabilityNow.heapUsedBytes > 0 ? capabilityNow.heapUsedBytes / 1048576 : 0;
       const decodeFps = decodedDelta * 1000 / dt;
       const ringFps = ringDelta * 1000 / dt;
       const rows = NAMES.map(function (n) { return [n, acc[n] / f]; })
@@ -2694,6 +2806,18 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
         'HUFF PROFILER  (toggle: ` )\n' +
         'fps        ' + fps.toFixed(1).padStart(6) + '\n' +
         'frame      ' + frameMs.toFixed(2).padStart(6) + ' ms\n' +
+        'profile    ' + String(targetProfile?.id || 'custom').padStart(6) + '\n' +
+        'uptime     ' + formatUptime(capabilityNow.uptimeMs).padStart(8) + '\n' +
+        'render     ' + capabilityRenderAvg.toFixed(2).padStart(6) + ' ms avg\n' +
+        'render max ' + capabilityNow.renderMaxMs.toFixed(2).padStart(6) + ' ms\n' +
+        'src sync   ' + capabilitySourceAvg.toFixed(2).padStart(6) + ' ms\n' +
+        'pipeline   ' + capabilityPipelineAvg.toFixed(2).padStart(6) + ' ms\n' +
+        'paths      ' + `${capabilityNow.renderWaitingSamples}/${capabilityNow.renderBypassSamples}/${capabilityNow.renderActiveSamples}`.padStart(11) + ' wait/bypass/active\n' +
+        'source     ' + `${capabilityNow.lastSourceKind || 'none'} ${capabilityNow.lastSourceWidth || 0}×${capabilityNow.lastSourceHeight || 0}`.padStart(18) + '\n' +
+        'src life   ' + `${capabilityNow.sourceReplacements}/${capabilityNow.sourceReady}/${capabilityNow.sourceErrors}`.padStart(11) + ' replace/ready/error\n' +
+        'resize     ' + `${capabilityNow.resizeRequests}/${capabilityNow.resizeCommits}`.padStart(6) + ' request/commit\n' +
+        'buffers    ' + `${capabilityNow.bufferAllocationPasses}/${capabilityNow.bufferDimensionChanges}`.padStart(6) + ' alloc/resize\n' +
+        (heapMiB > 0 ? 'heap MiB   ' + heapMiB.toFixed(1).padStart(6) + '\n' : '') +
         'decode     ' + decodeFps.toFixed(1).padStart(6) + ' fps\n' +
         'ring       ' + ringFps.toFixed(1).padStart(6) + ' fps\n' +
         'ring mem   ' + `${frameRing.allocatedSlots}/${frameRing.capacity}`.padStart(6) + ' slots\n' +
@@ -2710,6 +2834,11 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
         'sy publish ' + syphonNativePublishAvg.toFixed(2).padStart(6) + ' ms\n' +
         'sy skips   ' + `${syphonInFlightSkips}/${syphonBufferedSkips}`.padStart(6) + ' flight/buffer\n' +
         'sy ui      ' + syphonUiUpdates.toFixed(0).padStart(6) + ' updates\n' +
+        'sp draw    ' + spoutDrawAvg.toFixed(2).padStart(6) + ' ms\n' +
+        'sp read    ' + spoutReadAvg.toFixed(2).padStart(6) + ' ms\n' +
+        'sp send    ' + spoutSendAvg.toFixed(2).padStart(6) + ' ms\n' +
+        'sp frames  ' + `${spoutSentDelta}/${spoutBufferedDelta}`.padStart(6) + ' sent/skip\n' +
+        'sp socket  ' + spoutSocketMissDelta.toFixed(0).padStart(6) + ' misses\n' +
         'sol read   ' + solarReadbackAvg.toFixed(2).padStart(6) + ' ms\n' +
         'sol xform  ' + solarTransformAvg.toFixed(2).padStart(6) + ' ms\n' +
         'sol upload ' + solarUploadAvg.toFixed(2).padStart(6) + ' ms\n' +
@@ -2751,6 +2880,8 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
       lastScanlineTelemetry = scanlineTelemetrySnapshot();
       lastFlowTelemetry = flowTelemetrySnapshot();
       lastSyphonTelemetry = syphonTelemetrySnapshot();
+      lastSpoutTelemetry = spoutTelemetrySnapshot();
+      lastCapabilityTelemetry = capabilityTelemetrySnapshot();
     }
   }
 
@@ -2759,6 +2890,7 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
   function toggle() {
     visible = !visible;
     window.__huffProfilerActive = visible;
+    if (visible) _capabilityInstrumentation?.beginProfilerSession?.();
     ensureOverlay();
     overlay.style.display = visible ? 'block' : 'none';
     NAMES.forEach(function (n) { acc[n] = 0; });
@@ -2771,6 +2903,8 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
     lastScanlineTelemetry = scanlineTelemetrySnapshot();
     lastFlowTelemetry = flowTelemetrySnapshot();
     lastSyphonTelemetry = syphonTelemetrySnapshot();
+    lastSpoutTelemetry = spoutTelemetrySnapshot();
+    lastCapabilityTelemetry = capabilityTelemetrySnapshot();
     if (!visible) overlay.textContent = '';
   }
 

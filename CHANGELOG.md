@@ -438,3 +438,14 @@ This changelog tracks the optimization series for the legacy Tauri v1 + p5.js/Ca
 - Added a complete audit of current pipeline order, source ownership, buffer contracts, legal serial modularity, and routes that require additional storage.
 - Defined Passes 24–29 for stage contracts, validated recipes, stability instrumentation, output endurance, and release packaging.
 - Changed no runtime files and claimed no performance improvement.
+
+## HUFF Classic Optimization Pass 27 — Capability and Stability Instrumentation
+
+- Added immutable 720p30, 720p60, 1080p30, and 1080p60 capability profiles.
+- Added detached light, moderate, and worst-case effect-load scene definitions.
+- Added source replacement, readiness, error, resize, buffer, and long-session counters.
+- Added profiler-gated complete-render, source-sync, and active-pipeline timing.
+- Added Spout draw, readback, send, sent/skip, socket, and surface telemetry.
+- Extended the existing profiler without adding a render surface or scheduling clock.
+- Preserved exact Pass 22 effects/Flow, exact Pass 26 pipeline runtime, output pacing, controls, presets, and native code.
+- Added the Classic-to-wgpu constrained pipeline strategy and complete Pass 27 validation/documentation suite.

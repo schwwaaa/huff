@@ -2,9 +2,9 @@
 
 ```bash
 git add . && git commit \
-  -m "refactor: formalize HUFF Classic front-stage priority" \
-  -m "Represent the existing Glitch/Luma and Scanline ordering groups as one immutable validated priority contract inside the Pass 22 serial recipe runtime." \
-  -m "Preserve SCAN TOP, GLITCH TOP, NEUTRAL, and PULSE behavior exactly, including the original render-frame parity and 60fps pulse timing calculation." \
-  -m "Compile the two group handlers once, add no routing UI or render buffer, and keep Flow, effects, controls, presets, media paths, outputs, and native code unchanged." \
-  -m "Add 46,880-case priority parity validation, constrained source manifests, and the complete Pass 26 documentation suite."
+  -m "feat: add HUFF Classic capability instrumentation" \
+  -m "Define immutable 720p30, 720p60, 1080p30, and 1080p60 profiles plus detached light, moderate, and worst-case effect-load scenes." \
+  -m "Add profiler-gated total render, source-sync, active-pipeline, and Spout phase timing with source replacement, resize, buffer, uptime, and long-session counters." \
+  -m "Preserve the exact Pass 22 effects and Flow implementation, the confirmed Pass 26 serial pipeline runtime, output pacing, controls, presets, and complete native Tauri tree." \
+  -m "Add Pass 27 validation, capability testing documentation, and the Classic-to-wgpu constrained pipeline strategy."
 ```

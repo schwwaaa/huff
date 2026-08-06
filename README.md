@@ -18,7 +18,7 @@
 
 ---
 
-> **Optimization lineage:** Pass 26 keeps the established Pass 22 Canvas2D route and formalizes only the existing Glitch/Luma versus Scanline priority modes inside the validated serial recipe. No new routing mode, effect redesign, Flow change, or additional full-resolution buffer is introduced.
+> **Optimization lineage:** Pass 27 keeps the exact Pass 22 effects and confirmed Pass 26 serial pipeline while adding profiler-gated capability, output-phase, lifecycle, resize, and long-session instrumentation. No route, effect, Flow, preset, output-pacing, render-buffer, or native change is introduced.
 
 ## What is huff?
 

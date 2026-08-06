@@ -1,14 +1,13 @@
-# HUFF Classic — Current Status After Optimization Pass 26
+# HUFF Classic — Current Status After Optimization Pass 27
 
 ## Confirmed lineage
 
 - Pass 22 remains the authoritative behavioral baseline.
-- Pass 23 documented constrained modularity.
-- Pass 24 created immutable stage contracts.
-- Pass 25 moved the exact fixed route into one validated serial recipe and was confirmed working by the user.
-- Pass 26 formalizes the exact existing front-stage priority behavior.
+- Pass 25 introduced the validated fixed serial recipe and was confirmed working.
+- Pass 26 formalized the existing front-stage priority behavior and was confirmed working.
+- Pass 27 adds capability and stability instrumentation without changing visual behavior.
 
-## Current modular foundation
+## Current infrastructure
 
 ```text
 one validated 12-zone serial recipe
@@ -16,48 +15,31 @@ one validated 12-zone serial recipe
 two immutable front-stage ordering groups
 four existing priority modes
 four existing Global Mix slots
+720p30 / 720p60 / 1080p30 / 1080p60 test profiles
+light / moderate / worst-case test scenes
+render, decode, mirror, Syphon, and Spout phase telemetry
+source, resize, buffer, and long-session counters
 no user-facing route editor
-no parallel branch
 no new full-resolution buffer
 ```
 
-## Existing formalized front-stage modes
-
-```text
-SCAN TOP
-GLITCH TOP
-NEUTRAL
-PULSE
-```
-
-No new mode or effect position was added.
-
 ## Frozen area
 
-Flow remains excluded from infrastructure changes:
+Flow remains exact Pass 22 and is excluded from the infrastructure sequence.
+
+## Remaining infrastructure passes
+
+Two passes remain after Pass 27:
 
 ```text
-algorithm
-controls
-presets
-source ownership
-FrameRing access
-noise order
-tile order
-input/output buffers
-ping-pong swap
+Pass 28 — Output Endurance and Shutdown
+Pass 29 — Platform Packaging Freeze
 ```
 
-## Runtime validation required
-
-The user should verify the four priority modes, especially NEUTRAL and PULSE, then compare combined Glitch/Luma/Scanline scenes with Pass 25. Video pacing and Syphon should also be checked.
+After those passes, development can move into constrained pipeline switching and paired-down effect augmentation for Classic.
 
 ## Next pass
 
-**Pass 27 — Capability and Stability Instrumentation**
+**Pass 28 — Output Endurance and Shutdown**
 
-Pass 27 will add measurement and diagnostic structure for resolution/frame-rate capability, effect-load scenes, source replacement, resize, output pacing, and long-session state. It will not redesign effects or modify Flow.
-
-## Release state
-
-Not release-frozen. Output endurance, shutdown verification, installers, signing/notarization, Windows and Linux validation, and final platform documentation remain.
+Pass 28 will focus on Syphon reconnect/soak behavior, Spout lifecycle validation, mirror backpressure endurance, deterministic cleanup, and process-exit verification. It will make no Flow changes.

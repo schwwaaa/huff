@@ -1,40 +1,44 @@
-# HUFF Classic Optimization Pass 26 — Pass Notes
+# HUFF Classic Optimization Pass 27 — Pass Notes
 
 **Date:** 2026-08-05  
 **Authoritative behavioral baseline:** user-supplied Pass 22 archive  
-**Immediate predecessor:** user-confirmed working Pass 25 package  
-**Scope:** existing front-stage priority formalization  
-**User-facing controls:** unchanged  
+**Immediate predecessor:** user-confirmed working Pass 26 package  
+**Scope:** capability and stability instrumentation  
+**User-facing effect behavior:** unchanged  
 **Flow changes:** none
 
 ## Work completed
 
-- formalized the existing Glitch/Luma and Scanline ordering groups inside `src/pipeline-runtime.js`;
-- encoded the exact four existing priority modes: `scan`, `glitch`, `neutral`, and `pulse`;
-- preserved the original 60fps pulse timing basis, minimum speed clamp, frame rounding, and alternating phase;
-- compiled the two front-stage group handlers once outside `draw()`;
-- replaced the inline `glitchOnTop` branch with a validated immutable order resolver;
-- retained the original paint order in every mode;
-- retained unknown/empty priority fallback behavior as SCAN TOP;
-- kept the priority resolver inactive when neither front-stage group contributes;
-- extended `pipeline/stage-contracts.mjs` with the existing timing and fallback constants;
-- added deterministic comparison against the exact Pass 22 calculation across 46,880 cases;
-- retained the one accepted 12-zone serial recipe and every existing buffer ownership rule;
-- added a Pass 25 source manifest to constrain allowed runtime changes.
+- added immutable capability profiles for `720p30`, `720p60`, `1080p30`, and `1080p60`;
+- added detached light, moderate, and worst-case effect-load scene definitions;
+- added low-cost counters for file/camera source replacement, readiness, errors, stale camera completions, resize requests/commits, buffer allocation passes, and buffer dimension changes;
+- added profiler-gated timing for complete render cost, source synchronization, and the active validated pipeline;
+- retained the existing independent decode, render, mirror, Syphon, Spout, transport, and profiler clocks;
+- exposed Spout draw, CPU readback, WebSocket send, sent-frame, buffered-skip, socket-miss, and surface-rebuild telemetry;
+- extended the existing backtick profiler with capability profile, uptime, render-path, source lifecycle, resize, buffer, optional heap, and Spout data;
+- added a long-session test protocol and Classic-to-wgpu pipeline strategy document;
+- updated Pass 25 and Pass 26 validators only so their already-proven foundations remain runnable in the presence of the declared Pass 27 instrumentation files;
+- added no route, effect stage, control, preset, output clock, render surface, or native change.
 
 ## Runtime files changed
 
 ```text
-src/pipeline-runtime.js  formalized immutable front-stage contract and compiled resolver
-src/canvas.js            dispatches the existing front groups through the compiled plan
+src/capability-instrumentation.js  new immutable profile/scene registry and telemetry API
+src/canvas.js                      lifecycle counters, profiler-gated render phases, profiler display
+src/index.html                     script registration and Spout phase telemetry
 ```
 
-No effect implementation, control, preset, media path, output path, or native file changed.
+## Frozen runtime
 
-## Flow freeze
+```text
+src/effects.js
+src/pipeline-runtime.js
+src/presets/**
+src-tauri/**
+```
 
-`src/effects.js` remains exact Pass 22. Flow parameters, noise sampling, FrameRing use, tile order, source/destination rectangles, draw order, and `gBuf`/`gScratch` swap remain unchanged.
+Flow remains exact Pass 22. The validated Pass 26 serial recipe and front-stage priority runtime remain byte-identical.
 
 ## Result
 
-Pass 26 makes the already-existing limited front-stage modularity explicit and validated. It does not broaden the routing model. HUFF Classic still accepts one serial recipe and only the priority behavior already present in Pass 22.
+Pass 27 makes performance and lifecycle behavior observable without changing the image. The application can now be tested against repeatable capability profiles and effect-load scenes before output endurance and packaging freeze.
