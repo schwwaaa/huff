@@ -1,50 +1,38 @@
-# HUFF Classic Optimization Pass 28 — Pass Notes
+# HUFF Classic Optimization Pass 29 — Pass Notes
 
 ## Name
 
-**Output Endurance and Shutdown**
+**Platform Packaging Freeze**
 
-## Scope
+## Purpose
 
-Pass 28 hardens the lifecycle of:
+Freeze the release identity, native platform bundle targets, required native-output assets, build-host rules, signing preparation, artifact verification, capability matrix, and known-issues process before effect augmentation resumes.
 
-- canvas mirror sender and receiver;
-- Syphon browser transport;
-- Spout browser transport;
-- native MIDI and OSC resources;
-- final two-window Tauri shutdown.
-
-## Runtime changes
+## Runtime boundary
 
 ```text
-src/canvas.js
-src/canvas.html
-src/index.html
-src-tauri/src/main.rs
-```
-
-## Preserved boundary
-
-```text
-src/effects.js                 unchanged
-src/pipeline-runtime.js        unchanged
-src/capability-instrumentation.js unchanged
-src/presets/**                 unchanged
+src/**                         unchanged from Pass 28
+src-tauri/src/main.rs          unchanged from Pass 28
+src-tauri/src/syphon.rs        unchanged from Pass 28
+src-tauri/src/spout.rs         unchanged from Pass 28
 Flow                           unchanged
 pipeline route                 unchanged
-render buffer count            unchanged
+controls and presets           unchanged
 ```
 
-## Main implementation points
+## Packaging changes
 
-- Owned mirror reconnect timeout and animation-frame pump.
-- Canvas viewer socket-generation guard for asynchronous frame decode.
-- Syphon and Spout start/stop generation guards.
-- Duplicate start/stop operation prevention.
-- Deterministic Worker, WebSocket, timer, staging-surface, and cached-reference cleanup.
-- Shared `pagehide` and `beforeunload` cleanup paths.
-- Idempotent native shutdown for MIDI, OSC, Syphon, and Spout.
+- Synchronized version `1.0.3` across npm, Cargo, Tauri, and release metadata.
+- Replaced placeholder identifier with `com.schwwaaa.huff`.
+- Added publisher, category, descriptions, copyright, and ISC license.
+- Added platform-specific Tauri bundle configurations.
+- Restored the build-required Spout2 SDK source set used by the existing Windows bridge.
+- Changed Windows release behavior from silently optional Spout to mandatory Spout assets.
+- Fixed explicit-target DLL placement using Cargo `OUT_DIR`.
+- Added native-only macOS, Windows, and Linux release builders.
+- Added signing, notarization, artifact verification, checksums, and release manifests.
+- Defined MSI + portable ZIP for Windows and DEB + AppImage for Linux.
 
-## Validation status
+## Validation boundary
 
-Deterministic validation is complete. Runtime Syphon, Spout, reconnect, soak, and process-exit tests remain for target machines.
+Static package validation is complete. Native compilation and release-candidate runtime testing remain platform-specific work.

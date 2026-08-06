@@ -1,0 +1,17 @@
+{
+  "tauri": {
+    "bundle": {
+      "targets": ["deb", "appimage"],
+      "deb": {
+        "depends": [
+          "libwebkit2gtk-4.0-37",
+          "libgtk-3-0",
+          "libasound2",
+          "gstreamer1.0-plugins-base",
+          "gstreamer1.0-plugins-good",
+          "gstreamer1.0-libav"
+        ]
+      }
+    }
+  }
+}

@@ -1,86 +1,44 @@
-# HUFF Classic Optimization Pass 28 — Validation Report
+# HUFF Classic Optimization Pass 29 — Validation Report
 
 ## Result
 
-**Deterministic validation: PASS**  
-**Target-machine runtime endurance: pending**  
-**Native compile: not performed; Cargo unavailable**
+**Static validation: PASS**
 
-## Behavior validation completed
+## Proven
 
-The following inherited validators passed:
+- Pass 28 browser runtime is unchanged byte-for-byte.
+- Pass 28 Rust runtime source is unchanged byte-for-byte.
+- Flow, effects, controls, presets, clocks, output logic, and pipeline route are unchanged.
+- Release metadata is synchronized at version `1.0.3`.
+- Placeholder bundle identity is removed.
+- macOS, Windows, and Linux platform bundle configurations are valid against the installed Tauri v1 schema after merge.
+- Syphon.framework contains both required macOS architectures.
+- The build-required Spout2 SDK source set used by the bridge is present.
+- Windows build logic can no longer silently compile without Spout.
+- Release scripts parse and the static release preflight reports zero blockers.
+
+## Deterministic checks
 
 ```text
-Pass 9
-Pass 10
-Pass 11
-Pass 13S
-Pass 14
-Pass 15
-Pass 16
-Pass 16S
-Pass 17
-Pass 18
-Pass 19
-Pass 20
-Pass 21
-Pass 22
+Pass 29 validator: PASS
+Static release preflight: 38 checks, 0 blockers
+Tauri merged configuration schema: PASS for macOS, Windows, Linux
+JavaScript syntax: PASS
+Shell syntax: PASS
+npm dependency tree: PASS
+Applicable Pass 9–22 deterministic validators: PASS
+Final ZIP integrity: PASS
 ```
 
-These validate the established Flow, Scanline, Glitch, Luma, neutral-stage, history, output-bootstrap, and scheduling boundaries.
+## Not proven in this environment
 
-Pass 25–27 full historical validators intentionally enforce earlier file-change manifests and therefore are not expected to accept Pass 28 lifecycle files. Pass 28 independently verifies that `src/pipeline-runtime.js`, `src/effects.js`, and `src/capability-instrumentation.js` remain byte-identical to Pass 27.
+Rust and platform toolchains are not installed in the execution environment. Therefore this pass does not claim:
 
-## Pass 28 lifecycle validation
+- successful Cargo compilation;
+- successful universal macOS build;
+- successful signing or notarization;
+- successful Windows MSI build or DLL installation;
+- successful Linux DEB/AppImage build;
+- target-machine output or endurance results.
 
-`scripts/validate-pass28.mjs` verifies:
-
-- only declared browser/native runtime files changed;
-- Flow/effects remain exact Pass 27;
-- pipeline runtime remains exact Pass 27;
-- capability instrumentation remains exact Pass 27;
-- mirror sender reconnect timer and RAF ownership;
-- mirror receiver reconnect and decode-generation ownership;
-- Syphon/Spout Start and Stop pending-operation gates;
-- stale native start completion rejection;
-- pagehide and beforeunload cleanup;
-- Worker, WebSocket, timer, and staging-surface release markers;
-- idempotent native shutdown;
-- consumable OSC shutdown sender;
-- MIDI disconnect before exit;
-- no additional p5 Graphics render surface;
-- absence of rejected Flow Melt/Sort-Mosh code.
-
-## Deterministic lifecycle model
-
-10,000 generated lifecycle sequences covered:
-
-- normal start → stop;
-- stop while start is pending;
-- stale start completion after stop;
-- shutdown while start is pending;
-- restart after completed stop;
-- duplicate Start rejection;
-- duplicate Stop rejection;
-- idempotent shutdown.
-
-All passed.
-
-## Additional validation
-
-- External JavaScript syntax: passed.
-- Inline HTML JavaScript syntax: passed.
-- JSON parsing: passed.
-- TOML parsing: passed.
-- Shell syntax: passed.
-- Syphon framework architectures: x86_64 and arm64 confirmed.
-- ZIP integrity: passed.
-
-## Remaining uncertainty
-
-The environment did not provide Rust/Cargo, macOS Syphon clients, or Windows Spout receivers. Therefore this package does not claim:
-
-- successful native compilation in this environment;
-- completed Syphon/Spout endurance soak;
-- verified process/port release on the target operating systems;
-- runtime FPS improvement.
+Those tests are explicitly retained in `TESTING_CHECKLIST.md` and `CAPABILITY_MATRIX.md`.

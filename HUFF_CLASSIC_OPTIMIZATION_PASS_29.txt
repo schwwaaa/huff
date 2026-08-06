@@ -1,0 +1,10 @@
+HUFF Classic Optimization Pass 29
+Platform Packaging Freeze
+
+Runtime lineage: Pass 28 unchanged
+Release version: 1.0.3
+Bundle identifier: com.schwwaaa.huff
+macOS: universal app + DMG + Syphon
+Windows: x64 MSI + portable ZIP + Spout
+Linux: x64 DEB + AppImage + canvas mirror
+Next: Pass 30 — Constrained Pipeline Switching Foundation

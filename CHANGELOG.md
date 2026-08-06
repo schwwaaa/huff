@@ -1,5 +1,14 @@
 # HUFF Classic Optimization Changelog
 
+## Pass 29 — Platform Packaging Freeze
+
+- Froze release metadata at version 1.0.3 with bundle identifier `com.schwwaaa.huff`.
+- Added platform-specific Tauri bundle configurations for macOS, Windows, and Linux.
+- Restored the build-required Spout2 SDK source set used by the existing Windows bridge.
+- Prevented Windows release builds from silently omitting Spout.
+- Added native-only platform build orchestration, release preflight, signing/notarization preparation, artifact verification, SHA-256 manifests, MSI/portable packaging, and Linux DEB/AppImage targets.
+- Preserved the complete Pass 28 browser and native runtime byte-for-byte.
+
 ## Pass 28 — Output endurance and shutdown
 
 **Date:** 2026-08-05  

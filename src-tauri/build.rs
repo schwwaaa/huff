@@ -59,12 +59,24 @@ fn build_spout_windows() {
     let spout2_dir = src_tauri.join("native/spout2");
 
     if !bridge_dir.exists() {
-        println!("cargo:warning=spout_bridge not found — building WITHOUT Spout support.");
-        return;
+        panic!("HUFF Classic Windows release requires native/spout_bridge");
     }
-    if !spout2_dir.exists() {
-        println!("cargo:warning=spout2 SDK not found — building WITHOUT Spout support.");
-        return;
+    let required_sdk_files = [
+        "SPOUTSDK/licence.txt",
+        "SPOUTSDK/SpoutGL/SpoutCopy.cpp",
+        "SPOUTSDK/SpoutGL/SpoutDirectX.cpp",
+        "SPOUTSDK/SpoutGL/SpoutFrameCount.cpp",
+        "SPOUTSDK/SpoutGL/SpoutSenderNames.cpp",
+        "SPOUTSDK/SpoutGL/SpoutSharedMemory.cpp",
+        "SPOUTSDK/SpoutGL/SpoutUtils.cpp",
+        "SPOUTSDK/SpoutDirectX/SpoutDX/SpoutDX.cpp",
+    ];
+    for rel in required_sdk_files {
+        let file = spout2_dir.join(rel);
+        println!("cargo:rerun-if-changed={}", file.display());
+        if !file.is_file() {
+            panic!("HUFF Classic Windows release requires Spout2 SDK file {}", file.display());
+        }
     }
 
     println!("cargo:rerun-if-changed={}", bridge_dir.join("spout_bridge.cpp").display());
@@ -86,12 +98,14 @@ fn build_spout_windows() {
     println!("cargo:rustc-link-search=native={}", lib_dir.display());
     println!("cargo:rustc-link-lib=dylib=spout_bridge");
 
-    // Copy DLL next to exe so cargo run and tauri dev work
-    let target_dir = env::var("CARGO_TARGET_DIR")
+    // Copy the DLL next to the final executable. Derive the profile directory
+    // from OUT_DIR so explicit --target builds use target/<triple>/<profile>
+    // while native builds continue to use target/<profile>.
+    let out_dir = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR missing"));
+    let exe_dir = out_dir.ancestors().nth(3)
         .map(PathBuf::from)
-        .unwrap_or_else(|_| src_tauri_dir().join("target"));
-    let exe_dir = target_dir.join(&profile);
-    fs::create_dir_all(&exe_dir).expect("create target dir");
+        .unwrap_or_else(|| panic!("Could not derive target profile directory from {}", out_dir.display()));
+    fs::create_dir_all(&exe_dir).expect("create target profile dir");
     let dest = exe_dir.join("spout_bridge.dll");
     fs::copy(&dll_path, &dest)
         .unwrap_or_else(|e| panic!("copy {} -> {}: {e}", dll_path.display(), dest.display()));

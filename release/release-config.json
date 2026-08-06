@@ -1,0 +1,28 @@
+{
+  "productName": "huff",
+  "publicName": "HUFF Classic",
+  "version": "1.0.3",
+  "bundleIdentifier": "com.schwwaaa.huff",
+  "publisher": "schwwaaa",
+  "supportedProfiles": ["720p30", "720p60", "1080p30", "1080p60"],
+  "platforms": {
+    "macos": {
+      "architectures": ["arm64", "x86_64"],
+      "bundles": ["app", "dmg"],
+      "requiredOutput": "Syphon",
+      "minimumSystemVersion": "10.15"
+    },
+    "windows": {
+      "architectures": ["x86_64"],
+      "bundles": ["msi", "portable-zip"],
+      "requiredOutput": "Spout",
+      "toolchain": "msvc"
+    },
+    "linux": {
+      "architectures": ["x86_64"],
+      "bundles": ["deb", "appimage"],
+      "requiredOutput": "canvas-mirror",
+      "referenceBuildHost": "Ubuntu 22.04"
+    }
+  }
+}

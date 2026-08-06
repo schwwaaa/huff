@@ -1,54 +1,52 @@
-# HUFF Classic Optimization Pass 28 — Changed Files
+# HUFF Classic Optimization Pass 29 — Changed Files
 
-## Runtime
+## Browser and native runtime
 
-### `src/canvas.js`
+```text
+No changes to src/**
+No changes to src-tauri/src/**
+```
 
-- Owns and clears the mirror reconnect timer.
-- Owns and cancels the mirror requestAnimationFrame pump.
-- Detaches stream-tuning listeners during shutdown.
-- Releases Worker handlers, WebSocket handlers, cached canvas references, and staging backing store.
+## Tauri / Rust packaging
 
-### `src/canvas.html`
+- `src-tauri/tauri.conf.json`
+- `src-tauri/tauri.macos.conf.json`
+- `src-tauri/tauri.windows.conf.json`
+- `src-tauri/tauri.linux.conf.json`
+- `src-tauri/Cargo.toml`
+- `src-tauri/Cargo.lock`
+- `src-tauri/build.rs`
+- `src-tauri/native/spout2/SPOUTSDK/**` — restored required upstream SDK assets
 
-- Adds socket-generation validation.
-- Owns reconnect and fullscreen timers.
-- Prevents stale ImageBitmap decode completion after socket replacement or shutdown.
-- Adds deterministic pagehide/beforeunload cleanup.
+## Build and release utilities
 
-### `src/index.html`
-
-- Adds Syphon and Spout generation guards.
-- Prevents duplicate pending Start/Stop operations.
-- Adds shared transport-release functions.
-- Clears RAFs, polling intervals, sockets, Workers, staging surfaces, and cached references.
-- Adds pagehide cleanup in addition to beforeunload cleanup.
-
-### `src-tauri/src/main.rs`
-
-- Adds idempotent native runtime shutdown.
-- Releases MIDI connection.
-- Makes OSC shutdown sender consumable and stops the UDP listener.
-- Stops Syphon/Spout once before complete process exit.
-
-## Validation and metadata
-
-- `scripts/validate-pass28.mjs`
-- `baseline/pass27-src.sha256`
-- `baseline/pass27-src-tauri.sha256`
+- `build.sh`
+- `scripts/tauri-build.cjs`
+- `scripts/release-preflight.mjs`
+- `scripts/set-release-version.mjs`
+- `scripts/verify-release-artifacts.mjs`
+- `scripts/package-windows.ps1`
+- `scripts/check-linux-deps.sh`
+- `scripts/macos-notarize.sh`
+- `release/release-config.json`
+- `LICENSE`
 - `package.json`
 - `package-lock.json`
 
+## Validation
+
+- `scripts/validate-pass29.mjs`
+- `baseline/pass28-src.sha256`
+- `baseline/pass28-src-tauri.sha256`
+- `baseline/pass29-src.sha256`
+- `baseline/pass29-src-tauri.sha256`
+
 ## Documentation
 
-- `OUTPUT_ENDURANCE_SHUTDOWN_AUDIT.md`
-- `PASS_NOTES.md`
-- `CHANGELOG.md`
-- `CHANGED_FILES.md`
-- `TESTING_CHECKLIST.md`
-- `VALIDATION_REPORT.md`
-- `CURRENT_STATUS.md`
-- `OPTIMIZATION_ROADMAP.md`
-- `DOCUMENTATION_INDEX.md`
-- `GIT_COMMIT_MESSAGE.md`
-- `HUFF_CLASSIC_OPTIMIZATION_PASS_28.txt`
+- `PLATFORM_PACKAGING_FREEZE_AUDIT.md`
+- `PLATFORM_PACKAGE_MATRIX.md`
+- `RELEASE_SIGNING_NOTARIZATION.md`
+- `RELEASE_KNOWN_ISSUES.md`
+- `CAPABILITY_MATRIX.md`
+- complete updated documentation suite
+- README and installation-version corrections

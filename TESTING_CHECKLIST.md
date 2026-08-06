@@ -1,57 +1,59 @@
-# HUFF Classic Optimization Pass 28 — Testing Checklist
+# HUFF Classic Optimization Pass 29 — Testing Checklist
 
-## Completed static and deterministic checks
+## Completed static validation
 
-- [x] Pass 9–22 visual/arithmetic behavior validators passed.
-- [x] Pass 13S independent render/transport/mirror/profiler clock checks passed.
-- [x] Pass 28 source-boundary validator passed.
-- [x] 10,000 deterministic output lifecycle sequences passed.
-- [x] Flow/effects file matches Pass 27 exactly.
-- [x] Validated pipeline runtime matches Pass 27 exactly.
-- [x] Capability instrumentation matches Pass 27 exactly.
-- [x] No new p5 Graphics render surface.
-- [x] All project JavaScript and inline scripts passed Node syntax checks.
-- [x] JSON and TOML files parsed.
-- [x] Shell scripts passed `bash -n`.
-- [x] Syphon framework universal binary check completed.
-- [x] ZIP integrity test completed.
+- [x] Pass 28 `src/` tree is byte-identical.
+- [x] Pass 28 native runtime source files are byte-identical.
+- [x] Flow and effect code are byte-identical.
+- [x] Pipeline runtime is byte-identical.
+- [x] npm, Cargo, Tauri, lockfile, and release versions agree on `1.0.3`.
+- [x] Bundle identifier is `com.schwwaaa.huff`.
+- [x] All required icon sizes are present.
+- [x] Camera usage description and entitlement are present.
+- [x] Syphon.framework contains arm64 and x86_64.
+- [x] Build-required Spout2 SDK source files are present.
+- [x] Platform-specific Tauri configurations parse and merge against the Tauri v1 schema.
+- [x] Release preflight reports zero static blockers.
+- [x] Shell and JavaScript release scripts pass syntax checks.
+- [x] Applicable Pass 9–22 behavioral validators pass.
+- [x] Pass 29 manifest validation confirms the complete accepted Pass 28 runtime lineage is preserved.
+- [x] Final documented ZIP passes archive integrity testing and packaged-copy validation.
 
-## Required macOS runtime tests
+## macOS release candidate
 
-- [ ] Start/Stop Syphon 20 times.
-- [ ] Attach/detach/reattach OBS while Syphon remains active.
-- [ ] Confirm one-fps bootstrap becomes selected full rate after receiver attachment.
-- [ ] Disconnect local relay during active Syphon and confirm recovery.
-- [ ] Open/close canvas mirror 20 times.
-- [ ] Leave video + mirror + Syphon active for at least 60 minutes.
-- [ ] Close the control window while Syphon is active.
-- [ ] Close the canvas window and confirm complete HUFF process exit.
-- [ ] Confirm TCP 8787 and UDP 9000 release immediately.
-- [ ] Relaunch immediately after close.
+- [ ] Build arm64 app.
+- [ ] Build x86_64 app.
+- [ ] Assemble universal app.
+- [ ] Verify app and Syphon framework architectures.
+- [ ] Sign with Developer ID Application certificate.
+- [ ] Notarize and staple DMG.
+- [ ] Install DMG on a clean Apple Silicon Mac.
+- [ ] Install DMG on an Intel Mac.
+- [ ] Confirm camera permission under `com.schwwaaa.huff`.
+- [ ] Confirm Syphon start, receiver attach, detach, reconnect, stop, and shutdown.
+- [ ] Complete 60-minute soak.
 
-## Required Windows runtime tests
+## Windows release candidate
 
-- [ ] Start/Stop Spout 20 times.
-- [ ] Attach/detach/reattach a Spout receiver.
-- [ ] Confirm buffered-frame skips do not create latency accumulation.
-- [ ] Open/close canvas mirror 20 times.
-- [ ] Leave video + mirror + Spout active for at least 60 minutes.
-- [ ] Close HUFF while Spout is active.
-- [ ] Confirm process and ports release immediately.
-- [ ] Relaunch immediately after close.
+- [ ] Build natively with x86_64-pc-windows-msvc.
+- [ ] Confirm CMake compiles the restored Spout bridge.
+- [ ] Confirm `spout_bridge.dll` is adjacent to `huff.exe`.
+- [ ] Inspect MSI installation contents.
+- [ ] Test portable ZIP on a clean Windows 10 machine.
+- [ ] Test MSI on Windows 10 and Windows 11.
+- [ ] Confirm WebView2 bootstrap behavior.
+- [ ] Confirm Spout receiver output and reconnect.
+- [ ] Confirm shutdown leaves no process or occupied port.
+- [ ] Complete 60-minute soak.
 
-## Required Linux runtime tests
+## Linux release candidate
 
-- [ ] Canvas mirror reconnect and shutdown.
-- [ ] File playback endurance.
-- [ ] Camera/file replacement endurance where supported.
-- [ ] Process and port release.
-- [ ] Confirm no output lifecycle errors despite Syphon/Spout being unavailable.
-
-## Regression checks
-
-- [ ] Flow looks and responds exactly as confirmed in Pass 22.
-- [ ] Scanline/Glitch priority modes remain unchanged.
-- [ ] Video playback pacing remains unchanged.
-- [ ] MIDI and OSC input still work before shutdown.
-- [ ] No hidden process remains after either HUFF window is closed.
+- [ ] Build on Ubuntu 22.04 reference host.
+- [ ] Install DEB on a clean compatible system.
+- [ ] Launch AppImage.
+- [ ] Test H.264/AAC and representative user codecs.
+- [ ] Test file/camera switching.
+- [ ] Test MIDI and OSC.
+- [ ] Test canvas mirror reconnect and shutdown.
+- [ ] Confirm no orphan process or occupied port.
+- [ ] Complete 60-minute soak.

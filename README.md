@@ -10,15 +10,15 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.0.2--beta-ff4444?style=flat-square"/>
-  <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey?style=flat-square"/>
+  <img src="https://img.shields.io/badge/version-1.0.3--beta-ff4444?style=flat-square"/>
+  <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey?style=flat-square"/>
   <img src="https://img.shields.io/badge/Tauri-v1-blueviolet?style=flat-square"/>
   <img src="https://img.shields.io/badge/license-ISC-green?style=flat-square"/>
 </p>
 
 ---
 
-> **Optimization lineage:** Pass 27 keeps the exact Pass 22 effects and confirmed Pass 26 serial pipeline while adding profiler-gated capability, output-phase, lifecycle, resize, and long-session instrumentation. No route, effect, Flow, preset, output-pacing, render-buffer, or native change is introduced.
+> **Optimization lineage:** Pass 29 freezes release packaging on top of the confirmed Pass 28 runtime. The browser renderer, Pass 22 Flow/effects, validated serial pipeline, controls, presets, media paths, and native runtime commands remain unchanged.
 
 ## What is huff?
 
@@ -42,6 +42,7 @@ huff is built for **performers and artists** who want a tool that behaves predic
 - [Installation](#installation)
   - [macOS](#macos)
   - [Windows](#windows)
+  - [Linux](#linux)
 - [Building from Source](#building-from-source)
 - [The Interface](#the-interface)
   - [Source Group](#source-group)
@@ -102,85 +103,64 @@ huff is built for **performers and artists** who want a tool that behaves predic
 
 ### Effect Pipeline Diagram
 
-Each frame, huff runs the source material through up to eight independent effect passes. Each pass is optional and independently toggleable. The order is fixed — the output of one pass feeds the next.
+HUFF Classic now validates its established serial route at startup. The default compatibility recipe remains the accepted Pass 22 visual order:
 
+```text
+SOURCE SYNC
+    ↓
+PERSISTENT DECAY / TRAILS
+    ↓
+FRONT-STAGE PRIORITY
+Glitch + Pipeline Luma Key ↔ Scanlines
+    ↓
+GLOBAL MIX: BEFORE (optional position)
+    ↓
+FEEDBACK
+    ↓
+GLOBAL MIX: AFTER (optional position)
+    ↓
+FLOW
+    ↓
+GLOBAL MIX: AFTER FLOW (optional position)
+    ↓
+SYMMETRY
+    ↓
+SOLARIZE
+    ↓
+GLOBAL MIX: FINAL (optional position)
+    ↓
+PRESENTATION / OUTPUT
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│                         SOURCE                                   │
-│          video file  ·  webcam  ·  frame ring seed               │
-└────────────────────────────┬─────────────────────────────────────┘
-                             │
-                             ▼
-┌──────────────────────────────────────────────────────────────────┐
-│                      FRAME RING BUFFER                           │
-│   Stores last N frames as ImageData (capped at 192 MB)          │
-│   N = quality × 60, max 60 frames at quality=1                  │
-└────┬──────┬──────┬──────┬──────┬──────┬──────┬──────────────────┘
-     │      │      │      │      │      │      │
-     ▼      ▼      ▼      ▼      ▼      ▼      ▼
-  [t-1]  [t-2]  [t-3]  ...  [t-N]
-     │
-     ▼  (each pass reads the ring; writes to gBuf)
-┌─────────────────────────────────────────────────────────────────┐
-│  PASS 1  TRAILS        ghost frames composited under current    │
-│  PASS 2  FEEDBACK      zoom/translate/rotate feedback blit      │
-│  PASS 3  GLITCH        tile displacement from ring frames       │
-│  PASS 4  SCANLINES     drifting horizontal band displacement    │
-│  PASS 5  FLOW WARP     noise UV distortion                      │
-│  PASS 6  SOLARIZE      luma-threshold colour inversion          │
-│  PASS 7  SYMMETRY      mirror fold at axis                      │
-└────────────────────────────┬────────────────────────────────────┘
-                             │
-                             ▼
-┌──────────────────────────────────────────────────────────────────┐
-│                       OUTPUT FRAME                               │
-├──────────────────────────────────────────────────────────────────┤
-│  → Canvas window (WebSocket JPEG relay, port 8787)              │
-│  → Syphon server  (macOS — Metal texture upload)                │
-│  → Spout sender   (Windows — D3D11 texture upload)              │
-│  → Screen (controls window preview)                             │
-└──────────────────────────────────────────────────────────────────┘
+
+The renderer uses three full-resolution Canvas2D surfaces:
+
+```text
+gCur      clean decoded source
+gBuf      active/persistent composite
+gScratch  shared scratch and ping-pong surface
 ```
+
+The FrameRing stores reusable canvas-backed decoded frames under an estimated 192 MiB budget. Pipeline metadata validates legal stage zones, resource ownership, and required `gBuf` / `gScratch` swaps without changing the established effect algorithms.
 
 ### UI → Effect Flow
 
-The controls window (`index.html`) runs inside the Tauri WebView. Every slider, checkbox, and input reads its value through the `els` object (a DOM lookup cache). The p5.js draw loop runs at the browser's frame rate and queries `els` directly — there is no intermediate state synchronisation layer.
+The controls window (`index.html`) runs inside the Tauri WebView. Input and change events update a typed `renderState` cache. The draw loop reads this cache rather than repeatedly parsing every DOM control on every frame.
 
-```
-┌──────────────────────────────────────────┐
-│          Controls Panel (WebView)        │
-│                                          │
-│  slider → input event                   │
-│       ↓                                  │
-│  els.corrupt.value  (live DOM read)     │
-│       ↓                                  │
-│  p5 draw() loop  (requestAnimationFrame) │
-│       ↓                                  │
-│  applyGlitch(density, baseDX, baseDY)   │
-│       ↓                                  │
-│  drawRingRegion() per tile              │
-└──────────────────────────────────────────┘
-
-  MIDI CC received → midir (Rust)
-       ↓
-  Tauri "midi-event" event emitted
-       ↓
-  canvas.js onmessage handler
-       ↓
-  DOM element value updated
-       ↓
-  Next draw() frame picks it up (no delay)
-
-  OSC UDP packet → rosc (Rust)
-       ↓
-  Tauri "osc-message" event emitted
-       ↓
-  canvas.js onmessage handler
-       ↓
-  DOM element value updated  ──→  same path as MIDI
+```text
+control input / change
+        ↓
+renderState cache update
+        ↓
+validated pipeline draw
+        ↓
+effect handlers
+        ↓
+program composite
 ```
 
-MIDI and OSC both write to the same DOM elements as the sliders. There is intentionally no difference between moving a slider manually and receiving a CC or OSC message — they all converge on the same element value, and the draw loop reads that value on the next frame.
+MIDI and OSC update the same controls, which then synchronize into the same render-state path used by pointer and keyboard interaction.
+
+MIDI, OSC, and direct UI interaction converge on the same canonical control values and are visible to the renderer on the next frame.
 
 ### Frame Output Pipeline
 
@@ -221,21 +201,29 @@ The "HUFFSYPH" and "HUFFSPOUT" magic byte prefixes allow the Rust relay to disti
 
 ### macOS
 
-1. Download `huff-1.0.2-universal.dmg` from the [Releases](../../releases) page.
+1. Download `huff-1.0.3-universal.dmg` from the [Releases](../../releases) page.
 2. Open the DMG and drag **huff** to your Applications folder.
-3. On first launch, macOS may show a Gatekeeper warning because the app is not notarised. Right-click the app icon → **Open** → **Open** to bypass this once.
+3. On first launch, macOS may show a Gatekeeper warning if the downloaded build is not notarised. Right-click the app icon → **Open** → **Open** to bypass this once.
 4. Grant camera access when prompted (required for webcam input).
 
 No additional software is needed for Syphon — the framework is bundled inside the app.
 
 ### Windows
 
-1. Download `huff-1.0.2-x64-setup.exe` or the MSI from the [Releases](../../releases) page.
+1. Download the x64 MSI or portable ZIP from the [Releases](../../releases) page.
 2. Run the installer. Windows SmartScreen may warn about an unsigned binary — click **More info → Run anyway**.
-3. If you plan to use Spout output, install the [Spout2 runtime](https://spout.zeal.co/) from the Spout website.
-4. [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/) is required on Windows 10 (pre-installed on Windows 11).
+3. The HUFF Spout bridge is bundled. A Spout-compatible receiver is required only when using Spout output.
+4. Microsoft Edge WebView2 Runtime is required; the MSI uses Tauri’s download-bootstrapper installation mode.
 
 ---
+
+### Linux
+
+1. Use the DEB on Debian/Ubuntu-family systems or the AppImage for a portable test build.
+2. Install the GStreamer base/good/libav codec packages listed in `PLATFORM_PACKAGE_MATRIX.md`.
+3. Syphon and Spout are unavailable on Linux; use the canvas mirror window for output.
+
+Linux packaging is frozen, but codec and camera behavior still requires distribution-specific runtime validation before the public release.
 
 ## Building from Source
 
@@ -263,24 +251,27 @@ npm install
 npm run dev
 
 # Production build
-npm run build         # macOS: Universal DMG
-npx tauri build       # Windows/Linux: native installer
+npm run build:preflight   # validate all packaged release assets
+npm run build:mac          # macOS host: Universal app + DMG
+npm run build:windows      # Windows host: MSI + portable ZIP
+npm run build:linux        # Linux host: DEB + AppImage
 ```
 
 ### macOS Universal Binary
 
 ```bash
-# Build ARM64 + Intel, lipo them together, package as DMG
-bash scripts/create_universal_dmg.sh
-# Output: artifacts/huff-universal.dmg
+# Build ARM64 + Intel, assemble the universal app, sign, and create the DMG
+npm run build:mac
+# Output: src-tauri/target/universal/release/bundle/huff-1.0.3-universal.dmg
 ```
 
 ### Windows Artifacts
 
 ```cmd
-REM Builds EXE + NSIS installer + MSI + portable ZIP + SHA256SUMS
-scripts\tauri-build.cjs
-REM Output: artifacts\<timestamp>\
+REM Builds MSI + portable ZIP + platform release manifest + SHA-256 sums
+npm run build:windows
+REM Portable output: artifacts\huff-1.0.3-windows-x64-portable.zip
+REM MSI output: src-tauri\target\x86_64-pc-windows-msvc\release\bundle\msi\
 ```
 
 ---
@@ -866,7 +857,7 @@ Re-run the WebKitGTK/libssl dependency install for your distribution from the [B
 ---
 
 <p align="center">
-  <sub>huff v1.0.2 beta · built with Tauri, p5.js, Rust, Syphon, Spout2 · ISC licence</sub>
+  <sub>huff v1.0.3 beta · built with Tauri, p5.js, Rust, Syphon, Spout2 · ISC licence</sub>
 </p>
 
 

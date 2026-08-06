@@ -1,39 +1,40 @@
-# HUFF Classic — Current Status After Optimization Pass 28
+# HUFF Classic — Current Status After Optimization Pass 29
 
-## Confirmed lineage
+## Infrastructure status
 
-- Pass 22 remains the authoritative visual and effect baseline.
-- Passes 25–26 established the validated fixed serial recipe and existing front-stage priority behavior.
-- Pass 27 added capability and stability instrumentation.
-- Pass 28 hardens output reconnect, start/stop, and application shutdown lifecycle.
-
-## Current infrastructure
+The planned optimization and infrastructure sequence is complete.
 
 ```text
-validated fixed 12-zone serial recipe
-formalized front-stage priority
-720p/1080p capability instrumentation
-bounded mirror/Syphon/Spout output paths
-owned reconnect timers and animation pumps
-generation-guarded Syphon/Spout start and stop
-deterministic browser output cleanup
-idempotent native MIDI/OSC/Syphon/Spout shutdown
-no new render buffer
-no Flow changes
+Pass 22  authoritative visual/effect baseline
+Pass 23  pipeline modularity audit
+Pass 24  stage contract registry
+Pass 25  validated fixed serial recipe
+Pass 26  front-stage priority formalization
+Pass 27  capability/stability instrumentation
+Pass 28  output endurance and shutdown hardening
+Pass 29  platform packaging freeze
 ```
 
-## Remaining infrastructure pass
+## Frozen foundation
 
-One infrastructure pass remains:
+- Tauri v1 + p5.js + Canvas2D architecture;
+- Pass 22 Flow and effect behavior;
+- fixed validated serial route as compatibility recipe;
+- three-surface `gCur / gBuf / gScratch` topology;
+- independent decoder/render/output clocks;
+- bounded FrameRing and output queues;
+- deterministic shutdown;
+- `com.schwwaaa.huff` release identity;
+- native macOS, Windows, and Linux bundle definitions;
+- mandatory Syphon and Spout package assets;
+- release preflight, checksums, signing preparation, and known-issues process.
 
-```text
-Pass 29 — Platform Packaging Freeze
-```
-
-## After Pass 29
+## Next development phase
 
 ```text
 Pass 30 — Constrained Pipeline Switching Foundation
-Pass 31+ — Paired-down Classic effect augmentation
-HUFF HD — full typed wgpu modular routing and expanded effects
+Pass 31+ — Paired-down HUFF Classic effect augmentation
+HUFF HD — full typed wgpu routing and expanded effects
 ```
+
+Pass 30 must preserve the current fixed route as the default compatibility recipe and must not modify Flow.

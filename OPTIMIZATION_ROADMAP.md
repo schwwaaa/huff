@@ -1,49 +1,48 @@
-# HUFF Classic Optimization Roadmap — After Pass 28
+# HUFF Classic Roadmap — After Infrastructure Freeze
 
-## Authoritative rule
+## Completed
 
-Pass 22 remains the visual/behavioral baseline. Flow remains frozen during infrastructure work.
+Passes 1–29 complete the planned Classic optimization and infrastructure sequence.
 
-## Pass 29 — Platform Packaging Freeze
+## Pass 30 — Constrained Pipeline Switching Foundation
 
-- macOS universal framework verification;
-- final bundled-framework path and architecture checks;
-- signing/notarization preparation;
-- Windows installer and Spout package validation;
-- Linux WebKit/GStreamer/ALSA/codec package matrix;
-- 720p/1080p capability matrix template;
-- release known-issues document;
-- final Classic infrastructure freeze.
-
-## Post-infrastructure sequence
-
-### Pass 30 — Constrained Pipeline Switching Foundation
-
-Classic will expose a small set of validated serial recipes rather than a general node graph.
+Add a small validated recipe selector around the existing stage-contract registry.
 
 Requirements:
 
-- retain current route as the default compatibility recipe;
-- use existing `gBuf` / `gScratch` ping-pong ownership;
-- validate stage contracts before use;
-- reject undeclared cycles and routes requiring hidden buffers;
-- expose only routes that remain stable under the Classic Canvas2D budget.
+- current Pass 22 order remains the default `CLASSIC` recipe;
+- no unrestricted node graph;
+- no hidden full-resolution buffer allocation;
+- no undeclared feedback cycles;
+- each recipe validates before rendering;
+- each recipe declares stage order, buffer ownership, scratch use, and legal Global Mix points;
+- switching must be atomic and recover to `CLASSIC` on validation failure;
+- Flow remains unchanged.
 
-### Pass 31+ — Paired-down Effect Augmentation
+Initial work should focus on infrastructure and one or two carefully audited alternate serial recipes, not a large route catalogue.
 
-- add a deliberately limited set of effects;
-- validate every effect in every supported Classic recipe;
-- keep free Classic coherent and stable;
-- defer high-resolution, parallel branches, typed temporal stores, broad routing, and full experimentation to HUFF HD/wgpu.
+## Pass 31+ — Paired-down effect augmentation
 
-## HUFF HD / wgpu direction
+After recipe switching is stable:
 
-HUFF Classic acts as the stable proving ground for instrument behavior. HUFF HD can then expand accepted ideas into:
+- augment only a curated set of effects;
+- preserve old behavior behind neutral/default settings;
+- test each augmentation across every supported Classic recipe;
+- avoid effects that require broad parallel GPU routing or high-resolution temporal stores;
+- keep the free edition coherent, predictable, and supportable.
 
-- typed video/mask/key ports;
-- explicit history, field, trail, and feedback stores;
-- parallel branches;
-- program, preview, and auxiliary buses;
-- legal temporal cycles;
-- per-route GPU-resource budgeting;
-- high-resolution output and full modular routing.
+## HUFF HD / wgpu
+
+HUFF Classic proves interaction models and useful route relationships. HUFF HD can then expand accepted ideas into:
+
+```text
+typed video/mask/key ports
+parallel branches
+explicit field/trail/feedback stores
+program and preview buses
+auxiliary sends
+legal temporal cycles
+GPU resource budgets
+high-resolution output
+full modular routing
+```
