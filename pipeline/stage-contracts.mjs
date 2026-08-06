@@ -1,11 +1,10 @@
 /**
- * HUFF Classic Pass 24 — Stage Contract Registry
+ * HUFF Classic Pass 26 — Stage Contract Registry
  *
- * This module is deliberately not loaded by the Pass 22 runtime. It is the
- * machine-readable contract foundation for the validated serial recipe work
- * planned for Pass 25. Keeping it detached in Pass 24 guarantees that no
- * render dispatch, effect algorithm, control, preset, clock, or output path
- * changes merely because the contracts now exist.
+ * The registry remains the machine-readable source contract for the exact
+ * Pass 22 serial route. Pass 26 extends the existing front-stage priority
+ * metadata with its original timing and fallback rules; it does not add modes,
+ * stages, render resources, or effect positions.
  */
 
 const freezeArray = (value) => Object.freeze([...value]);
@@ -274,6 +273,7 @@ export const PASS22_ROUTE_SKELETON = freezeArray([
 export const FRONT_STAGE_PRIORITY_CONTRACT = Object.freeze({
   stateKey: 'layerPriority',
   pulseSpeedKey: 'layerPulseSpeed',
+  renderFrameKey: 'frameCount',
   groups: Object.freeze({
     'glitch-luma-group': freezeArray(['glitch', 'pipeline-luma-key']),
     'scanline-group': freezeArray(['scanlines']),
@@ -285,6 +285,10 @@ export const FRONT_STAGE_PRIORITY_CONTRACT = Object.freeze({
     pulse: 'alternate-by-layer-pulse-speed',
   }),
   defaultMode: 'scan',
+  fallbackMode: 'scan',
+  renderRateBasis: 60,
+  pulseMinimumSpeed: 0.1,
+  pulseMinimumFrames: 1,
 });
 
 export function validateStageContractRegistry() {
@@ -322,6 +326,31 @@ export function validateStageContractRegistry() {
       }
     }
   }
+
+  const front = FRONT_STAGE_PRIORITY_CONTRACT;
+  if (front.stateKey !== 'layerPriority') errors.push('front priority state key changed');
+  if (front.pulseSpeedKey !== 'layerPulseSpeed') errors.push('front pulse speed key changed');
+  if (front.renderFrameKey !== 'frameCount') errors.push('front render frame key changed');
+  if (front.defaultMode !== 'scan' || front.fallbackMode !== 'scan') {
+    errors.push('front default/fallback mode changed');
+  }
+  if (front.renderRateBasis !== 60 || front.pulseMinimumSpeed !== 0.1 || front.pulseMinimumFrames !== 1) {
+    errors.push('front pulse timing constants changed');
+  }
+  if (JSON.stringify(front.groups['glitch-luma-group']) !== JSON.stringify(['glitch', 'pipeline-luma-key'])) {
+    errors.push('front glitch/luma group changed');
+  }
+  if (JSON.stringify(front.groups['scanline-group']) !== JSON.stringify(['scanlines'])) {
+    errors.push('front scanline group changed');
+  }
+  if (JSON.stringify(front.modes.scan) !== JSON.stringify(['glitch-luma-group', 'scanline-group'])) {
+    errors.push('SCAN TOP order changed');
+  }
+  if (JSON.stringify(front.modes.glitch) !== JSON.stringify(['scanline-group', 'glitch-luma-group'])) {
+    errors.push('GLITCH TOP order changed');
+  }
+  if (front.modes.neutral !== 'alternate-each-render-frame') errors.push('NEUTRAL mode changed');
+  if (front.modes.pulse !== 'alternate-by-layer-pulse-speed') errors.push('PULSE mode changed');
 
   return Object.freeze({
     valid: errors.length === 0,

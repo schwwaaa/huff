@@ -1,5 +1,18 @@
 # HUFF Classic Optimization Changelog
 
+## Pass 26 — Existing front-stage priority formalization
+
+**Date:** 2026-08-05  
+**Status:** implementation and deterministic validation complete; target-runtime parity testing pending
+
+- Formalized the exact existing Glitch/Luma versus Scanline ordering relationship inside the validated pipeline runtime.
+- Added immutable SCAN TOP and GLITCH TOP order arrays plus the existing NEUTRAL and PULSE policies.
+- Preserved the original render-frame parity, 60fps pulse basis, speed clamp, rounding, fallback, and phase behavior.
+- Compiled the two group handlers once outside `draw()` and removed the inline `glitchOnTop` resolver.
+- Added no new priority mode, stage position, routing control, parallel branch, or full-resolution buffer.
+- Kept `src/effects.js`, Flow, controls, presets, media paths, outputs, and the complete native tree unchanged.
+- Added 46,880-case priority parity validation and a complete Pass 25 source manifest.
+
 ## Pass 25 — Validated serial recipe foundation
 
 **Date:** 2026-08-05  

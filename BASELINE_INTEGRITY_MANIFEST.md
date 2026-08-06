@@ -1,44 +1,40 @@
-# HUFF Classic Pass 24 — Baseline Integrity Manifest
+# HUFF Classic Pass 26 — Baseline Integrity Manifest
 
-The authoritative behavioral runtime remains the user-supplied Pass 22 archive used to create Pass 23.
+## Behavioral authority
 
-## Exact retained core hashes
+The authoritative behavioral runtime remains the user-supplied Pass 22 archive. Pass 25 is the immediate user-confirmed working predecessor for Pass 26.
+
+## Exact frozen effects hash
 
 ```text
-src/canvas.js
-3fdb5fb540be2d42173ddfd1aa355db930bac8e2cc758930e6eeddca05477798
-
 src/effects.js
 2b352fa279c728ba292485fe22a0e580c6a3f36d669bd9741f79d5af4454dd44
-
-src/index.html
-a8648e98ab3f0dae2883adadba843754889e70a22efd2c9e1e3b91933f5116dc
-
-package.json
-cf608e2bcdf638c613e9480f2df01d46dcadde138be4696f7ae7943a47640b2d
 ```
 
-## Complete retained file manifests
+This proves the complete effect implementation, including Flow, remains Pass 22.
+
+## Complete manifests
 
 ```text
 baseline/pass22-src.sha256
 baseline/pass22-src-tauri.sha256
+baseline/pass24-src.sha256
+baseline/pass25-src.sha256
 ```
 
-The manifests record every file or symbolic-link target under the authoritative Pass 22 `src/` and `src-tauri/` trees. `scripts/validate-pass24.mjs` verifies every entry and rejects missing, changed, or additional files.
+`baseline/pass25-src.sha256` records every file under the user-confirmed working Pass 25 `src/` tree before Pass 26 changes.
 
-## Pass 24 additions outside the runtime trees
+## Pass 26 constrained-change rule
+
+Pass 26 permits changes only to:
 
 ```text
-pipeline/stage-contracts.mjs
-baseline/pass22-src.sha256
-baseline/pass22-src-tauri.sha256
-scripts/validate-pass24.mjs
-Pass 24 documentation
+src/pipeline-runtime.js
+src/canvas.js
 ```
 
-No Pass 24 file is imported or loaded by the application runtime.
+All other `src/` files must match `baseline/pass25-src.sha256`. The complete native tree must match `baseline/pass22-src-tauri.sha256`.
 
-## Pass 25 constrained-change manifest
+## Validation
 
-`baseline/pass24-src.sha256` records the complete confirmed-working Pass 24 source tree before runtime recipe integration. Pass 25 validation permits changes only to `src/canvas.js`, `src/index.html`, and the added `src/pipeline-runtime.js`; every other source file must still match the Pass 24 manifest. The complete native tree must continue to match `baseline/pass22-src-tauri.sha256`.
+`scripts/validate-pass26.mjs` enforces these manifests and rejects undeclared runtime files, missing files, or changes outside the declared scope.

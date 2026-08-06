@@ -1,23 +1,44 @@
-# HUFF Classic Optimization Pass 25 — Validation Report
+# HUFF Classic Optimization Pass 26 — Validation Report
 
 ## Scope
 
-Pass 25 integrates the exact Pass 22 route into a validated serial recipe runtime without adding user-facing routing, changing effect algorithms, or allocating another full-resolution buffer.
+Pass 26 formalizes only the already-existing Glitch/Luma versus Scanline priority relationship inside the validated serial recipe runtime. It adds no route, effect position, control, preset field, or render resource.
 
-## Deterministic recipe validation
+## Priority parity validation
 
-`node scripts/validate-pass25.mjs` confirms:
+`node scripts/validate-pass26.mjs` executes 46,880 comparisons between:
 
-- the browser recipe matches the Pass 24 12-zone route skeleton;
-- stage legal-zone rules match the contract registry;
-- scratch and swap rules match the contract registry;
-- the recipe and registries are immutable;
-- compiled dispatch order is exact;
-- source synchronization, persistence, effects, and presentation execute in the expected order;
-- reordered routes are rejected;
-- unknown stages are rejected;
-- invalid Global Mix conditional positions are rejected;
-- missing handlers are rejected before use.
+1. a direct implementation of the Pass 22 inline `glitchOnTop` calculation; and
+2. the new immutable priority resolver.
+
+The matrix includes:
+
+```text
+scan
+glitch
+neutral
+pulse
+empty
+unknown
+undefined
+null
+```
+
+and pulse speeds from below the clamp through the UI maximum, plus undefined and `NaN` cases.
+
+Every case returned the same paint order.
+
+## Compiled group validation
+
+The validator confirms:
+
+- SCAN TOP executes Glitch/Luma then Scanlines;
+- GLITCH TOP executes Scanlines then Glitch/Luma;
+- NEUTRAL uses the original render-frame parity;
+- PULSE uses the original 60fps timing formula;
+- static order arrays are frozen and reused;
+- both handlers are required at compile time;
+- a modified SCAN TOP contract is rejected.
 
 ## Runtime preservation checks
 
@@ -27,18 +48,13 @@ Pass 25 integrates the exact Pass 22 route into a validated serial recipe runtim
 2b352fa279c728ba292485fe22a0e580c6a3f36d669bd9741f79d5af4454dd44
 ```
 
-- the complete `src-tauri/` tree matches the Pass 22 manifest;
-- all Pass 24 source files except the declared `canvas.js` and `index.html` changes remain exact;
-- `src/pipeline-runtime.js` is the only added runtime file;
-- Flow dispatch parameters remain unchanged;
-- Feedback still copies to `gScratch` before clearing `gBuf`;
-- Flow and Symmetry still swap `gBuf` and `gScratch`;
+- `src/index.html`, controls, presets, MIDI maps, OSC maps, media workers, and relay scripts match the Pass 25 source manifest;
+- the complete `src-tauri/` tree matches the Pass 22 native manifest;
+- Flow dispatch parameters and `gBuf`/`gScratch` swap remain unchanged;
 - the count of full-resolution p5 Graphics allocations remains unchanged;
 - rejected Melt and Sort-Mosh code remains absent.
 
-## Inherited validators completed
-
-The following validators pass against Pass 25:
+## Validators completed
 
 ```text
 Pass 9
@@ -56,29 +72,29 @@ Pass 20
 Pass 21
 Pass 22
 Pass 25
+Pass 26
 ```
 
-Pass 23 and Pass 24 validators are intentionally superseded. Their purpose was to prove that the runtime stayed byte-for-byte Pass 22 and that the registry was not loaded. Pass 25 deliberately changes those two conditions while validating a tightly constrained set of runtime files.
+Pass 23 and Pass 24 validators remain superseded by the runtime integration introduced in Pass 25.
 
-## Static checks
+## Static validation
 
-The final package was checked for:
+The final package is checked for:
 
-- 80 project-owned JavaScript/ESM/CommonJS files with `node --check`;
+- 30 project-owned JavaScript/ESM/CommonJS files with `node --check`;
 - 32 inline HTML scripts with `node --check`;
-- 34 JSON files parsed successfully;
+- 29 JSON files parsed successfully;
 - 2 TOML files parsed successfully;
 - 6 shell scripts with `bash -n`;
-- ZIP integrity.
-
-## Browser smoke-test limitation
-
-A local Chromium smoke test was attempted, but this execution environment blocks local `file:` and localhost navigation by policy. No browser-runtime success claim is made from that attempt.
+- complete Pass 25 source-manifest constraints;
+- complete Pass 22 native-manifest constraints;
+- bundled Syphon binary confirmed as universal `x86_64 + arm64`;
+- ZIP integrity after packaging.
 
 ## Native validation
 
-`cargo check` was not run because Cargo is not installed. The native tree is unchanged and verified against the Pass 22 manifest.
+`cargo check` was not run because Cargo and Rust are not installed in this environment. The native tree is unchanged and hash-verified.
 
 ## Runtime claims
 
-No FPS improvement is claimed. No visual change is intended. Actual Pass 22 parity, media playback, Syphon, Spout, and long-session behavior require application testing on the target platforms.
+No FPS improvement is claimed. No visual change is intended. Actual WebView playback, visual parity, Syphon, Spout, and long-session behavior require testing in the packaged application.

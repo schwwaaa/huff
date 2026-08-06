@@ -1672,10 +1672,10 @@ function _presentCleanFrame(curCanvas) {
 }
 
 
-// ─── Pass 25 validated serial pipeline ──────────────────────────────────────
-// The runtime validates the exact Pass 22 recipe once at startup and compiles
-// these predeclared handlers. No per-frame closures, routing controls, or new
-// full-resolution buffers are introduced.
+// ─── Pass 26 validated serial pipeline ──────────────────────────────────────
+// The runtime validates the exact Pass 22 recipe and the existing front-stage
+// priority contract once at startup. No new route, control, effect position,
+// per-frame closure, or full-resolution buffer is introduced.
 const _pipelineRuntime = window.HuffPipelineRuntime;
 if (!_pipelineRuntime?.validation?.valid) {
   throw new Error('[HUFF pipeline] validated Pass 22 serial recipe is unavailable');
@@ -1687,7 +1687,10 @@ const _pipelineFrame = Object.seal({
   activity: null,
   density: 0,
   scanAngleArg: null,
-  glitchOnTop: false,
+  frontStageActive: false,
+  layerPriority: 'scan',
+  layerPulseSpeed: 2,
+  renderFrame: 0,
   glitchPriority: 1,
   scanPriority: 1,
   lumaMix: 0,
@@ -1710,20 +1713,36 @@ function _runPersistentDecayStage(frame) {
   }
 }
 
-function _runFrontStagePriority(frame) {
-  const s = frame.state;
+function _runGlitchLumaFrontGroup(frame) {
   const activity = frame.activity;
-  if (frame.glitchOnTop) {
-    if (activity.scanlines) applyScanlines(frame.density, frame.scanAngleArg, frame.scanPriority, s);
-    if (activity.glitch || activity.luma) {
-      _emitGlitchGroup(s, frame.density, frame.glitchPriority, frame.lumaMix);
-    }
-  } else {
-    if (activity.glitch || activity.luma) {
-      _emitGlitchGroup(s, frame.density, frame.glitchPriority, frame.lumaMix);
-    }
-    if (activity.scanlines) applyScanlines(frame.density, frame.scanAngleArg, frame.scanPriority, s);
+  if (activity.glitch || activity.luma) {
+    _emitGlitchGroup(frame.state, frame.density, frame.glitchPriority, frame.lumaMix);
   }
+}
+
+function _runScanlineFrontGroup(frame) {
+  if (frame.activity.scanlines) {
+    applyScanlines(frame.density, frame.scanAngleArg, frame.scanPriority, frame.state);
+  }
+}
+
+const _frontStageGroupHandlers = Object.freeze({
+  'glitch-luma-group': _runGlitchLumaFrontGroup,
+  'scanline-group': _runScanlineFrontGroup,
+});
+
+const _frontStagePriorityPlan = _pipelineRuntime.compileFrontStagePriority(
+  _frontStageGroupHandlers,
+);
+
+function _runFrontStagePriority(frame) {
+  if (!frame.frontStageActive) return;
+  _frontStagePriorityPlan.execute(
+    frame,
+    frame.layerPriority,
+    frame.layerPulseSpeed,
+    frame.renderFrame,
+  );
 }
 
 function _runGlobalMixStage(frame, step) {
@@ -1913,21 +1932,14 @@ function draw() {
   _pipelineFrame.activity = activity;
   _pass22PipelinePlan.executePersistent(_pipelineFrame);
 
-  // Paint order remains the Classic layer-priority model. Only calculate the
-  // ordering state when at least one of the two ordered groups contributes.
-  let glitchOnTop = false;
-  if (activity.scanlines || activity.glitch || activity.luma) {
-    const layerState = s.layerPriority || 'scan';
-    const pulseSpd    = s.layerPulseSpeed;
-    const pulseFrames = Math.max(1, Math.round(60 / Math.max(0.1, pulseSpd)));
-    if      (layerState === 'glitch')  glitchOnTop = true;
-    else if (layerState === 'neutral') glitchOnTop = (frameCount & 1) === 0;
-    else if (layerState === 'pulse')   glitchOnTop = (Math.floor(frameCount / pulseFrames) & 1) === 0;
-  }
-
+  // Paint order remains the exact Classic layer-priority model. The validated
+  // priority plan resolves only the four modes already present in Pass 22.
+  _pipelineFrame.frontStageActive = activity.scanlines || activity.glitch || activity.luma;
+  _pipelineFrame.layerPriority = s.layerPriority || 'scan';
+  _pipelineFrame.layerPulseSpeed = s.layerPulseSpeed;
+  _pipelineFrame.renderFrame = frameCount;
   _pipelineFrame.density = density;
   _pipelineFrame.scanAngleArg = scanAngleArg;
-  _pipelineFrame.glitchOnTop = glitchOnTop;
   _pipelineFrame.glitchPriority = 1.0;
   _pipelineFrame.scanPriority = 1.0;
   _pipelineFrame.lumaMix = s.lumaKeyMix;

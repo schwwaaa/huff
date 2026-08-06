@@ -77,7 +77,7 @@ const sandbox = { window: {}, console };
 vm.runInNewContext(runtimeSource, sandbox, { filename: 'pipeline-runtime.js' });
 const runtime = sandbox.window.HuffPipelineRuntime;
 assert(runtime, 'browser pipeline runtime did not register');
-assert(runtime.version === 1, 'unexpected pipeline runtime version');
+assert(runtime.version >= 1, 'unexpected pipeline runtime version');
 assert(runtime.validation?.valid === true, 'built-in serial recipe is invalid');
 assert(Object.isFrozen(runtime.PASS22_SERIAL_RECIPE), 'serial recipe must be frozen');
 assert(Object.isFrozen(runtime.ZONE_ORDER), 'zone order must be frozen');

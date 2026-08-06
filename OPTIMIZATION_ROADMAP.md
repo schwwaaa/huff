@@ -1,45 +1,37 @@
-# HUFF Classic Optimization Roadmap — After Pass 25
+# HUFF Classic Optimization Roadmap — After Pass 26
 
 ## Authoritative rule
 
-Pass 22 remains the behavioral baseline. Pass 25 changes only how the existing route is validated and dispatched.
+Pass 22 remains the behavioral baseline. Pass 25 is the confirmed-working modular-runtime checkpoint. Pass 26 formalizes only the priority behavior already present in Pass 22.
 
 Flow remains frozen throughout the infrastructure sequence.
 
-## Pass 26 — Existing Front-Stage Priority Formalization
-
-- formalize the current Glitch/Luma and Scanline ordering group inside the validated recipe system;
-- preserve `scan`, `glitch`, `neutral`, and `pulse` behavior exactly;
-- preserve all defaults and existing presets;
-- keep route selection limited to the behavior already present in Pass 22;
-- reject positions requiring parallel branches or another full-resolution buffer;
-- make no Flow changes.
-
 ## Pass 27 — Capability and Stability Instrumentation
 
-- 720p30 / 720p60 / 1080p30 / 1080p60 matrix;
-- light, moderate, and worst-case effect scenes;
-- decode, render, mirror, and Syphon/Spout phase measurements;
-- source replacement and resize diagnostics;
-- long-session state and resource telemetry;
-- no visual-effect redesign.
+- define 720p30, 720p60, 1080p30, and 1080p60 test profiles;
+- define light, moderate, and worst-case effect scenes;
+- measure decode, render, mirror, and Syphon/Spout phases separately;
+- add source replacement and resize counters;
+- add long-session resource and state telemetry;
+- avoid new per-frame allocation and avoid visual-effect changes;
+- make no Flow changes.
 
 ## Pass 28 — Output Endurance and Shutdown
 
-- Syphon reconnect and soak tests;
+- Syphon reconnect and soak validation;
 - Spout validation;
 - mirror backpressure endurance;
 - deterministic source/output cleanup;
-- process-exit verification;
-- no Flow changes.
+- process-exit and orphan-process verification;
+- make no Flow changes.
 
 ## Pass 29 — Platform Packaging Freeze
 
 - macOS universal framework verification;
-- signing and notarization;
+- signing and notarization preparation;
 - Windows installer validation;
-- Linux codec and package matrix;
-- final known-issues and capability documentation.
+- Linux codec, WebKit, GStreamer, and package matrix;
+- final capability and known-issues documentation.
 
 ## Deferred feature work
 

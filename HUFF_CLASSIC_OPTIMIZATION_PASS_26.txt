@@ -1,0 +1,10 @@
+HUFF Classic Optimization Pass 26
+Existing Front-Stage Priority Formalization
+
+- Continues from the user-confirmed working Pass 25 package.
+- Preserves the authoritative Pass 22 visual behavior.
+- Formalizes only the existing Glitch/Luma versus Scanline priority modes.
+- Preserves SCAN TOP, GLITCH TOP, NEUTRAL, and PULSE timing exactly.
+- Adds no controls, stage positions, parallel branches, or render buffers.
+- Makes no Flow, effect-algorithm, preset, media, output, or native changes.
+- Includes deterministic parity validation and the complete documentation suite.

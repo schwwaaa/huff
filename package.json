@@ -21,7 +21,8 @@
     "validate:pass20": "node scripts/validate-pass20.mjs",
     "validate:pass21": "node scripts/validate-pass21.mjs",
     "validate:pass22": "node scripts/validate-pass22.mjs",
-    "validate:pass25": "node scripts/validate-pass25.mjs"
+    "validate:pass25": "node scripts/validate-pass25.mjs",
+    "validate:pass26": "node scripts/validate-pass26.mjs"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^1.6.3"
