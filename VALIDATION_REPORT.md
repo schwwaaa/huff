@@ -1,50 +1,84 @@
-# HUFF Classic Optimization Pass 24 — Validation Report
+# HUFF Classic Optimization Pass 25 — Validation Report
 
 ## Scope
 
-Pass 24 validates an immutable stage contract registry while preserving the exact Pass 22 application runtime.
+Pass 25 integrates the exact Pass 22 route into a validated serial recipe runtime without adding user-facing routing, changing effect algorithms, or allocating another full-resolution buffer.
 
-## Baseline integrity
+## Deterministic recipe validation
 
-The complete `src/` and `src-tauri/` trees were verified file-by-file against the included Pass 22 manifests. Core files also match their known SHA-256 hashes:
+`node scripts/validate-pass25.mjs` confirms:
+
+- the browser recipe matches the Pass 24 12-zone route skeleton;
+- stage legal-zone rules match the contract registry;
+- scratch and swap rules match the contract registry;
+- the recipe and registries are immutable;
+- compiled dispatch order is exact;
+- source synchronization, persistence, effects, and presentation execute in the expected order;
+- reordered routes are rejected;
+- unknown stages are rejected;
+- invalid Global Mix conditional positions are rejected;
+- missing handlers are rejected before use.
+
+## Runtime preservation checks
+
+- `src/effects.js` remains exact Pass 22:
 
 ```text
-src/canvas.js  3fdb5fb540be2d42173ddfd1aa355db930bac8e2cc758930e6eeddca05477798
-src/effects.js 2b352fa279c728ba292485fe22a0e580c6a3f36d669bd9741f79d5af4454dd44
-src/index.html a8648e98ab3f0dae2883adadba843754889e70a22efd2c9e1e3b91933f5116dc
-package.json   cf608e2bcdf638c613e9480f2df01d46dcadde138be4696f7ae7943a47640b2d
+2b352fa279c728ba292485fe22a0e580c6a3f36d669bd9741f79d5af4454dd44
 ```
 
-## Pass 24 deterministic checks
+- the complete `src-tauri/` tree matches the Pass 22 manifest;
+- all Pass 24 source files except the declared `canvas.js` and `index.html` changes remain exact;
+- `src/pipeline-runtime.js` is the only added runtime file;
+- Flow dispatch parameters remain unchanged;
+- Feedback still copies to `gScratch` before clearing `gBuf`;
+- Flow and Symmetry still swap `gBuf` and `gScratch`;
+- the count of full-resolution p5 Graphics allocations remains unchanged;
+- rejected Melt and Sort-Mosh code remains absent.
 
-- 11 unique immutable stage contracts validated;
-- 12-zone Pass 22 route skeleton validated;
-- all stage resources and legal zones validated;
-- Flow contract fixed to `gBuf + FrameRing -> gScratch -> swap`;
-- Feedback contract fixed to snapshot `gBuf -> gScratch`, clear `gBuf`, redraw to `gBuf`;
-- Global Mix limited to before, after, afterflow, and final;
-- current scan/glitch front-stage orders validated;
-- route markers verified in the existing Pass 22 `draw()` order;
-- complete source/native file manifests verified;
-- registry confirmed absent from all runtime entrypoints;
-- rejected post-Pass-22 Flow code and controls confirmed absent.
+## Inherited validators completed
 
-## Inherited validation
+The following validators pass against Pass 25:
 
-All available validators from Pass 9 through Pass 24 were executed successfully. Detailed counts from the earlier deterministic effect validators remain documented in their original reports.
+```text
+Pass 9
+Pass 10
+Pass 11
+Pass 13S
+Pass 14
+Pass 15
+Pass 16
+Pass 16S
+Pass 17
+Pass 18
+Pass 19
+Pass 20
+Pass 21
+Pass 22
+Pass 25
+```
 
-Additional static checks completed:
+Pass 23 and Pass 24 validators are intentionally superseded. Their purpose was to prove that the runtime stayed byte-for-byte Pass 22 and that the registry was not loaded. Pass 25 deliberately changes those two conditions while validating a tightly constrained set of runtime files.
 
-- 27 project-owned JavaScript/ES module/CommonJS files passed `node --check`;
+## Static checks
+
+The final package was checked for:
+
+- 80 project-owned JavaScript/ESM/CommonJS files with `node --check`;
+- 32 inline HTML scripts with `node --check`;
 - 34 JSON files parsed successfully;
 - 2 TOML files parsed successfully;
-- 6 shell scripts passed `bash -n`;
-- archive integrity validation passed after packaging.
+- 6 shell scripts with `bash -n`;
+- ZIP integrity.
+
+## Browser smoke-test limitation
+
+A local Chromium smoke test was attempted, but this execution environment blocks local `file:` and localhost navigation by policy. No browser-runtime success claim is made from that attempt.
 
 ## Native validation
 
-`cargo check` was not run because Cargo is unavailable in the validation environment. No native source changed in Pass 24.
+`cargo check` was not run because Cargo is not installed. The native tree is unchanged and verified against the Pass 22 manifest.
 
 ## Runtime claims
 
-No visual, performance, routing, pacing, or output change is claimed. The stage registry is deliberately not loaded by the application in Pass 24.
+No FPS improvement is claimed. No visual change is intended. Actual Pass 22 parity, media playback, Syphon, Spout, and long-session behavior require application testing on the target platforms.

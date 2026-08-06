@@ -1,46 +1,42 @@
-# HUFF Classic Optimization Pass 24 — Pass Notes
+# HUFF Classic Optimization Pass 25 — Pass Notes
 
 **Date:** 2026-08-05  
-**Authoritative runtime baseline:** user-supplied Pass 22 archive  
-**Scope:** immutable stage contract registry  
-**Runtime behavior changes:** none
+**Authoritative behavioral baseline:** user-supplied Pass 22 archive  
+**Immediate predecessor:** confirmed-working Pass 24 Stage Contract Registry package  
+**Scope:** validated serial recipe foundation  
+**User-facing controls:** none  
+**Flow changes:** none
 
 ## Work completed
 
-- added a machine-readable resource registry;
-- added 12 named serial pipeline zones matching Pass 22;
-- added immutable contracts for 11 existing runtime stages;
-- recorded the existing Glitch/Luma versus Scanline priority relationship;
-- recorded the four existing Global Mix insertion positions;
-- recorded Feedback snapshot/clear ownership;
-- recorded Flow and Symmetry ping-pong ownership;
-- explicitly froze Flow's algorithm and routing contract;
-- added complete Pass 22 source and native file manifests;
-- added deterministic registry and route validation.
+- added `src/pipeline-runtime.js`, a browser-compatible immutable recipe validator and compiler;
+- represented the exact existing 12-zone Pass 22 route as the only accepted runtime recipe;
+- validated the recipe at script startup before the renderer can execute an affected frame;
+- compiled stage handlers once, outside `draw()`, with no per-frame closure creation;
+- moved existing active-stage dispatch through the compiled recipe;
+- retained the direct clean bypass path;
+- retained the exact front-stage priority calculation;
+- retained all four Global Mix named positions;
+- retained Feedback snapshot-before-clear behavior;
+- retained Flow and Symmetry `gBuf`/`gScratch` swap points;
+- retained Solarize and presentation placement;
+- added deterministic rejection tests for illegal order, unknown stages, invalid Global Mix placement, and missing handlers;
+- added a Pass 24 source manifest to prove that only the declared runtime files changed.
 
-## Runtime preservation
-
-The registry is deliberately detached from the application runtime in Pass 24.
-
-The following remain byte-for-byte identical to the authoritative Pass 22 runtime:
+## Runtime files changed
 
 ```text
-complete src/ tree
-complete src-tauri/ tree
-src/canvas.js
-src/effects.js
-src/index.html
-package.json
-controls
-presets
-Flow
-media loading and lifecycle
-render / transport / mirror / profiler clocks
-FrameRing
-gCur / gBuf / gScratch
-mirror / Syphon / Spout
+src/pipeline-runtime.js  new validated recipe runtime
+src/canvas.js            existing stage bodies dispatched through the compiled recipe
+src/index.html            loads pipeline-runtime.js before effects.js and canvas.js
 ```
+
+No controls, presets, effect algorithms, media paths, output paths, or native files changed.
+
+## Flow freeze
+
+Flow remains the original Pass 22 implementation in `src/effects.js`. Its parameters, noise sampling, FrameRing use, source/destination buffers, tile order, draw order, and ping-pong swap are unchanged.
 
 ## Result
 
-Pass 24 establishes enforceable ownership metadata without risking visual or pacing regressions. Pass 25 can now build a validated serial recipe around the existing route rather than inferring buffer behavior from effect names.
+Pass 25 establishes the runtime foundation for constrained modularity without exposing routing or changing the accepted route. The application still has one legal recipe: the Pass 22 route.

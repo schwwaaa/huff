@@ -300,3 +300,7 @@ Pass 23 changes no runtime code. Pass 22 remains the exact behavioral baseline.
 ## Pass 24 implementation status
 
 Pass 24 implements the proposed registry as detached immutable metadata in `pipeline/stage-contracts.mjs`. It does not load the registry into the renderer. The fixed Pass 22 route and all runtime files remain unchanged. Runtime recipe execution remains deferred to Pass 25.
+
+## Pass 25 implementation status
+
+Pass 25 implements the validated serial recipe foundation. The exact Pass 22 route is now the only compiled runtime recipe. Invalid order, unknown stages, incorrect Global Mix slots, changed front-stage membership, and missing handlers are rejected before rendering. User routing and broader modularity remain deferred.

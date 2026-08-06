@@ -38,3 +38,7 @@ Pass 24 documentation
 ```
 
 No Pass 24 file is imported or loaded by the application runtime.
+
+## Pass 25 constrained-change manifest
+
+`baseline/pass24-src.sha256` records the complete confirmed-working Pass 24 source tree before runtime recipe integration. Pass 25 validation permits changes only to `src/canvas.js`, `src/index.html`, and the added `src/pipeline-runtime.js`; every other source file must still match the Pass 24 manifest. The complete native tree must continue to match `baseline/pass22-src-tauri.sha256`.

@@ -21,6 +21,8 @@
  *    temporal ring backing stores are explicitly released on shrink/resize/exit
  *  - Pass 15: mirror ImageBitmaps are captured at bounded preview dimensions
  *    before Worker transfer when supported, with automatic legacy fallback
+ *  - Pass 25: the exact Pass 22 active route dispatches through a validated,
+ *    immutable serial recipe with no new routing controls or render buffers
  */
 
 // ─── Module-local DOM helpers ─────────────────────────────────────────────────
@@ -1669,6 +1671,174 @@ function _presentCleanFrame(curCanvas) {
   image(gCur, 0, 0, width, height);
 }
 
+
+// ─── Pass 25 validated serial pipeline ──────────────────────────────────────
+// The runtime validates the exact Pass 22 recipe once at startup and compiles
+// these predeclared handlers. No per-frame closures, routing controls, or new
+// full-resolution buffers are introduced.
+const _pipelineRuntime = window.HuffPipelineRuntime;
+if (!_pipelineRuntime?.validation?.valid) {
+  throw new Error('[HUFF pipeline] validated Pass 22 serial recipe is unavailable');
+}
+
+const _pipelineFrame = Object.seal({
+  state: null,
+  bg: 'black',
+  activity: null,
+  density: 0,
+  scanAngleArg: null,
+  glitchOnTop: false,
+  glitchPriority: 1,
+  scanPriority: 1,
+  lumaMix: 0,
+  gmPos: 'after',
+});
+
+function _runSourceSyncStage() {
+  _syncGCur();
+}
+
+function _runPersistentDecayStage(frame) {
+  const pers = frame.state.persistence;
+  if (pers < 1) {
+    const ctx = gBuf.drawingContext;
+    ctx.save();
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.fillStyle = `rgba(0,0,0,${(((1 - pers) * (20 - 1)) + 1) / 255})`;
+    ctx.fillRect(0, 0, gBuf.width, gBuf.height);
+    ctx.restore();
+  }
+}
+
+function _runFrontStagePriority(frame) {
+  const s = frame.state;
+  const activity = frame.activity;
+  if (frame.glitchOnTop) {
+    if (activity.scanlines) applyScanlines(frame.density, frame.scanAngleArg, frame.scanPriority, s);
+    if (activity.glitch || activity.luma) {
+      _emitGlitchGroup(s, frame.density, frame.glitchPriority, frame.lumaMix);
+    }
+  } else {
+    if (activity.glitch || activity.luma) {
+      _emitGlitchGroup(s, frame.density, frame.glitchPriority, frame.lumaMix);
+    }
+    if (activity.scanlines) applyScanlines(frame.density, frame.scanAngleArg, frame.scanPriority, s);
+  }
+}
+
+function _runGlobalMixStage(frame, step) {
+  const activity = frame.activity;
+  const gmPos = frame.gmPos;
+  if (activity.globalMix && gmPos === step.conditionalPosition) {
+    _emitGlobalMix(frame.state);
+  }
+}
+
+function _runFeedbackStage(frame) {
+  const activity = frame.activity;
+  if (activity.feedback) {
+    const s = frame.state;
+    const fb = s.feedback;
+    const fx = s.fbX;
+    const fy = s.fbY;
+    const fz = s.fbZ;
+    const ft = (s.fbTheta * Math.PI) / 180;
+
+    _copyGraphicsFrame(gScratch, gBuf);
+    const feedbackSource = _graphicsCanvas(gScratch);
+
+    const ctx = gBuf.drawingContext;
+    ctx.save();
+    ctx.clearRect(0, 0, gBuf.width, gBuf.height);
+    ctx.globalAlpha = Math.min(1, fb);
+    ctx.translate(gBuf.width / 2 + fx, gBuf.height / 2 + fy);
+    ctx.rotate(ft);
+    ctx.scale(fz, fz);
+    ctx.drawImage(feedbackSource, -gBuf.width / 2, -gBuf.height / 2, gBuf.width, gBuf.height);
+    ctx.restore();
+  }
+}
+
+function _runFlowStage(frame) {
+  const activity = frame.activity;
+  if (activity.flow) {
+    const s = frame.state;
+    applyFlowWarp(gBuf, gScratch, Math.trunc(s.flowStrength),
+      Math.trunc(s.flowScale), Math.trunc(s.flowPulse), s.flowImpl, s.flowSpeed,
+      s.flowTurb, s.flowSwirl, s.flowSpread);
+    [gBuf, gScratch] = [gScratch, gBuf];
+  }
+}
+
+function _runSymmetryStage(frame) {
+  const activity = frame.activity;
+  if (activity.symmetry) {
+    const s = frame.state;
+    applySymmetry(gBuf, gScratch, s.symMode || 'v', s.symPos);
+    [gBuf, gScratch] = [gScratch, gBuf];
+  }
+}
+
+function _runSolarizeStage(frame) {
+  const activity = frame.activity;
+  if (activity.solarize) {
+    const s = frame.state;
+    applySolarize(gBuf, s.solarizeThresh, s.solarizeAmt,
+      s.solarizeR, s.solarizeG, s.solarizeB);
+  }
+}
+
+function _runPresentationStage(frame) {
+  const s = frame.state;
+  const activity = frame.activity;
+
+  // Effects may leave transparent regions, so retain the selected background in
+  // the active path. The clean bypass path is a full-frame opaque copy.
+  _paintMainBackground(frame.bg);
+
+  const curCanvas = _graphicsCanvas(gCur);
+  const bufCanvas = _graphicsCanvas(gBuf);
+  if (_mainCtx && curCanvas) {
+    _mainCtx.save();
+    _mainCtx.setTransform(1, 0, 0, 1, 0, 0);
+    _mainCtx.globalCompositeOperation = 'source-over';
+    if (activity.baseMix) {
+      _mainCtx.globalAlpha = s.baseMix;
+      _mainCtx.drawImage(curCanvas, 0, 0, width, height);
+    }
+    if (bufCanvas) {
+      _mainCtx.globalAlpha = 1;
+      _mainCtx.drawImage(bufCanvas, 0, 0, width, height);
+    }
+    _mainCtx.restore();
+  } else {
+    if (activity.baseMix) {
+      push();
+      tint(255, s.baseMix * 255);
+      image(gCur, 0, 0, width, height);
+      pop();
+    }
+    image(gBuf, 0, 0, width, height);
+  }
+}
+
+const _pipelineStageHandlers = Object.freeze({
+  'source-sync': _runSourceSyncStage,
+  'persistent-decay': _runPersistentDecayStage,
+  'front-stage-priority': _runFrontStagePriority,
+  'global-mix': _runGlobalMixStage,
+  'feedback': _runFeedbackStage,
+  'flow': _runFlowStage,
+  'symmetry': _runSymmetryStage,
+  'solarize': _runSolarizeStage,
+  'presentation': _runPresentationStage,
+});
+
+const _pass22PipelinePlan = _pipelineRuntime.compileRecipe(
+  _pipelineRuntime.PASS22_SERIAL_RECIPE,
+  _pipelineStageHandlers,
+);
+
 function draw() {
   _tickFPS();
   const s = renderState;
@@ -1682,7 +1852,9 @@ function draw() {
 
   // Keep gCur current at 60fps only on WebViews without rVFC. Modern WebViews
   // update it once per genuinely decoded source frame in pumpVideoFrames().
-  _syncGCur();
+  _pipelineFrame.state = s;
+  _pipelineFrame.bg = bg;
+  _pass22PipelinePlan.executeSource(_pipelineFrame);
 
   // Preserve phase progression even when the corresponding stage is currently
   // neutral. Re-enabling an effect therefore resumes at the same temporal point
@@ -1738,15 +1910,8 @@ function draw() {
 
   if (activity.glitch) randomSeed(baseSeed + frameCount);
 
-  const pers = s.persistence;
-  if (pers < 1) {
-    const ctx = gBuf.drawingContext;
-    ctx.save();
-    ctx.globalCompositeOperation = 'destination-out';
-    ctx.fillStyle = `rgba(0,0,0,${(((1 - pers) * (20 - 1)) + 1) / 255})`;
-    ctx.fillRect(0, 0, gBuf.width, gBuf.height);
-    ctx.restore();
-  }
+  _pipelineFrame.activity = activity;
+  _pass22PipelinePlan.executePersistent(_pipelineFrame);
 
   // Paint order remains the Classic layer-priority model. Only calculate the
   // ordering state when at least one of the two ordered groups contributes.
@@ -1760,98 +1925,14 @@ function draw() {
     else if (layerState === 'pulse')   glitchOnTop = (Math.floor(frameCount / pulseFrames) & 1) === 0;
   }
 
-  const glitchPriority = 1.0;
-  const scanPriority    = 1.0;
-  const lumaMix         = s.lumaKeyMix;
-
-  if (glitchOnTop) {
-    if (activity.scanlines) applyScanlines(density, scanAngleArg, scanPriority, s);
-    if (activity.glitch || activity.luma) {
-      _emitGlitchGroup(s, density, glitchPriority, lumaMix);
-    }
-  } else {
-    if (activity.glitch || activity.luma) {
-      _emitGlitchGroup(s, density, glitchPriority, lumaMix);
-    }
-    if (activity.scanlines) applyScanlines(density, scanAngleArg, scanPriority, s);
-  }
-
-  const gmPos = s.globalMixPos || 'after';
-  if (activity.globalMix && gmPos === 'before') _emitGlobalMix(s);
-
-  const fb = s.feedback;
-  if (activity.feedback) {
-    const fx = s.fbX;
-    const fy = s.fbY;
-    const fz = s.fbZ;
-    const ft = (s.fbTheta * Math.PI) / 180;
-
-    _copyGraphicsFrame(gScratch, gBuf);
-    const feedbackSource = _graphicsCanvas(gScratch);
-
-    const ctx = gBuf.drawingContext;
-    ctx.save();
-    ctx.clearRect(0, 0, gBuf.width, gBuf.height);
-    ctx.globalAlpha = Math.min(1, fb);
-    ctx.translate(gBuf.width / 2 + fx, gBuf.height / 2 + fy);
-    ctx.rotate(ft);
-    ctx.scale(fz, fz);
-    ctx.drawImage(feedbackSource, -gBuf.width / 2, -gBuf.height / 2, gBuf.width, gBuf.height);
-    ctx.restore();
-  }
-
-  if (activity.globalMix && gmPos === 'after') _emitGlobalMix(s);
-
-  if (activity.flow) {
-    applyFlowWarp(gBuf, gScratch, Math.trunc(s.flowStrength),
-      Math.trunc(s.flowScale), Math.trunc(s.flowPulse), s.flowImpl, s.flowSpeed,
-      s.flowTurb, s.flowSwirl, s.flowSpread);
-    [gBuf, gScratch] = [gScratch, gBuf];
-  }
-
-  if (activity.globalMix && gmPos === 'afterflow') _emitGlobalMix(s);
-
-  if (activity.symmetry) {
-    applySymmetry(gBuf, gScratch, s.symMode || 'v', s.symPos);
-    [gBuf, gScratch] = [gScratch, gBuf];
-  }
-
-  if (activity.solarize) {
-    applySolarize(gBuf, s.solarizeThresh, s.solarizeAmt,
-      s.solarizeR, s.solarizeG, s.solarizeB);
-  }
-
-  if (activity.globalMix && gmPos === 'final') _emitGlobalMix(s);
-
-  // Effects may leave transparent regions, so retain the selected background in
-  // the active path. The clean bypass path above is a full-frame opaque copy and
-  // therefore does not need this fill.
-  _paintMainBackground(bg);
-
-  const curCanvas = _graphicsCanvas(gCur);
-  const bufCanvas = _graphicsCanvas(gBuf);
-  if (_mainCtx && curCanvas) {
-    _mainCtx.save();
-    _mainCtx.setTransform(1, 0, 0, 1, 0, 0);
-    _mainCtx.globalCompositeOperation = 'source-over';
-    if (activity.baseMix) {
-      _mainCtx.globalAlpha = s.baseMix;
-      _mainCtx.drawImage(curCanvas, 0, 0, width, height);
-    }
-    if (bufCanvas) {
-      _mainCtx.globalAlpha = 1;
-      _mainCtx.drawImage(bufCanvas, 0, 0, width, height);
-    }
-    _mainCtx.restore();
-  } else {
-    if (activity.baseMix) {
-      push();
-      tint(255, s.baseMix * 255);
-      image(gCur, 0, 0, width, height);
-      pop();
-    }
-    image(gBuf, 0, 0, width, height);
-  }
+  _pipelineFrame.density = density;
+  _pipelineFrame.scanAngleArg = scanAngleArg;
+  _pipelineFrame.glitchOnTop = glitchOnTop;
+  _pipelineFrame.glitchPriority = 1.0;
+  _pipelineFrame.scanPriority = 1.0;
+  _pipelineFrame.lumaMix = s.lumaKeyMix;
+  _pipelineFrame.gmPos = s.globalMixPos || 'after';
+  _pass22PipelinePlan.executeEffectsAndPresentation(_pipelineFrame);
 }
 function drawWaiting() {
   push();

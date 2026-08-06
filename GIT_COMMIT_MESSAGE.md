@@ -1,10 +1,10 @@
-# HUFF Classic Pass 24 — Git Commit Message
+# HUFF Classic Pass 25 — Git Commit Message
 
 ```bash
 git add . && git commit \
-  -m "chore: add HUFF Classic stage contract registry" \
-  -m "Define immutable metadata for the existing Pass 22 resources, serial zones, effect-stage classes, buffer ownership, scratch requirements, swaps, and legal positions." \
-  -m "Record the existing front-stage priority relationship and Global Mix positions without loading the registry into the runtime or exposing routing controls." \
-  -m "Preserve the complete Pass 22 src and src-tauri trees, Flow implementation, controls, presets, media ownership, clocks, FrameRing, buffers, mirror, Syphon, and Spout exactly." \
-  -m "Add full baseline file manifests and deterministic Pass 24 contract, route-order, and runtime-inertness validation."
+  -m "refactor: validate the HUFF Classic serial pipeline" \
+  -m "Compile the exact Pass 22 twelve-zone route once at startup and dispatch the existing source, persistence, front-stage, Global Mix, Feedback, Flow, Symmetry, Solarize, and presentation stages through immutable handlers." \
+  -m "Reject reordered zones, unknown stages, invalid Global Mix positions, and missing handlers before rendering while adding no routing UI or full-resolution buffer." \
+  -m "Preserve Flow and effects, controls, presets, media ownership, FrameRing behavior, clocks, mirror, Syphon, Spout, and the native Tauri tree." \
+  -m "Add deterministic Pass 25 recipe validation, constrained-change manifests, testing documentation, and the continuing infrastructure roadmap."
 ```

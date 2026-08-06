@@ -1,0 +1,10 @@
+HUFF Classic Optimization Pass 25
+Validated Serial Recipe Foundation
+
+- Continues from the confirmed-working Pass 24 package.
+- Executes the exact Pass 22 route through one immutable validated recipe.
+- Adds no user-facing routing controls.
+- Adds no full-resolution render buffer.
+- Makes no Flow or effect-algorithm changes.
+- Preserves the complete native tree.
+- Includes deterministic validation and the full documentation suite.

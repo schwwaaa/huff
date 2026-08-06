@@ -158,3 +158,7 @@ No output change
 ```
 
 Pass 25 may begin executing the exact fixed route through a validated serial recipe only after preserving all Pass 22 dispatch and buffer-swap invariants.
+
+## Pass 25 runtime integration status
+
+Pass 25 now mirrors the detached contract metadata in a browser-compatible immutable recipe runtime. The application accepts only the exact Pass 22 route, validates it before rendering, and compiles predeclared stage handlers once. No route controls or new legal stage positions are exposed.

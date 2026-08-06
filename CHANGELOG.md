@@ -1,5 +1,21 @@
 # HUFF Classic Optimization Changelog
 
+## Pass 25 — Validated serial recipe foundation
+
+**Date:** 2026-08-05  
+**Status:** implementation and deterministic validation complete; target-runtime parity testing pending
+
+- Added a browser-side immutable validator/compiler for the exact 12-zone Pass 22 route.
+- Loaded the pipeline runtime before `effects.js` and `canvas.js`.
+- Declared stable stage handlers for source synchronization, persistence, front-stage ordering, Global Mix, Feedback, Flow, Symmetry, Solarize, and presentation.
+- Compiled handlers once outside `draw()` and reused one sealed frame context.
+- Preserved the clean bypass and the existing active-pipeline entry behavior.
+- Rejected zone reordering, unknown stages, illegal Global Mix positions, changed front-stage membership, and missing handlers before rendering.
+- Preserved Feedback snapshot-before-clear behavior and Flow/Symmetry ping-pong swaps.
+- Added no user-facing routing and no additional full-resolution p5 Graphics surface.
+- Kept `src/effects.js`, presets, media lifecycle, output paths, and the complete native tree unchanged.
+- Added Pass 25 deterministic validation and a Pass 24 source manifest to constrain allowed runtime changes.
+
 ## Pass 24 — Stage contract registry
 
 **Date:** 2026-08-05  
