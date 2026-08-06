@@ -1,5 +1,31 @@
 # HUFF Classic Optimization Changelog
 
+## Pass 28 — Output endurance and shutdown
+
+**Date:** 2026-08-05  
+**Status:** implementation and deterministic validation complete; target-runtime endurance testing pending
+
+- Added owned reconnect timers and animation-frame lifecycle for the mirror sender.
+- Added socket-generation and stale-decode guards to the canvas receiver.
+- Added Syphon and Spout generation guards so late native Start completions cannot reactivate stopped outputs.
+- Added duplicate Start/Stop pending-operation protection.
+- Added deterministic cleanup for output RAFs, polling intervals, Workers, WebSockets, staging surfaces, listeners, and cached canvas references.
+- Added pagehide cleanup alongside beforeunload cleanup.
+- Added one idempotent native shutdown pass that drops MIDI, stops OSC, stops Syphon/Spout, and exits the two-window process.
+- Preserved exact Pass 22 Flow/effect behavior, the validated pipeline runtime, presets, decoder, clocks, and render-buffer count.
+- Added 10,000-case lifecycle validation and complete Pass 27 source/native manifests.
+
+## Pass 27 — Capability and stability instrumentation
+
+**Date:** 2026-08-05  
+**Status:** instrumentation complete; user reported the application appeared fine
+
+- Added 720p30, 720p60, 1080p30, and 1080p60 capability profiles.
+- Added detached light, moderate, and worst-case effect-load scenes.
+- Added profiler-gated render, source-sync, active-pipeline, mirror, Syphon, and Spout phase telemetry.
+- Added source, resize, allocation, uptime, and long-session counters.
+- Preserved Flow, effects, pipeline ordering, controls, presets, output pacing, and native code.
+
 ## Pass 26 — Existing front-stage priority formalization
 
 **Date:** 2026-08-05  

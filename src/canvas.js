@@ -2162,6 +2162,24 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
   let relayFramePending = false;
   let _wsDelay = 1500;
   const WS_DELAY_MAX = 30000;
+  let reconnectTimer = 0;
+  let pumpRafId = 0;
+
+  function clearReconnectTimer() {
+    if (!reconnectTimer) return;
+    clearTimeout(reconnectTimer);
+    reconnectTimer = 0;
+  }
+
+  function scheduleReconnect() {
+    if (mirrorShutdown || reconnectTimer) return;
+    const delay = _wsDelay;
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = 0;
+      ensureWS();
+    }, delay);
+    _wsDelay = Math.min(_wsDelay * 2, WS_DELAY_MAX);
+  }
 
   // ── Off-main-thread encoder ──────────────────────────────────────────────
   let encoderWorker = null;
@@ -2246,10 +2264,12 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
   function ensureWS() {
     if (mirrorShutdown) return;
     if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
+    clearReconnectTimer();
     ws = new WebSocket(wsUrl);
     window.__huffWS = ws;
     ws.binaryType = 'arraybuffer';
     ws.onopen  = () => {
+      clearReconnectTimer();
       connected = true;
       relayFramePending = false;
       _wsDelay = 1500;
@@ -2274,10 +2294,7 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
       relayFramePending = false;
       mirrorReceivers = 0;
       setWSStatus('WS: disconnected');
-      if (!mirrorShutdown) {
-        setTimeout(ensureWS, _wsDelay);
-        _wsDelay = Math.min(_wsDelay * 2, WS_DELAY_MAX);
-      }
+      scheduleReconnect();
     };
   }
   ensureWS();
@@ -2449,13 +2466,14 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
   }
 
   let last = 0;
-  requestAnimationFrame(function pump(ts) {
+  pumpRafId = requestAnimationFrame(function pump(ts) {
+    if (mirrorShutdown) return;
     if (ts - last >= targetPeriod()) {
       last = ts;
       const c = findCanvas();
       if (c) sendFrame(c).catch(() => {});
     }
-    requestAnimationFrame(pump);
+    pumpRafId = requestAnimationFrame(pump);
   });
 
   function shutdownMirror() {
@@ -2466,13 +2484,27 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
     relayFramePending = false;
     workerBusy = false;
     fallbackBusy = false;
-    try { encoderWorker?.terminate(); } catch {}
+    clearReconnectTimer();
+    if (pumpRafId) {
+      cancelAnimationFrame(pumpRafId);
+      pumpRafId = 0;
+    }
+    document.removeEventListener('input', updateStreamTuning);
+    document.removeEventListener('change', updateStreamTuning);
+    if (encoderWorker) {
+      try { encoderWorker.onmessage = encoderWorker.onerror = null; } catch {}
+      try { encoderWorker.postMessage({ type:'release' }); } catch {}
+      try { encoderWorker.terminate(); } catch {}
+    }
     encoderWorker = null;
     if (ws) {
       try { ws.onopen = ws.onmessage = ws.onerror = ws.onclose = null; } catch {}
       try { ws.close(); } catch {}
     }
     ws = null;
+    cachedRenderCanvas = null;
+    tcv.width = 1;
+    tcv.height = 1;
   }
   window.addEventListener('pagehide', shutdownMirror, { once:true });
   window.addEventListener('beforeunload', shutdownMirror, { once:true });

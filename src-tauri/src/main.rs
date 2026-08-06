@@ -17,12 +17,13 @@ mod syphon;
 mod spout;
 
 use std::{collections::HashMap, net::SocketAddr, sync::Arc};
+use std::sync::atomic::{AtomicBool, Ordering};
 #[cfg(target_os = "macos")]
 use std::time::{Duration, Instant};
 
 use futures_util::{SinkExt, StreamExt};
 use midir::{MidiInput, MidiInputConnection};
-use once_cell::sync::{Lazy, OnceCell};
+use once_cell::sync::Lazy;
 use rosc::{OscPacket, OscType};
 use serde::{Deserialize, Serialize};
 use tokio::{net::{TcpListener, UdpSocket}, sync::{Mutex, Notify}};
@@ -188,7 +189,9 @@ pub struct OscEvent {
     pub args: Vec<String>,
 }
 
-static OSC_SHUTDOWN: OnceCell<tokio::sync::oneshot::Sender<()>> = OnceCell::new();
+static OSC_SHUTDOWN: Lazy<std::sync::Mutex<Option<tokio::sync::oneshot::Sender<()>>>> =
+    Lazy::new(|| std::sync::Mutex::new(None));
+static RUNTIME_SHUTDOWN_STARTED: AtomicBool = AtomicBool::new(false);
 
 /// Converts an OscPacket recursively (handles bundles) and emits each message.
 fn dispatch_osc(packet: OscPacket, app: &tauri::AppHandle) {
@@ -678,17 +681,38 @@ fn spout_status() -> String {
     { "unavailable (Windows only)".into() }
 }
 
+fn shutdown_native_runtime() {
+    if RUNTIME_SHUTDOWN_STARTED.swap(true, Ordering::SeqCst) {
+        return;
+    }
+
+    // Drop the MIDI connection before process exit so device callbacks cannot
+    // outlive the visible instrument windows.
+    if let Ok(mut midi) = MIDI_CONN.lock() {
+        *midi = None;
+    }
+
+    // Wake the OSC task so its UDP socket is released deterministically instead
+    // of relying only on operating-system process teardown.
+    if let Ok(mut shutdown) = OSC_SHUTDOWN.lock() {
+        if let Some(tx) = shutdown.take() {
+            let _ = tx.send(());
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    syphon::stop();
+    #[cfg(target_os = "windows")]
+    spout::stop();
+}
+
 fn main() {
 tauri::Builder::default()
   .on_window_event(|event| {
       if matches!(event.event(), tauri::WindowEvent::CloseRequested { .. }) {
-          // HUFF is a two-window instrument. Closing either surface should end
-          // the complete process so no hidden WebView, relay, or native sender
-          // remains alive after the visible window is gone.
-          #[cfg(target_os = "macos")]
-          syphon::stop();
-          #[cfg(target_os = "windows")]
-          spout::stop();
+          // HUFF is a two-window instrument. Closing either surface ends the
+          // complete process after one idempotent native cleanup pass.
+          shutdown_native_runtime();
           event.window().app_handle().exit(0);
       }
   })
@@ -733,7 +757,9 @@ tauri::Builder::default()
 
       // ── OSC UDP listener ────────────────────────────────────────────────
       let (tx, rx) = tokio::sync::oneshot::channel::<()>();
-      OSC_SHUTDOWN.set(tx).ok();
+      if let Ok(mut shutdown) = OSC_SHUTDOWN.lock() {
+          *shutdown = Some(tx);
+      }
       let app_handle = app.handle();
       tauri::async_runtime::spawn(run_osc_listener(app_handle, rx));
 

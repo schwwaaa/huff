@@ -2,9 +2,10 @@
 
 ```bash
 git add . && git commit \
-  -m "feat: add HUFF Classic capability instrumentation" \
-  -m "Define immutable 720p30, 720p60, 1080p30, and 1080p60 profiles plus detached light, moderate, and worst-case effect-load scenes." \
-  -m "Add profiler-gated total render, source-sync, active-pipeline, and Spout phase timing with source replacement, resize, buffer, uptime, and long-session counters." \
-  -m "Preserve the exact Pass 22 effects and Flow implementation, the confirmed Pass 26 serial pipeline runtime, output pacing, controls, presets, and complete native Tauri tree." \
-  -m "Add Pass 27 validation, capability testing documentation, and the Classic-to-wgpu constrained pipeline strategy."
+  -m "fix: harden HUFF Classic output shutdown" \
+  -m "Own and clear mirror reconnect timers, animation pumps, Workers, WebSockets, listeners, pending receiver frames, and staging surfaces across pagehide and beforeunload." \
+  -m "Add generation-guarded Syphon and Spout start/stop lifecycles so stale native completions cannot reactivate an output after Stop or application shutdown." \
+  -m "Make native shutdown idempotently release MIDI, stop the OSC UDP listener, stop Syphon or Spout, and exit the complete two-window process." \
+  -m "Preserve the exact Pass 22 effects and Flow behavior, validated serial pipeline, controls, presets, decoder, frame clocks, and render-buffer topology." \
+  -m "Add Pass 28 lifecycle validation, baseline manifests, endurance checklist, and complete documentation."
 ```

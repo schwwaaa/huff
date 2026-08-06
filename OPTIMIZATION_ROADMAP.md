@@ -1,43 +1,49 @@
-# HUFF Classic Optimization Roadmap — After Pass 27
+# HUFF Classic Optimization Roadmap — After Pass 28
 
 ## Authoritative rule
 
-Pass 22 remains the behavioral baseline. Pass 26 is the confirmed-working modular-runtime checkpoint. Pass 27 adds measurement only.
-
-Flow remains frozen throughout Passes 28–29.
-
-## Pass 28 — Output Endurance and Shutdown
-
-- Syphon start/stop/reconnect and receiver detach/reattach testing;
-- bootstrap-to-full-rate transition soak;
-- Spout start/stop/reconnect and backpressure testing;
-- mirror receiver reconnect and latest-frame-wins endurance;
-- deterministic source, Worker, WebSocket, timer, and native-output cleanup;
-- process-exit and orphan-process verification;
-- no effect or Flow changes.
+Pass 22 remains the visual/behavioral baseline. Flow remains frozen during infrastructure work.
 
 ## Pass 29 — Platform Packaging Freeze
 
 - macOS universal framework verification;
-- signing and notarization preparation;
+- final bundled-framework path and architecture checks;
+- signing/notarization preparation;
 - Windows installer and Spout package validation;
-- Linux codec, WebKit, GStreamer, ALSA, and package matrix;
-- final 720p/1080p capability matrix;
-- release-known-issues and platform documentation;
+- Linux WebKit/GStreamer/ALSA/codec package matrix;
+- 720p/1080p capability matrix template;
+- release known-issues document;
 - final Classic infrastructure freeze.
 
-## Post-infrastructure feature sequence
+## Post-infrastructure sequence
 
 ### Pass 30 — Constrained Pipeline Switching Foundation
 
-- expose a small validated recipe list rather than a node graph;
-- preserve serial `gBuf` / `gScratch` ownership;
-- reject routes requiring undeclared buffers or unsafe cycles;
-- retain the original route as the default and compatibility fallback.
+Classic will expose a small set of validated serial recipes rather than a general node graph.
 
-### Pass 31+ — Paired-Down Effect Augmentation
+Requirements:
 
-- add only effects that fit the Classic resource and stability budget;
-- validate each effect in every supported recipe;
-- keep the free Classic feature set coherent and intentionally limited;
-- reserve broad modular routing, high-resolution processing, and full experimentation for HUFF HD/wgpu.
+- retain current route as the default compatibility recipe;
+- use existing `gBuf` / `gScratch` ping-pong ownership;
+- validate stage contracts before use;
+- reject undeclared cycles and routes requiring hidden buffers;
+- expose only routes that remain stable under the Classic Canvas2D budget.
+
+### Pass 31+ — Paired-down Effect Augmentation
+
+- add a deliberately limited set of effects;
+- validate every effect in every supported Classic recipe;
+- keep free Classic coherent and stable;
+- defer high-resolution, parallel branches, typed temporal stores, broad routing, and full experimentation to HUFF HD/wgpu.
+
+## HUFF HD / wgpu direction
+
+HUFF Classic acts as the stable proving ground for instrument behavior. HUFF HD can then expand accepted ideas into:
+
+- typed video/mask/key ports;
+- explicit history, field, trail, and feedback stores;
+- parallel branches;
+- program, preview, and auxiliary buses;
+- legal temporal cycles;
+- per-route GPU-resource budgeting;
+- high-resolution output and full modular routing.

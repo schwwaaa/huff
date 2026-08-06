@@ -2035,6 +2035,10 @@
         let outputFps = parseInt(fpsSelect.value, 10) || 30;
         let lastAckAt = 0;
         let statePollTimer = null;
+        let lifecycleGeneration = 0;
+        let startPending = false;
+        let stopPending = false;
+        let shuttingDown = false;
 
         // Output telemetry is sampled only while the existing backtick profiler
         // is visible. Keeping the counters on window lets canvas.js report the
@@ -2143,7 +2147,10 @@
             frameInFlight = false;
             const socket = syphWS;
             syphWS = null;
-            try { socket?.close(); } catch {}
+            if (socket) {
+                try { socket.onopen = socket.onmessage = socket.onerror = socket.onclose = null; } catch {}
+                try { socket.close(); } catch {}
+            }
         }
 
         function handleSocketMessage(event) {
@@ -2229,6 +2236,7 @@
         function destroyWorker() {
             workerReady = false;
             if (worker) {
+                try { worker.onmessage = worker.onerror = null; } catch {}
                 try { worker.postMessage({ type: 'release' }); } catch {}
                 try { worker.terminate(); } catch {}
             }
@@ -2451,7 +2459,37 @@
             finally { statePollBusy = false; }
         }
 
+        function releaseSyphonTransport({ stopNative = false, clearPollTimer = false } = {}) {
+            active = false;
+            receiverConnected = false;
+            frameInFlight = false;
+            statePollBusy = false;
+            if (rafId) {
+                cancelAnimationFrame(rafId);
+                rafId = null;
+            }
+            if (clearPollTimer && statePollTimer) {
+                clearInterval(statePollTimer);
+                statePollTimer = null;
+            }
+            closeSyphWS();
+            destroyWorker();
+            if (fallbackCanvas) {
+                fallbackCanvas.width = 1;
+                fallbackCanvas.height = 1;
+            }
+            fallbackCanvas = null;
+            fallbackCtx = null;
+            sourceCanvas = null;
+            if (stopNative) {
+                try { invoke('stop_syphon').catch(() => {}); } catch {}
+            }
+        }
+
         async function startSyphon() {
+            if (active || startPending || stopPending || shuttingDown) return;
+            const generation = ++lifecycleGeneration;
+            startPending = true;
             const w = Math.max(64, parseInt(wInput.value, 10) || 1280);
             const h = Math.max(64, parseInt(hInput.value, 10) || 720);
 
@@ -2460,6 +2498,10 @@
 
             try {
                 const message = await invoke('start_syphon', { width: w, height: h });
+                if (shuttingDown || generation !== lifecycleGeneration) {
+                    try { invoke('stop_syphon').catch(() => {}); } catch {}
+                    return;
+                }
                 outputW = w;
                 outputH = h;
                 active = true;
@@ -2479,6 +2521,10 @@
                 ensureWorker();
                 ensureSyphWS();
                 await pollRuntimeState(true);
+                if (shuttingDown || generation !== lifecycleGeneration || !active) {
+                    releaseSyphonTransport();
+                    return;
+                }
 
                 statusBox.textContent = `${message}\nWaiting for a receiver; publishing a 1 fps bootstrap frame until one connects.`;
                 statusBox.className = 'active';
@@ -2490,31 +2536,26 @@
 
                 rafId = requestAnimationFrame(sendFrame);
             } catch (error) {
-                statusBox.textContent = `⚠ ${error}`;
-                statusBox.className = 'error';
+                if (!shuttingDown && generation === lifecycleGeneration) {
+                    statusBox.textContent = `⚠ ${error}`;
+                    statusBox.className = 'error';
+                }
+            } finally {
+                if (generation === lifecycleGeneration) startPending = false;
             }
         }
 
         async function stopSyphon() {
-            active = false;
-            receiverConnected = false;
-            frameInFlight = false;
-            if (rafId) {
-                cancelAnimationFrame(rafId);
-                rafId = null;
-            }
-            closeSyphWS();
-            destroyWorker();
-            if (fallbackCanvas) {
-                fallbackCanvas.width = 1;
-                fallbackCanvas.height = 1;
-            }
-            fallbackCanvas = null;
-            fallbackCtx = null;
+            if (stopPending) return;
+            stopPending = true;
+            ++lifecycleGeneration;
+            startPending = false;
+            releaseSyphonTransport();
 
             try {
                 statusBox.textContent = await invoke('stop_syphon');
             } catch {}
+            finally { stopPending = false; }
 
             statusBox.className = '';
             pill.textContent = 'SYPHON: OFF';
@@ -2532,15 +2573,16 @@
         });
 
         statePollTimer = setInterval(() => pollRuntimeState(false), 1000);
-        window.addEventListener('beforeunload', () => {
-            active = false;
-            if (statePollTimer) {
-                clearInterval(statePollTimer);
-                statePollTimer = null;
-            }
-            closeSyphWS();
-            destroyWorker();
-        }, { once: true });
+        function shutdownSyphon() {
+            if (shuttingDown) return;
+            shuttingDown = true;
+            ++lifecycleGeneration;
+            startPending = false;
+            stopPending = false;
+            releaseSyphonTransport({ stopNative: true, clearPollTimer: true });
+        }
+        window.addEventListener('pagehide', shutdownSyphon, { once: true });
+        window.addEventListener('beforeunload', shutdownSyphon, { once: true });
     })();
     </script>
 
@@ -2599,6 +2641,11 @@
         let outputW      = 1280;
         let outputH      = 720;
         let spoutWS      = null;
+        let statusPollTimer = null;
+        let lifecycleGeneration = 0;
+        let startPending = false;
+        let stopPending = false;
+        let shuttingDown = false;
 
         // Pass 27 profiler telemetry. Timing is recorded only while the existing
         // backtick profiler is visible; low-cost sent/skip counters remain useful
@@ -2663,7 +2710,10 @@
         function closeSpoutWS() {
             const socket = spoutWS;
             spoutWS = null;
-            try { socket?.close(); } catch {}
+            if (socket) {
+                try { socket.onopen = socket.onmessage = socket.onerror = socket.onclose = null; } catch {}
+                try { socket.close(); } catch {}
+            }
         }
 
         function ensureSpoutWS() {
@@ -2757,13 +2807,44 @@
         }
 
         // ── start / stop ──────────────────────────────────────────────────────
+        function releaseSpoutTransport({ stopNative = false, clearPollTimer = false } = {}) {
+            running = false;
+            spoutTelemetry.running = false;
+            if (rafId) {
+                cancelAnimationFrame(rafId);
+                rafId = null;
+            }
+            if (clearPollTimer && statusPollTimer) {
+                clearInterval(statusPollTimer);
+                statusPollTimer = null;
+            }
+            closeSpoutWS();
+            if (spoutCanvas) {
+                spoutCanvas.width = 1;
+                spoutCanvas.height = 1;
+            }
+            spoutCanvas = null;
+            spoutCtx = null;
+            sourceCanvas = null;
+            if (stopNative) {
+                try { invoke('stop_spout').catch(() => {}); } catch {}
+            }
+        }
+
         async function startSpout() {
+            if (running || startPending || stopPending || shuttingDown) return;
+            const generation = ++lifecycleGeneration;
+            startPending = true;
             const w = parseInt(wInput?.value || '1280', 10);
             const h = parseInt(hInput?.value || '720',  10);
 
             setStatus(`Starting Spout sender at ${w}×${h}…`);
             try {
                 const msg = await invoke('start_spout', { width: w, height: h });
+                if (shuttingDown || generation !== lifecycleGeneration) {
+                    try { invoke('stop_spout').catch(() => {}); } catch {}
+                    return;
+                }
                 setStatus(`${msg}\nSending ${w}×${h} pixels → Spout → look for "huff" in your VJ software.`, 'active');
                 outputW    = Math.max(64, w);
                 outputH    = Math.max(64, h);
@@ -2779,17 +2860,18 @@
                 setPillActive(true);
                 rafId = requestAnimationFrame(sendSpoutFrame);
             } catch(e) {
-                setStatus(`⚠ ${e}`, 'error');
+                if (!shuttingDown && generation === lifecycleGeneration) setStatus(`⚠ ${e}`, 'error');
+            } finally {
+                if (generation === lifecycleGeneration) startPending = false;
             }
         }
 
         async function stopSpout() {
-            running = false;
-            spoutTelemetry.running = false;
-            if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
-            closeSpoutWS();
-            spoutCanvas = null;
-            spoutCtx = null;
+            if (stopPending) return;
+            stopPending = true;
+            ++lifecycleGeneration;
+            startPending = false;
+            releaseSpoutTransport();
             toggleBtn.textContent = '▶ Start';
             toggleBtn.classList.remove('active');
             setPillActive(false);
@@ -2799,6 +2881,8 @@
                 setStatus(msg);
             } catch(e) {
                 setStatus(`⚠ stop failed: ${e}`, 'error');
+            } finally {
+                stopPending = false;
             }
         }
 
@@ -2807,16 +2891,25 @@
         });
 
         // ── status poll ───────────────────────────────────────────────────────
-        setInterval(async () => {
-            if (!running) return;
+        statusPollTimer = setInterval(async () => {
+            if (!running || shuttingDown) return;
             spoutCount('statusPolls');
             try {
                 const s = await invoke('spout_status');
-                if (running) setStatus(s, 'active');
+                if (running && !shuttingDown) setStatus(s, 'active');
             } catch {}
         }, 2000);
 
-        window.addEventListener('beforeunload', closeSpoutWS, { once: true });
+        function shutdownSpout() {
+            if (shuttingDown) return;
+            shuttingDown = true;
+            ++lifecycleGeneration;
+            startPending = false;
+            stopPending = false;
+            releaseSpoutTransport({ stopNative: true, clearPollTimer: true });
+        }
+        window.addEventListener('pagehide', shutdownSpout, { once: true });
+        window.addEventListener('beforeunload', shutdownSpout, { once: true });
 
     })();
     </script>

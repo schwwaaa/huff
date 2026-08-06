@@ -1,45 +1,14 @@
-# HUFF Classic Optimization Pass 27 — Validation Report
+# HUFF Classic Optimization Pass 28 — Validation Report
 
-## Scope
+## Result
 
-Pass 27 adds capability and stability instrumentation only. No effect behavior, route, control, preset, output pacing, render surface, or native code is changed.
+**Deterministic validation: PASS**  
+**Target-machine runtime endurance: pending**  
+**Native compile: not performed; Cargo unavailable**
 
-## Instrumentation contract validation
+## Behavior validation completed
 
-`scripts/validate-pass27.mjs` executes the browser instrumentation in an isolated VM and confirms:
-
-- the four profile definitions and frame budgets;
-- the three detached effect-load scene definitions;
-- frozen public registries;
-- exact profile selection for 720p30 and 1080p60;
-- lifecycle counter behavior;
-- profiler-gated timing behavior;
-- render total and maximum accumulation;
-- source/pipeline phase accumulation;
-- render-path counting;
-- source/canvas state snapshots;
-- uptime and optional heap snapshots.
-
-## Runtime preservation
-
-```text
-src/effects.js
-2b352fa279c728ba292485fe22a0e580c6a3f36d669bd9741f79d5af4454dd44
-
-src/pipeline-runtime.js
-5124aa948fcf556ce5b00c8da1bfef8a86da850d278e680cc9a4e0a8ea3634b9
-```
-
-The validator also confirms:
-
-- every source file outside `canvas.js`, `index.html`, and the declared new instrumentation file matches the Pass 26 manifest;
-- the complete native tree matches the Pass 26 manifest;
-- no third p5 Graphics surface exists;
-- no new animation or polling clock exists in the instrumentation;
-- no closure or object-spread allocation was introduced inside `draw()`;
-- rejected Flow Melt and Sort-Mosh code remains absent.
-
-## Validators completed
+The following inherited validators passed:
 
 ```text
 Pass 9
@@ -56,30 +25,62 @@ Pass 19
 Pass 20
 Pass 21
 Pass 22
-Pass 25
-Pass 26
-Pass 27
 ```
 
-The Pass 25 and Pass 26 validators were made forward-compatible with the declared Pass 27 instrumentation files while retaining their original contract checks.
+These validate the established Flow, Scanline, Glitch, Luma, neutral-stage, history, output-bootstrap, and scheduling boundaries.
 
-## Static validation
+Pass 25–27 full historical validators intentionally enforce earlier file-change manifests and therefore are not expected to accept Pass 28 lifecycle files. Pass 28 independently verifies that `src/pipeline-runtime.js`, `src/effects.js`, and `src/capability-instrumentation.js` remain byte-identical to Pass 27.
 
-The final package is checked for:
+## Pass 28 lifecycle validation
 
-- project-owned JavaScript syntax with `node --check`;
-- inline HTML script syntax;
-- JSON parsing;
-- TOML parsing;
-- shell syntax with `bash -n`;
-- Pass 26 source/native manifest constraints;
-- universal `x86_64 + arm64` Syphon framework binary;
-- ZIP integrity after packaging.
+`scripts/validate-pass28.mjs` verifies:
 
-## Native validation
+- only declared browser/native runtime files changed;
+- Flow/effects remain exact Pass 27;
+- pipeline runtime remains exact Pass 27;
+- capability instrumentation remains exact Pass 27;
+- mirror sender reconnect timer and RAF ownership;
+- mirror receiver reconnect and decode-generation ownership;
+- Syphon/Spout Start and Stop pending-operation gates;
+- stale native start completion rejection;
+- pagehide and beforeunload cleanup;
+- Worker, WebSocket, timer, and staging-surface release markers;
+- idempotent native shutdown;
+- consumable OSC shutdown sender;
+- MIDI disconnect before exit;
+- no additional p5 Graphics render surface;
+- absence of rejected Flow Melt/Sort-Mosh code.
 
-`cargo check` was not run because Cargo/Rust are unavailable in this environment. The native tree is unchanged and hash-verified.
+## Deterministic lifecycle model
 
-## Runtime claims
+10,000 generated lifecycle sequences covered:
 
-No FPS increase or capability tier is claimed. Runtime tests on the target machines must establish the final 720p/1080p matrix and output endurance.
+- normal start → stop;
+- stop while start is pending;
+- stale start completion after stop;
+- shutdown while start is pending;
+- restart after completed stop;
+- duplicate Start rejection;
+- duplicate Stop rejection;
+- idempotent shutdown.
+
+All passed.
+
+## Additional validation
+
+- External JavaScript syntax: passed.
+- Inline HTML JavaScript syntax: passed.
+- JSON parsing: passed.
+- TOML parsing: passed.
+- Shell syntax: passed.
+- Syphon framework architectures: x86_64 and arm64 confirmed.
+- ZIP integrity: passed.
+
+## Remaining uncertainty
+
+The environment did not provide Rust/Cargo, macOS Syphon clients, or Windows Spout receivers. Therefore this package does not claim:
+
+- successful native compilation in this environment;
+- completed Syphon/Spout endurance soak;
+- verified process/port release on the target operating systems;
+- runtime FPS improvement.

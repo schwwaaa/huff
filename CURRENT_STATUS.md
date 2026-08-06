@@ -1,45 +1,39 @@
-# HUFF Classic — Current Status After Optimization Pass 27
+# HUFF Classic — Current Status After Optimization Pass 28
 
 ## Confirmed lineage
 
-- Pass 22 remains the authoritative behavioral baseline.
-- Pass 25 introduced the validated fixed serial recipe and was confirmed working.
-- Pass 26 formalized the existing front-stage priority behavior and was confirmed working.
-- Pass 27 adds capability and stability instrumentation without changing visual behavior.
+- Pass 22 remains the authoritative visual and effect baseline.
+- Passes 25–26 established the validated fixed serial recipe and existing front-stage priority behavior.
+- Pass 27 added capability and stability instrumentation.
+- Pass 28 hardens output reconnect, start/stop, and application shutdown lifecycle.
 
 ## Current infrastructure
 
 ```text
-one validated 12-zone serial recipe
-11 registered effect-stage contracts
-two immutable front-stage ordering groups
-four existing priority modes
-four existing Global Mix slots
-720p30 / 720p60 / 1080p30 / 1080p60 test profiles
-light / moderate / worst-case test scenes
-render, decode, mirror, Syphon, and Spout phase telemetry
-source, resize, buffer, and long-session counters
-no user-facing route editor
-no new full-resolution buffer
+validated fixed 12-zone serial recipe
+formalized front-stage priority
+720p/1080p capability instrumentation
+bounded mirror/Syphon/Spout output paths
+owned reconnect timers and animation pumps
+generation-guarded Syphon/Spout start and stop
+deterministic browser output cleanup
+idempotent native MIDI/OSC/Syphon/Spout shutdown
+no new render buffer
+no Flow changes
 ```
 
-## Frozen area
+## Remaining infrastructure pass
 
-Flow remains exact Pass 22 and is excluded from the infrastructure sequence.
-
-## Remaining infrastructure passes
-
-Two passes remain after Pass 27:
+One infrastructure pass remains:
 
 ```text
-Pass 28 — Output Endurance and Shutdown
 Pass 29 — Platform Packaging Freeze
 ```
 
-After those passes, development can move into constrained pipeline switching and paired-down effect augmentation for Classic.
+## After Pass 29
 
-## Next pass
-
-**Pass 28 — Output Endurance and Shutdown**
-
-Pass 28 will focus on Syphon reconnect/soak behavior, Spout lifecycle validation, mirror backpressure endurance, deterministic cleanup, and process-exit verification. It will make no Flow changes.
+```text
+Pass 30 — Constrained Pipeline Switching Foundation
+Pass 31+ — Paired-down Classic effect augmentation
+HUFF HD — full typed wgpu modular routing and expanded effects
+```

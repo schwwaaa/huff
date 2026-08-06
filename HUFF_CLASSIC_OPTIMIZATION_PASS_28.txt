@@ -1,0 +1,11 @@
+HUFF Classic Optimization Pass 28
+Output Endurance and Shutdown
+
+Behavioral authority: user-supplied Pass 22
+Confirmed predecessor: Pass 27
+Flow changes: none
+Effect changes: none
+Route changes: none
+Native changes: deterministic shutdown only
+
+Adds owned reconnect/timer/RAF/Worker/WebSocket cleanup, Syphon/Spout lifecycle generation guards, canvas-viewer decode guards, and idempotent MIDI/OSC/native-output shutdown.

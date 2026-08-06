@@ -60,89 +60,137 @@
     }
     document.addEventListener('dblclick', toggleFS);
     document.addEventListener('keydown', e => { if (e.key==='f' || e.key==='F') toggleFS(); });
-    if (autofs) setTimeout(()=>{ goFullscreen(); }, 120);
+    let autofsTimer = 0;
+    if (autofs) autofsTimer = setTimeout(()=>{ autofsTimer = 0; goFullscreen(); }, 120);
 
-// ── WebSocket with exponential-backoff reconnect ─────────────────────────
-let ws;
+// ── WebSocket with owned reconnect + decode lifecycle ─────────────────────
+let ws = null;
+let reconnectTimer = 0;
 let _wsDelay = 1000; // start at 1 s, doubles up to 16 s
 const WS_DELAY_MAX = 16000;
+let viewerShutdown = false;
+let socketGeneration = 0;
+let pendingFrame = null; // newest received frame bytes not yet rendered
+let decodeBusy = false;  // one decode/draw at a time
+
+function clearReconnectTimer() {
+  if (!reconnectTimer) return;
+  clearTimeout(reconnectTimer);
+  reconnectTimer = 0;
+}
+
+function scheduleReconnect() {
+  if (viewerShutdown || reconnectTimer) return;
+  const delay = _wsDelay;
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = 0;
+    connectWS();
+  }, delay);
+  _wsDelay = Math.min(_wsDelay * 2, WS_DELAY_MAX);
+}
+
+function drainPending(generation) {
+  if (viewerShutdown || decodeBusy || pendingFrame == null) return;
+  decodeBusy = true;
+  const data = pendingFrame;
+  pendingFrame = null;
+  let blob;
+  try { blob = new Blob([data]); }
+  catch { decodeBusy = false; return; }
+
+  createImageBitmap(blob, { imageOrientation:'none', premultiplyAlpha:'premultiply' })
+    .then(bmp => {
+      if (viewerShutdown || generation !== socketGeneration) {
+        bmp.close?.();
+        return;
+      }
+      if (cvs.width !== bmp.width || cvs.height !== bmp.height) {
+        cvs.width = bmp.width;
+        cvs.height = bmp.height;
+      }
+      if (bitmapCtx) {
+        bitmapCtx.transferFromImageBitmap(bmp);
+        bmp.close?.();
+      } else {
+        ctx.globalAlpha = 1;
+        ctx.globalCompositeOperation = 'copy';
+        ctx.drawImage(bmp, 0, 0);
+        ctx.globalCompositeOperation = 'source-over';
+        bmp.close?.();
+      }
+    })
+    .catch(e => { if (!viewerShutdown) console.warn('[canvas ws] bad frame', e); })
+    .finally(() => {
+      decodeBusy = false;
+      if (!viewerShutdown && generation === socketGeneration && pendingFrame != null) {
+        drainPending(generation);
+      }
+    });
+}
 
 function connectWS() {
-  ws = new WebSocket(wsURL);
-  ws.binaryType = 'arraybuffer';
+  if (viewerShutdown) return;
+  if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
+  clearReconnectTimer();
+  const generation = ++socketGeneration;
+  const socket = new WebSocket(wsURL);
+  ws = socket;
+  socket.binaryType = 'arraybuffer';
 
-  ws.onopen = () => {
+  socket.onopen = () => {
+    if (viewerShutdown || socket !== ws || generation !== socketGeneration) {
+      try { socket.close(); } catch {}
+      return;
+    }
+    clearReconnectTimer();
     console.log('[canvas ws] connected to', wsURL);
-    _wsDelay = 1000; // reset backoff on successful connection
-    try { ws.send(JSON.stringify({ type:'hello', role:'canvas' })); } catch(e) { console.error(e); }
+    _wsDelay = 1000;
+    try { socket.send(JSON.stringify({ type:'hello', role:'canvas' })); } catch(e) { console.error(e); }
   };
 
-  ws.onerror = (ev) => {
-    console.error('[canvas ws] error', ev);
+  socket.onerror = (ev) => {
+    if (!viewerShutdown) console.error('[canvas ws] error', ev);
   };
 
-  ws.onclose = (ev) => {
-    console.warn('[canvas ws] closed', ev.code, ev.reason, `— reconnecting in ${_wsDelay}ms`);
-    setTimeout(() => {
-      _wsDelay = Math.min(_wsDelay * 2, WS_DELAY_MAX);
-      connectWS();
-    }, _wsDelay);
+  socket.onclose = (ev) => {
+    if (socket !== ws) return;
+    ws = null;
+    pendingFrame = null;
+    if (!viewerShutdown) {
+      console.warn('[canvas ws] closed', ev.code, ev.reason, `— reconnecting in ${_wsDelay}ms`);
+      scheduleReconnect();
+    }
   };
 
-  // Latest-frame-wins. The previous handler decoded and drew EVERY frame it
-  // received, so when decode+draw fell behind the incoming rate (more likely at
-  // 1080p / 60fps) frames accumulated and were shown stale — a latency tail that
-  // grew while streaming and kept draining after the sender stopped. Instead we
-  // keep only the newest received frame and run at most one decode at a time;
-  // any frames that arrive mid-decode overwrite the pending one and the stale
-  // ones are dropped. Latency is bounded to a single decode+draw, and on stop
-  // there is at most one frame left to render — no tail.
-  let _pending = null;     // newest received frame bytes not yet rendered
-  let _busy    = false;    // a decode/draw is currently in flight
-
-  ws.onmessage = (ev) => {
+  // Latest-frame-wins: frames arriving during decode replace the pending frame.
+  socket.onmessage = (ev) => {
+    if (viewerShutdown || socket !== ws || generation !== socketGeneration) return;
     if (typeof ev.data === 'string') return;
-    _pending = ev.data;    // drop any older undrawn frame — only the newest matters
-    if (!_busy) drainPending();
+    pendingFrame = ev.data;
+    if (!decodeBusy) drainPending(generation);
   };
+}
 
-  function drainPending() {
-    if (_busy || _pending == null) return;
-    _busy = true;
-    const data = _pending;
-    _pending = null;
-    let blob;
-    try { blob = new Blob([data]); }
-    catch (e) { _busy = false; return; }
-    createImageBitmap(blob, { imageOrientation:'none', premultiplyAlpha:'premultiply' })
-      .then(bmp => {
-        if (cvs.width !== bmp.width || cvs.height !== bmp.height) {
-          cvs.width = bmp.width;
-          cvs.height = bmp.height;
-        }
-        if (bitmapCtx) {
-          bitmapCtx.transferFromImageBitmap(bmp);
-          // transferFromImageBitmap consumes the bitmap; close is harmless and
-          // also protects WebViews whose implementation retains ownership.
-          bmp.close?.();
-        } else {
-          ctx.globalAlpha = 1;
-          ctx.globalCompositeOperation = 'copy';
-          ctx.drawImage(bmp, 0, 0);
-          ctx.globalCompositeOperation = 'source-over';
-          bmp.close?.();
-        }
-      })
-      .catch(e => { console.warn('[canvas ws] bad frame', e); })
-      .finally(() => {
-        _busy = false;
-        // A newer frame landed while we were decoding — render it next, dropping
-        // everything that arrived before it.
-        if (_pending != null) drainPending();
-      });
+function shutdownViewer() {
+  if (viewerShutdown) return;
+  viewerShutdown = true;
+  socketGeneration++;
+  pendingFrame = null;
+  clearReconnectTimer();
+  if (autofsTimer) {
+    clearTimeout(autofsTimer);
+    autofsTimer = 0;
+  }
+  const socket = ws;
+  ws = null;
+  if (socket) {
+    try { socket.onopen = socket.onmessage = socket.onerror = socket.onclose = null; } catch {}
+    try { socket.close(); } catch {}
   }
 }
 
+window.addEventListener('pagehide', shutdownViewer, { once:true });
+window.addEventListener('beforeunload', shutdownViewer, { once:true });
 connectWS();
   </script>
 </body>

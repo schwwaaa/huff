@@ -1,78 +1,57 @@
-# HUFF Classic Optimization Pass 27 — Testing Checklist
+# HUFF Classic Optimization Pass 28 — Testing Checklist
 
-## Completed deterministic validation
+## Completed static and deterministic checks
 
-- [x] four immutable capability profiles validated
-- [x] light, moderate, and worst-case scene definitions validated
-- [x] timing remains disabled while the profiler is hidden
-- [x] render/source/pipeline accumulation and maximum tracking validated
-- [x] lifecycle and resize counters validated
-- [x] optional heap snapshot handles unsupported WebViews safely
-- [x] instrumentation adds no animation loop, interval, render surface, or control
-- [x] Spout draw/read/send and sent/skip markers validated
-- [x] exact Pass 22 `src/effects.js` hash preserved
-- [x] exact Pass 26 `src/pipeline-runtime.js` hash preserved
-- [x] complete `src-tauri/` tree preserved
-- [x] no additional full-resolution p5 Graphics surface added
-- [x] rejected Melt and Sort-Mosh code remains absent
-- [x] Pass 9–22 behavior validators passed
-- [x] Pass 25 serial recipe validator passed
-- [x] Pass 26 priority validator passed
-- [x] Pass 27 instrumentation validator passed
+- [x] Pass 9–22 visual/arithmetic behavior validators passed.
+- [x] Pass 13S independent render/transport/mirror/profiler clock checks passed.
+- [x] Pass 28 source-boundary validator passed.
+- [x] 10,000 deterministic output lifecycle sequences passed.
+- [x] Flow/effects file matches Pass 27 exactly.
+- [x] Validated pipeline runtime matches Pass 27 exactly.
+- [x] Capability instrumentation matches Pass 27 exactly.
+- [x] No new p5 Graphics render surface.
+- [x] All project JavaScript and inline scripts passed Node syntax checks.
+- [x] JSON and TOML files parsed.
+- [x] Shell scripts passed `bash -n`.
+- [x] Syphon framework universal binary check completed.
+- [x] ZIP integrity test completed.
 
-## Required target-runtime checks
+## Required macOS runtime tests
 
-### Profiler behavior
+- [ ] Start/Stop Syphon 20 times.
+- [ ] Attach/detach/reattach OBS while Syphon remains active.
+- [ ] Confirm one-fps bootstrap becomes selected full rate after receiver attachment.
+- [ ] Disconnect local relay during active Syphon and confirm recovery.
+- [ ] Open/close canvas mirror 20 times.
+- [ ] Leave video + mirror + Syphon active for at least 60 minutes.
+- [ ] Close the control window while Syphon is active.
+- [ ] Close the canvas window and confirm complete HUFF process exit.
+- [ ] Confirm TCP 8787 and UDP 9000 release immediately.
+- [ ] Relaunch immediately after close.
 
-- [ ] backtick opens and closes the profiler
-- [ ] hidden profiler has no visible frame-pacing regression
-- [ ] profile label follows 720p/1080p canvas changes
-- [ ] waiting, bypass, and active path counts advance correctly
-- [ ] optional heap line is absent when unsupported
+## Required Windows runtime tests
 
-### Capability matrix
+- [ ] Start/Stop Spout 20 times.
+- [ ] Attach/detach/reattach a Spout receiver.
+- [ ] Confirm buffered-frame skips do not create latency accumulation.
+- [ ] Open/close canvas mirror 20 times.
+- [ ] Leave video + mirror + Spout active for at least 60 minutes.
+- [ ] Close HUFF while Spout is active.
+- [ ] Confirm process and ports release immediately.
+- [ ] Relaunch immediately after close.
 
-- [ ] 720p30 light scene
-- [ ] 720p30 moderate scene
-- [ ] 720p30 worst-case scene
-- [ ] 720p60 light scene
-- [ ] 720p60 moderate scene
-- [ ] 720p60 worst-case scene
-- [ ] 1080p30 light scene
-- [ ] 1080p30 moderate scene
-- [ ] 1080p30 worst-case scene
-- [ ] 1080p60 light scene
-- [ ] 1080p60 moderate scene
-- [ ] 1080p60 worst-case scene
+## Required Linux runtime tests
 
-### Lifecycle and long-session
+- [ ] Canvas mirror reconnect and shutdown.
+- [ ] File playback endurance.
+- [ ] Camera/file replacement endurance where supported.
+- [ ] Process and port release.
+- [ ] Confirm no output lifecycle errors despite Syphon/Spout being unavailable.
 
-- [ ] repeated file-to-file replacement increments replacement/ready without errors
-- [ ] file-to-camera and camera-to-file replacement
-- [ ] camera start/stop/restart
-- [ ] repeated resize and fullscreen cycles show paired request/commit counts
-- [ ] buffer dimension changes occur only when dimensions actually change
-- [ ] one-hour moderate-scene playback
-- [ ] one-hour worst-case playback where practical
-- [ ] FrameRing slots and estimated memory remain bounded
+## Regression checks
 
-### Outputs
-
-- [ ] mirror sent/drop and capture/encode values update with a receiver
-- [ ] Syphon phase values update with a receiver
-- [ ] Spout draw/read/send values update on Windows
-- [ ] output instrumentation does not change selected output FPS
-
-### Visual parity
-
-- [ ] Pass 26 visual comparison with profiler hidden
-- [ ] Pass 26 visual comparison with profiler visible
-- [ ] all four front-stage priority modes
-- [ ] Flow character remains exact Pass 22
-
-## Not available in this environment
-
-- [ ] `cargo check` — Cargo/Rust are not installed; native source is unchanged
-- [ ] target Tauri v1 WebView runtime
-- [ ] macOS Syphon receiver
-- [ ] Windows Spout receiver
+- [ ] Flow looks and responds exactly as confirmed in Pass 22.
+- [ ] Scanline/Glitch priority modes remain unchanged.
+- [ ] Video playback pacing remains unchanged.
+- [ ] MIDI and OSC input still work before shutdown.
+- [ ] No hidden process remains after either HUFF window is closed.

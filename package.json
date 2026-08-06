@@ -1,7 +1,7 @@
 {
   "name": "huff",
   "private": true,
-  "version": "1.0.2",
+  "version": "1.0.3",
   "type": "module",
   "scripts": {
     "dev": "tauri dev",
@@ -23,7 +23,8 @@
     "validate:pass22": "node scripts/validate-pass22.mjs",
     "validate:pass25": "node scripts/validate-pass25.mjs",
     "validate:pass26": "node scripts/validate-pass26.mjs",
-    "validate:pass27": "node scripts/validate-pass27.mjs"
+    "validate:pass27": "node scripts/validate-pass27.mjs",
+    "validate:pass28": "node scripts/validate-pass28.mjs"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^1.6.3"
