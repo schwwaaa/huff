@@ -1,8 +1,6 @@
-# HUFF Classic — Current Status After Optimization Pass 29
+# HUFF Classic — Current Status After Optimization Pass 30
 
-## Infrastructure status
-
-The planned optimization and infrastructure sequence is complete.
+## Confirmed foundation
 
 ```text
 Pass 22  authoritative visual/effect baseline
@@ -13,28 +11,38 @@ Pass 26  front-stage priority formalization
 Pass 27  capability/stability instrumentation
 Pass 28  output endurance and shutdown hardening
 Pass 29  platform packaging freeze
+Pass 30  constrained pipeline switching foundation
 ```
 
-## Frozen foundation
-
-- Tauri v1 + p5.js + Canvas2D architecture;
-- Pass 22 Flow and effect behavior;
-- fixed validated serial route as compatibility recipe;
-- three-surface `gCur / gBuf / gScratch` topology;
-- independent decoder/render/output clocks;
-- bounded FrameRing and output queues;
-- deterministic shutdown;
-- `com.schwwaaa.huff` release identity;
-- native macOS, Windows, and Linux bundle definitions;
-- mandatory Syphon and Spout package assets;
-- release preflight, checksums, signing preparation, and known-issues process.
-
-## Next development phase
+## Available pipeline recipes
 
 ```text
-Pass 30 — Constrained Pipeline Switching Foundation
-Pass 31+ — Paired-down HUFF Classic effect augmentation
-HUFF HD — full typed wgpu routing and expanded effects
+CLASSIC
+Exact Pass 22 order and default compatibility route.
+
+CRISP FINISH
+Runs Glitch, Pipeline Luma Key, and Scanlines after Flow, Symmetry, and Solarize.
 ```
 
-Pass 30 must preserve the current fixed route as the default compatibility recipe and must not modify Flow.
+## Frozen systems
+
+- Pass 22 Flow implementation and controls;
+- all existing effect algorithms;
+- Tauri v1 + p5.js + Canvas2D renderer;
+- three-surface `gCur / gBuf / gScratch` topology;
+- bounded FrameRing;
+- decoder and independent clocks;
+- mirror, Syphon, Spout, and deterministic shutdown;
+- Pass 29 platform packaging and release identity.
+
+## Next phase
+
+The planned infrastructure and constrained-routing sequence is complete pending runtime approval of Pass 30.
+
+Next development begins the **paired-down HUFF Classic effect augmentation series**. Each augmentation must:
+
+- preserve current behavior at neutral/default settings;
+- be tested in both CLASSIC and CRISP FINISH;
+- avoid additional unbounded full-resolution stores;
+- remain small enough to support in the free Classic edition;
+- leave broad modular routing and high-resolution expansion to HUFF HD/wgpu.

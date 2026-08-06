@@ -1,38 +1,73 @@
-# HUFF Classic Optimization Pass 29 — Pass Notes
+# HUFF Classic Optimization Pass 30 — Pass Notes
 
 ## Name
 
-**Platform Packaging Freeze**
+**Constrained Pipeline Switching Foundation**
+
+## Baseline
+
+HUFF Classic Optimization Pass 29 — Platform Packaging Freeze.
 
 ## Purpose
 
-Freeze the release identity, native platform bundle targets, required native-output assets, build-host rules, signing preparation, artifact verification, capability matrix, and known-issues process before effect augmentation resumes.
+Add a small validated serial recipe selector without turning HUFF Classic into a node graph and without changing any effect algorithm.
 
-## Runtime boundary
+## User-facing recipes
+
+### CLASSIC
+
+The exact Pass 22 compatibility route:
 
 ```text
-src/**                         unchanged from Pass 28
-src-tauri/src/main.rs          unchanged from Pass 28
-src-tauri/src/syphon.rs        unchanged from Pass 28
-src-tauri/src/spout.rs         unchanged from Pass 28
-Flow                           unchanged
-pipeline route                 unchanged
-controls and presets           unchanged
+source sync
+→ persistent decay
+→ Glitch / Pipeline Luma Key / Scanlines
+→ Global Mix: before
+→ Feedback
+→ Global Mix: after
+→ Flow
+→ Global Mix: afterflow
+→ Symmetry
+→ Solarize
+→ Global Mix: final
+→ presentation
 ```
 
-## Packaging changes
+### CRISP FINISH
 
-- Synchronized version `1.0.3` across npm, Cargo, Tauri, and release metadata.
-- Replaced placeholder identifier with `com.schwwaaa.huff`.
-- Added publisher, category, descriptions, copyright, and ISC license.
-- Added platform-specific Tauri bundle configurations.
-- Restored the build-required Spout2 SDK source set used by the existing Windows bridge.
-- Changed Windows release behavior from silently optional Spout to mandatory Spout assets.
-- Fixed explicit-target DLL placement using Cargo `OUT_DIR`.
-- Added native-only macOS, Windows, and Linux release builders.
-- Added signing, notarization, artifact verification, checksums, and release manifests.
-- Defined MSI + portable ZIP for Windows and DEB + AppImage for Linux.
+The same stages and resources, with the existing Glitch/Luma/Scanline ordered group moved into a validated final overlay slot:
 
-## Validation boundary
+```text
+source sync
+→ persistent decay
+→ Global Mix: before
+→ Feedback
+→ Global Mix: after
+→ Flow
+→ Global Mix: afterflow
+→ Symmetry
+→ Solarize
+→ Glitch / Pipeline Luma Key / Scanlines
+→ Global Mix: final
+→ presentation
+```
 
-Static package validation is complete. Native compilation and release-candidate runtime testing remain platform-specific work.
+This allows Glitch, Luma Key, and Scanlines to remain visually crisp instead of being transformed by Flow, Symmetry, and Solarize.
+
+## Safety boundary
+
+- Both recipes compile once at startup.
+- One immutable recipe is selected before any stage executes for a frame.
+- Unknown route IDs recover to `CLASSIC`.
+- Both recipes declare exactly three full-resolution buffers.
+- Both recipes use only the existing `gScratch` scratch surface.
+- No recipe declares a cycle.
+- No effect implementation changed.
+- Flow remains the exact Pass 22 implementation.
+- No native, decoder, FrameRing, mirror, Syphon, Spout, shutdown, or packaging runtime changed.
+
+## Preset behavior
+
+- New presets save `pipelineRecipe`.
+- Presets created before Pass 30 load into `CLASSIC` regardless of the route currently selected.
+- Unknown imported recipe IDs recover to `CLASSIC` before control events are dispatched.

@@ -1,52 +1,54 @@
-# HUFF Classic Optimization Pass 29 — Changed Files
+# HUFF Classic Optimization Pass 30 — Changed Files
 
-## Browser and native runtime
+## Browser runtime
 
-```text
-No changes to src/**
-No changes to src-tauri/src/**
-```
+- `src/pipeline-runtime.js`
+  - adds two immutable validated recipe definitions;
+  - compiles a recipe registry once at startup;
+  - adds atomic recipe switching and `CLASSIC` fallback.
+- `src/canvas.js`
+  - selects one plan before frame dispatch;
+  - uses the selected plan for the complete frame;
+  - saves route selection in presets and undo;
+  - migrates legacy/unknown preset routes to `CLASSIC`.
+- `src/index.html`
+  - adds the `PIPELINE / RECIPE` selector with `CLASSIC` and `CRISP FINISH`.
 
-## Tauri / Rust packaging
+## Source contracts
 
-- `src-tauri/tauri.conf.json`
-- `src-tauri/tauri.macos.conf.json`
-- `src-tauri/tauri.windows.conf.json`
-- `src-tauri/tauri.linux.conf.json`
-- `src-tauri/Cargo.toml`
-- `src-tauri/Cargo.lock`
-- `src-tauri/build.rs`
-- `src-tauri/native/spout2/SPOUTSDK/**` — restored required upstream SDK assets
+- `pipeline/stage-contracts.mjs`
+  - adds the `final-overlays` zone;
+  - permits the existing front overlay members in that zone;
+  - declares both recipe skeletons and their fixed resource budgets.
 
-## Build and release utilities
+## Validation and metadata
 
-- `build.sh`
-- `scripts/tauri-build.cjs`
-- `scripts/release-preflight.mjs`
-- `scripts/set-release-version.mjs`
-- `scripts/verify-release-artifacts.mjs`
-- `scripts/package-windows.ps1`
-- `scripts/check-linux-deps.sh`
-- `scripts/macos-notarize.sh`
-- `release/release-config.json`
-- `LICENSE`
+- `scripts/validate-pass30.mjs`
 - `package.json`
-- `package-lock.json`
-
-## Validation
-
-- `scripts/validate-pass29.mjs`
-- `baseline/pass28-src.sha256`
-- `baseline/pass28-src-tauri.sha256`
-- `baseline/pass29-src.sha256`
-- `baseline/pass29-src-tauri.sha256`
+- `baseline/pass30-src.sha256`
+- `baseline/pass30-src-tauri.sha256`
 
 ## Documentation
 
-- `PLATFORM_PACKAGING_FREEZE_AUDIT.md`
-- `PLATFORM_PACKAGE_MATRIX.md`
-- `RELEASE_SIGNING_NOTARIZATION.md`
-- `RELEASE_KNOWN_ISSUES.md`
-- `CAPABILITY_MATRIX.md`
+- `PIPELINE_SWITCHING_FOUNDATION_AUDIT.md`
+- `HUFF_CLASSIC_OPTIMIZATION_PASS_30.txt`
 - complete updated documentation suite
-- README and installation-version corrections
+
+## Explicitly unchanged
+
+```text
+src/effects.js
+src/capability-instrumentation.js
+src/canvas.html
+src/presets/**
+src-tauri/**
+Flow algorithm and controls
+all effect algorithms
+video decoder and source lifecycle
+FrameRing capture and memory policy
+render / transport / output clocks
+mirror / Syphon / Spout runtime
+shutdown behavior
+platform packaging definitions
+full-resolution buffer count
+```

@@ -1,0 +1,7 @@
+HUFF Classic Optimization Pass 30
+Constrained Pipeline Switching Foundation
+
+CLASSIC preserves the exact Pass 22 route.
+CRISP FINISH moves the existing Glitch/Luma/Scanline group after Flow, Symmetry, and Solarize.
+
+No effect algorithm, Flow behavior, decoder path, FrameRing policy, output system, native runtime, or full-resolution buffer count changed.

@@ -32,7 +32,8 @@
     "release:preflight": "node scripts/release-preflight.mjs --platform=all --static",
     "release:version": "node scripts/set-release-version.mjs",
     "release:verify": "node scripts/verify-release-artifacts.mjs",
-    "validate:pass29": "node scripts/validate-pass29.mjs"
+    "validate:pass29": "node scripts/validate-pass29.mjs",
+    "validate:pass30": "node scripts/validate-pass30.mjs"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^1.6.3"

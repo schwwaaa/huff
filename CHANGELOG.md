@@ -1,5 +1,19 @@
 # HUFF Classic Optimization Changelog
 
+## Pass 30 — Constrained Pipeline Switching Foundation
+
+**Date:** 2026-08-06  
+**Status:** implementation and deterministic validation complete; target-runtime visual approval pending
+
+- Preserved the exact Pass 22 order as the default `CLASSIC` recipe.
+- Added one audited `CRISP FINISH` recipe that runs the existing Glitch/Luma/Scanline group after Flow, Symmetry, and Solarize.
+- Added immutable recipe declarations, fixed three-buffer resource budgets, zero-cycle declarations, startup validation, precompiled plans, atomic frame-boundary selection, and `CLASSIC` fallback.
+- Added a compact Pipeline Recipe selector.
+- Added preset and undo support for recipe selection.
+- Forced pre-Pass-30 and unknown imported preset routes to `CLASSIC`.
+- Preserved `src/effects.js`, Flow, all effect algorithms, decoder, FrameRing, clocks, mirror, Syphon, Spout, native runtime, and platform packaging.
+- Added Pass 30 deterministic validation and the complete documentation suite.
+
 ## Pass 29 — Platform Packaging Freeze
 
 - Froze release metadata at version 1.0.3 with bundle identifier `com.schwwaaa.huff`.

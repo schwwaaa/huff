@@ -1,15 +1,19 @@
-/* pipeline-runtime.js — HUFF Classic Pass 26 constrained priority foundation
+/* pipeline-runtime.js — HUFF Classic Pass 30 constrained recipe switching
  *
- * This file keeps the one accepted Pass 22 serial route, formalizes the exact
- * existing Glitch/Luma versus Scanline priority modes, and compiles both plans
- * once at startup. It adds no routing controls, effect positions, render
- * resources, or visual behavior.
+ * The runtime preserves the exact Pass 22 route as CLASSIC and adds one
+ * carefully audited serial alternate: CRISP FINISH. Both recipes use the
+ * existing gCur / gBuf / gScratch topology, compile once at startup, and are
+ * selected atomically at the start of a rendered frame. No effect algorithm,
+ * decoder path, temporal store, output path, or native code is changed here.
  */
 (() => {
   'use strict';
 
   const freezeArray = value => Object.freeze([...value]);
   const freezeObject = value => Object.freeze({ ...value });
+
+  const CLASSIC_RECIPE_ID = 'classic';
+  const CRISP_FINISH_RECIPE_ID = 'crisp-finish';
 
   const ZONE_ORDER = freezeArray([
     'source-sync',
@@ -26,10 +30,25 @@
     'presentation',
   ]);
 
+  const CRISP_FINISH_ZONE_ORDER = freezeArray([
+    'source-sync',
+    'persistent-decay',
+    'global-mix-before',
+    'persistent-transform',
+    'global-mix-after',
+    'primary-transform',
+    'global-mix-afterflow',
+    'secondary-transform',
+    'color-finish',
+    'final-overlays',
+    'global-mix-final',
+    'presentation',
+  ]);
+
   const STAGE_LEGAL_ZONES = Object.freeze({
     'source-sync': freezeArray(['source-sync']),
     'persistent-decay': freezeArray(['persistent-decay']),
-    'front-stage-priority': freezeArray(['front-overlays']),
+    'front-stage-priority': freezeArray(['front-overlays', 'final-overlays']),
     'global-mix': freezeArray([
       'global-mix-before',
       'global-mix-after',
@@ -211,18 +230,81 @@
     freezeObject({ zone: 'presentation', stage: 'presentation' }),
   ]);
 
-  function validateRecipe(recipe) {
+  const CRISP_FINISH_SERIAL_RECIPE = freezeArray([
+    freezeObject({ zone: 'source-sync', stage: 'source-sync' }),
+    freezeObject({ zone: 'persistent-decay', stage: 'persistent-decay' }),
+    freezeObject({ zone: 'global-mix-before', stage: 'global-mix', conditionalPosition: 'before' }),
+    freezeObject({ zone: 'persistent-transform', stage: 'feedback' }),
+    freezeObject({ zone: 'global-mix-after', stage: 'global-mix', conditionalPosition: 'after' }),
+    freezeObject({ zone: 'primary-transform', stage: 'flow' }),
+    freezeObject({ zone: 'global-mix-afterflow', stage: 'global-mix', conditionalPosition: 'afterflow' }),
+    freezeObject({ zone: 'secondary-transform', stage: 'symmetry' }),
+    freezeObject({ zone: 'color-finish', stage: 'solarize' }),
+    freezeObject({
+      zone: 'final-overlays',
+      stage: 'front-stage-priority',
+      members: freezeArray(['glitch', 'pipeline-luma-key', 'scanlines']),
+      priorityContract: FRONT_STAGE_PRIORITY_CONTRACT,
+    }),
+    freezeObject({ zone: 'global-mix-final', stage: 'global-mix', conditionalPosition: 'final' }),
+    freezeObject({ zone: 'presentation', stage: 'presentation' }),
+  ]);
+
+  const PIPELINE_RECIPES = Object.freeze({
+    [CLASSIC_RECIPE_ID]: Object.freeze({
+      id: CLASSIC_RECIPE_ID,
+      label: 'CLASSIC',
+      description: 'Exact Pass 22 stage order.',
+      zoneOrder: ZONE_ORDER,
+      steps: PASS22_SERIAL_RECIPE,
+      fullResolutionBufferCount: 3,
+      scratchResources: freezeArray(['gScratch']),
+      declaredCycles: freezeArray([]),
+      compatibilityDefault: true,
+    }),
+    [CRISP_FINISH_RECIPE_ID]: Object.freeze({
+      id: CRISP_FINISH_RECIPE_ID,
+      label: 'CRISP FINISH',
+      description: 'Runs Glitch, Luma Key, and Scanlines after Flow, Symmetry, and Solarize.',
+      zoneOrder: CRISP_FINISH_ZONE_ORDER,
+      steps: CRISP_FINISH_SERIAL_RECIPE,
+      fullResolutionBufferCount: 3,
+      scratchResources: freezeArray(['gScratch']),
+      declaredCycles: freezeArray([]),
+      compatibilityDefault: false,
+    }),
+  });
+
+  const REQUIRED_STAGE_COUNTS = Object.freeze({
+    'source-sync': 1,
+    'persistent-decay': 1,
+    'front-stage-priority': 1,
+    'global-mix': 4,
+    'feedback': 1,
+    'flow': 1,
+    'symmetry': 1,
+    'solarize': 1,
+    'presentation': 1,
+  });
+
+  function validateRecipe(recipe, zoneOrder = ZONE_ORDER) {
     const errors = [];
     if (!Array.isArray(recipe)) {
       return Object.freeze({ valid: false, errors: freezeArray(['recipe must be an array']), stepCount: 0 });
     }
-    if (recipe.length !== ZONE_ORDER.length) {
-      errors.push(`expected ${ZONE_ORDER.length} steps, got ${recipe.length}`);
+    if (!Array.isArray(zoneOrder)) {
+      return Object.freeze({ valid: false, errors: freezeArray(['zone order must be an array']), stepCount: recipe.length });
     }
+    if (recipe.length !== zoneOrder.length) {
+      errors.push(`expected ${zoneOrder.length} steps, got ${recipe.length}`);
+    }
+
+    const stageCounts = Object.create(null);
+    const globalMixPositions = [];
 
     for (let index = 0; index < recipe.length; index++) {
       const step = recipe[index];
-      const expectedZone = ZONE_ORDER[index];
+      const expectedZone = zoneOrder[index];
       if (!step || typeof step !== 'object') {
         errors.push(`step ${index} is not an object`);
         continue;
@@ -240,11 +322,14 @@
       if (!resourceRule) {
         errors.push(`step ${index}: missing resource rule for ${step.stage}`);
       }
+      stageCounts[step.stage] = (stageCounts[step.stage] || 0) + 1;
+
       if (step.stage === 'global-mix') {
         const expectedPosition = step.zone.replace('global-mix-', '');
         if (step.conditionalPosition !== expectedPosition) {
           errors.push(`step ${index}: Global Mix position mismatch for ${step.zone}`);
         }
+        globalMixPositions.push(step.conditionalPosition);
       }
       if (step.stage === 'front-stage-priority') {
         const expectedMembers = ['glitch', 'pipeline-luma-key', 'scanlines'];
@@ -252,10 +337,18 @@
           errors.push('front-stage members differ from Pass 22');
         }
         const priorityValidation = validateFrontStagePriorityContract(step.priorityContract);
-        if (!priorityValidation.valid) {
-          errors.push(...priorityValidation.errors);
-        }
+        if (!priorityValidation.valid) errors.push(...priorityValidation.errors);
       }
+    }
+
+    for (const [stage, expectedCount] of Object.entries(REQUIRED_STAGE_COUNTS)) {
+      const actualCount = stageCounts[stage] || 0;
+      if (actualCount !== expectedCount) {
+        errors.push(`${stage}: expected ${expectedCount} occurrence(s), got ${actualCount}`);
+      }
+    }
+    if (JSON.stringify(globalMixPositions) !== JSON.stringify(['before', 'after', 'afterflow', 'final'])) {
+      errors.push('Global Mix named positions differ from the Classic contract');
     }
 
     return Object.freeze({
@@ -265,8 +358,34 @@
     });
   }
 
-  function compileRecipe(recipe, handlers) {
-    const validation = validateRecipe(recipe);
+  function validateRecipeDefinition(definition) {
+    const errors = [];
+    if (!definition || typeof definition !== 'object') {
+      return Object.freeze({ valid: false, errors: freezeArray(['recipe definition must be an object']) });
+    }
+    if (!definition.id || typeof definition.id !== 'string') errors.push('recipe id is required');
+    if (!definition.label || typeof definition.label !== 'string') errors.push('recipe label is required');
+    if (definition.fullResolutionBufferCount !== 3) {
+      errors.push(`${definition.id || 'recipe'} must declare exactly three full-resolution buffers`);
+    }
+    if (JSON.stringify(definition.scratchResources) !== JSON.stringify(['gScratch'])) {
+      errors.push(`${definition.id || 'recipe'} must use only the existing gScratch resource`);
+    }
+    if (!Array.isArray(definition.declaredCycles) || definition.declaredCycles.length !== 0) {
+      errors.push(`${definition.id || 'recipe'} may not declare a pipeline cycle`);
+    }
+    const routeValidation = validateRecipe(definition.steps, definition.zoneOrder);
+    if (!routeValidation.valid) errors.push(...routeValidation.errors);
+
+    return Object.freeze({
+      valid: errors.length === 0,
+      errors: freezeArray(errors),
+      stepCount: definition.steps?.length ?? 0,
+    });
+  }
+
+  function compileRecipe(recipe, handlers, zoneOrder = ZONE_ORDER) {
+    const validation = validateRecipe(recipe, zoneOrder);
     if (!validation.valid) {
       throw new Error(`[HUFF pipeline] invalid serial recipe: ${validation.errors.join('; ')}`);
     }
@@ -311,29 +430,122 @@
     });
   }
 
+  function compileRecipeRegistry(definitions, handlers) {
+    if (!definitions || typeof definitions !== 'object') {
+      throw new Error('[HUFF pipeline] recipe definitions are required');
+    }
+    const plans = Object.create(null);
+    const validations = Object.create(null);
+    for (const [id, definition] of Object.entries(definitions)) {
+      if (definition.id !== id) {
+        throw new Error(`[HUFF pipeline] recipe key/id mismatch: ${id}`);
+      }
+      const definitionValidation = validateRecipeDefinition(definition);
+      if (!definitionValidation.valid) {
+        throw new Error(`[HUFF pipeline] invalid recipe ${id}: ${definitionValidation.errors.join('; ')}`);
+      }
+      validations[id] = definitionValidation;
+      plans[id] = compileRecipe(definition.steps, handlers, definition.zoneOrder);
+    }
+    if (!plans[CLASSIC_RECIPE_ID]) {
+      throw new Error('[HUFF pipeline] CLASSIC compatibility recipe is required');
+    }
+    return Object.freeze({
+      definitions,
+      plans: Object.freeze(plans),
+      validations: Object.freeze(validations),
+      ids: freezeArray(Object.keys(plans)),
+      get(id) {
+        return plans[id] || null;
+      },
+    });
+  }
+
+  function createRecipeSwitcher(compiledRegistry, fallbackId = CLASSIC_RECIPE_ID) {
+    if (!compiledRegistry?.plans || !compiledRegistry.plans[fallbackId]) {
+      throw new Error('[HUFF pipeline] a compiled fallback recipe is required');
+    }
+
+    let activeId = fallbackId;
+    let activePlan = compiledRegistry.plans[fallbackId];
+    let lastRequestedId = fallbackId;
+    let fallbackCount = 0;
+
+    return Object.freeze({
+      select(requestedId) {
+        const normalized = typeof requestedId === 'string' && requestedId
+          ? requestedId
+          : fallbackId;
+        if (normalized === lastRequestedId) return activePlan;
+        lastRequestedId = normalized;
+        const nextPlan = compiledRegistry.plans[normalized];
+        if (nextPlan) {
+          activeId = normalized;
+          activePlan = nextPlan;
+        } else {
+          activeId = fallbackId;
+          activePlan = compiledRegistry.plans[fallbackId];
+          fallbackCount++;
+          console.warn(`[HUFF pipeline] unknown recipe "${normalized}"; restored CLASSIC`);
+        }
+        return activePlan;
+      },
+      get activeId() {
+        return activeId;
+      },
+      get activePlan() {
+        return activePlan;
+      },
+      get fallbackCount() {
+        return fallbackCount;
+      },
+      fallbackId,
+    });
+  }
+
   const frontStageValidation = validateFrontStagePriorityContract(FRONT_STAGE_PRIORITY_CONTRACT);
   if (!frontStageValidation.valid) {
     throw new Error(`[HUFF pipeline] built-in front-stage contract failed validation: ${frontStageValidation.errors.join('; ')}`);
   }
 
-  const validation = validateRecipe(PASS22_SERIAL_RECIPE);
+  const validation = validateRecipe(PASS22_SERIAL_RECIPE, ZONE_ORDER);
   if (!validation.valid) {
     throw new Error(`[HUFF pipeline] built-in Pass 22 recipe failed validation: ${validation.errors.join('; ')}`);
   }
 
+  const recipeValidations = Object.freeze(Object.fromEntries(
+    Object.entries(PIPELINE_RECIPES).map(([id, definition]) => {
+      const result = validateRecipeDefinition(definition);
+      if (!result.valid) {
+        throw new Error(`[HUFF pipeline] built-in recipe ${id} failed validation: ${result.errors.join('; ')}`);
+      }
+      return [id, result];
+    }),
+  ));
+
   window.HuffPipelineRuntime = Object.freeze({
     version: 2,
+    recipeVersion: 1,
+    CLASSIC_RECIPE_ID,
+    CRISP_FINISH_RECIPE_ID,
     ZONE_ORDER,
+    CRISP_FINISH_ZONE_ORDER,
     STAGE_LEGAL_ZONES,
     STAGE_RESOURCE_RULES,
     FRONT_STAGE_PRIORITY_CONTRACT,
     PASS22_SERIAL_RECIPE,
+    CRISP_FINISH_SERIAL_RECIPE,
+    PIPELINE_RECIPES,
     frontStageValidation,
     validation,
+    recipeValidations,
     validateFrontStagePriorityContract,
     resolveFrontStageOrder,
     compileFrontStagePriority,
     validateRecipe,
+    validateRecipeDefinition,
     compileRecipe,
+    compileRecipeRegistry,
+    createRecipeSwitcher,
   });
 })();

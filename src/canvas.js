@@ -496,7 +496,7 @@ const PRESET_IDS = [
   'bgMode',
   'cluSpeedVar','cluPulse',
   'cluSteer','cluBreathe','cluBounds','cluCohere',
-  'layerPriority','layerPulseSpeed',
+  'pipelineRecipe','layerPriority','layerPulseSpeed',
   'globalMixOn','globalMixBlend','globalMixAmt','globalMixPos',
 ];
 
@@ -529,16 +529,26 @@ function _clampToElement(el, val) {
 
 function applyPreset(data) {
   if (!data) return;
+  // Presets created before Pass 30 did not contain a route ID. They must load
+  // into the exact CLASSIC compatibility recipe, regardless of the route that
+  // happens to be active when the preset is recalled. Unknown imported route
+  // IDs also recover to CLASSIC before any control events are dispatched.
+  const sourceData = { ...data };
+  const validRecipeIds = new Set(['classic', 'crisp-finish']);
+  if (!validRecipeIds.has(String(sourceData.pipelineRecipe || ''))) {
+    sourceData.pipelineRecipe = 'classic';
+  }
+
   _suppressUndo = true;
   try {
     PRESET_IDS.forEach(id => {
-      if (!(id in data)) return;
+      if (!(id in sourceData)) return;
       const el = _$(id);
       if (!el) return;
       if (el.type === 'checkbox') {
-        el.checked = !!data[id];
+        el.checked = !!sourceData[id];
       } else {
-        el.value = _clampToElement(el, data[id]);
+        el.value = _clampToElement(el, sourceData[id]);
       }
       el.dispatchEvent(new Event('input',  { bubbles:true }));
       el.dispatchEvent(new Event('change', { bubbles:true }));
@@ -1046,7 +1056,7 @@ function hookUI() {
     'depthScatter','depthScatterVal','corruptDrift','corruptDriftVal',
     'scanAngle','bgMode','dim',
     'cluSpeedVar','cluSpeedVarVal','cluPulse','cluPulseVal','cluBreathe','cluBreatheVal','cluBounds',
-    'layerPriority','layerPulseSpeed','layerPulseSpeedVal',
+    'pipelineRecipe','layerPriority','layerPulseSpeed','layerPulseSpeedVal',
     'lumaKeyOn','lumaKeyMix','lumaKeyMixVal','lumaKeyAB','lumaKeyABVal','lumaKeyInvert',
     'globalMixOn','globalMixBlend','globalMixAmt','globalMixAmtVal','globalMixPos',
   ].forEach(k => els[k] = _$(k));
@@ -1253,7 +1263,7 @@ function hookSliders() {
 
   // Checkboxes and selects also get snapshotted for undo
   ['corruptOn','clusters','clusterTiles','flowOn','baseOn','symOn','solarizeOn',
-   'cluBounds','layerPriority','seedOnLoad','bgMode','symMode',
+   'cluBounds','pipelineRecipe','layerPriority','seedOnLoad','bgMode','symMode',
    'lumaKeyOn','globalMixOn','globalMixBlend','globalMixPos','scanSpinLeft','scanSpinRight'].forEach(id => {
     _$(id)?.addEventListener('change', snapshotForUndo);
   });
@@ -1692,13 +1702,13 @@ function _presentCleanFrame(curCanvas) {
 }
 
 
-// ─── Pass 26 validated serial pipeline ──────────────────────────────────────
-// The runtime validates the exact Pass 22 recipe and the existing front-stage
-// priority contract once at startup. No new route, control, effect position,
-// per-frame closure, or full-resolution buffer is introduced.
+// ─── Pass 30 validated serial recipe switching ─────────────────────────────
+// CLASSIC is the exact Pass 22 route. CRISP FINISH moves only the existing
+// Glitch/Luma/Scanline ordered group into the validated final-overlays zone.
+// Both plans compile once and use the same three full-resolution buffers.
 const _pipelineRuntime = window.HuffPipelineRuntime;
-if (!_pipelineRuntime?.validation?.valid) {
-  throw new Error('[HUFF pipeline] validated Pass 22 serial recipe is unavailable');
+if (!_pipelineRuntime?.validation?.valid || !_pipelineRuntime?.recipeValidations) {
+  throw new Error('[HUFF pipeline] validated serial recipe registry is unavailable');
 }
 
 const _pipelineFrame = Object.seal({
@@ -1873,10 +1883,15 @@ const _pipelineStageHandlers = Object.freeze({
   'presentation': _runPresentationStage,
 });
 
-const _pass22PipelinePlan = _pipelineRuntime.compileRecipe(
-  _pipelineRuntime.PASS22_SERIAL_RECIPE,
+const _pipelineRecipeRegistry = _pipelineRuntime.compileRecipeRegistry(
+  _pipelineRuntime.PIPELINE_RECIPES,
   _pipelineStageHandlers,
 );
+const _pipelineRecipeSwitcher = _pipelineRuntime.createRecipeSwitcher(
+  _pipelineRecipeRegistry,
+  _pipelineRuntime.CLASSIC_RECIPE_ID,
+);
+window.HUFF_ACTIVE_PIPELINE_RECIPE = _pipelineRuntime.CLASSIC_RECIPE_ID;
 
 function _finishCapabilityRender(startedAt, path) {
   if (!window.__huffProfilerActive || !startedAt) return;
@@ -1889,6 +1904,13 @@ function draw() {
   _tickFPS();
   const s = renderState;
   const bg = s.bgMode || 'black';
+  // Select exactly one precompiled plan before any stage executes. The same
+  // immutable plan is then used for source, persistence, effects, and
+  // presentation for the complete frame. Unknown IDs recover to CLASSIC.
+  const pipelinePlan = _pipelineRecipeSwitcher.select(s.pipelineRecipe || 'classic');
+  if (window.HUFF_ACTIVE_PIPELINE_RECIPE !== _pipelineRecipeSwitcher.activeId) {
+    window.HUFF_ACTIVE_PIPELINE_RECIPE = _pipelineRecipeSwitcher.activeId;
+  }
 
   if (!videoEl) {
     _paintMainBackground(bg);
@@ -1902,7 +1924,7 @@ function draw() {
   _pipelineFrame.state = s;
   _pipelineFrame.bg = bg;
   const sourceSyncStarted = window.__huffProfilerActive ? performance.now() : 0;
-  _pass22PipelinePlan.executeSource(_pipelineFrame);
+  pipelinePlan.executeSource(_pipelineFrame);
   if (sourceSyncStarted) {
     _capabilityInstrumentation?.sample('sourceSync', performance.now() - sourceSyncStarted);
   }
@@ -1964,7 +1986,7 @@ function draw() {
 
   _pipelineFrame.activity = activity;
   const activePipelineStarted = window.__huffProfilerActive ? performance.now() : 0;
-  _pass22PipelinePlan.executePersistent(_pipelineFrame);
+  pipelinePlan.executePersistent(_pipelineFrame);
 
   // Paint order remains the exact Classic layer-priority model. The validated
   // priority plan resolves only the four modes already present in Pass 22.
@@ -1978,7 +2000,7 @@ function draw() {
   _pipelineFrame.scanPriority = 1.0;
   _pipelineFrame.lumaMix = s.lumaKeyMix;
   _pipelineFrame.gmPos = s.globalMixPos || 'after';
-  _pass22PipelinePlan.executeEffectsAndPresentation(_pipelineFrame);
+  pipelinePlan.executeEffectsAndPresentation(_pipelineFrame);
   if (activePipelineStarted) {
     _capabilityInstrumentation?.sample('activePipeline', performance.now() - activePipelineStarted);
   }

@@ -1,10 +1,10 @@
 /**
- * HUFF Classic Pass 26 — Stage Contract Registry
+ * HUFF Classic Pass 30 — Stage Contract and Recipe Registry
  *
- * The registry remains the machine-readable source contract for the exact
- * Pass 22 serial route. Pass 26 extends the existing front-stage priority
- * metadata with its original timing and fallback rules; it does not add modes,
- * stages, render resources, or effect positions.
+ * CLASSIC preserves the exact Pass 22 serial route. CRISP FINISH moves only
+ * the existing Glitch/Luma/Scanline ordered group to the final-overlays zone.
+ * Both recipes declare the same three full-resolution resources, one scratch
+ * surface, and no pipeline cycles.
  */
 
 const freezeArray = (value) => Object.freeze([...value]);
@@ -23,6 +23,7 @@ export const PIPELINE_ZONES = freezeArray([
   'source-sync',
   'persistent-decay',
   'front-overlays',
+  'final-overlays',
   'global-mix-before',
   'persistent-transform',
   'global-mix-after',
@@ -83,7 +84,7 @@ export const STAGE_CONTRACTS = freezeArray([
     id: 'glitch',
     label: 'Glitch',
     stageClass: 'clean-overlay',
-    legalZones: ['front-overlays'],
+    legalZones: ['front-overlays', 'final-overlays'],
     reads: ['gCur', 'FrameRing'],
     writes: ['gBuf'],
     scratch: [],
@@ -102,7 +103,7 @@ export const STAGE_CONTRACTS = freezeArray([
     id: 'pipeline-luma-key',
     label: 'Pipeline Luma Key',
     stageClass: 'clean-overlay',
-    legalZones: ['front-overlays'],
+    legalZones: ['front-overlays', 'final-overlays'],
     reads: ['gCur'],
     writes: ['gBuf'],
     scratch: [],
@@ -121,7 +122,7 @@ export const STAGE_CONTRACTS = freezeArray([
     id: 'scanlines',
     label: 'Scanlines',
     stageClass: 'clean-overlay',
-    legalZones: ['front-overlays'],
+    legalZones: ['front-overlays', 'final-overlays'],
     reads: ['gCur'],
     writes: ['gBuf'],
     scratch: [],
@@ -270,6 +271,46 @@ export const PASS22_ROUTE_SKELETON = freezeArray([
   freezeObject({ zone: 'presentation', stage: 'presentation' }),
 ]);
 
+export const CRISP_FINISH_ROUTE_SKELETON = freezeArray([
+  freezeObject({ zone: 'source-sync', stage: 'source-sync' }),
+  freezeObject({ zone: 'persistent-decay', stage: 'persistent-decay' }),
+  freezeObject({ zone: 'global-mix-before', stage: 'global-mix', conditionalPosition: 'before' }),
+  freezeObject({ zone: 'persistent-transform', stage: 'feedback' }),
+  freezeObject({ zone: 'global-mix-after', stage: 'global-mix', conditionalPosition: 'after' }),
+  freezeObject({ zone: 'primary-transform', stage: 'flow' }),
+  freezeObject({ zone: 'global-mix-afterflow', stage: 'global-mix', conditionalPosition: 'afterflow' }),
+  freezeObject({ zone: 'secondary-transform', stage: 'symmetry' }),
+  freezeObject({ zone: 'color-finish', stage: 'solarize' }),
+  freezeObject({
+    zone: 'final-overlays',
+    stage: 'front-stage-priority',
+    members: freezeArray(['glitch', 'pipeline-luma-key', 'scanlines']),
+  }),
+  freezeObject({ zone: 'global-mix-final', stage: 'global-mix', conditionalPosition: 'final' }),
+  freezeObject({ zone: 'presentation', stage: 'presentation' }),
+]);
+
+export const PIPELINE_RECIPE_DEFINITIONS = Object.freeze({
+  classic: Object.freeze({
+    id: 'classic',
+    label: 'CLASSIC',
+    route: PASS22_ROUTE_SKELETON,
+    fullResolutionBufferCount: 3,
+    scratchResources: freezeArray(['gScratch']),
+    declaredCycles: freezeArray([]),
+    compatibilityDefault: true,
+  }),
+  'crisp-finish': Object.freeze({
+    id: 'crisp-finish',
+    label: 'CRISP FINISH',
+    route: CRISP_FINISH_ROUTE_SKELETON,
+    fullResolutionBufferCount: 3,
+    scratchResources: freezeArray(['gScratch']),
+    declaredCycles: freezeArray([]),
+    compatibilityDefault: false,
+  }),
+});
+
 export const FRONT_STAGE_PRIORITY_CONTRACT = Object.freeze({
   stateKey: 'layerPriority',
   pulseSpeedKey: 'layerPulseSpeed',
@@ -315,7 +356,7 @@ export function validateStageContractRegistry() {
     }
   }
 
-  for (const step of PASS22_ROUTE_SKELETON) {
+  for (const step of [...PASS22_ROUTE_SKELETON, ...CRISP_FINISH_ROUTE_SKELETON]) {
     if (!zones.has(step.zone)) errors.push(`route: unknown zone ${step.zone}`);
     if (step.stage !== 'front-stage-priority' && !ids.has(step.stage)) {
       errors.push(`route: unknown stage ${step.stage}`);
@@ -326,6 +367,18 @@ export function validateStageContractRegistry() {
       }
     }
   }
+
+  for (const [recipeId, recipe] of Object.entries(PIPELINE_RECIPE_DEFINITIONS)) {
+    if (recipe.id !== recipeId) errors.push(`recipe key/id mismatch: ${recipeId}`);
+    if (recipe.fullResolutionBufferCount !== 3) errors.push(`${recipeId}: unexpected full-resolution buffer count`);
+    if (JSON.stringify(recipe.scratchResources) !== JSON.stringify(['gScratch'])) {
+      errors.push(`${recipeId}: unexpected scratch resource declaration`);
+    }
+    if (recipe.declaredCycles.length !== 0) errors.push(`${recipeId}: cycles are not legal in Classic recipes`);
+  }
+
+  const crispFront = CRISP_FINISH_ROUTE_SKELETON.find(step => step.stage === 'front-stage-priority');
+  if (crispFront?.zone !== 'final-overlays') errors.push('CRISP FINISH front stage is not in final-overlays');
 
   const front = FRONT_STAGE_PRIORITY_CONTRACT;
   if (front.stateKey !== 'layerPriority') errors.push('front priority state key changed');
@@ -357,5 +410,6 @@ export function validateStageContractRegistry() {
     errors: freezeArray(errors),
     contractCount: STAGE_CONTRACTS.length,
     routeStepCount: PASS22_ROUTE_SKELETON.length,
+    recipeCount: Object.keys(PIPELINE_RECIPE_DEFINITIONS).length,
   });
 }

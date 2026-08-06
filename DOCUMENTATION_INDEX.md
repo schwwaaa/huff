@@ -1,38 +1,27 @@
-# HUFF Classic Optimization Pass 29 — Documentation Index
+# HUFF Classic Optimization Pass 30 — Documentation Index
 
 ## Current pass
 
 - `PASS_NOTES.md`
-- `PLATFORM_PACKAGING_FREEZE_AUDIT.md`
-- `PLATFORM_PACKAGE_MATRIX.md`
-- `RELEASE_SIGNING_NOTARIZATION.md`
-- `RELEASE_KNOWN_ISSUES.md`
-- `CAPABILITY_MATRIX.md`
+- `PIPELINE_SWITCHING_FOUNDATION_AUDIT.md`
 - `CHANGED_FILES.md`
 - `TESTING_CHECKLIST.md`
 - `VALIDATION_REPORT.md`
 - `CURRENT_STATUS.md`
 - `OPTIMIZATION_ROADMAP.md`
 - `GIT_COMMIT_MESSAGE.md`
-- `HUFF_CLASSIC_OPTIMIZATION_PASS_29.txt`
+- `HUFF_CLASSIC_OPTIMIZATION_PASS_30.txt`
 
-## Release infrastructure
+## Runtime and source contracts
 
-- `release/release-config.json`
-- `scripts/release-preflight.mjs`
-- `scripts/set-release-version.mjs`
-- `scripts/verify-release-artifacts.mjs`
-- `scripts/package-windows.ps1`
-- `scripts/check-linux-deps.sh`
-- `scripts/macos-notarize.sh`
-- `build.sh`
-
-## Validation and baseline
-
-- `scripts/validate-pass29.mjs`
-- `baseline/pass28-src.sha256`
-- `baseline/pass28-src-tauri.sha256`
+- `src/pipeline-runtime.js`
+- `pipeline/stage-contracts.mjs`
+- `scripts/validate-pass30.mjs`
 - `baseline/pass29-src.sha256`
 - `baseline/pass29-src-tauri.sha256`
+- `baseline/pass30-src.sha256`
+- `baseline/pass30-src-tauri.sha256`
 
-All earlier optimization audits, incident reports, validators, and cumulative history remain in the archive.
+## Prior infrastructure and release documentation
+
+The complete Pass 1–29 optimization history, packaging freeze, release matrix, signing/notarization preparation, platform known issues, capability instrumentation, output lifecycle audits, and prior validators remain in the archive.

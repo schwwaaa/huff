@@ -1,44 +1,47 @@
-# HUFF Classic Roadmap — After Infrastructure Freeze
+# HUFF Classic Roadmap — After Pass 30
 
 ## Completed
 
-Passes 1–29 complete the planned Classic optimization and infrastructure sequence.
-
-## Pass 30 — Constrained Pipeline Switching Foundation
-
-Add a small validated recipe selector around the existing stage-contract registry.
-
-Requirements:
-
-- current Pass 22 order remains the default `CLASSIC` recipe;
-- no unrestricted node graph;
-- no hidden full-resolution buffer allocation;
-- no undeclared feedback cycles;
-- each recipe validates before rendering;
-- each recipe declares stage order, buffer ownership, scratch use, and legal Global Mix points;
-- switching must be atomic and recover to `CLASSIC` on validation failure;
-- Flow remains unchanged.
-
-Initial work should focus on infrastructure and one or two carefully audited alternate serial recipes, not a large route catalogue.
+Passes 1–30 complete the Classic optimization, infrastructure, packaging, and constrained pipeline-switching foundation.
 
 ## Pass 31+ — Paired-down effect augmentation
 
-After recipe switching is stable:
+The next series returns to creative effect work with strict compatibility boundaries.
 
-- augment only a curated set of effects;
-- preserve old behavior behind neutral/default settings;
-- test each augmentation across every supported Classic recipe;
-- avoid effects that require broad parallel GPU routing or high-resolution temporal stores;
-- keep the free edition coherent, predictable, and supportable.
+Requirements for every augmentation:
+
+- one effect or one tightly related behavior per pass;
+- existing behavior preserved behind neutral/default values;
+- exact authoritative baseline identified before coding;
+- CLASSIC and CRISP FINISH both tested;
+- no unrestricted routing graph;
+- no hidden full-resolution buffer allocation;
+- no new temporal store without an explicit bounded budget;
+- no change to Flow unless the user explicitly reopens Flow work;
+- deterministic validation where possible;
+- user visual approval before further optimization.
+
+Recommended sequence:
+
+```text
+Pass 31  augmentation scope and first selected effect
+Pass 32  refine and validate that approved effect
+Pass 33+ continue the curated Classic set
+Release  final cross-platform capability and installer validation
+```
+
+## HUFF Classic product boundary
+
+Classic remains the free, stabilized, paired-down instrument. It should offer a coherent collection of expressive effects and a small number of reliable pipeline recipes—not attempt to imitate the complete HUFF HD architecture.
 
 ## HUFF HD / wgpu
 
-HUFF Classic proves interaction models and useful route relationships. HUFF HD can then expand accepted ideas into:
+The accepted creative ideas can expand fully in HUFF HD through:
 
 ```text
-typed video/mask/key ports
+typed video / mask / key ports
 parallel branches
-explicit field/trail/feedback stores
+explicit field / trail / feedback stores
 program and preview buses
 auxiliary sends
 legal temporal cycles
