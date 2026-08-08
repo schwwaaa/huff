@@ -193,8 +193,11 @@ body {
     <tr><td>glitchBaseX</td><td>Glitch X</td><td>-1000</td><td>1000</td><td></td></tr>
     <tr><td>glitchBaseY</td><td>Glitch Y</td><td>-1000</td><td>1000</td><td></td></tr>
     <tr><td>abMix</td><td>A/B Mix</td><td>0</td><td>1</td><td>0 = Glitch priority, 1 = Scanlines priority. Recessive side floors at 0.35</td></tr>
-    <tr><td>lumaKeyAB</td><td>Luma Key A/B</td><td>0</td><td>1</td><td>0 = clean dominant, 1 = glitch dominant. Floors at 0.35</td></tr>
+    <tr><td>lumaKeyAB</td><td>Luma Key Clip</td><td>0</td><td>1</td><td>Threshold between clean and processed image ownership.</td></tr>
     <tr><td>lumaKeyMix</td><td>Luma Key Mix</td><td>0</td><td>1</td><td>Overall strength of the pipeline luma key</td></tr>
+    <tr><td>lumaKeyGain</td><td>Luma Key Gain</td><td>0.25</td><td>4</td><td>1.00 preserves the established 64-level rolloff; higher values harden the edge, lower values soften it.</td></tr>
+    <tr><td>lumaKeyCleanup</td><td>Luma Cleanup</td><td>0</td><td>1</td><td>INDIGO-inspired low-end key cleanup; removes low-level leakage and slight shadows.</td></tr>
+    <tr><td>lumaKeyDensity</td><td>Luma Density</td><td>0</td><td>1</td><td>INDIGO-inspired high-end key density; pushes strong foreground toward full opacity.</td></tr>
     <tr><td>trailLayers</td><td>Trail Layers</td><td>0</td><td>4</td><td></td></tr>
     <tr><td>trailDepth</td><td>Trail Depth</td><td>0</td><td>1</td><td></td></tr>
     <tr><td>trailLumaKey</td><td>Trail Luma Key</td><td>0</td><td>1</td><td>0 = off</td></tr>
@@ -269,6 +272,8 @@ body {
   <thead><tr><th>ID</th><th>Label</th><th>Options</th></tr></thead>
   <tbody>
     <tr><td>globalMixBlend</td><td>Global Mix Blend</td><td>screen, multiply, overlay, difference, hard-light, lighter</td></tr>
+    <tr><td>lumaKeySource</td><td>Luma Key Source</td><td>clean, stencil</td></tr>
+    <tr><td>lumaKeyFade</td><td>Luma Fade Mode</td><td>xfade, add</td><td>add is presented as SOFT ADD and uses bounded Screen compositing rather than Canvas lighter.</td></tr>
     <tr><td>symMode</td><td>Symmetry Mode</td><td>v, h, hv</td></tr>
     <tr><td>bgMode</td><td>Background</td><td>black, white, green, blue</td></tr>
   </tbody>

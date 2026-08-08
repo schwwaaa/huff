@@ -10,6 +10,8 @@
  *  - hookUI split into focused sub-functions
  *  - Pass 8: one shared full-resolution scratch buffer for feedback/flow/symmetry
  *  - Pass 31: decoded-frame Glitch-only strobe; Luma Key and all other stages remain live
+ *  - Pass 34: Fairlight-style stored Luma Stencil + INDIGO Cleanup/Density + bounded Soft Add
+ *  - Pass 36: LIVE Luma stability rebase + stateless stored-stencil mask rebuilds
  *  - Pass 8: p5.Graphics and pixel-processing scratch canvases resize in place
  *  - Pass 8: final presentation uses direct Canvas2D blits
  *  - Pass 9: ring capture contexts stay in copy mode and capacity math is cached
@@ -159,6 +161,8 @@ function _retireCurrentSource({ revokeBlob = true } = {}) {
   _seekPending = false;
   _rvfcOwnsGCur = false;
   _resetGlitchStrobeGate('source-retired');
+  window.resetPipelineLumaKeyState?.();
+  _updateLumaStencilStatus?.('EMPTY');
 
   if (revokeBlob && currentBlobUrl) {
     try { URL.revokeObjectURL(currentBlobUrl); } catch {}
@@ -499,6 +503,7 @@ const PRESET_IDS = [
   'cluSpeedVar','cluPulse',
   'cluSteer','cluBreathe','cluBounds','cluCohere',
   'pipelineRecipe','layerPriority','layerPulseSpeed',
+  'lumaKeyOn','lumaKeyMix','lumaKeyAB','lumaKeyInvert','lumaKeyGain','lumaKeySource','lumaKeyFade','lumaKeyCleanup','lumaKeyDensity',
   'globalMixOn','globalMixBlend','globalMixAmt','globalMixPos',
 ];
 
@@ -544,6 +549,16 @@ function applyPreset(data) {
   // inherit a currently active strobe state when recalled.
   if (!('glitchStrobe' in sourceData)) sourceData.glitchStrobe = false;
   if (!('glitchStrobeEvery' in sourceData)) sourceData.glitchStrobeEvery = '4';
+  // Pass 34 removes the rejected GLITCH key source. Legacy/self/glitch key
+  // presets migrate safely to LIVE. Stored stencil pixels are intentionally not
+  // serialized in presets; only the selected process source is.
+  if (!('lumaKeyGain' in sourceData)) sourceData.lumaKeyGain = '1';
+  if (!('lumaKeySource' in sourceData) || sourceData.lumaKeySource === 'glitch') {
+    sourceData.lumaKeySource = 'clean';
+  }
+  if (!('lumaKeyFade' in sourceData)) sourceData.lumaKeyFade = 'xfade';
+  if (!('lumaKeyCleanup' in sourceData)) sourceData.lumaKeyCleanup = '0';
+  if (!('lumaKeyDensity' in sourceData)) sourceData.lumaKeyDensity = '0';
 
   _suppressUndo = true;
   try {
@@ -1004,6 +1019,8 @@ function windowResized() {
     [gBuf, gScratch].forEach(_clearGraphics);
     frameRing.clear(true);
     _resetGlitchStrobeGate('resize');
+    window.resetPipelineLumaKeyState?.();
+    _updateLumaStencilStatus?.('EMPTY');
     seededOnce = false;
     _bypassSyncedVfc = -1;
     _renderWasBypassed = true;
@@ -1018,6 +1035,8 @@ function clearAll() {
   [gBuf, gScratch].forEach(_clearGraphics);
   frameRing.clear();
   _resetGlitchStrobeGate('clear');
+  window.resetPipelineLumaKeyState?.();
+  _updateLumaStencilStatus?.('EMPTY');
   seededOnce = false;
   _bypassSyncedVfc = -1;
   _renderWasBypassed = true;
@@ -1067,6 +1086,7 @@ function hookUI() {
     'cluSpeedVar','cluSpeedVarVal','cluPulse','cluPulseVal','cluBreathe','cluBreatheVal','cluBounds',
     'pipelineRecipe','layerPriority','layerPulseSpeed','layerPulseSpeedVal',
     'lumaKeyOn','lumaKeyMix','lumaKeyMixVal','lumaKeyAB','lumaKeyABVal','lumaKeyInvert',
+    'lumaKeyGain','lumaKeyGainVal','lumaKeySource','lumaKeyFade','lumaKeyCleanup','lumaKeyCleanupVal','lumaKeyDensity','lumaKeyDensityVal','lumaKeyCaptureBtn','lumaKeyStencilState',
     'globalMixOn','globalMixBlend','globalMixAmt','globalMixAmtVal','globalMixPos',
   ].forEach(k => els[k] = _$(k));
 
@@ -1250,6 +1270,46 @@ function hookVolume() {
   });
 }
 
+function _updateLumaStencilStatus(forcedText = '') {
+  const stateEl = els.lumaKeyStencilState;
+  if (!stateEl) return;
+
+  const status = window.getPipelineLumaStencilStatus?.();
+  const isReady = forcedText === 'READY' || (!forcedText && !!status?.ready);
+  const noSource = forcedText === 'NO SOURCE';
+  const wantsStencil = els.lumaKeySource?.value === 'stencil';
+
+  let label = 'EMPTY';
+  let color = 'rgba(255,255,255,.45)';
+  let glow = 'none';
+
+  if (isReady) {
+    const w = status?.width || 0;
+    const h = status?.height || 0;
+    label = w && h ? `STENCIL STORED ${w}×${h}` : 'STENCIL STORED';
+    color = '#a7ffb5';
+    glow = '0 0 7px rgba(120,255,150,.55)';
+  } else if (noSource) {
+    label = 'NO SOURCE';
+    color = '#ff9b9b';
+  } else if (wantsStencil) {
+    label = 'CAPTURE FIRST';
+    color = '#ffd48a';
+  }
+
+  stateEl.textContent = label;
+  stateEl.style.color = color;
+  stateEl.style.textShadow = glow;
+  stateEl.style.opacity = '1';
+
+  if (els.lumaKeyCaptureBtn) {
+    els.lumaKeyCaptureBtn.classList.toggle('active', isReady);
+    els.lumaKeyCaptureBtn.setAttribute('aria-pressed', isReady ? 'true' : 'false');
+    els.lumaKeyCaptureBtn.style.color = isReady ? 'var(--term-green)' : '';
+    els.lumaKeyCaptureBtn.style.textShadow = isReady ? '0 0 7px rgba(120,255,150,.55)' : '';
+  }
+}
+
 function hookSliders() {
   const sliderIds = [
     'quality','depth','corrupt','block','glitchSpeed','glitchSpeedFine',
@@ -1263,7 +1323,7 @@ function hookSliders() {
     'depthScatter','corruptDrift',
     'solarizeThresh','solarizeAmt','solarizeR','solarizeG','solarizeB',
     'cluSpeedVar','cluPulse','cluBreathe',
-    'lumaKeyMix','lumaKeyAB','globalMixAmt','scanAngle','scanSpinSpeed','layerPulseSpeed',
+    'lumaKeyMix','lumaKeyAB','lumaKeyGain','lumaKeyCleanup','lumaKeyDensity','globalMixAmt','scanAngle','scanSpinSpeed','layerPulseSpeed',
   ];
 
   sliderIds.forEach(id => {
@@ -1273,7 +1333,7 @@ function hookSliders() {
   // Checkboxes and selects also get snapshotted for undo
   ['corruptOn','glitchStrobe','clusters','clusterTiles','flowOn','baseOn','symOn','solarizeOn',
    'cluBounds','pipelineRecipe','layerPriority','seedOnLoad','bgMode','symMode',
-   'lumaKeyOn','globalMixOn','globalMixBlend','globalMixPos','scanSpinLeft','scanSpinRight'].forEach(id => {
+   'lumaKeyOn','lumaKeyInvert','lumaKeySource','lumaKeyFade','globalMixOn','globalMixBlend','globalMixPos','scanSpinLeft','scanSpinRight'].forEach(id => {
     _$(id)?.addEventListener('change', snapshotForUndo);
   });
 
@@ -1289,6 +1349,24 @@ function hookSliders() {
   els.glitchStrobeEvery?.addEventListener('input', () => {
     _resetGlitchStrobeGate('rate');
   });
+
+  els.lumaKeyCaptureBtn?.addEventListener('click', () => {
+    const ok = window.capturePipelineLumaStencil?.() === true;
+    _updateLumaStencilStatus(ok ? 'READY' : 'NO SOURCE');
+  });
+
+  els.lumaKeySource?.addEventListener('change', () => {
+    window.invalidatePipelineLumaKeyCache?.();
+    _updateLumaStencilStatus();
+  });
+
+  // Key-shaping changes invalidate only the bounded Luma caches. This keeps
+  // mode changes explicit and prevents stale alpha state from surviving an
+  // INVERT / GAIN / CLEANUP / DENSITY edit.
+  ['lumaKeyAB','lumaKeyGain','lumaKeyCleanup','lumaKeyDensity'].forEach(id => {
+    els[id]?.addEventListener('input', () => window.invalidatePipelineLumaKeyCache?.());
+  });
+  els.lumaKeyInvert?.addEventListener('change', () => window.invalidatePipelineLumaKeyCache?.());
 }
 
 function hookPresets() {
@@ -1421,6 +1499,9 @@ function updateLabels() {
   set(els.lumaKeyMix,       els.lumaKeyMixVal,       f2);
   set(els.layerPulseSpeed,  els.layerPulseSpeedVal,  v => (+v).toFixed(1));
   set(els.lumaKeyAB,        els.lumaKeyABVal,        f2);
+  set(els.lumaKeyGain,      els.lumaKeyGainVal,      f2);
+  set(els.lumaKeyCleanup,   els.lumaKeyCleanupVal,   f2);
+  set(els.lumaKeyDensity,   els.lumaKeyDensityVal,   f2);
   set(els.globalMixAmt,     els.globalMixAmtVal,     f2);
   if (els.baseMix && els.baseMixVal) {
     els.baseMixVal.textContent = f2(els.baseMix.value);
@@ -1429,6 +1510,7 @@ function updateLabels() {
   if (els.glitchStrobeEvery) {
     els.glitchStrobeEvery.disabled = !els.glitchStrobe?.checked;
   }
+  _updateLumaStencilStatus();
 }
 
 function setSeedFromUI() {
@@ -1638,14 +1720,19 @@ function _shouldApplyGlitchThisRender(state) {
 // ─── Draw-loop helpers ───────────────────────────────────────────────────────
 // Defined once rather than recreated as closures on every render frame.
 function _emitGlitchGroup(state, density, glitchPriority, lumaMix) {
-  if (_shouldApplyGlitchThisRender(state)) {
+  const glitchUpdated = _shouldApplyGlitchThisRender(state);
+  if (glitchUpdated) {
     applyGlitch(density, Math.trunc(state.glitchBaseX), Math.trunc(state.glitchBaseY), glitchPriority, state);
   }
-  // Luma Key intentionally remains real-time while Glitch is strobing. This
-  // preserves the live clean-source reveal against the held/persistent glitch
-  // material instead of freezing the complete composite.
+  // Luma Key remains independent of the Glitch strobe gate. LIVE uses the
+  // proven decoded-frame cached clean patch; STENCIL uses a one-shot stored
+  // luminance matte inspired by Fairlight's internal stencil/live-key split.
   if (state.lumaKeyOn && lumaMix > 0) {
-    applyPipelineLumaKey(state.lumaKeyAB, lumaMix, !!state.lumaKeyInvert, _vfc);
+    applyPipelineLumaKey(
+      state.lumaKeyAB, lumaMix, !!state.lumaKeyInvert, _vfc,
+      state.lumaKeyGain, state.lumaKeySource, state.lumaKeyFade,
+      state.lumaKeyCleanup, state.lumaKeyDensity,
+    );
   }
 }
 
@@ -2704,6 +2791,10 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
       presentSamples: t.presentSamples || 0,
       rebuiltFrames: t.rebuiltFrames || 0,
       reusedFrames: t.reusedFrames || 0,
+      stencilCaptureMs: t.stencilCaptureMs || 0,
+      stencilCaptureSamples: t.stencilCaptureSamples || 0,
+      stencilCaptures: t.stencilCaptures || 0,
+      stencilReuses: t.stencilReuses || 0,
     };
   }
 
@@ -2863,6 +2954,11 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
         ? (lumaNow.presentMs - lastLumaTelemetry.presentMs) / lumaPresentSamples : 0;
       const lumaRebuiltDelta = lumaNow.rebuiltFrames - lastLumaTelemetry.rebuiltFrames;
       const lumaReusedDelta = lumaNow.reusedFrames - lastLumaTelemetry.reusedFrames;
+      const lumaStencilCaptureSamples = lumaNow.stencilCaptureSamples - lastLumaTelemetry.stencilCaptureSamples;
+      const lumaStencilCaptureAvg = lumaStencilCaptureSamples > 0
+        ? (lumaNow.stencilCaptureMs - lastLumaTelemetry.stencilCaptureMs) / lumaStencilCaptureSamples : 0;
+      const lumaStencilCaptureDelta = lumaNow.stencilCaptures - lastLumaTelemetry.stencilCaptures;
+      const lumaStencilReuseDelta = lumaNow.stencilReuses - lastLumaTelemetry.stencilReuses;
       const glitchNow = glitchTelemetrySnapshot();
       const glitchFramesDelta = glitchNow.frames - lastGlitchTelemetry.frames;
       const glitchTilesDelta = glitchNow.tiles - lastGlitchTelemetry.tiles;
@@ -2997,6 +3093,8 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
         'luma upload' + lumaUploadAvg.toFixed(2).padStart(6) + ' ms\n' +
         'luma pres  ' + lumaPresentAvg.toFixed(2).padStart(6) + ' ms\n' +
         'luma cache ' + `${lumaRebuiltDelta}/${lumaReusedDelta}`.padStart(6) + ' rebuild/reuse\n' +
+        'luma stenc ' + lumaStencilCaptureAvg.toFixed(2).padStart(6) + ' ms capture\n' +
+        'stencil    ' + `${lumaStencilCaptureDelta}/${lumaStencilReuseDelta}`.padStart(6) + ' capture/reuse\n' +
         'gl tiles   ' + glitchTilesAvg.toFixed(0).padStart(6) + ' / frame\n' +
         'gl draws   ' + glitchDrawCallsAvg.toFixed(0).padStart(6) + ' / frame\n' +
         'gl ring    ' + `${glitchRingRebuildDelta}/${glitchRingReuseDelta}`.padStart(6) + ' rebuild/reuse\n' +

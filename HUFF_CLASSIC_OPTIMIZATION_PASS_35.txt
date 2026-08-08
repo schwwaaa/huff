@@ -1,0 +1,66 @@
+HUFF Classic Optimization Pass 35
+Luma / Glitch-Strobe Performance Recovery + Stencil Status Clarity
+
+Authoritative parent: Pass 34 — Stencil Luma + Key Shaping
+
+Purpose
+-------
+Fix the runtime regression reported when Pipeline Luma Key is active while Glitch Strobe is enabled, without removing the accepted Pass 34 keying features or changing Flow, Glitch, routing, media, outputs, or native code.
+
+Accepted Pass 34 behavior retained
+---------------------------------
+- LIVE and STENCIL key sources
+- GAIN
+- CLEANUP
+- DENSITY
+- X-FADE
+- SOFT ADD
+- Glitch-only STROBE
+
+Performance change
+------------------
+The Luma key is split internally into:
+
+  CUT  = cached bounded luminance matte
+  FILL = current clean video
+
+The CUT is the expensive part because it requires luminance analysis and synchronous pixel readback. The FILL now remains current through inexpensive Canvas2D compositing even while the CUT is reused.
+
+When Glitch Strobe and LIVE Luma are both active, CUT analysis is capped to approximately 15 Hz. Current clean RGB still passes through the cached matte on every render. This is a deliberate responsiveness safeguard for the specific combination that regressed to single-digit FPS.
+
+STENCIL is cheaper after capture: its stored luminance already provides the CUT, so advancing source frames no longer force getImageData() at all. Only the live FILL is composited every render.
+
+Stencil UI clarification
+------------------------
+CAPTURE now has explicit visible state:
+- READY WIDTH×HEIGHT in bright green after successful capture
+- CAPTURE FIRST when STENCIL is selected without stored pixels
+- NO SOURCE if capture is attempted without a valid source
+- the CAPTURE button itself lights when a stored stencil exists
+
+No new creative feature was added in this pass.
+
+Runtime files changed
+---------------------
+- src/effects.js
+- src/canvas.js
+
+Protected / unchanged
+---------------------
+- src/index.html
+- src/pipeline-runtime.js
+- src/capability-instrumentation.js
+- src/presets/**
+- src-tauri/**
+- Flow
+- Glitch algorithm
+- Glitch Strobe schedule
+- CLASSIC / CRISP FINISH recipes
+- FrameRing
+- decoder and independent clocks
+- Syphon / Spout / mirror
+- release packaging
+
+Important
+---------
+Static validation proves structure and preserved boundaries, not runtime FPS. The exact reported Glitch Strobe + Luma combination must be tested on the user's machine before any performance claim is accepted.

@@ -1,0 +1,12 @@
+HUFF Classic Optimization Pass 34
+Stencil Luma + Key Shaping
+
+Baseline: accepted Pass 33
+Runtime changes: Pipeline Luma Key only
+
+- removes rejected GLITCH key source
+- adds Fairlight-inspired LIVE/STENCIL key source and one-shot STENCIL CAPTURE
+- adds INDIGO-inspired CLEANUP and DENSITY key shaping
+- retains X-FADE
+- replaces blown-out Canvas2D lighter ADD with bounded SOFT ADD (screen)
+- no Flow, Glitch algorithm, pipeline recipe, native runtime, or full-resolution buffer changes

@@ -1547,25 +1547,51 @@ function applySymmetry(src, dst, mode = 'v', pos = 0.5) {
 
 // ─── Pipeline Luma Key ────────────────────────────────────────────────────────
 // Applied in draw() between applyGlitch() and applyScanlines().
-// Gates how much of the glitch output (gBuf) shows through based on the
-// luminance of the clean source (gCur).
 //
-// thresh=0 → nothing keyed (all glitch shows)
-// thresh=1 → everything keyed (all clean shows)
-// invert   → flips: dark areas show glitch, bright areas stay clean
+// Pass 36 stability rebase:
+//   - LIVE returns to the known-good Pass 31/34 single-scratch architecture.
+//     One bounded clean patch is analyzed/cached by decoded source frame and
+//     then composited exactly as before. No 15 Hz wall-clock gate and no
+//     per-render split CUT/FILL path.
+//   - STENCIL keeps the accepted Fairlight-inspired stored luminance plane,
+//     but its reusable alpha mask is rebuilt by direct byte assignment. This
+//     avoids the Pass 35 cumulative-alpha bug where repeated threshold/invert
+//     changes multiplied a new mask by the previously shaped mask.
+//   - Selecting STENCIL without a valid capture no longer silently falls back
+//     to LIVE; the stage simply waits for CAPTURE, matching the UI state.
 //
-// Operates at 640px max width for performance.
-//
-// Pass 17 uses one bounded scratch canvas as both the readback source and the
-// cached clean-area patch. The old path built a second white alpha-mask canvas,
-// copied the clean frame again, then applied destination-in. Directly replacing
-// the copied clean frame's alpha is visually equivalent: destination-in keeps
-// the destination RGB and multiplies only its alpha by the mask alpha.
+// INDIGO-inspired GAIN, CLEANUP, DENSITY, X-FADE and SOFT ADD remain.
+// Operates at 640px max width for performance. No new full-resolution surface.
 
 let _plkCanvas = null, _plkCtx = null;
+let _plkStencilMaskCanvas = null, _plkStencilMaskCtx = null;
+let _plkStencilMaskImageData = null;
+
+// LIVE cached clean patch.
 let _plkCacheFrame = -1;
 let _plkCacheThresh = NaN;
 let _plkCacheInvert = false;
+let _plkCacheGain = NaN;
+let _plkCacheCleanup = NaN;
+let _plkCacheDensity = NaN;
+
+// Fairlight-inspired stored stencil: bounded 8-bit luminance only.
+let _plkStencilLuma = null;
+let _plkStencilW = 0, _plkStencilH = 0;
+let _plkStencilVersion = 0;
+let _plkStencilMaskVersion = -1;
+let _plkStencilMaskThresh = NaN;
+let _plkStencilMaskInvert = false;
+let _plkStencilMaskGain = NaN;
+let _plkStencilMaskCleanup = NaN;
+let _plkStencilMaskDensity = NaN;
+
+// INDIGO Cleanup/Density is applied as a 256-entry alpha shaping table.
+// The table is rebuilt only when these two controls change.
+const _plkShapeLut = new Uint8Array(256);
+let _plkShapeCleanup = NaN;
+let _plkShapeDensity = NaN;
+let _plkShapeIdentity = true;
 
 const _plkTelemetry = window.__huffLumaKeyTelemetry || {
   readbackMs: 0,
@@ -1578,6 +1604,10 @@ const _plkTelemetry = window.__huffLumaKeyTelemetry || {
   presentSamples: 0,
   rebuiltFrames: 0,
   reusedFrames: 0,
+  stencilCaptureMs: 0,
+  stencilCaptureSamples: 0,
+  stencilCaptures: 0,
+  stencilReuses: 0,
 };
 window.__huffLumaKeyTelemetry = _plkTelemetry;
 
@@ -1585,125 +1615,446 @@ function _plkProfileAdd(name, amount = 1) {
   _plkTelemetry[name] = (_plkTelemetry[name] || 0) + amount;
 }
 
-function _pipelineLumaMaskAlpha(lum, threshold, invert) {
-  const roll = Math.max(0, Math.min(1, (lum - threshold) / 64));
-  // Preserve the original operation order exactly. Do not simplify the
-  // inverted branch algebraically: floating-point cancellation at boundary
-  // values can otherwise change the final byte by one.
-  const reveal = invert ? (1 - roll) : roll;
-  return ((1 - reveal) * 255 + 0.5) | 0;
-}
-
 function _multiplyByteAlpha(sourceAlpha, maskAlpha) {
-  // gCur is normally opaque video/camera content, so the common path is exact
-  // and avoids a multiply. Preserve destination-in semantics for any partially
-  // transparent source that reaches this function.
   if (sourceAlpha === 255) return maskAlpha;
   if (sourceAlpha === 0 || maskAlpha === 0) return 0;
   return Math.floor((sourceAlpha * maskAlpha + 127) / 255);
 }
 
-function _pipelineLumaPixelsBytes(pix, threshold, invert) {
-  for (let i = 0; i < pix.length; i += 4) {
-    const r = pix[i], g = pix[i + 1], b = pix[i + 2];
-    const lum = _lumaR[r] + _lumaG[g] + _lumaB[b];
-    const maskAlpha = _pipelineLumaMaskAlpha(lum, threshold, invert);
-    pix[i + 3] = _multiplyByteAlpha(pix[i + 3], maskAlpha);
+function _ensurePipelineShapeLut(cleanup, density) {
+  if (cleanup === _plkShapeCleanup && density === _plkShapeDensity) {
+    return _plkShapeIdentity ? null : _plkShapeLut;
+  }
+
+  _plkShapeCleanup = cleanup;
+  _plkShapeDensity = density;
+  _plkShapeIdentity = cleanup <= 0 && density <= 0;
+
+  if (_plkShapeIdentity) return null;
+
+  const blackPoint = Math.max(0, Math.min(0.45, cleanup * 0.45));
+  const whitePoint = Math.max(0.55, Math.min(1, 1 - density * 0.45));
+
+  for (let i = 0; i < 256; i++) {
+    let a = i / 255;
+    if (blackPoint > 0) {
+      a = a <= blackPoint ? 0 : (a - blackPoint) / (1 - blackPoint);
+    }
+    if (whitePoint < 1) {
+      a = a >= whitePoint ? 1 : a / whitePoint;
+    }
+    _plkShapeLut[i] = Math.max(0, Math.min(255, (a * 255 + 0.5) | 0));
+  }
+
+  return _plkShapeLut;
+}
+
+// LIVE key path: mutate only the alpha of the bounded clean patch. This is the
+// same architecture that was stable before the Pass 35 CUT/FILL experiment.
+function _pipelineLumaPixelsBytesClean(patchPix, threshold, invert, safeGain, shapeLut) {
+  if (invert) {
+    for (let i = 0; i < patchPix.length; i += 4) {
+      const lum = _lumaR[patchPix[i]] + _lumaG[patchPix[i + 1]] + _lumaB[patchPix[i + 2]];
+      const roll = Math.max(0, Math.min(1, ((lum - threshold) * safeGain) / 64));
+      const reveal = 1 - roll;
+      let maskAlpha = ((1 - reveal) * 255 + 0.5) | 0;
+      if (shapeLut) maskAlpha = shapeLut[maskAlpha];
+      patchPix[i + 3] = _multiplyByteAlpha(patchPix[i + 3], maskAlpha);
+    }
+    return;
+  }
+
+  for (let i = 0; i < patchPix.length; i += 4) {
+    const lum = _lumaR[patchPix[i]] + _lumaG[patchPix[i + 1]] + _lumaB[patchPix[i + 2]];
+    const roll = Math.max(0, Math.min(1, ((lum - threshold) * safeGain) / 64));
+    let maskAlpha = ((1 - roll) * 255 + 0.5) | 0;
+    if (shapeLut) maskAlpha = shapeLut[maskAlpha];
+    patchPix[i + 3] = _multiplyByteAlpha(patchPix[i + 3], maskAlpha);
   }
 }
 
-function _pipelineLumaPixelsWords(pix, threshold, invert) {
-  // RGBA ImageData bytes are packed as 0xAABBGGRR on little-endian targets.
-  // Keep RGB verbatim and replace only the alpha byte of the cached clean patch.
+function _pipelineLumaPixelsWordsClean(patchPix, threshold, invert, safeGain, shapeLut) {
   const words = new Uint32Array(
-    pix.buffer,
-    pix.byteOffset,
-    pix.byteLength >>> 2
+    patchPix.buffer,
+    patchPix.byteOffset,
+    patchPix.byteLength >>> 2
   );
+
+  if (invert) {
+    for (let i = 0; i < words.length; i++) {
+      const packed = words[i];
+      const r = packed & 0xff;
+      const g = (packed >>> 8) & 0xff;
+      const b = (packed >>> 16) & 0xff;
+      const lum = _lumaR[r] + _lumaG[g] + _lumaB[b];
+      const roll = Math.max(0, Math.min(1, ((lum - threshold) * safeGain) / 64));
+      const reveal = 1 - roll;
+      let maskAlpha = ((1 - reveal) * 255 + 0.5) | 0;
+      if (shapeLut) maskAlpha = shapeLut[maskAlpha];
+      const outputAlpha = _multiplyByteAlpha(packed >>> 24, maskAlpha);
+      words[i] = ((packed & 0x00ffffff) | (outputAlpha << 24)) >>> 0;
+    }
+    return;
+  }
+
   for (let i = 0; i < words.length; i++) {
     const packed = words[i];
     const r = packed & 0xff;
     const g = (packed >>> 8) & 0xff;
     const b = (packed >>> 16) & 0xff;
-    const sourceAlpha = packed >>> 24;
     const lum = _lumaR[r] + _lumaG[g] + _lumaB[b];
-    const maskAlpha = _pipelineLumaMaskAlpha(lum, threshold, invert);
-    const outputAlpha = _multiplyByteAlpha(sourceAlpha, maskAlpha);
+    const roll = Math.max(0, Math.min(1, ((lum - threshold) * safeGain) / 64));
+    let maskAlpha = ((1 - roll) * 255 + 0.5) | 0;
+    if (shapeLut) maskAlpha = shapeLut[maskAlpha];
+    const outputAlpha = _multiplyByteAlpha(packed >>> 24, maskAlpha);
     words[i] = ((packed & 0x00ffffff) | (outputAlpha << 24)) >>> 0;
   }
 }
 
-function applyPipelineLumaKey(thresh, mix, invert, sourceFrameSerial = -1) {
-  if (mix <= 0) return;
+// STENCIL mask path. Crucially, alpha is ASSIGNED from the stored luminance on
+// every mask rebuild. It is never multiplied by the previous mask alpha.
+function _pipelineLumaStencilMask(stencilLuma, maskBytes, threshold, invert, safeGain, shapeLut) {
+  if (invert) {
+    for (let p = 0, i = 0; p < stencilLuma.length; p++, i += 4) {
+      const roll = Math.max(0, Math.min(1, ((stencilLuma[p] - threshold) * safeGain) / 64));
+      const reveal = 1 - roll;
+      let maskAlpha = ((1 - reveal) * 255 + 0.5) | 0;
+      if (shapeLut) maskAlpha = shapeLut[maskAlpha];
+      maskBytes[i + 3] = maskAlpha;
+    }
+    return;
+  }
 
-  const W = gBuf.width, H = gBuf.height;
-  const MAX_W = 640;
-  const scale = W > MAX_W ? MAX_W / W : 1;
-  const sw = Math.max(1, Math.round(W * scale));
-  const sh = Math.max(1, Math.round(H * scale));
+  for (let p = 0, i = 0; p < stencilLuma.length; p++, i += 4) {
+    const roll = Math.max(0, Math.min(1, ((stencilLuma[p] - threshold) * safeGain) / 64));
+    let maskAlpha = ((1 - roll) * 255 + 0.5) | 0;
+    if (shapeLut) maskAlpha = shapeLut[maskAlpha];
+    maskBytes[i + 3] = maskAlpha;
+  }
+}
+
+function _invalidatePipelineLumaCaches() {
+  _plkCacheFrame = -1;
+  _plkCacheThresh = NaN;
+  _plkCacheInvert = false;
+  _plkCacheGain = NaN;
+  _plkCacheCleanup = NaN;
+  _plkCacheDensity = NaN;
+  _plkStencilMaskVersion = -1;
+  _plkStencilMaskThresh = NaN;
+  _plkStencilMaskInvert = false;
+  _plkStencilMaskGain = NaN;
+  _plkStencilMaskCleanup = NaN;
+  _plkStencilMaskDensity = NaN;
+}
+window.invalidatePipelineLumaKeyCache = _invalidatePipelineLumaCaches;
+
+function _ensurePipelineLumaCanvas(sw, sh) {
   if (!_plkCanvas) {
     _plkCanvas = document.createElement('canvas');
     _plkCtx = _plkCanvas.getContext('2d', { willReadFrequently: true });
   }
-  if (_plkCanvas.width !== sw || _plkCanvas.height !== sh) {
-    _plkCanvas.width = sw;
-    _plkCanvas.height = sh;
-    _plkCacheFrame = -1;
+  if (!_plkStencilMaskCanvas) {
+    _plkStencilMaskCanvas = document.createElement('canvas');
+    _plkStencilMaskCtx = _plkStencilMaskCanvas.getContext('2d');
   }
+
+  const resized =
+    _plkCanvas.width !== sw || _plkCanvas.height !== sh ||
+    _plkStencilMaskCanvas.width !== sw || _plkStencilMaskCanvas.height !== sh;
+
+  if (!resized) return;
+
+  _plkCanvas.width = sw;
+  _plkCanvas.height = sh;
+  _plkStencilMaskCanvas.width = sw;
+  _plkStencilMaskCanvas.height = sh;
+  _plkStencilMaskImageData = _plkStencilMaskCtx.createImageData(sw, sh);
+
+  const maskBytes = _plkStencilMaskImageData.data;
+  for (let i = 0; i < maskBytes.length; i += 4) {
+    maskBytes[i] = 255;
+    maskBytes[i + 1] = 255;
+    maskBytes[i + 2] = 255;
+    maskBytes[i + 3] = 255;
+  }
+
+  _invalidatePipelineLumaCaches();
+
+  // A stored stencil belongs to its capture dimensions. Do not silently scale
+  // it after a renderer resize.
+  _plkStencilLuma = null;
+  _plkStencilW = 0;
+  _plkStencilH = 0;
+  _plkStencilVersion++;
+}
+
+function _captureLumaBytesFromImageData(data, target) {
+  if (_solLittleEndian) {
+    const words = new Uint32Array(
+      data.buffer,
+      data.byteOffset,
+      data.byteLength >>> 2
+    );
+    for (let i = 0; i < words.length; i++) {
+      const packed = words[i];
+      target[i] = (
+        _lumaR[packed & 0xff] +
+        _lumaG[(packed >>> 8) & 0xff] +
+        _lumaB[(packed >>> 16) & 0xff] + 0.5
+      ) | 0;
+    }
+    return;
+  }
+
+  for (let p = 0, i = 0; i < data.length; p++, i += 4) {
+    target[p] = (
+      _lumaR[data[i]] +
+      _lumaG[data[i + 1]] +
+      _lumaB[data[i + 2]] + 0.5
+    ) | 0;
+  }
+}
+
+window.capturePipelineLumaStencil = function capturePipelineLumaStencil() {
+  if (!gBuf || !gCur) return false;
+
+  const W = gBuf.width, H = gBuf.height;
+  if (!W || !H) return false;
+
+  const MAX_W = 640;
+  const scale = W > MAX_W ? MAX_W / W : 1;
+  const sw = Math.max(1, Math.round(W * scale));
+  const sh = Math.max(1, Math.round(H * scale));
+  _ensurePipelineLumaCanvas(sw, sh);
 
   const gCurEl = gCur.elt ?? gCur.drawingContext?.canvas;
-  if (!gCurEl) return;
+  if (!gCurEl) return false;
 
-  // The cached clean patch depends only on the decoded clean frame, threshold,
-  // invert state, and dimensions. At 60 Hz render with 30 fps media this avoids
-  // rebuilding the same patch twice.
-  const rebuild = sourceFrameSerial !== _plkCacheFrame
-    || thresh !== _plkCacheThresh
-    || invert !== _plkCacheInvert;
   const profile = window.__huffProfilerActive === true;
+  const started = profile ? performance.now() : 0;
 
-  if (rebuild) {
-    let phaseStart = profile ? performance.now() : 0;
+  try {
     copyCanvasFrame(_plkCtx, gCurEl, sw, sh);
-    const patchData = _plkCtx.getImageData(0, 0, sw, sh);
-    if (profile) {
-      _plkProfileAdd('readbackMs', performance.now() - phaseStart);
-      _plkProfileAdd('readbackSamples');
+    const keyData = _plkCtx.getImageData(0, 0, sw, sh);
+    const pixelCount = sw * sh;
+
+    if (!_plkStencilLuma || _plkStencilLuma.length !== pixelCount) {
+      _plkStencilLuma = new Uint8Array(pixelCount);
     }
 
-    const threshold = (1 - thresh) * 255;
-    phaseStart = profile ? performance.now() : 0;
-    if (_solLittleEndian) _pipelineLumaPixelsWords(patchData.data, threshold, invert);
-    else _pipelineLumaPixelsBytes(patchData.data, threshold, invert);
-    if (profile) {
-      _plkProfileAdd('transformMs', performance.now() - phaseStart);
-      _plkProfileAdd('transformSamples');
-    }
+    _captureLumaBytesFromImageData(keyData.data, _plkStencilLuma);
+    _plkStencilW = sw;
+    _plkStencilH = sh;
+    _plkStencilVersion++;
+    _plkStencilMaskVersion = -1;
 
-    phaseStart = profile ? performance.now() : 0;
-    _plkCtx.putImageData(patchData, 0, 0);
     if (profile) {
-      _plkProfileAdd('uploadMs', performance.now() - phaseStart);
-      _plkProfileAdd('uploadSamples');
-      _plkProfileAdd('rebuiltFrames');
+      const elapsed = performance.now() - started;
+      _plkProfileAdd('stencilCaptureMs', elapsed);
+      _plkProfileAdd('stencilCaptureSamples');
+      _plkProfileAdd('stencilCaptures');
     }
-
-    _plkCacheFrame = sourceFrameSerial;
-    _plkCacheThresh = thresh;
-    _plkCacheInvert = invert;
-  } else if (profile) {
-    _plkProfileAdd('reusedFrames');
+    return true;
+  } catch (err) {
+    console.warn('[huff] luma stencil capture failed', err);
+    return false;
   }
+};
 
-  // Overlay the cached clean-area patch onto gBuf at mix strength. Glitch areas
-  // remain untouched, preserving existing trails and feedback underneath.
-  const ctx = gBuf.drawingContext;
-  const presentStart = profile ? performance.now() : 0;
+window.getPipelineLumaStencilStatus = function getPipelineLumaStencilStatus() {
+  return {
+    ready: !!_plkStencilLuma,
+    width: _plkStencilW,
+    height: _plkStencilH,
+    version: _plkStencilVersion,
+  };
+};
+
+window.resetPipelineLumaKeyState = function resetPipelineLumaKeyState() {
+  _invalidatePipelineLumaCaches();
+  _plkStencilLuma = null;
+  _plkStencilW = 0;
+  _plkStencilH = 0;
+  _plkStencilVersion++;
+};
+
+function _drawPipelineLumaPatch(ctx, safeFadeMode, mix, W, H, sw, sh) {
   ctx.save();
+  if (safeFadeMode === 'add') {
+    ctx.globalCompositeOperation = 'screen';
+  } else {
+    ctx.globalCompositeOperation = 'source-over';
+  }
   ctx.globalAlpha = mix;
   if (sw === W && sh === H) ctx.drawImage(_plkCanvas, 0, 0);
   else ctx.drawImage(_plkCanvas, 0, 0, W, H);
   ctx.restore();
+}
+
+function applyPipelineLumaKey(
+  thresh,
+  mix,
+  invert,
+  sourceFrameSerial = -1,
+  gain = 1,
+  keySource = 'clean',
+  fadeMode = 'xfade',
+  cleanup = 0,
+  density = 0
+) {
+  if (mix <= 0 || !gBuf || !gCur) return;
+
+  const W = gBuf.width, H = gBuf.height;
+  if (!W || !H) return;
+
+  const MAX_W = 640;
+  const scale = W > MAX_W ? MAX_W / W : 1;
+  const sw = Math.max(1, Math.round(W * scale));
+  const sh = Math.max(1, Math.round(H * scale));
+  _ensurePipelineLumaCanvas(sw, sh);
+
+  const gCurEl = gCur.elt ?? gCur.drawingContext?.canvas;
+  if (!gCurEl) return;
+
+  const safeGain = Math.max(0.25, Math.min(4, Number.isFinite(gain) ? gain : 1));
+  const safeCleanup = Math.max(0, Math.min(1, Number.isFinite(cleanup) ? cleanup : 0));
+  const safeDensity = Math.max(0, Math.min(1, Number.isFinite(density) ? density : 0));
+  const safeFadeMode = fadeMode === 'add' ? 'add' : 'xfade';
+  const profile = window.__huffProfilerActive === true;
+  const threshold = (1 - thresh) * 255;
+  const shapeLut = _ensurePipelineShapeLut(safeCleanup, safeDensity);
+  const ctx = gBuf.drawingContext;
+
+  // STENCIL is explicit: if no stored matte exists, do not silently behave as
+  // LIVE. The UI says CAPTURE FIRST and the image remains untouched.
+  if (keySource === 'stencil') {
+    const stencilReady =
+      !!_plkStencilLuma && _plkStencilW === sw && _plkStencilH === sh;
+    if (!stencilReady) return;
+
+    if (profile) _plkProfileAdd('stencilReuses');
+
+    const maskRebuild =
+      _plkStencilMaskVersion !== _plkStencilVersion ||
+      thresh !== _plkStencilMaskThresh ||
+      invert !== _plkStencilMaskInvert ||
+      safeGain !== _plkStencilMaskGain ||
+      safeCleanup !== _plkStencilMaskCleanup ||
+      safeDensity !== _plkStencilMaskDensity;
+
+    if (maskRebuild) {
+      const phaseStart = profile ? performance.now() : 0;
+      _pipelineLumaStencilMask(
+        _plkStencilLuma,
+        _plkStencilMaskImageData.data,
+        threshold,
+        invert,
+        safeGain,
+        shapeLut
+      );
+      if (profile) {
+        _plkProfileAdd('transformMs', performance.now() - phaseStart);
+        _plkProfileAdd('transformSamples');
+      }
+
+      const uploadStart = profile ? performance.now() : 0;
+      _plkStencilMaskCtx.putImageData(_plkStencilMaskImageData, 0, 0);
+      if (profile) {
+        _plkProfileAdd('uploadMs', performance.now() - uploadStart);
+        _plkProfileAdd('uploadSamples');
+        _plkProfileAdd('rebuiltFrames');
+      }
+
+      _plkStencilMaskVersion = _plkStencilVersion;
+      _plkStencilMaskThresh = thresh;
+      _plkStencilMaskInvert = invert;
+      _plkStencilMaskGain = safeGain;
+      _plkStencilMaskCleanup = safeCleanup;
+      _plkStencilMaskDensity = safeDensity;
+    } else if (profile) {
+      _plkProfileAdd('reusedFrames');
+    }
+
+    // Current clean RGB passes through the stored mask using Canvas2D only;
+    // there is no synchronous readback after the one-shot CAPTURE.
+    const presentStart = profile ? performance.now() : 0;
+    copyCanvasFrame(_plkCtx, gCurEl, sw, sh);
+    _plkCtx.save();
+    _plkCtx.globalAlpha = 1;
+    _plkCtx.globalCompositeOperation = 'destination-in';
+    _plkCtx.drawImage(_plkStencilMaskCanvas, 0, 0, sw, sh);
+    _plkCtx.restore();
+    _drawPipelineLumaPatch(ctx, safeFadeMode, mix, W, H, sw, sh);
+    if (profile) {
+      _plkProfileAdd('presentMs', performance.now() - presentStart);
+      _plkProfileAdd('presentSamples');
+    }
+    return;
+  }
+
+  // LIVE: restore the pre-Pass-35 single-scratch behavior. The cached patch is
+  // rebuilt on decoded source frames or parameter changes and otherwise reused.
+  const rebuild =
+    sourceFrameSerial !== _plkCacheFrame ||
+    thresh !== _plkCacheThresh ||
+    invert !== _plkCacheInvert ||
+    safeGain !== _plkCacheGain ||
+    safeCleanup !== _plkCacheCleanup ||
+    safeDensity !== _plkCacheDensity;
+
+  if (rebuild) {
+    try {
+      let phaseStart = profile ? performance.now() : 0;
+      copyCanvasFrame(_plkCtx, gCurEl, sw, sh);
+      const patchData = _plkCtx.getImageData(0, 0, sw, sh);
+      if (profile) {
+        _plkProfileAdd('readbackMs', performance.now() - phaseStart);
+        _plkProfileAdd('readbackSamples');
+      }
+
+      phaseStart = profile ? performance.now() : 0;
+      if (_solLittleEndian) {
+        _pipelineLumaPixelsWordsClean(
+          patchData.data, threshold, invert, safeGain, shapeLut
+        );
+      } else {
+        _pipelineLumaPixelsBytesClean(
+          patchData.data, threshold, invert, safeGain, shapeLut
+        );
+      }
+      if (profile) {
+        _plkProfileAdd('transformMs', performance.now() - phaseStart);
+        _plkProfileAdd('transformSamples');
+      }
+
+      phaseStart = profile ? performance.now() : 0;
+      _plkCtx.putImageData(patchData, 0, 0);
+      if (profile) {
+        _plkProfileAdd('uploadMs', performance.now() - phaseStart);
+        _plkProfileAdd('uploadSamples');
+        _plkProfileAdd('rebuiltFrames');
+      }
+
+      _plkCacheFrame = sourceFrameSerial;
+      _plkCacheThresh = thresh;
+      _plkCacheInvert = invert;
+      _plkCacheGain = safeGain;
+      _plkCacheCleanup = safeCleanup;
+      _plkCacheDensity = safeDensity;
+    } catch (err) {
+      // A transient canvas readback failure should skip this key pass, not take
+      // down the renderer or leave the control surface appearing wedged.
+      console.warn('[huff] live luma key update failed', err);
+      _plkCacheFrame = -1;
+      return;
+    }
+  } else if (profile) {
+    _plkProfileAdd('reusedFrames');
+  }
+
+  const presentStart = profile ? performance.now() : 0;
+  _drawPipelineLumaPatch(ctx, safeFadeMode, mix, W, H, sw, sh);
   if (profile) {
     _plkProfileAdd('presentMs', performance.now() - presentStart);
     _plkProfileAdd('presentSamples');

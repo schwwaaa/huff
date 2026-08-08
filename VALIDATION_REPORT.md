@@ -1,32 +1,31 @@
-# HUFF Classic Optimization Pass 31 — Validation Report
+# Validation Report — Pass 36
 
-## Result
+## Completed
 
-**Deterministic and static validation: PASS**
+- `validate:pass36`: PASS — 516 structural checks plus 131,072 neutral Luma-key cases.
+- `validate:pass34`: PASS — accepted Gain / Stencil / Cleanup / Density / Soft Add feature contract retained.
+- `validate:pass22`: PASS — Scanline/legacy optimized behavior validator retained.
+- JavaScript syntax: PASS — 44 project files.
+- JSON parsing: PASS — 33 project files.
+- shell syntax: PASS — 8 scripts.
+- static release preflight: PASS — 38 passed, 0 warnings, 0 blockers.
 
-## Proven
+## Pass 36-specific deterministic regression
 
-- only `applyGlitch()` is strobe-gated;
-- Pipeline Luma Key remains dispatched every active render frame;
-- scheduling is based on decoded-frame `_vfc` buckets;
-- STROBE off preserves normal Glitch dispatch;
-- first activation, rate changes, and Glitch re-enable force an update;
-- no whole-frame store or additional render buffer was added;
-- protected Pass 30 runtime and native files remain hash-identical.
+The validator simulates consecutive stencil-mask rebuilds with different threshold, polarity, Gain, Cleanup and Density values. The second result must equal a fresh independent calculation. This verifies that prior alpha cannot contaminate a later stencil rebuild.
 
-## Completed checks
+## Superseded validators
 
-```text
-Pass 31 validator:               32 checks PASS
-Pass 30 route validator:         PASS
-Applicable Pass 9–22 validators: PASS
-Release preflight:               38 passed, 0 blockers
-JavaScript syntax:               PASS
-JSON files:                      38 PASS
-TOML files:                      2 PASS
-Shell syntax:                    PASS
-```
+Some older pass validators assert that files modified legitimately by later accepted passes must remain byte-identical to those older passes. Those source-manifest assertions are not applicable after later augmentation and are not used as evidence for Pass 36.
 
-## Not proven here
+Pass 35's validator is specifically superseded because it requires the split CUT/FILL and 15 Hz Luma architecture intentionally removed by this corrective pass.
 
-The packaged Tauri application was not visually exercised in this environment. Runtime approval is required for visual feel, persistence interaction, luma-key composition, frame pacing, and platform outputs. No performance improvement is claimed.
+## Runtime still required
+
+The Tauri/WebView application was not run in this packaging environment. Runtime verification is required for:
+
+- the two reported freeze scenarios;
+- sustained Glitch Strobe + LIVE Luma frame rate;
+- Stencil repeated Invert/threshold edits;
+- interaction with Feedback/Flow;
+- Syphon/Spout output.

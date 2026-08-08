@@ -1,0 +1,16 @@
+HUFF Classic Optimization Pass 36
+Luma Key Stability Rebase
+
+Baseline: accepted Pass 35 package.
+
+Purpose:
+- recover the stable pre-Pass-35 LIVE Luma execution model;
+- fix the stored-stencil alpha state corruption found after runtime testing;
+- keep the accepted Gain, Cleanup, Density, Stencil, X-Fade and Soft Add controls;
+- preserve Glitch Strobe, Flow, pipeline recipes, media, outputs and native code.
+
+Runtime files changed:
+- src/effects.js
+- src/canvas.js
+
+No new creative feature is introduced in this pass.

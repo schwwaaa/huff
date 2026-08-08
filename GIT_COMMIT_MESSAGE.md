@@ -1,10 +1,10 @@
-# Ready-to-use Git commit
+# Git Commit Message — Pass 36
 
 ```bash
 git add . && git commit \
-  -m "feat: add Glitch-only strobe to HUFF Classic" \
-  -m "Gate only applyGlitch on decoded-frame intervals while keeping Pipeline Luma Key, Scanlines, Feedback, Flow, Symmetry, Solarize, Global Mix, media decode, and outputs live." \
-  -m "Add STROBE and EVERY controls inside the Glitch group, persist them in new presets, and migrate legacy presets to strobe off." \
-  -m "Preserve Pass 30 pipeline recipes, Pass 22 Flow and effects, the three-buffer topology, FrameRing policy, decoder, clocks, outputs, native runtime, and platform packaging." \
-  -m "Add deterministic scheduling validation and the complete Pass 31 documentation suite."
+  -m "fix: rebase HUFF Classic luma key for stability" \
+  -m "Restore LIVE Luma to the proven decoded-frame cached clean-patch architecture and remove the Pass 35 wall-clock analysis gate and split live CUT/FILL path that changed Glitch interaction." \
+  -m "Fix stored-stencil alpha corruption by rebuilding mask alpha directly from captured luminance instead of multiplying against prior mask state, and make uncaptured STENCIL explicit rather than silently falling back to LIVE." \
+  -m "Retain Gain, Cleanup, Density, X-Fade, Soft Add, Glitch Strobe and both constrained pipeline recipes while leaving Flow, FrameRing, decoder, outputs, presets and native Tauri runtime unchanged." \
+  -m "Add deterministic stencil-rebuild regression validation, runtime freeze tests and the complete Pass 36 documentation suite."
 ```

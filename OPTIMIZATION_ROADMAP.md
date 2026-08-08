@@ -1,19 +1,25 @@
-# HUFF Classic Roadmap — After Pass 31
+# HUFF Classic — Optimization Roadmap
 
-## Completed
+## Completed foundation
 
-Passes 1–30: optimization, stability, packaging, and constrained pipeline switching.
+Passes 1–30 established optimization, lifecycle hardening, output reliability, packaging structure and constrained pipeline switching.
 
-Pass 31: Glitch-only strobe with real-time Pipeline Luma Key.
+## Accepted augmentation
 
-## Immediate next pass
+- Pass 31 — Glitch-only Strobe.
+- Pass 32/34 direction — expanded Luma key shaping and Fairlight-inspired stored stencil.
 
-Pass 32 is reserved for refinement or correction of Glitch Strobe after runtime testing. It must not introduce a separate effect unless explicitly requested.
+## Current
 
-## Later Classic augmentation
+**Pass 36 — Luma Key Stability Rebase**
 
-Continue one approved effect or tightly related behavior per pass. Keep Classic stable, paired down, and compatible with its three-buffer Canvas2D architecture.
+No further augmentation should proceed until runtime confirms:
 
-## HUFF HD / wgpu
+- no Luma freeze;
+- acceptable FPS with Glitch Strobe;
+- repeatable stencil behavior;
+- restored expected Glitch/Luma interaction.
 
-Reserve unrestricted typed routing, parallel branches, dedicated field/trail stores, program/preview buses, higher-resolution processing, and full modular expansion for HUFF HD.
+## After runtime approval
+
+Return to a deliberate feature discussion. Do not automatically choose the next augmentation.

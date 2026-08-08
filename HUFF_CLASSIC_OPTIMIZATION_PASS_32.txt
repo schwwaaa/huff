@@ -1,0 +1,18 @@
+HUFF CLASSIC OPTIMIZATION PASS 32
+=================================
+
+Baseline: accepted / committed Pass 31 Glitch Strobe Isolation
+Feature: Pipeline Luma Key Gain + Self Key
+
+GAIN
+  0.25–4.00
+  1.00 = exact legacy 64-level rolloff
+
+SELF KEY
+  OFF = key control from clean source luminance (legacy HUFF behavior)
+  ON  = key control from current processed gBuf luminance; processed gBuf is the keyed fill over clean source
+
+No Flow changes.
+No new full-resolution buffer.
+No pipeline recipe changes.
+No native runtime changes.

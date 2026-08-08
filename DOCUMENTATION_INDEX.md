@@ -1,23 +1,23 @@
-# HUFF Classic Optimization Pass 31 — Documentation Index
+# Documentation Index — HUFF Classic Pass 36
 
 ## Current pass
-
+- `HUFF_CLASSIC_OPTIMIZATION_PASS_36.txt`
 - `PASS_NOTES.md`
-- `GLITCH_STROBE_ISOLATION_AUDIT.md`
+- `CHANGELOG.md`
 - `CHANGED_FILES.md`
 - `TESTING_CHECKLIST.md`
 - `VALIDATION_REPORT.md`
 - `CURRENT_STATUS.md`
 - `OPTIMIZATION_ROADMAP.md`
 - `GIT_COMMIT_MESSAGE.md`
-- `HUFF_CLASSIC_OPTIMIZATION_PASS_31.txt`
+- `LUMA_KEY_STABILITY_REBASE_AUDIT.md`
 
-## Validation
+## Continuing architecture / release references
+- `PIPELINE_MODULARITY_AUDIT.md`
+- `PIPELINE_SWITCHING_FOUNDATION_AUDIT.md`
+- `CLASSIC_TO_WGPU_PIPELINE_STRATEGY.md`
+- `PLATFORM_PACKAGING_FREEZE_AUDIT.md`
+- `CAPABILITY_MATRIX.md`
+- `RELEASE_KNOWN_ISSUES.md`
 
-- `scripts/validate-pass31.mjs`
-- `baseline/pass30-src.sha256`
-- `baseline/pass30-src-tauri.sha256`
-- `baseline/pass31-src.sha256`
-- `baseline/pass31-src-tauri.sha256`
-
-All prior optimization, routing, packaging, and release documentation remains in the archive.
+Historical pass documentation remains in the project root for cumulative traceability.

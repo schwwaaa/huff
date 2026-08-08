@@ -1,35 +1,23 @@
-# HUFF Classic Optimization Pass 31 — Pass Notes
+# HUFF Classic — Pass Notes
 
-## Name
+## Pass 36 — Luma Key Stability Rebase
 
-**Glitch Strobe Isolation**
+**Status:** static/deterministic validation complete; runtime validation required.
 
-## Baseline
+Pass 36 is a corrective stability pass after Pass 35 runtime testing exposed Luma freezes, inconsistent Glitch interaction, and unreliable Stencil reuse.
 
-HUFF Classic Optimization Pass 30 — Constrained Pipeline Switching.
+### Changes
 
-## Purpose
+- restored LIVE Luma to the known-good decoded-frame cached clean-patch architecture;
+- removed the Pass 35 ~15 Hz wall-clock Luma analysis gate;
+- removed the Pass 35 split LIVE CUT/FILL execution path;
+- fixed cumulative stencil alpha corruption by rebuilding mask alpha directly from stored luminance;
+- retained the no-readback-after-capture STENCIL presentation path;
+- made uncaptured STENCIL explicit instead of silently falling back to LIVE;
+- added explicit bounded-cache invalidation for Invert and key-shaping changes;
+- clarified stored stencil status as `STENCIL STORED WxH`;
+- added Invert to undo snapshot handling.
 
-Add strobing only to the existing Glitch stage. The complete output is never frozen. Pipeline Luma Key continues to evaluate the current clean source every render frame, allowing held/persistent glitch material to be revealed against real-time video.
+### No new feature
 
-## Controls
-
-```text
-STROBE  off/on
-EVERY   1–30 decoded source frames
-```
-
-With STROBE off, Glitch follows the exact Pass 30 path. With STROBE on, `applyGlitch()` runs once per decoded-frame bucket. The existing persistent composite remains available between updates.
-
-## Explicitly live while Glitch strobes
-
-- Pipeline Luma Key and its clean-source mask;
-- Scanlines;
-- Feedback;
-- Flow;
-- Symmetry;
-- Solarize;
-- Global Mix;
-- media decode, transport, mirror, Syphon, and Spout.
-
-No whole-frame LIVE/STROBE/HOLD system is included. The rejected Frame Store Pass 31 is not part of this package.
+This pass intentionally adds no new creative control. It stabilizes the accepted Luma feature set before further augmentation.

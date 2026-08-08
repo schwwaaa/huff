@@ -1,0 +1,44 @@
+HUFF CLASSIC OPTIMIZATION PASS 33
+================================
+
+Title:
+Responsive Luma Key — Glitch Key + Add/X-Fade
+
+Baseline:
+Pass 32 — Luma Key Gain + Self Key
+
+Runtime changes:
+- Keep GAIN.
+- Replace SELF KEY with KEY SRC CLEAN/GLITCH.
+- GLITCH captures bounded 8-bit processed luminance only on accepted decoded Glitch updates.
+- Add Luma FADE mode X-FADE / ADD.
+- Clamp Gain once per stage.
+- Split normal/invert hot loops.
+- Add Glitch-key profiler telemetry and lifecycle reset.
+
+Historical source correlation:
+- Magic DaVE DVE Luma Self Key: processed DVE output is analyzed for luminance and keyed; Lift/Gain control clipping and steepness.
+- Grass Valley INDIGO: key cut and key fill are distinct concepts; Luma Fade Mode offers Add. and X-Fade.
+
+Protected:
+- Flow
+- Glitch algorithm
+- Glitch Strobe scheduling
+- Scanlines
+- Feedback
+- Symmetry
+- Solarize
+- FrameRing
+- decoder / clocks
+- CLASSIC / CRISP FINISH
+- mirror / Syphon / Spout
+- src-tauri
+- factory presets
+
+Validation:
+- Pass 33 deterministic validation: PASS (131,356 checks).
+- Applicable Pass 9–22 inherited validators: PASS.
+- JavaScript / inline HTML / JSON / TOML / shell syntax: PASS.
+- Release preflight: 38 passed, 0 warnings, 0 blockers.
+
+Runtime FPS improvement is not claimed until tested on the target machine.

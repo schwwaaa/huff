@@ -1,44 +1,44 @@
-# HUFF Classic Pass 27 — Baseline Integrity Manifest
+# HUFF Classic Pass 33 — Baseline Integrity Manifest
 
 ## Behavioral authority
 
-The authoritative behavioral runtime remains the user-supplied Pass 22 archive. Pass 26 is the immediate user-confirmed working predecessor for Pass 27.
+The authoritative visual/effect lineage remains the user-confirmed Pass 22 runtime. Pass 31 is the committed working augmentation baseline; Pass 32 added Luma `GAIN` and the now-superseded every-render `SELF KEY` experiment. Pass 33 branches directly from Pass 32 and preserves every protected runtime system outside the declared Luma-key changes.
 
-## Exact frozen effect and pipeline hashes
+## Current protected boundaries
+
+Pass 33 permits browser-runtime changes only to:
 
 ```text
 src/effects.js
-2b352fa279c728ba292485fe22a0e580c6a3f36d669bd9741f79d5af4454dd44
-
-src/pipeline-runtime.js
-5124aa948fcf556ce5b00c8da1bfef8a86da850d278e680cc9a4e0a8ea3634b9
-```
-
-## Complete manifests
-
-```text
-baseline/pass22-src.sha256
-baseline/pass22-src-tauri.sha256
-baseline/pass24-src.sha256
-baseline/pass25-src.sha256
-baseline/pass26-src.sha256
-baseline/pass26-src-tauri.sha256
-```
-
-`baseline/pass26-src.sha256` records every file under the user-confirmed working Pass 26 `src/` tree before Pass 27 changes.
-
-## Pass 27 constrained-change rule
-
-Pass 27 permits runtime changes only to:
-
-```text
-src/capability-instrumentation.js
 src/canvas.js
 src/index.html
 ```
 
-All other source files must match the Pass 26 manifest. The complete native tree must match the Pass 26 native manifest.
+The complete native tree remains byte-identical to Pass 32.
 
-## Validation
+The following remain unchanged from Pass 32:
 
-`scripts/validate-pass27.mjs` enforces these boundaries and rejects undeclared runtime files, missing files, effect changes, pipeline-runtime changes, additional render surfaces, or added instrumentation clocks.
+```text
+src/pipeline-runtime.js
+src/capability-instrumentation.js
+src/canvas.html
+src/presets/**
+src-tauri/**
+```
+
+Flow remains the accepted Pass 22 implementation.
+
+## Complete manifests
+
+```text
+baseline/pass32-src.sha256
+baseline/pass32-src-tauri.sha256
+baseline/pass33-src.sha256
+baseline/pass33-src-tauri.sha256
+```
+
+`baseline/pass33-src.sha256` and `baseline/pass33-src-tauri.sha256` record the complete delivered Pass 33 source trees.
+
+## Validation rule
+
+`scripts/validate-pass33.mjs` compares the active tree against the accepted Pass 32 manifests and rejects undeclared runtime changes, native changes, factory-preset changes, additional full-resolution `createGraphics()` surfaces, or reintroduction of the Pass 32 every-render Self Key path.

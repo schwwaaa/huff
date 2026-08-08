@@ -1,22 +1,21 @@
-# HUFF Classic — Current Status After Optimization Pass 31
+# HUFF Classic — Current Status
 
-## Confirmed foundation
+**Current candidate:** Pass 36 — Luma Key Stability Rebase
 
-Passes 22–30 remain the accepted visual, infrastructure, packaging, and constrained-pipeline foundation.
+**Last runtime-confirmed baseline before this fix:** Pass 35, with reported Luma regressions.
 
-## Current augmentation
+## Stable lineage retained
 
-Pass 31 adds one narrowly scoped feature: decoded-frame strobing of the existing Glitch stage. It does not freeze the complete output. Pipeline Luma Key and the clean source remain real-time.
+- Pass 22 visual/Flow baseline
+- Passes 23–30 infrastructure and constrained routing
+- Pass 31 Glitch-only Strobe
+- Pass 32 Luma Gain concept
+- Pass 34 accepted LIVE/STENCIL + Cleanup/Density + bounded Soft Add direction
 
-## Pipeline recipes
+## Pass 36 objective
 
-- `CLASSIC` — exact Pass 22 order.
-- `CRISP FINISH` — Glitch/Luma/Scanlines after Flow, Symmetry, and Solarize.
+Resolve Luma instability before any additional feature augmentation.
 
-## Protected systems
+## Feature freeze for this test
 
-Flow, all effect algorithms, buffer topology, FrameRing policy, decoder, clocks, outputs, shutdown, native code, and platform packaging remain unchanged.
-
-## Next step
-
-Runtime approval and refinement of Glitch Strobe. No additional effect should be selected without explicit user direction.
+Do not add another effect or keying control until Pass 36 runtime behavior is confirmed.

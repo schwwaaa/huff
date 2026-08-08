@@ -1374,7 +1374,7 @@
                 </div>
             </div>
 
-            <!-- LUMA KEY — gates glitch output by source luminance before scanlines -->
+            <!-- LUMA KEY — Fairlight stored stencil + INDIGO key shaping -->
             <div class="group">
                 <div class="group-label">Luma Key</div>
                 <div class="group-body">
@@ -1382,16 +1382,55 @@
                     <div class="ctrl"><label>ON</label><input id="lumaKeyOn" type="checkbox"></div>
                     <span style="font-size:9px;color:rgba(255,255,255,.4);font-family:'Share Tech Mono',monospace;white-space:nowrap">CLEAN ←</span>
                     <div class="ctrl" style="flex:1">
-                        <input id="lumaKeyAB" type="range" min="0" max="1" step="0.01" value="0.5" style="width:100%">
+                        <input id="lumaKeyAB" type="range" min="0" max="1" step="0.01" value="0.5" style="width:100%" title="Clip / threshold. Determines where the luminance key changes ownership between clean and processed image.">
                     </div>
-                    <span style="font-size:9px;color:rgba(255,255,255,.4);font-family:'Share Tech Mono',monospace;white-space:nowrap">→ GLITCH</span>
+                    <span style="font-size:9px;color:rgba(255,255,255,.4);font-family:'Share Tech Mono',monospace;white-space:nowrap">→ PROCESSED</span>
                     <span class="val" id="lumaKeyABVal" style="min-width:30px;text-align:right">0.50</span>
                     <div class="ctrl">
                         <label>MIX</label>
-                        <input id="lumaKeyMix" type="range" min="0" max="1" step="0.01" value="0">
+                        <input id="lumaKeyMix" type="range" min="0" max="1" step="0.01" value="0" title="Overall key opacity. Kept separate from Clip/Gain, following INDIGO's key-control model.">
                         <span class="val" id="lumaKeyMixVal">0.00</span>
                     </div>
                     <div class="ctrl"><label>INVERT</label><input id="lumaKeyInvert" type="checkbox"></div>
+                </div>
+                <div class="group-row">
+                    <div class="ctrl">
+                        <label>GAIN</label>
+                        <input id="lumaKeyGain" type="range" min="0.25" max="4" step="0.05" value="1" title="Key edge steepness. 1.00 preserves the established HUFF rolloff.">
+                        <span class="val" id="lumaKeyGainVal">1.00</span>
+                    </div>
+                    <div class="ctrl">
+                        <label>KEY SRC</label>
+                        <select id="lumaKeySource" title="LIVE follows incoming luminance continuously. STENCIL uses a captured internal luminance stencil, inspired by Fairlight's stored-stencil/live-key distinction.">
+                            <option value="clean">LIVE</option>
+                            <option value="stencil">STENCIL</option>
+                        </select>
+                    </div>
+                    <div class="ctrl">
+                        <label>STENCIL</label>
+                        <button id="lumaKeyCaptureBtn" type="button" class="btn-dim" style="font-size:9px;padding:2px 7px" title="Capture the current clean image luminance as a bounded internal stencil. The captured pixels are working memory, not preset data.">CAPTURE</button>
+                        <span id="lumaKeyStencilState" style="font-size:9px;color:rgba(255,255,255,.45);font-family:'Share Tech Mono',monospace">EMPTY</span>
+                    </div>
+                    <div class="ctrl">
+                        <label>FADE</label>
+                        <select id="lumaKeyFade" title="INDIGO-inspired Luma fade modes. X-FADE preserves normal keyed replacement. SOFT ADD adapts additive fading with bounded Screen compositing to avoid the blowout of Canvas2D lighter.">
+                            <option value="xfade">X-FADE</option>
+                            <option value="add">SOFT ADD</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="group-row">
+                    <div class="ctrl" style="flex:1">
+                        <label>CLEANUP</label>
+                        <input id="lumaKeyCleanup" type="range" min="0" max="1" step="0.01" value="0" style="width:100%" title="INDIGO-inspired key cleanup. Pushes low-level key leakage and slight shadows toward black while keeping the opposite end fixed.">
+                        <span class="val" id="lumaKeyCleanupVal">0.00</span>
+                    </div>
+                    <div class="ctrl" style="flex:1">
+                        <label>DENSITY</label>
+                        <input id="lumaKeyDensity" type="range" min="0" max="1" step="0.01" value="0" style="width:100%" title="INDIGO-inspired key density. Pushes strong keyed foreground toward full opacity while keeping black fixed.">
+                        <span class="val" id="lumaKeyDensityVal">0.00</span>
+                    </div>
+                    <span style="font-size:9px;color:rgba(255,255,255,.4);font-family:'Share Tech Mono',monospace;white-space:nowrap">INDIGO key shaping · Fairlight stencil memory</span>
                 </div>
                 </div>
             </div>

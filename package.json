@@ -34,7 +34,12 @@
     "release:verify": "node scripts/verify-release-artifacts.mjs",
     "validate:pass29": "node scripts/validate-pass29.mjs",
     "validate:pass30": "node scripts/validate-pass30.mjs",
-    "validate:pass31": "node scripts/validate-pass31.mjs"
+    "validate:pass31": "node scripts/validate-pass31.mjs",
+    "validate:pass32": "node scripts/validate-pass32.mjs",
+    "validate:pass33": "node scripts/validate-pass33.mjs",
+    "validate:pass34": "node scripts/validate-pass34.mjs",
+    "validate:pass35": "node scripts/validate-pass35.mjs",
+    "validate:pass36": "node scripts/validate-pass36.mjs"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^1.6.3"
