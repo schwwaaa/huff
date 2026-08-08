@@ -80,8 +80,8 @@ Use for huff's action buttons: `refreshBtn` (reseed) and `resetMotionBtn` (reset
 | `depth` | 0 | 1 | Scanline depth |
 | `corrupt` | 0 | 1 | Corrupt % |
 | `baseMix` | 0 | 1 | Base video mix |
-| `glitchSpeed` | 0 | 1 | Glitch animation speed |
-| `glitchSpeedMul` | 0 | 1 | Speed multiplier |
+| `glitchSpeed` | 0 | 5 | Legacy Corrupt rate base |
+| `glitchSpeedMul` | 0 | 10 | Legacy Corrupt rate multiplier |
 | `flowStrength` | 0 | 1 | Flow warp strength |
 | `fbZ` | 0 | 2 | Feedback zoom |
 | `fbX` | 0 | 2 | Feedback X offset |
@@ -89,36 +89,49 @@ Use for huff's action buttons: `refreshBtn` (reseed) and `resetMotionBtn` (reset
 | `fbTheta` | -1 | 1 | Feedback rotation |
 | `persistence` | 0 | 1 | Trail persistence |
 | `block` | 1 | 64 | Pixel block size |
-| `glitchSize` | 1 | 200 | Glitch tile size |
-| `glitchSmear` | 0 | 1 | Glitch smear |
-| `glitchAlpha` | 0 | 1 | Glitch tile opacity |
+| `glitchSize` | 1 | 60 | Corrupt patch size |
+| `glitchSmear` | 0 | 200 | Corrupt repeats |
+| `glitchAlpha` | 0 | 1 | Corrupt mix |
 | `glitchJitter` | 0 | 1 | Positional jitter |
-| `corruptDrift` | 0 | 1 | Corrupt drift |
-| `depthScatter` | 0 | 1 | Depth scatter |
+| `corruptDrift` | 0 | 1 | Corrupt amount drift |
+| `corruptSpeed` | 0 | 4 | Master Corrupt motion speed |
+| `depthScatter` | 0 | 1 | Corrupt age spread |
+| `glitchBaseX` | -1000 | 1000 | Corrupt position X |
+| `glitchBaseY` | -1000 | 1000 | Corrupt position Y |
+| `glitchBaseZ` | -1 | 1 | Corrupt position Z (2.5D) |
+| `corruptMoveX` | -1200 | 1200 | Corrupt move X px/s |
+| `corruptMoveY` | -1200 | 1200 | Corrupt move Y px/s |
+| `corruptMoveZ` | -1.5 | 1.5 | Corrupt move Z units/s |
 | `scanShift` | -200 | 200 | Scanline horizontal shift |
 | `scanDrift` | 0 | 5 | Scanline drift speed |
 | `scanAlpha` | 0 | 1 | Scanline band opacity |
 | `scanSpeed` | 0 | 5 | Scanline global speed |
 | `scanGap` | 0 | 200 | Scanline gap quantise |
 | `scanSkew` | -1 | 1 | Scanline skew |
-| `cluSpread` | 0 | 200 | Cluster spread radius |
-| `cluMinSpread` | 0 | 150 | Cluster inner radius |
-| `cluBias` | 0 | 1 | Cluster bias |
-| `cluSpeed` | 0 | 15 | Cluster physics speed |
-| `cluInertia` | 0.01 | 0.99 | Cluster physics inertia |
-| `cluDrift` | 0 | 5 | Cluster drift |
+| `cluSpread` | 1 | 300 | Corrupt group size |
+| `cluDepth` | 0 | 1 | Corrupt group Z spread |
+| `cluMoveX` | -600 | 600 | Group move X px/s |
+| `cluMoveY` | -600 | 600 | Group move Y px/s |
+| `cluMoveZ` | -1.5 | 1.5 | Group move Z units/s |
+| `cluMinSpread` | 0 | 150 | Corrupt hollow radius |
+| `cluBias` | 0 | 1 | Corrupt group amount |
+| `cluSpeed` | 0 | 10 | Corrupt group organic speed |
+| `cluInertia` | 0.01 | 0.99 | Corrupt group momentum |
+| `cluDrift` | 0 | 5 | Corrupt group wander |
 | `symPos` | 0 | 1 | Symmetry axis position |
 | `solarizeThresh` | 0 | 1 | Solarize threshold |
 | `trailDepth` | 0 | 1 | Trail depth |
 | `quality` | 0 | 1 | Render quality |
 
+> **Pass 38 Corrupt note:** HUFF presents **FIELD RATE** for the legacy `speed × fine × mult²` field contract and a separate **SPEED** (`corruptSpeed`) for autonomous Corrupt/XYZ/Cluster motion. Existing OSC mappings to the legacy speed IDs remain valid.
+
 ### Toggles (checked = ON)
 
 | ID | Description |
 |---|---|
-| `corruptOn` | Glitch system |
+| `corruptOn` | Corrupt system |
 | `clusters` | Scanlines |
-| `clusterTiles` | Cluster tiles |
+| `clusterTiles` | Clusters On (Corrupt) |
 | `flowOn` | Flow warp |
 | `symOn` | Symmetry |
 | `solarizeOn` | Solarize |
@@ -130,7 +143,7 @@ Use for huff's action buttons: `refreshBtn` (reseed) and `resetMotionBtn` (reset
 
 | ID | Description |
 |---|---|
-| `refreshBtn` | Re-seed glitch |
+| `refreshBtn` | Re-seed Corrupt |
 | `resetMotionBtn` | Reset FB motion to defaults |
 
 ---

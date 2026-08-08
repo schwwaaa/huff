@@ -266,6 +266,22 @@ let baseSeed = 1, seededOnce = false;
 let _bypassSyncedVfc = -1;
 let _renderWasBypassed = true;
 let nPhaseX = 0, nPhaseY = 1000;
+// Pass 38: one explicit Corrupt motion clock. SPEED scales autonomous Corrupt
+// movement without changing decoded-frame STROBE / MULTIGRAB timing semantics.
+let _corruptClock = 0;
+const _corruptMotion = Object.seal({ x:0, y:0, z:0, zDir:1, dt:1/60, speed:1, timeSec:0, serial:0 });
+window.HUFF_CORRUPT_MOTION = _corruptMotion;
+function _resetCorruptAxisMotion() {
+  _corruptClock = 0;
+  _corruptMotion.x = 0;
+  _corruptMotion.y = 0;
+  _corruptMotion.z = 0;
+  _corruptMotion.zDir = 1;
+  _corruptMotion.dt = 1/60;
+  _corruptMotion.speed = 1;
+  _corruptMotion.timeSec = 0;
+  _corruptMotion.serial = 0;
+}
 let nPhaseScanX = 0, nPhaseScanY = 2000; // independent scanline phase
 let _scanSpinAngle = 0;                   // continuous spin accumulator (degrees)
 
@@ -486,12 +502,14 @@ function toggleUI() {
 // loadPresetFromFile(f)  — load snapshot from a File object
 
 const PRESET_IDS = [
-  'quality','depth','corrupt','block','glitchSpeed','glitchSpeedFine',
-  'glitchSize','glitchSmear','glitchBaseX','glitchBaseY',
-  'glitchSpeedMul','glitchAlpha','glitchJitter','glitchSmearAngle','glitchStrobe','glitchStrobeEvery','seed',
+  'quality','depth','corrupt','block','glitchSpeed','glitchSpeedFine','glitchSpeedMul',
+  'glitchSize','glitchSmear','glitchBaseX','glitchBaseY','glitchBaseZ','corruptMoveX','corruptMoveY','corruptMoveZ',
+  'glitchAlpha','glitchJitter','glitchSmearAngle','glitchStrobeEvery',
+  'corruptUpdateMode','corruptHoldFrames','corruptLiveFrames','corruptSpeed',
+  'corruptMaskMode','corruptMaskThreshold','corruptMaskSide','corruptDistribution','seed',
   'corruptOn','feedback','persistence','fbX','fbY','fbZ','fbTheta',
-  'clusters','clusterTiles','clusterCount','clusterRadius','spatialGap',
-  'cluCenters','cluSpread','cluMinSpread','cluBias','cluDrift','cluSpeed','cluInertia',
+  'clusters','clusterCount','clusterRadius','spatialGap',
+  'cluCenters','cluSpread','cluMinSpread','cluDepth','cluBias','cluDrift','cluSpeed','cluInertia','cluMoveX','cluMoveY','cluMoveZ',
   'flowOn','flowStrength','flowScale','flowPulse','flowImpl','flowSpeed','flowTurb','flowSwirl','flowSpread',
   'baseOn','baseMix','seedOnLoad',
   'symOn','symMode','symPos',
@@ -545,10 +563,34 @@ function applyPreset(data) {
   if (!validRecipeIds.has(String(sourceData.pipelineRecipe || ''))) {
     sourceData.pipelineRecipe = 'classic';
   }
-  // Pass 31 is opt-in and belongs only to Glitch. Legacy presets must not
-  // inherit a currently active strobe state when recalled.
-  if (!('glitchStrobe' in sourceData)) sourceData.glitchStrobe = false;
+  // Pass 37 makes the temporal policy explicit. Legacy Glitch Strobe
+  // presets migrate to the equivalent CORRUPT update mode.
   if (!('glitchStrobeEvery' in sourceData)) sourceData.glitchStrobeEvery = '4';
+  if (!('corruptUpdateMode' in sourceData)) {
+    sourceData.corruptUpdateMode = sourceData.glitchStrobe ? 'strobe' : 'continuous';
+  }
+  if (!('corruptHoldFrames' in sourceData)) sourceData.corruptHoldFrames = '8';
+  if (!('corruptLiveFrames' in sourceData)) sourceData.corruptLiveFrames = '2';
+  if (!('corruptSpeed' in sourceData)) sourceData.corruptSpeed = '1';
+  if (!('glitchBaseZ' in sourceData)) sourceData.glitchBaseZ = '0';
+  if (!('corruptMoveX' in sourceData)) sourceData.corruptMoveX = '0';
+  if (!('corruptMoveY' in sourceData)) sourceData.corruptMoveY = '0';
+  if (!('corruptMoveZ' in sourceData)) sourceData.corruptMoveZ = '0';
+
+  // Clusters are now a distribution mode rather than a separate effect block.
+  if (!('corruptDistribution' in sourceData)) {
+    sourceData.corruptDistribution = sourceData.clusterTiles ? 'cluster' : 'random';
+  }
+  // Legacy presets predate the 2.5D cluster depth plane. Keep them visually
+  // flat unless they explicitly store the new parameter. Fresh sessions use
+  // the UI default so turning Clusters on immediately reveals depth.
+  if (!('cluDepth' in sourceData)) sourceData.cluDepth = '0';
+  if (!('cluMoveX' in sourceData)) sourceData.cluMoveX = '0';
+  if (!('cluMoveY' in sourceData)) sourceData.cluMoveY = '0';
+  if (!('cluMoveZ' in sourceData)) sourceData.cluMoveZ = '0';
+  if (!('corruptMaskMode' in sourceData)) sourceData.corruptMaskMode = 'full';
+  if (!('corruptMaskThreshold' in sourceData)) sourceData.corruptMaskThreshold = '128';
+  if (!('corruptMaskSide' in sourceData)) sourceData.corruptMaskSide = 'bright';
   // Pass 34 removes the rejected GLITCH key source. Legacy/self/glitch key
   // presets migrate safely to LIVE. Stored stencil pixels are intentionally not
   // serialized in presets; only the selected process source is.
@@ -574,6 +616,9 @@ function applyPreset(data) {
       el.dispatchEvent(new Event('input',  { bubbles:true }));
       el.dispatchEvent(new Event('change', { bubbles:true }));
     });
+    // RATE is a derived performance view over the exact legacy speed stack.
+    // Preset recall leaves SPEED/FINE/MULT byte-for-byte semantically intact.
+    _syncCorruptRateFromLegacy();
     updateLabels();
     setSeedFromUI();
   } finally {
@@ -1041,6 +1086,7 @@ function clearAll() {
   _bypassSyncedVfc = -1;
   _renderWasBypassed = true;
   if (typeof resetClusterPhysics === 'function') resetClusterPhysics();
+  _resetCorruptAxisMotion();
 }
 
 function refreshGlitch() {
@@ -1057,19 +1103,23 @@ function hookUI() {
     'file','playBtn','pauseBtn','refreshBtn','resetBtn','clearBufBtn',
     'camStartBtn','camStopBtn','camRefreshBtn','cams','corruptOn',
     'quality','qualityVal','depth','depthVal','corrupt','corruptVal','block','blockVal',
-    'glitchSpeed','glitchSpeedVal','glitchSpeedFine','glitchSpeedFineVal',
+    'glitchSpeed','glitchSpeedVal','glitchSpeedFine','glitchSpeedFineVal','corruptRate','corruptRateVal','corruptSpeed','corruptSpeedVal',
     'glitchSize','glitchSizeVal','glitchSmear','glitchSmearVal',
-    'glitchBaseX','glitchBaseXVal','glitchBaseY','glitchBaseYVal',
+    'glitchBaseX','glitchBaseXVal','glitchBaseY','glitchBaseYVal','glitchBaseZ','glitchBaseZVal',
+    'corruptMoveX','corruptMoveXVal','corruptMoveY','corruptMoveYVal','corruptMoveZ','corruptMoveZVal','corruptResetXYZBtn',
     'glitchSpeedMul','glitchSpeedMulVal','glitchAlpha','glitchAlphaVal',
     'glitchJitter','glitchJitterVal','glitchSmearAngle','glitchSmearAngleVal',
-    'glitchStrobe','glitchStrobeEvery','glitchStrobeEveryVal','seed',
+    'glitchStrobe','glitchStrobeEvery','glitchStrobeEveryVal',
+    'corruptUpdateMode','corruptHoldFrames','corruptHoldFramesVal','corruptLiveFrames','corruptLiveFramesVal',
+    'corruptDistribution','clusterModeStatus','corruptMaskMode','corruptMaskThreshold','corruptMaskThresholdVal','corruptMaskSide','corruptMaskStatus','seed',
     'feedback','feedbackVal','persistence','persistenceVal',
     'fbX','fbXVal','fbY','fbYVal','fbZ','fbZVal','fbTheta','fbThetaVal',
     'clusters','clusterTiles','clusterCount','clusterCountVal',
     'clusterRadius','clusterRadiusVal','spatialGap','spatialGapVal',
-    'cluCenters','cluCentersVal','cluSpread','cluSpreadVal',
+    'cluCenters','cluCentersVal','cluSpread','cluSpreadVal','cluDepth','cluDepthVal',
     'cluMinSpread','cluMinSpreadVal','cluBias','cluBiasVal','cluDrift','cluDriftVal',
     'cluSpeed','cluSpeedVal','cluSteer','cluSteerVal','cluInertia','cluInertiaVal','cluCohere','cluCohereVal',
+    'cluMoveX','cluMoveXVal','cluMoveY','cluMoveYVal','cluMoveZ','cluMoveZVal',
     'flowOn','flowStrength','flowStrengthVal','flowScale','flowScaleVal',
     'flowPulse','flowPulseVal','flowImpl','flowImplVal',
     'flowSpeed','flowSpeedVal','flowTurb','flowTurbVal','flowSwirl','flowSwirlVal','flowSpread','flowSpreadVal',
@@ -1308,18 +1358,73 @@ function _updateLumaStencilStatus(forcedText = '') {
     els.lumaKeyCaptureBtn.style.color = isReady ? 'var(--term-green)' : '';
     els.lumaKeyCaptureBtn.style.textShadow = isReady ? '0 0 7px rgba(120,255,150,.55)' : '';
   }
+  if (typeof _syncCorruptContextUI === 'function') _syncCorruptContextUI();
+}
+
+// CORRUPT RATE is a semantic performance control layered over the exact legacy
+// SPEED × FINE × MULT² contract. The logarithmic knob preserves useful
+// low-speed resolution while still spanning the complete legacy 0..5000 range.
+let _syncingCorruptRate = false;
+function _legacyCorruptEffectiveRate() {
+  const speed = Number(els.glitchSpeed?.value ?? 0) || 0;
+  const fine = Number(els.glitchSpeedFine?.value ?? 0) || 0;
+  const mul = Number(els.glitchSpeedMul?.value ?? 0) || 0;
+  return Math.max(0, speed * fine * mul * mul);
+}
+function _corruptRateKnobToEffective(value) {
+  const k = Math.max(0, Math.min(1, Number(value) || 0));
+  return 0.5 * (Math.pow(10, 4 * k) - 1);
+}
+function _corruptEffectiveToRateKnob(rate) {
+  const r = Math.max(0, Math.min(4999.5, Number(rate) || 0));
+  return Math.max(0, Math.min(1, Math.log10(1 + r / 0.5) / 4));
+}
+function _setLegacyCorruptRate(rate) {
+  const r = Math.max(0, Math.min(5000, Number(rate) || 0));
+  let speed = 0, fine = 1, mul = 1;
+  if (r <= 5) {
+    speed = r;
+  } else if (r <= 50) {
+    speed = 5;
+    fine = r / 5;
+  } else {
+    speed = 5;
+    fine = 10;
+    mul = Math.sqrt(r / 50);
+  }
+  _syncingCorruptRate = true;
+  try {
+    if (els.glitchSpeed) els.glitchSpeed.value = String(speed);
+    if (els.glitchSpeedFine) els.glitchSpeedFine.value = String(fine);
+    if (els.glitchSpeedMul) els.glitchSpeedMul.value = String(mul);
+    _syncRenderControl('glitchSpeed');
+    _syncRenderControl('glitchSpeedFine');
+    _syncRenderControl('glitchSpeedMul');
+  } finally {
+    _syncingCorruptRate = false;
+  }
+}
+function _syncCorruptRateFromLegacy() {
+  if (!els.corruptRate || _syncingCorruptRate) return;
+  _syncingCorruptRate = true;
+  try {
+    els.corruptRate.value = String(_corruptEffectiveToRateKnob(_legacyCorruptEffectiveRate()));
+  } finally {
+    _syncingCorruptRate = false;
+  }
 }
 
 function hookSliders() {
   const sliderIds = [
-    'quality','depth','corrupt','block','glitchSpeed','glitchSpeedFine',
-    'glitchSize','glitchSmear','glitchBaseX','glitchBaseY','glitchStrobeEvery',
+    'quality','depth','corrupt','block','glitchSpeed','glitchSpeedFine','glitchSpeedMul','corruptSpeed',
+    'glitchSize','glitchSmear','glitchBaseX','glitchBaseY','glitchBaseZ','corruptMoveX','corruptMoveY','corruptMoveZ','glitchStrobeEvery',
+    'corruptHoldFrames','corruptLiveFrames','corruptMaskThreshold',
     'feedback','persistence','fbX','fbY','fbZ','fbTheta',
-    'spatialGap','clusterCount','clusterRadius','cluCenters','cluSpread',
+    'spatialGap','clusterCount','clusterRadius','cluCenters','cluSpread','cluDepth','cluMoveX','cluMoveY','cluMoveZ',
     'cluMinSpread','cluBias','cluDrift','cluSpeed','cluSteer','cluInertia','cluCohere',
     'scanAlpha','scanShift','scanDrift','scanSpeed','scanGap','scanSkew','scanFocus','scanRoll',
     'glitchAlpha','glitchJitter','glitchSmearAngle',
-    'flowStrength','flowScale','flowPulse','flowImpl','flowSpeed','flowTurb','flowSwirl','flowSpread','baseMix','symPos','glitchSpeedMul',
+    'flowStrength','flowScale','flowPulse','flowImpl','flowSpeed','flowTurb','flowSwirl','flowSpread','baseMix','symPos',
     'depthScatter','corruptDrift',
     'solarizeThresh','solarizeAmt','solarizeR','solarizeG','solarizeB',
     'cluSpeedVar','cluPulse','cluBreathe',
@@ -1330,8 +1435,22 @@ function hookSliders() {
     els[id]?.addEventListener('input', () => { updateLabels(); snapshotForUndo(); });
   });
 
+  els.corruptRate?.addEventListener('input', () => {
+    if (_syncingCorruptRate) return;
+    _setLegacyCorruptRate(_corruptRateKnobToEffective(els.corruptRate.value));
+    updateLabels();
+    snapshotForUndo();
+  });
+  for (const id of ['glitchSpeed','glitchSpeedFine','glitchSpeedMul']) {
+    els[id]?.addEventListener('input', () => {
+      if (_syncingCorruptRate) return;
+      _syncCorruptRateFromLegacy();
+      updateLabels();
+    });
+  }
+
   // Checkboxes and selects also get snapshotted for undo
-  ['corruptOn','glitchStrobe','clusters','clusterTiles','flowOn','baseOn','symOn','solarizeOn',
+  ['corruptOn','corruptUpdateMode','corruptDistribution','clusterTiles','corruptMaskMode','corruptMaskSide','clusters','flowOn','baseOn','symOn','solarizeOn',
    'cluBounds','pipelineRecipe','layerPriority','seedOnLoad','bgMode','symMode',
    'lumaKeyOn','lumaKeyInvert','lumaKeySource','lumaKeyFade','globalMixOn','globalMixBlend','globalMixPos','scanSpinLeft','scanSpinRight'].forEach(id => {
     _$(id)?.addEventListener('change', snapshotForUndo);
@@ -1342,17 +1461,65 @@ function hookSliders() {
     updateLabels();
   });
 
-  els.glitchStrobe?.addEventListener('change', () => {
-    _resetGlitchStrobeGate('toggle');
+  let _syncingLegacyCorruptControls = false;
+  const syncLegacyUpdateAlias = () => {
+    if (!els.glitchStrobe || !els.corruptUpdateMode) return;
+    _syncingLegacyCorruptControls = true;
+    els.glitchStrobe.checked = els.corruptUpdateMode.value === 'strobe';
+    _syncingLegacyCorruptControls = false;
+  };
+  const syncLegacyDistributionAlias = () => {
+    if (!els.clusterTiles || !els.corruptDistribution) return;
+    _syncingLegacyCorruptControls = true;
+    els.clusterTiles.checked = els.corruptDistribution.value === 'cluster';
+    _syncingLegacyCorruptControls = false;
+  };
+
+  els.corruptUpdateMode?.addEventListener('change', () => {
+    syncLegacyUpdateAlias();
+    _resetGlitchStrobeGate('mode');
     updateLabels();
   });
-  els.glitchStrobeEvery?.addEventListener('input', () => {
-    _resetGlitchStrobeGate('rate');
+  els.glitchStrobe?.addEventListener('change', () => {
+    if (_syncingLegacyCorruptControls || !els.corruptUpdateMode) return;
+    els.corruptUpdateMode.value = els.glitchStrobe.checked ? 'strobe' : 'continuous';
+    els.corruptUpdateMode.dispatchEvent(new Event('change', { bubbles:true }));
   });
+  els.glitchStrobeEvery?.addEventListener('input', () => _resetGlitchStrobeGate('interval'));
+  els.corruptHoldFrames?.addEventListener('input', () => _resetGlitchStrobeGate('hold'));
+  els.corruptLiveFrames?.addEventListener('input', () => _resetGlitchStrobeGate('live'));
+
+  els.corruptDistribution?.addEventListener('change', () => {
+    syncLegacyDistributionAlias();
+    updateLabels();
+  });
+  els.clusterTiles?.addEventListener('change', () => {
+    if (_syncingLegacyCorruptControls || !els.corruptDistribution) return;
+    els.corruptDistribution.value = els.clusterTiles.checked ? 'cluster' : 'random';
+    els.corruptDistribution.dispatchEvent(new Event('change', { bubbles:true }));
+  });
+  els.corruptMaskMode?.addEventListener('change', updateLabels);
+  els.corruptMaskSide?.addEventListener('change', updateLabels);
+  els.corruptResetXYZBtn?.addEventListener('click', () => {
+    snapshotForUndo();
+    const neutral = { glitchBaseX:0, glitchBaseY:0, glitchBaseZ:0, corruptMoveX:0, corruptMoveY:0, corruptMoveZ:0 };
+    for (const [id, value] of Object.entries(neutral)) {
+      if (!els[id]) continue;
+      els[id].value = String(value);
+      els[id].dispatchEvent(new Event('input', { bubbles:true }));
+    }
+    _resetCorruptAxisMotion();
+    updateLabels();
+  });
+
+  // Initialize compatibility aliases after the canonical controls exist.
+  syncLegacyUpdateAlias();
+  syncLegacyDistributionAlias();
 
   els.lumaKeyCaptureBtn?.addEventListener('click', () => {
     const ok = window.capturePipelineLumaStencil?.() === true;
     _updateLumaStencilStatus(ok ? 'READY' : 'NO SOURCE');
+    updateLabels();
   });
 
   els.lumaKeySource?.addEventListener('change', () => {
@@ -1430,36 +1597,88 @@ function updateDim() {
   if (els.dim) els.dim.textContent = `${width}×${height}`;
 }
 
+function _syncCorruptContextUI() {
+  const mode = els.corruptUpdateMode?.value || 'continuous';
+  document.querySelectorAll('.strobe-only').forEach(el => {
+    el.style.display = mode === 'strobe' ? '' : 'none';
+  });
+  document.querySelectorAll('.multigrab-only').forEach(el => {
+    el.style.display = mode === 'multigrab' ? '' : 'none';
+  });
+
+  const clustered = !!els.clusterTiles?.checked;
+  document.querySelectorAll('.cluster-only').forEach(el => {
+    el.style.display = clustered ? '' : 'none';
+  });
+  if (els.clusterModeStatus) {
+    els.clusterModeStatus.classList.remove('ready', 'warn');
+    els.clusterModeStatus.textContent = clustered ? 'CLUSTERED' : 'RANDOM';
+    if (clustered) els.clusterModeStatus.classList.add('ready');
+  }
+
+  const stencilMask = els.corruptMaskMode?.value === 'stencil';
+  document.querySelectorAll('.corrupt-stencil-only').forEach(el => {
+    el.style.display = stencilMask ? '' : 'none';
+  });
+
+  if (els.glitchStrobeEvery) els.glitchStrobeEvery.disabled = mode !== 'strobe';
+  if (els.corruptHoldFrames) els.corruptHoldFrames.disabled = mode !== 'multigrab';
+  if (els.corruptLiveFrames) els.corruptLiveFrames.disabled = mode !== 'multigrab';
+
+  const statusEl = els.corruptMaskStatus;
+  if (statusEl) {
+    statusEl.classList.remove('ready', 'warn');
+    if (!stencilMask) {
+      statusEl.textContent = 'FULL FRAME';
+    } else {
+      const status = window.getPipelineLumaStencilStatus?.();
+      if (status?.ready) {
+        statusEl.textContent = `STENCIL ${status.width || 0}×${status.height || 0}`;
+        statusEl.classList.add('ready');
+      } else {
+        statusEl.textContent = 'CAPTURE IN LUMA KEY';
+        statusEl.classList.add('warn');
+      }
+    }
+  }
+}
+
 function updateLabels() {
+  _syncCorruptRateFromLegacy();
   const f2  = v => (+v).toFixed(2);
+  const pct = v => `${Math.round((+v) * 100)}%`;
   const set = (el, valEl, fmt) => { if (el && valEl) valEl.textContent = fmt(el.value); };
 
   set(els.quality,          els.qualityVal,          f2);
-  set(els.depth,            els.depthVal,            f2);
-  set(els.corrupt,          els.corruptVal,          f2);
-  set(els.block,            els.blockVal,            v => v);
-  set(els.glitchSpeed,      els.glitchSpeedVal,      f2);
-  set(els.glitchSpeedFine,  els.glitchSpeedFineVal,  f2);
-  set(els.glitchSize,       els.glitchSizeVal,       v => v);
-  set(els.glitchSmear,      els.glitchSmearVal,      v => v);
+  set(els.depth,            els.depthVal,            pct);
+  set(els.corrupt,          els.corruptVal,          v => `${(+v).toFixed(2)}×`);
+  set(els.corruptSpeed,     els.corruptSpeedVal,     v => `${(+v).toFixed(2)}×`);
+  set(els.block,            els.blockVal,            v => `${Math.round(+v)} px`);
+  if (els.corruptRateVal) els.corruptRateVal.textContent = `${_legacyCorruptEffectiveRate().toFixed(2)}×`;
+  set(els.glitchSize,       els.glitchSizeVal,       v => `${(+v / 20).toFixed(2)}×`);
+  set(els.glitchSmear,      els.glitchSmearVal,      v => String(Math.max(0, Math.trunc(+v || 0))));
   set(els.feedback,         els.feedbackVal,         f2);
   set(els.persistence,      els.persistenceVal,      f2);
   set(els.fbX,              els.fbXVal,              f2);
   set(els.fbY,              els.fbYVal,              f2);
   set(els.fbZ,              els.fbZVal,              f2);
   set(els.fbTheta,          els.fbThetaVal,          v => v);
-  set(els.spatialGap,       els.spatialGapVal,       v => v);
+  set(els.spatialGap,       els.spatialGapVal,       v => `${Math.round(+v)} px`);
   set(els.clusterCount,     els.clusterCountVal,     v => v);
   set(els.clusterRadius,    els.clusterRadiusVal,    v => v);
-  set(els.cluCenters,       els.cluCentersVal,       v => v);
-  set(els.cluSpread,        els.cluSpreadVal,        v => v);
-  set(els.cluMinSpread,     els.cluMinSpreadVal,     v => v);
-  set(els.cluBias,          els.cluBiasVal,          f2);
+  set(els.cluCenters,       els.cluCentersVal,       v => String(Math.max(1, Math.trunc(+v || 1))));
+  set(els.cluSpread,        els.cluSpreadVal,        v => `${Math.round(+v)} px`);
+  set(els.cluDepth,         els.cluDepthVal,         pct);
+  set(els.cluMinSpread,     els.cluMinSpreadVal,     v => `${Math.round(+v)} px`);
+  set(els.cluBias,          els.cluBiasVal,          pct);
   set(els.cluDrift,         els.cluDriftVal,         f2);
   set(els.cluSpeed,         els.cluSpeedVal,         v => (+v).toFixed(1));
   set(els.cluSteer,         els.cluSteerVal,         f2);
-  set(els.cluInertia,       els.cluInertiaVal,       f2);
-  set(els.cluCohere,        els.cluCohereVal,        f2);
+  set(els.cluInertia,       els.cluInertiaVal,       pct);
+  set(els.cluCohere,        els.cluCohereVal,        pct);
+  set(els.cluMoveX,         els.cluMoveXVal,         v => `${Math.trunc(+v || 0)} px/s`);
+  set(els.cluMoveY,         els.cluMoveYVal,         v => `${Math.trunc(+v || 0)} px/s`);
+  set(els.cluMoveZ,         els.cluMoveZVal,         v => `${(+v).toFixed(2)} z/s`);
   set(els.flowStrength,     els.flowStrengthVal,     v => v);
   set(els.flowScale,        els.flowScaleVal,        v => v);
   set(els.flowPulse,        els.flowPulseVal,        v => (v|0));
@@ -1468,13 +1687,21 @@ function updateLabels() {
   set(els.flowSpread,       els.flowSpreadVal,       f2);
   set(els.flowTurb,         els.flowTurbVal,         f2);
   set(els.flowSwirl,        els.flowSwirlVal,        f2);
-  set(els.glitchBaseX,      els.glitchBaseXVal,      v => (v|0));
-  set(els.glitchBaseY,      els.glitchBaseYVal,      v => (v|0));
+  set(els.glitchBaseX,      els.glitchBaseXVal,      v => `${Math.trunc(+v || 0)} px`);
+  set(els.glitchBaseY,      els.glitchBaseYVal,      v => `${Math.trunc(+v || 0)} px`);
+  set(els.glitchBaseZ,      els.glitchBaseZVal,      v => `${Math.round((+v || 0) * 100)}%`);
+  set(els.corruptMoveX,     els.corruptMoveXVal,     v => `${Math.trunc(+v || 0)} px/s`);
+  set(els.corruptMoveY,     els.corruptMoveYVal,     v => `${Math.trunc(+v || 0)} px/s`);
+  set(els.corruptMoveZ,     els.corruptMoveZVal,     v => `${(+v).toFixed(2)} z/s`);
+  set(els.glitchSpeedFine,  els.glitchSpeedFineVal,  f2);
   set(els.glitchSpeedMul,   els.glitchSpeedMulVal,   f2);
-  set(els.glitchAlpha,      els.glitchAlphaVal,      f2);
-  set(els.glitchJitter,     els.glitchJitterVal,     f2);
-  set(els.glitchSmearAngle, els.glitchSmearAngleVal, v => (v|0)+'°');
-  set(els.glitchStrobeEvery, els.glitchStrobeEveryVal, v => String(Math.max(1, Math.trunc(+v || 1))));
+  set(els.glitchAlpha,      els.glitchAlphaVal,      pct);
+  set(els.glitchJitter,     els.glitchJitterVal,     pct);
+  set(els.glitchSmearAngle, els.glitchSmearAngleVal, v => Math.trunc(+v || 0) === 0 ? 'AUTO' : `${Math.trunc(+v)}°`);
+  set(els.glitchStrobeEvery, els.glitchStrobeEveryVal, v => `${Math.max(1, Math.trunc(+v || 1))} fr`);
+  set(els.corruptHoldFrames, els.corruptHoldFramesVal, v => `${Math.max(1, Math.trunc(+v || 1))} fr`);
+  set(els.corruptLiveFrames, els.corruptLiveFramesVal, v => `${Math.max(1, Math.trunc(+v || 1))} fr`);
+  set(els.corruptMaskThreshold, els.corruptMaskThresholdVal, v => String(Math.max(0, Math.min(255, Math.trunc(+v || 0)))));
   set(els.scanAlpha,        els.scanAlphaVal,        f2);
   set(els.scanShift,        els.scanShiftVal,        f2);
   set(els.scanDrift,        els.scanDriftVal,        f2);
@@ -1485,17 +1712,17 @@ function updateLabels() {
   set(els.scanFocus,        els.scanFocusVal,        f2);
   set(els.scanRoll,         els.scanRollVal,         f2);
   set(els.scanSpinSpeed,    els.scanSpinSpeedVal,    f2);
-  set(els.depthScatter,     els.depthScatterVal,     f2);
-  set(els.corruptDrift,     els.corruptDriftVal,     f2);
+  set(els.depthScatter,     els.depthScatterVal,     pct);
+  set(els.corruptDrift,     els.corruptDriftVal,     pct);
   set(els.symPos,           els.symPosVal,           f2);
   set(els.solarizeThresh,   els.solarizeThreshVal,   f2);
   set(els.solarizeAmt,      els.solarizeAmtVal,      f2);
   set(els.solarizeR,        els.solarizeRVal,        f2);
   set(els.solarizeG,        els.solarizeGVal,        f2);
   set(els.solarizeB,        els.solarizeBVal,        f2);
-  set(els.cluSpeedVar,      els.cluSpeedVarVal,      f2);
-  set(els.cluPulse,         els.cluPulseVal,         f2);
-  set(els.cluBreathe,       els.cluBreatheVal,       f2);
+  set(els.cluSpeedVar,      els.cluSpeedVarVal,      pct);
+  set(els.cluPulse,         els.cluPulseVal,         v => (+v).toFixed(1));
+  set(els.cluBreathe,       els.cluBreatheVal,       pct);
   set(els.lumaKeyMix,       els.lumaKeyMixVal,       f2);
   set(els.layerPulseSpeed,  els.layerPulseSpeedVal,  v => (+v).toFixed(1));
   set(els.lumaKeyAB,        els.lumaKeyABVal,        f2);
@@ -1507,10 +1734,8 @@ function updateLabels() {
     els.baseMixVal.textContent = f2(els.baseMix.value);
     if (els.baseMix) els.baseMix.disabled = !els.baseOn?.checked;
   }
-  if (els.glitchStrobeEvery) {
-    els.glitchStrobeEvery.disabled = !els.glitchStrobe?.checked;
-  }
   _updateLumaStencilStatus();
+  _syncCorruptContextUI();
 }
 
 function setSeedFromUI() {
@@ -1645,33 +1870,45 @@ function enableTransport(en) {
   });
 }
 
-// ─── Pass 31 Glitch-only strobe gate ────────────────────────────────────────
-// Gate only applyGlitch() on decoded source-frame buckets. Pipeline Luma Key
-// remains live every render frame, as do Scanlines, Feedback, Flow, Symmetry,
-// Solarize, Global Mix, clean-source presentation, transport, and outputs.
-// No additional image buffer or history system is allocated.
+// ─── Pass 37 CORRUPT update-policy gate ──────────────────────────────────────
+// Fairlight treats freeze/sample/strobe behavior as update policies applied to
+// image memory. Magic DaVE's MultiGrab separates frozen time from live time.
+// HUFF adapts those ideas only to the CORRUPT layer: the rest of the pipeline,
+// Luma Key, Scanlines, Flow, playback, and outputs continue independently.
 const _glitchStrobeGate = Object.seal({
   wasGlitchActive: false,
-  lastEnabled: false,
+  lastMode: 'continuous',
   lastRate: 4,
+  lastHold: 8,
+  lastLive: 2,
   lastBucket: -1,
+  lastCycle: -1,
   updates: 0,
   heldRenders: 0,
   resets: 0,
   lastResetReason: 'startup',
 });
-window.HUFF_GLITCH_STROBE_TELEMETRY = _glitchStrobeGate;
+window.HUFF_GLITCH_STROBE_TELEMETRY = _glitchStrobeGate; // compatibility name
+window.HUFF_CORRUPT_UPDATE_TELEMETRY = _glitchStrobeGate;
 
 function _glitchStrobeRate(value) {
   const rate = Math.trunc(Number(value));
   return Number.isFinite(rate) ? Math.max(1, Math.min(30, rate)) : 4;
 }
 
+function _corruptFrameCount(value, fallback, max) {
+  const n = Math.trunc(Number(value));
+  return Number.isFinite(n) ? Math.max(1, Math.min(max, n)) : fallback;
+}
+
 function _resetGlitchStrobeGate(reason = 'reset') {
   _glitchStrobeGate.wasGlitchActive = false;
-  _glitchStrobeGate.lastEnabled = false;
+  _glitchStrobeGate.lastMode = 'continuous';
   _glitchStrobeGate.lastRate = 4;
+  _glitchStrobeGate.lastHold = 8;
+  _glitchStrobeGate.lastLive = 2;
   _glitchStrobeGate.lastBucket = -1;
+  _glitchStrobeGate.lastCycle = -1;
   _glitchStrobeGate.resets++;
   _glitchStrobeGate.lastResetReason = String(reason);
 }
@@ -1684,35 +1921,73 @@ function _shouldApplyGlitchThisRender(state) {
     return false;
   }
 
-  const enabled = !!state.glitchStrobe;
-  if (!enabled) {
+  const mode = String(state.corruptUpdateMode || (state.glitchStrobe ? 'strobe' : 'continuous'));
+
+  if (mode === 'continuous') {
     gate.wasGlitchActive = true;
-    gate.lastEnabled = false;
+    gate.lastMode = 'continuous';
     gate.lastBucket = -1;
+    gate.lastCycle = -1;
     gate.updates++;
     return true;
   }
 
-  const rate = _glitchStrobeRate(state.glitchStrobeEvery);
-  const bucket = Math.floor(Math.max(0, _vfc) / rate);
-  const shouldUpdate =
-    !gate.wasGlitchActive ||
-    !gate.lastEnabled ||
-    gate.lastRate !== rate ||
-    gate.lastBucket !== bucket;
+  if (mode === 'strobe') {
+    const rate = _glitchStrobeRate(state.glitchStrobeEvery);
+    const bucket = Math.floor(Math.max(0, _vfc) / rate);
+    const shouldUpdate =
+      !gate.wasGlitchActive ||
+      gate.lastMode !== 'strobe' ||
+      gate.lastRate !== rate ||
+      gate.lastBucket !== bucket;
 
+    gate.wasGlitchActive = true;
+    gate.lastMode = 'strobe';
+    gate.lastRate = rate;
+
+    if (shouldUpdate) {
+      gate.lastBucket = bucket;
+      gate.updates++;
+      return true;
+    }
+
+    gate.heldRenders++;
+    return false;
+  }
+
+  if (mode === 'multigrab') {
+    const hold = _corruptFrameCount(state.corruptHoldFrames, 8, 60);
+    const live = _corruptFrameCount(state.corruptLiveFrames, 2, 30);
+    const cycleLen = hold + live;
+    const decoded = Math.max(0, _vfc);
+    const cycle = Math.floor(decoded / cycleLen);
+    const phase = decoded % cycleLen;
+    const inLiveWindow = phase >= hold;
+    const enteringMode = !gate.wasGlitchActive || gate.lastMode !== 'multigrab';
+    const timingChanged = gate.lastHold !== hold || gate.lastLive !== live;
+
+    gate.wasGlitchActive = true;
+    gate.lastMode = 'multigrab';
+    gate.lastHold = hold;
+    gate.lastLive = live;
+    gate.lastCycle = cycle;
+
+    // Always render once when entering MULTIGRAB so the hold begins with a
+    // visible Corrupt state instead of an empty/non-updated layer.
+    if (enteringMode || timingChanged || inLiveWindow) {
+      gate.updates++;
+      return true;
+    }
+
+    gate.heldRenders++;
+    return false;
+  }
+
+  // Unknown policy is deliberately safe: CONTINUOUS, never a silent freeze.
   gate.wasGlitchActive = true;
-  gate.lastEnabled = true;
-  gate.lastRate = rate;
-
-  if (shouldUpdate) {
-    gate.lastBucket = bucket;
-    gate.updates++;
-    return true;
-  }
-
-  gate.heldRenders++;
-  return false;
+  gate.lastMode = 'continuous';
+  gate.updates++;
+  return true;
 }
 
 // ─── draw loop ────────────────────────────────────────────────────────────────
@@ -2113,12 +2388,37 @@ function draw() {
   // Preserve phase progression even when the corresponding stage is currently
   // neutral. Re-enabling an effect therefore resumes at the same temporal point
   // as the pre-optimization renderer.
-  const mul     = s.glitchSpeedMul;
-  const coarse  = s.glitchSpeed * mul;
-  const fine    = s.glitchSpeedFine * mul;
-  const density = coarse * fine;
-  nPhaseX += density * 0.01;
-  nPhaseY += density * 0.011;
+  // FIELD RATE controls the internal corruption field while master SPEED
+  // scales autonomous motion. Hidden FINE/MULT aliases remain at 1 for
+  // normal UI/preset use, but the exact legacy multiplication path stays alive
+  // for old custom MIDI/OSC mappings that still target those stable IDs.
+  const legacyMul = Number(s.glitchSpeedMul) || 0;
+  const density = Math.max(0, (Number(s.glitchSpeed) || 0) * (Number(s.glitchSpeedFine) || 0) * legacyMul * legacyMul);
+  const corruptSpeed = Math.max(0, Math.min(4, Number.isFinite(Number(s.corruptSpeed)) ? Number(s.corruptSpeed) : 1));
+  const corruptDt = Math.max(0, Math.min(0.05, (Number(deltaTime) || 16.6667) / 1000));
+  _corruptMotion.dt = corruptDt;
+  _corruptMotion.speed = corruptSpeed;
+  _corruptClock += corruptSpeed * corruptDt * 60;
+  _corruptMotion.timeSec = _corruptClock / 60;
+  _corruptMotion.serial = Math.floor(_corruptClock);
+  nPhaseX += density * corruptSpeed * 0.01;
+  nPhaseY += density * corruptSpeed * 0.011;
+
+  if (s.corruptOn) {
+    const moveX = Number(s.corruptMoveX) || 0;
+    const moveY = Number(s.corruptMoveY) || 0;
+    const moveZ = Number(s.corruptMoveZ) || 0;
+    if (width > 0) _corruptMotion.x = ((_corruptMotion.x + moveX * corruptSpeed * corruptDt) % width + width) % width;
+    if (height > 0) _corruptMotion.y = ((_corruptMotion.y + moveY * corruptSpeed * corruptDt) % height + height) % height;
+    if (moveZ !== 0 && corruptSpeed > 0) {
+      let nz = _corruptMotion.z + moveZ * corruptSpeed * corruptDt * _corruptMotion.zDir;
+      while (nz > 1 || nz < -1) {
+        if (nz > 1) { nz = 2 - nz; _corruptMotion.zDir *= -1; }
+        if (nz < -1) { nz = -2 - nz; _corruptMotion.zDir *= -1; }
+      }
+      _corruptMotion.z = nz;
+    }
+  }
 
   const scanSpeed = s.scanSpeed;
   nPhaseScanX += scanSpeed * 0.008;
@@ -2163,7 +2463,7 @@ function draw() {
   _renderWasBypassed = false;
   _bypassSyncedVfc = -1;
 
-  if (activity.glitch) randomSeed(baseSeed + frameCount);
+  if (activity.glitch) randomSeed(baseSeed + _corruptMotion.serial);
 
   _pipelineFrame.activity = activity;
   const activePipelineStarted = window.__huffProfilerActive ? performance.now() : 0;

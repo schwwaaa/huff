@@ -57,21 +57,26 @@ Use for `refreshBtn`, `resetMotionBtn`, etc.
 | `fbY` | FB Y | -1 | 1 |
 | `fbZ` | FB Z | 0.98 | 1.03 |
 | `fbTheta` | FB θ | -2 | 2 |
-| `depth` | DEPTH | 0 | 0.5 |
-| `depthScatter` | SCATTER | 0 | 1 |
-| `corrupt` | CORRUPT % | 0 | 7 |
-| `corruptDrift` | DRIFT | 0 | 1 |
-| `block` | PIXEL SIZE | 150 | 2000 |
-| `glitchSize` | GLITCH SIZE | 1 | 60 |
-| `glitchAlpha` | OPACITY | 0 | 1 |
+| `depth` | CORRUPT AGE | 0 | 0.5 |
+| `depthScatter` | AGE SPREAD | 0 | 1 |
+| `corrupt` | AMOUNT | 0 | 7 |
+| `corruptDrift` | AMOUNT DRIFT | 0 | 1 |
+| `corruptSpeed` | CORRUPT SPEED | 0 | 4 |
+| `block` | GRID | 150 | 2000 |
+| `glitchSize` | PATCH SIZE | 1 | 60 |
+| `glitchAlpha` | MIX | 0 | 1 |
 | `glitchJitter` | JITTER | 0 | 1 |
-| `glitchSmear` | SMEAR | 0 | 200 |
-| `glitchSmearAngle` | SMEAR ANGLE | 0 | 360 |
-| `glitchSpeed` | SPEED | 0 | 10 |
-| `glitchSpeedFine` | FINE SPEED | 0 | 5 |
-| `glitchSpeedMul` | MULT | 0 | 5 |
-| `glitchBaseX` | GLITCH X | -1 | 1 |
-| `glitchBaseY` | GLITCH Y | -1 | 1 |
+| `glitchSmear` | REPEATS | 0 | 200 |
+| `glitchSmearAngle` | DIRECTION (0=AUTO) | 0 | 360 |
+| `glitchSpeed` | LEGACY RATE BASE | 0 | 5 |
+| `glitchSpeedFine` | LEGACY RATE FINE | 0 | 10 |
+| `glitchSpeedMul` | LEGACY RATE MULT | 0 | 10 |
+| `glitchBaseX` | POSITION X | -1000 | 1000 |
+| `glitchBaseY` | POSITION Y | -1000 | 1000 |
+| `glitchBaseZ` | POSITION Z | -1 | 1 |
+| `corruptMoveX` | MOVE X | -1200 | 1200 |
+| `corruptMoveY` | MOVE Y | -1200 | 1200 |
+| `corruptMoveZ` | MOVE Z | -1.5 | 1.5 |
 | `trailLayers` | TRAIL LAYERS | 0 | 10 |
 | `trailDepth` | TRAIL DEPTH | 0 | 1 |
 | `symPos` | SYM POS | 0 | 1 |
@@ -83,14 +88,18 @@ Use for `refreshBtn`, `resetMotionBtn`, etc.
 | `scanAlpha` | OPACITY | 0 | 1 |
 | `clusterCount` | BANDS | 0 | 30 |
 | `clusterRadius` | BAND HEIGHT | 0 | 1 |
-| `cluCenters` | CENTERS | 1 | 20 |
-| `cluSpread` | SPREAD | 1 | 300 |
-| `cluMinSpread` | MIN RAD | 0 | 150 |
-| `spatialGap` | SPATIAL GAP | 0 | 200 |
-| `cluBias` | BIAS | 0 | 1 |
-| `cluDrift` | DRIFT | 0 | 5 |
-| `cluSpeed` | SPEED | 0 | 15 |
-| `cluInertia` | INERTIA | 0.01 | 0.99 |
+| `cluCenters` | GROUPS | 1 | 20 |
+| `cluSpread` | GROUP SIZE | 1 | 300 |
+| `cluMinSpread` | HOLLOW | 0 | 150 |
+| `spatialGap` | GAP | 0 | 200 |
+| `cluBias` | GROUP AMOUNT | 0 | 1 |
+| `cluDepth` | Z SPREAD | 0 | 1 |
+| `cluMoveX` | GROUP MOVE X | -600 | 600 |
+| `cluMoveY` | GROUP MOVE Y | -600 | 600 |
+| `cluMoveZ` | GROUP MOVE Z | -1.5 | 1.5 |
+| `cluDrift` | WANDER | 0 | 5 |
+| `cluSpeed` | ORGANIC SPEED | 0 | 10 |
+| `cluInertia` | MOMENTUM | 0.01 | 0.99 |
 | `solarizeThresh` | THRESH | 0 | 1 |
 | `solarizeAmt` | AMOUNT | 0 | 1 |
 | `solarizeR` | SOL R | 0 | 2 |
@@ -101,16 +110,18 @@ Use for `refreshBtn`, `resetMotionBtn`, etc.
 | `flowPulse` | PULSE | 0 | 200 |
 | `flowImpl` | IMPLODE | 0 | 1 |
 
+> **Pass 38 Corrupt note:** the visible **FIELD RATE** control remains a derived performance control over the legacy `glitchSpeed × glitchSpeedFine × glitchSpeedMul²` runtime contract. The new **SPEED** control (`corruptSpeed`) independently scales autonomous Corrupt/XYZ/Cluster motion. Existing MIDI maps that target legacy speed IDs still work.
+
 ### Toggles (checkboxes)
 | ID | Label |
 |----|-------|
-| `corruptOn` | ON (Glitch) |
+| `corruptOn` | ON (Corrupt) |
 | `baseOn` | BASE VIDEO |
 | `seedOnLoad` | SEED ON LOAD |
 | `symOn` | SYMM |
 | `clusters` | ON (Scanlines) |
 | `scanRandSize` | RAND SIZE |
-| `clusterTiles` | ON (Clusters) |
+| `clusterTiles` | CLUSTERS ON (Corrupt) |
 | `solarizeOn` | ON (Solarize) |
 | `flowOn` | ON (Flow) |
 | `trailOn` | ON (Trails) |
@@ -118,7 +129,7 @@ Use for `refreshBtn`, `resetMotionBtn`, etc.
 ### Triggers (buttons)
 | ID | Label |
 |----|-------|
-| `refreshBtn` | ↻ Refresh |
+| `refreshBtn` | ↻ Re-seed Corrupt |
 | `resetMotionBtn` | ↺ Reset Motion |
 | `resetBtn` | ↺ Reset (all params) |
 

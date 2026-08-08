@@ -1,0 +1,40 @@
+HUFF Classic Optimization Pass 37
+Corrupt Semantic Controls + Cluster Integration
+
+Baseline: runtime-approved Pass 36 package.
+
+Primary objective:
+Make the historical Glitch/Clusters subsystem legible as one CORRUPT instrument whose visible controls describe observable actions.
+
+Major changes:
+- visible GLITCH panel renamed CORRUPT;
+- Clusters integrated as CORRUPT DISTRIBUTION: RANDOM / CLUSTER;
+- semantic groups: UPDATE, TIME, REGIONS, DISTRIBUTION, GROUP SHAPE, GROUP MOVE, PATCH MOVE, COMPOSITE;
+- opaque parameter labels replaced with action-oriented names and visible units;
+- SPEED + FINE + MULT presented as one derived RATE performance control while preserving exact legacy runtime parameters for presets/MIDI/OSC;
+- DIRECTION 0 is now displayed as AUTO rather than misleading 0 degrees;
+- Magic DaVE-inspired MULTIGRAB adds independent HOLD and LIVE update windows for CORRUPT only;
+- Fairlight-inspired STENCIL process mask lets the already-captured Luma Stencil restrict where CORRUPT patch centers may be placed;
+- INDIGO-inspired contextual delegation hides controls that are irrelevant to the selected update, distribution, or mask mode.
+
+Protected systems:
+- Pass 22 Flow implementation remains exact;
+- Pass 36 Luma Key implementation remains exact;
+- Feedback, Scanlines, Symmetry and Solarize algorithms remain unchanged;
+- CLASSIC / CRISP FINISH recipes remain unchanged;
+- decoder, FrameRing ownership, output clocks, mirror, Syphon, Spout and native Tauri tree remain unchanged;
+- no new full-resolution render buffer and no new image readback path.
+
+Runtime files changed:
+- src/index.html
+- src/canvas.js
+- src/effects.js
+
+Compatibility documentation changed:
+- src/midi/FORMAT.md
+- src/osc/FORMAT.md
+- docs/docs/parameter-reference.html
+- docs-v1/docs/parameter-reference.html
+
+Runtime acceptance principle:
+A visible control must correspond to an understandable visual action in the mode where it is shown. Controls that remain visually dead, misleading, or excessively dependent on unexplained combinations should be reported by name for the next refinement pass.

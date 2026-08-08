@@ -1,23 +1,24 @@
-# Documentation Index — HUFF Classic Pass 36
+# HUFF Classic Pass 38 — Documentation Index
 
-## Current pass
-- `HUFF_CLASSIC_OPTIMIZATION_PASS_36.txt`
-- `PASS_NOTES.md`
+## Read first
+
+- `HUFF_CLASSIC_OPTIMIZATION_PASS_38.txt` — concise pass definition.
+- `CURRENT_STATUS.md` — active architecture and decision gates.
+- `PASS_NOTES.md` — cumulative recent pass notes.
+
+## Pass 38 technical audit
+
+- `CORRUPT_XYZ_CLUSTER_LUMA_PERFORMANCE_AUDIT.md` — manual grounding, XYZ semantics, Cluster redesign and Luma/Corrupt performance analysis.
+
+## Change / validation records
+
 - `CHANGELOG.md`
 - `CHANGED_FILES.md`
 - `TESTING_CHECKLIST.md`
 - `VALIDATION_REPORT.md`
-- `CURRENT_STATUS.md`
 - `OPTIMIZATION_ROADMAP.md`
 - `GIT_COMMIT_MESSAGE.md`
-- `LUMA_KEY_STABILITY_REBASE_AUDIT.md`
 
-## Continuing architecture / release references
-- `PIPELINE_MODULARITY_AUDIT.md`
-- `PIPELINE_SWITCHING_FOUNDATION_AUDIT.md`
-- `CLASSIC_TO_WGPU_PIPELINE_STRATEGY.md`
-- `PLATFORM_PACKAGING_FREEZE_AUDIT.md`
-- `CAPABILITY_MATRIX.md`
-- `RELEASE_KNOWN_ISSUES.md`
+## Historical audits retained
 
-Historical pass documentation remains in the project root for cumulative traceability.
+All prior HUFF Classic optimization, Luma, Flow, pipeline, output and packaging audits remain included for cumulative project context.

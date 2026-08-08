@@ -1,59 +1,115 @@
-# Testing Checklist — Pass 36
+# HUFF Classic Pass 38 — Testing Checklist
 
-## Critical regression test
+## 1. Baseline
 
-Use the same media/settings that produced the Pass 35 freezes.
+- [ ] App launches normally.
+- [ ] Video loads/plays with audio.
+- [ ] CORRUPT OFF remains visually neutral.
+- [ ] Flow behavior matches the accepted baseline.
+- [ ] Luma LIVE and STENCIL still operate as in Pass 36/37 before stressing CORRUPT.
 
-1. Enable Glitch.
-2. Enable Glitch Strobe; try EVERY 4, 8 and 16.
-3. Enable Luma Key with KEY SRC = LIVE.
-4. Toggle INVERT repeatedly while video is playing.
-5. Sweep threshold, Gain, Cleanup and Density.
-6. Disable Luma, use several other effects, then return and enable Luma again.
+## 2. Master SPEED
 
-### Success
-- no freeze or single-digit collapse;
-- Luma remains responsive after leaving and returning to it;
-- held/strobed Glitch is visibly affected by Luma in the familiar pre-Pass-35 manner.
+With Clusters OFF and CORRUPT ON:
 
-## Stencil test
+- [ ] MOVE X is clearly visible.
+- [ ] SPEED 0 stops autonomous spatial movement.
+- [ ] SPEED 0.25 is visibly slower than 1.
+- [ ] SPEED 2 is visibly faster than 1.
+- [ ] SPEED 4 remains controllable rather than immediately unusable.
+- [ ] FIELD RATE changes the internal Corrupt motion/noise character independently enough to justify remaining separate.
 
-1. Set KEY SRC = STENCIL.
-2. Confirm `CAPTURE FIRST` is shown.
-3. Press CAPTURE on a high-contrast frame.
-4. Confirm `STENCIL STORED WxH` appears.
-5. Sweep threshold several times.
-6. Toggle INVERT repeatedly.
-7. Sweep Gain, Cleanup and Density.
-8. Return all controls toward prior values and verify the stencil remains responsive rather than progressively disappearing.
-9. Switch to LIVE and back to STENCIL; confirm the stored stencil remains valid until source change, resize or Clear Buffers.
+### Update policy separation
 
-## Pipeline interaction
+- [ ] STROBE INTERVAL does not change when SPEED changes.
+- [ ] MULTIGRAB HOLD/LIVE durations do not change when SPEED changes.
 
-Test both:
+## 3. RANDOM / Patch XYZ
 
-```text
-CLASSIC
-CRISP FINISH
-```
+Clusters OFF:
 
-with:
+- [ ] POSITION X visibly shifts corrupted patches horizontally.
+- [ ] POSITION Y visibly shifts corrupted patches vertically.
+- [ ] POSITION Z -1 clearly recedes/shrinks.
+- [ ] POSITION Z 0 is neutral.
+- [ ] POSITION Z +1 clearly approaches/enlarges.
+- [ ] MOVE X continuously travels horizontally.
+- [ ] MOVE Y continuously travels vertically.
+- [ ] MOVE Z continuously moves near/far and reverses at depth bounds.
+- [ ] Reset XYZ restores all six patch XYZ controls to neutral.
 
-- Glitch Strobe + LIVE Luma;
-- Glitch Strobe + STENCIL Luma;
-- Scanlines;
-- Feedback;
-- Flow.
+## 4. Cluster toggle
 
-## Lifecycle
+- [ ] Clusters OFF shows RANDOM status and hides group controls.
+- [ ] Clusters ON shows CLUSTERED status and reveals group controls.
+- [ ] Repeated ON/OFF switching does not freeze or corrupt the renderer.
+- [ ] Existing MIDI/OSC `clusterTiles` mapping still toggles the same mode if available.
 
-- replace the video source;
-- resize/fullscreen cycle;
-- Clear Buffers;
-- close and relaunch.
+## 5. Cluster identity
 
-Stencil should intentionally invalidate after source replacement, resize, or Clear Buffers.
+Start with `ORGANIC SPEED = 0`, `WANDER = 0`, `KICK = 0`.
 
-## Output
+- [ ] GROUPS changes number of persistent bodies.
+- [ ] GROUP AMOUNT changes the share of patches assigned to groups.
+- [ ] GROUP SIZE changes visible group radius.
+- [ ] HOLLOW opens/closes the group center.
+- [ ] SHAPE HOLD makes boil vs locked-body behavior understandable.
+- [ ] Z SPREAD 0 is flat.
+- [ ] Increasing Z SPREAD visibly separates groups in near/far scale/placement.
+- [ ] GROUP MOVE X directly translates groups horizontally.
+- [ ] GROUP MOVE Y directly translates groups vertically.
+- [ ] GROUP MOVE Z is visible even when Z SPREAD = 0.
+- [ ] PULSE SIZE expands/contracts group size at a rate scaled by master SPEED.
 
-Confirm Canvas mirror and, where available, Syphon/Spout continue without disconnect or frozen frames.
+Then add organic dynamics:
+
+- [ ] ORGANIC SPEED adds noise-steered travel rather than replacing direct XYZ.
+- [ ] TURN RATE visibly changes heading-change rate.
+- [ ] WANDER adds irregularity.
+- [ ] SPEED VAR differentiates group travel enough to be understandable.
+- [ ] KICK creates identifiable impulses.
+- [ ] MOMENTUM changes glide vs responsiveness.
+- [ ] EDGE BOUNCE/WRAP are visually distinct.
+
+## 6. Luma FPS investigation
+
+Open the backtick profiler.
+
+### CORRUPT baseline
+
+- [ ] Record FPS with CORRUPT on, Luma off.
+- [ ] Record `gl tiles` and `gl draws`.
+
+### LIVE Luma
+
+- [ ] Enable LIVE Luma with the same Corrupt state.
+- [ ] Record FPS.
+- [ ] Record `luma read`, `luma xform`, `luma upload`, `luma pres`, and `luma cache`.
+- [ ] Confirm Luma remains responsive to Clip/Gain/Cleanup/Density/Invert.
+- [ ] Confirm no freeze when toggling Invert.
+
+### STENCIL Luma
+
+- [ ] Capture a stencil.
+- [ ] Confirm status says stored/ready.
+- [ ] Switch to STENCIL and record FPS under the same Corrupt settings.
+- [ ] Compare against LIVE Luma.
+
+### Draw-call stress
+
+Repeat LIVE Luma tests with:
+
+- [ ] REPEATS = 0.
+- [ ] moderate REPEATS.
+- [ ] high REPEATS.
+- [ ] positive POSITION Z.
+
+Report actual runtime behavior; do not infer performance from static checks.
+
+## 7. Pipeline / output regression
+
+- [ ] CLASSIC route works.
+- [ ] CRISP FINISH route works.
+- [ ] Syphon still publishes on macOS if available.
+- [ ] Spout path remains structurally untouched on Windows.
+- [ ] closing the app does not leave child processes/windows behind.

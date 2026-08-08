@@ -248,6 +248,23 @@
         }
         .group.collapsed .group-body { display: none; }
         .group-row { display: flex; flex-wrap: wrap; gap: 3px; align-items: center; }
+        .corrupt-section {
+            display: flex; flex-wrap: wrap; gap: 3px; align-items: center;
+            padding-top: 3px; margin-top: 3px; border-top: 1px dotted var(--win-dark);
+        }
+        .corrupt-section:first-child { border-top: 0; margin-top: 0; padding-top: 0; }
+        .corrupt-section-title {
+            font-family: 'VT323', monospace; font-size: 10px; letter-spacing: .1em;
+            color: var(--term-cyan); min-width: 58px; padding: 1px 3px;
+            text-transform: uppercase; user-select: none;
+        }
+        .corrupt-hidden { display: none !important; }
+        .corrupt-status {
+            font-family: 'Share Tech Mono', monospace; font-size: 10px; color: var(--term-dgreen);
+            padding: 1px 4px; white-space: nowrap;
+        }
+        .corrupt-status.ready { color: var(--term-green); text-shadow: 0 0 4px rgba(0,255,0,.45); }
+        .corrupt-status.warn { color: var(--term-yel); }
 
         /* ═══════════════════════════════════════════════
            CTRL CHIPS — inset terminal boxes
@@ -1161,177 +1178,299 @@
             </div>
             </div>
 
-            <!-- GLITCH CORE + MOTION -->
-            <div class="group">
-                <div class="group-label">Glitch</div>
+            <!-- CORRUPT — temporal region corruption + spatial distribution -->
+            <div class="group" id="corruptGroup">
+                <div class="group-label">Corrupt</div>
                 <div class="group-body">
-                <div class="group-row">
-                    <div class="ctrl"><label>ON</label><input id="corruptOn" type="checkbox"></div>
-                    <div class="ctrl"><label>STROBE</label><input id="glitchStrobe" type="checkbox" title="Update only the Glitch layer at a decoded-frame interval. Luma Key, Scanlines, Feedback, Flow, and the clean source continue in real time."></div>
-                    <div class="ctrl">
-                        <label>EVERY</label>
-                        <input id="glitchStrobeEvery" type="range" min="1" max="30" step="1" value="4" disabled title="Apply a new Glitch update every N decoded source frames while STROBE is enabled.">
-                        <span class="val" id="glitchStrobeEveryVal">4</span>
-                    </div>
-                    <div class="ctrl">
-                        <label>DEPTH</label>
-                        <input id="depth" type="range" min="0" max="0.5" step="0.01" value="0.5">
-                        <span class="val" id="depthVal">0.50</span>
-                    </div>
-                    <div class="ctrl">
-                        <label>SCATTER</label>
-                        <input id="depthScatter" type="range" min="0" max="1" step="0.01" value="1.0">
-                        <span class="val" id="depthScatterVal">1.00</span>
-                    </div>
-                    <div class="ctrl">
-                        <label>CORRUPT %</label>
-                        <input id="corrupt" type="range" min="0" max="7" step="0.01" value="0.30">
-                        <span class="val" id="corruptVal">0.30</span>
-                    </div>
-                    <div class="ctrl">
-                        <label>DRIFT</label>
-                        <input id="corruptDrift" type="range" min="0" max="1" step="0.01" value="0">
-                        <span class="val" id="corruptDriftVal">0.00</span>
-                    </div>
-                    <div class="ctrl">
-                        <label>PIXEL SIZE</label>
-                        <input id="block" type="range" min="150" max="2000" step="2" value="1000">
-                        <span class="val" id="blockVal">32</span>
-                    </div>
-                    <div class="ctrl">
-                        <label>GLITCH SIZE</label>
-                        <input id="glitchSize" type="range" min="1" max="60" step="0.01" value="10">
-                        <span class="val" id="glitchSizeVal">20</span>
-                    </div>
-                    <div class="ctrl">
-                        <label>OPACITY</label>
-                        <input id="glitchAlpha" type="range" min="0" max="1" step="0.01" value="1.0">
-                        <span class="val" id="glitchAlphaVal">1.00</span>
-                    </div>
-                    <div class="ctrl">
-                        <label>JITTER</label>
-                        <input id="glitchJitter" type="range" min="0" max="1" step="0.01" value="1.0">
-                        <span class="val" id="glitchJitterVal">1.00</span>
-                    </div>
-                    <div class="ctrl">
-                        <label>SMEAR</label>
-                        <input id="glitchSmear" type="range" min="0" max="200" step="0.01" value="6">
-                        <span class="val" id="glitchSmearVal">6</span>
-                    </div>
-                    <div class="ctrl">
-                        <label>SMEAR ANGLE</label>
-                        <input id="glitchSmearAngle" type="range" min="0" max="360" step="1" value="0">
-                        <span class="val" id="glitchSmearAngleVal">0°</span>
-                    </div>
-                    <div class="ctrl">
-                        <label>SPEED</label>
+                    <!-- Legacy control aliases remain in the DOM for presets and old MIDI / OSC maps.
+                         The visible FIELD RATE control is a derived compatibility/performance control and never changes
+                         the meaning/range of the original three runtime parameters. -->
+                    <div class="corrupt-hidden" aria-hidden="true">
+                        <input id="glitchStrobe" type="checkbox">
                         <input id="glitchSpeed" type="range" min="0" max="5" step="0.005" value="0.8">
-                        <span class="val" id="glitchSpeedVal">0.80</span>
-                    </div>
-                    <div class="ctrl">
-                        <label>FINE</label>
+                        <span id="glitchSpeedVal">0.80</span>
                         <input id="glitchSpeedFine" type="range" min="0" max="10" step="0.001" value="1.00">
-                        <span class="val" id="glitchSpeedFineVal">1.00</span>
-                    </div>
-                    <div class="ctrl">
-                        <label>MULT</label>
+                        <span id="glitchSpeedFineVal">1.00</span>
                         <input id="glitchSpeedMul" type="range" min="0" max="10" step="0.1" value="1.00">
-                        <span class="val" id="glitchSpeedMulVal">1.00</span>
-                    </div>
-                    <div class="ctrl">
-                        <label>GLITCH X</label>
-                        <input id="glitchBaseX" type="range" min="-1000" max="1000" step="1" value="0">
-                        <span class="val" id="glitchBaseXVal">0</span>
-                    </div>
-                    <div class="ctrl">
-                        <label>GLITCH Y</label>
-                        <input id="glitchBaseY" type="range" min="-1000" max="1000" step="1" value="0">
-                        <span class="val" id="glitchBaseYVal">0</span>
-                    </div>
-                </div>
-            </div>
-            </div>
-
-            <!-- CLUSTERS -->
-            <div class="group">
-                <div class="group-label">Clusters</div>
-                <div class="group-body">
-                <div class="group-row">
-                    <div class="ctrl"><label>ON</label><input id="clusterTiles" type="checkbox"></div>
-                    <div class="ctrl">
-                        <label>CENTERS</label>
-                        <input id="cluCenters" type="range" min="1" max="20" step="1" value="3">
-                        <span class="val" id="cluCentersVal">3</span>
-                    </div>
-                    <div class="ctrl">
-                        <label>SPREAD</label>
-                        <input id="cluSpread" type="range" min="1" max="300" step="1" value="80">
-                        <span class="val" id="cluSpreadVal">80</span>
-                    </div>
-                    <div class="ctrl">
-                        <label>MIN RAD</label>
-                        <input id="cluMinSpread" type="range" min="0" max="150" step="1" value="0">
-                        <span class="val" id="cluMinSpreadVal">0</span>
-                    </div>
-                    <div class="ctrl">
-                        <label>SPATIAL GAP</label>
-                        <input id="spatialGap" type="range" min="0" max="200" step="1" value="40">
-                        <span class="val" id="spatialGapVal">40</span>
-                    </div>
-                    <div class="ctrl">
-                        <label>BIAS</label>
-                        <input id="cluBias" type="range" min="0" max="1" step="0.01" value="0.85">
-                        <span class="val" id="cluBiasVal">0.85</span>
-                    </div>
-                    <div class="ctrl">
-                        <label>DRIFT</label>
-                        <input id="cluDrift" type="range" min="0" max="5" step="0.01" value="0">
-                        <span class="val" id="cluDriftVal">0.00</span>
-                    </div>
-                    <div class="ctrl">
-                        <label>SPEED</label>
-                        <input id="cluSpeed" type="range" min="0" max="10" step="0.01" value="0">
-                        <span class="val" id="cluSpeedVal">0.0</span>
-                    </div>
-                    <div class="ctrl">
-                        <label>STEER</label>
-                        <input id="cluSteer" type="range" min="0" max="10" step="0.01" value="1">
-                        <span class="val" id="cluSteerVal">1.00</span>
-                    </div>
-                    <div class="ctrl">
-                        <label>SPD VAR</label>
-                        <input id="cluSpeedVar" type="range" min="0" max="2" step="0.01" value="0">
-                        <span class="val" id="cluSpeedVarVal">0.00</span>
-                    </div>
-                    <div class="ctrl">
-                        <label>PULSE</label>
-                        <input id="cluPulse" type="range" min="0" max="10" step="0.1" value="0">
-                        <span class="val" id="cluPulseVal">0.00</span>
-                    </div>
-                    <div class="ctrl">
-                        <label>INERTIA</label>
-                        <input id="cluInertia" type="range" min="0.01" max="0.99" step="0.01" value="0.92">
-                        <span class="val" id="cluInertiaVal">0.92</span>
-                    </div>
-                    <div class="ctrl">
-                        <label>COHERENCE</label>
-                        <input id="cluCohere" type="range" min="0" max="1" step="0.01" value="0.8">
-                        <span class="val" id="cluCohereVal">0.80</span>
-                    </div>
-                    <div class="ctrl">
-                        <label>BREATHE</label>
-                        <input id="cluBreathe" type="range" min="0" max="0.9" step="0.01" value="0">
-                        <span class="val" id="cluBreatheVal">0.00</span>
-                    </div>
-                    <div class="ctrl">
-                        <label>BOUNDS</label>
-                        <select id="cluBounds" style="font-size:10px;padding:1px 2px">
-                            <option value="bounce">BOUNCE</option>
-                            <option value="wrap">WRAP</option>
+                        <span id="glitchSpeedMulVal">1.00</span>
+                        <select id="corruptDistribution">
+                            <option value="random">RANDOM</option>
+                            <option value="cluster">CLUSTER</option>
                         </select>
                     </div>
+
+                    <div class="corrupt-section">
+                        <div class="corrupt-section-title">Update</div>
+                        <div class="ctrl"><label>ON</label><input id="corruptOn" type="checkbox" title="Enable temporal region corruption."></div>
+                        <div class="ctrl">
+                            <label>SPEED</label>
+                            <input id="corruptSpeed" type="range" min="0" max="4" step="0.01" value="1" title="Master Corrupt motion speed. Scales autonomous patch motion, cluster movement, drift, and XYZ travel without changing explicit STROBE / MULTIGRAB frame timings.">
+                            <span class="val" id="corruptSpeedVal">1.00×</span>
+                        </div>
+                        <div class="ctrl">
+                            <label>MODE</label>
+                            <select id="corruptUpdateMode" title="CONTINUOUS updates Corrupt normally. STROBE refreshes only at an interval. MULTIGRAB alternates held and live-update periods.">
+                                <option value="continuous">CONTINUOUS</option>
+                                <option value="strobe">STROBE</option>
+                                <option value="multigrab">MULTIGRAB</option>
+                            </select>
+                        </div>
+                        <div class="ctrl strobe-only">
+                            <label>INTERVAL</label>
+                            <input id="glitchStrobeEvery" type="range" min="1" max="30" step="1" value="4" title="Refresh Corrupt every N decoded source frames.">
+                            <span class="val" id="glitchStrobeEveryVal">4 fr</span>
+                        </div>
+                        <div class="ctrl multigrab-only">
+                            <label>HOLD</label>
+                            <input id="corruptHoldFrames" type="range" min="1" max="60" step="1" value="8" title="MULTIGRAB: number of decoded frames Corrupt remains held.">
+                            <span class="val" id="corruptHoldFramesVal">8 fr</span>
+                        </div>
+                        <div class="ctrl multigrab-only">
+                            <label>LIVE</label>
+                            <input id="corruptLiveFrames" type="range" min="1" max="30" step="1" value="2" title="MULTIGRAB: number of decoded frames Corrupt updates continuously before the next hold.">
+                            <span class="val" id="corruptLiveFramesVal">2 fr</span>
+                        </div>
+                    </div>
+
+                    <div class="corrupt-section">
+                        <div class="corrupt-section-title">Time</div>
+                        <div class="ctrl">
+                            <label>AGE</label>
+                            <input id="depth" type="range" min="0" max="0.5" step="0.01" value="0.5" title="How far back into the bounded video history Corrupt may borrow image patches.">
+                            <span class="val" id="depthVal">50%</span>
+                        </div>
+                        <div class="ctrl">
+                            <label>AGE SPREAD</label>
+                            <input id="depthScatter" type="range" min="0" max="1" step="0.01" value="1.0" title="How differently aged the individual borrowed patches may be.">
+                            <span class="val" id="depthScatterVal">100%</span>
+                        </div>
+                    </div>
+
+                    <div class="corrupt-section">
+                        <div class="corrupt-section-title">Regions</div>
+                        <div class="ctrl">
+                            <label>AMOUNT</label>
+                            <input id="corrupt" type="range" min="0" max="7" step="0.01" value="0.30" title="Relative number of corruption targets selected from the image grid.">
+                            <span class="val" id="corruptVal">0.30×</span>
+                        </div>
+                        <div class="ctrl">
+                            <label>AMOUNT DRIFT</label>
+                            <input id="corruptDrift" type="range" min="0" max="1" step="0.01" value="0" title="Slowly vary the number of active corruption regions over time.">
+                            <span class="val" id="corruptDriftVal">0%</span>
+                        </div>
+                        <div class="ctrl">
+                            <label>GRID</label>
+                            <input id="block" type="range" min="150" max="2000" step="2" value="1000" title="Spacing of candidate corruption regions. Larger values make a coarser grid.">
+                            <span class="val" id="blockVal">1000 px</span>
+                        </div>
+                        <div class="ctrl">
+                            <label>PATCH SIZE</label>
+                            <input id="glitchSize" type="range" min="1" max="60" step="0.01" value="10" title="Size of each borrowed image patch relative to the grid cell.">
+                            <span class="val" id="glitchSizeVal">0.50×</span>
+                        </div>
+                        <div class="ctrl">
+                            <label>GAP</label>
+                            <input id="spatialGap" type="range" min="0" max="200" step="1" value="40" title="Minimum spacing between accepted corruption regions.">
+                            <span class="val" id="spatialGapVal">40 px</span>
+                        </div>
+                        <div class="ctrl">
+                            <label>JITTER</label>
+                            <input id="glitchJitter" type="range" min="0" max="1" step="0.01" value="1.0" title="Randomly displace each corruption patch around its selected position.">
+                            <span class="val" id="glitchJitterVal">100%</span>
+                        </div>
+                        <div class="ctrl">
+                            <label>MASK</label>
+                            <select id="corruptMaskMode" title="FULL allows corruption anywhere. STENCIL restricts patch placement to the stored Luma Stencil.">
+                                <option value="full">FULL</option>
+                                <option value="stencil">STENCIL</option>
+                            </select>
+                        </div>
+                        <div class="ctrl corrupt-stencil-only">
+                            <label>LEVEL</label>
+                            <input id="corruptMaskThreshold" type="range" min="0" max="255" step="1" value="128" title="Brightness threshold used when the stored Luma Stencil controls Corrupt placement.">
+                            <span class="val" id="corruptMaskThresholdVal">128</span>
+                        </div>
+                        <div class="ctrl corrupt-stencil-only">
+                            <label>SIDE</label>
+                            <select id="corruptMaskSide" title="Choose whether bright or dark regions of the stored Luma Stencil may receive corruption.">
+                                <option value="bright">BRIGHT</option>
+                                <option value="dark">DARK</option>
+                            </select>
+                        </div>
+                        <span id="corruptMaskStatus" class="corrupt-status">FULL FRAME</span>
+                    </div>
+
+                    <div class="corrupt-section">
+                        <div class="corrupt-section-title">Clusters</div>
+                        <div class="ctrl">
+                            <label>ON</label>
+                            <input id="clusterTiles" type="checkbox" title="Group Corrupt patches into persistent moving bodies. Off uses the normal RANDOM placement field.">
+                        </div>
+                        <span id="clusterModeStatus" class="corrupt-status">RANDOM</span>
+                    </div>
+
+                    <div class="corrupt-section cluster-only">
+                        <div class="corrupt-section-title">Group Shape</div>
+                        <div class="ctrl">
+                            <label>GROUPS</label>
+                            <input id="cluCenters" type="range" min="1" max="20" step="1" value="3" title="Number of independent moving corruption groups.">
+                            <span class="val" id="cluCentersVal">3</span>
+                        </div>
+                        <div class="ctrl">
+                            <label>GROUP AMOUNT</label>
+                            <input id="cluBias" type="range" min="0" max="1" step="0.01" value="0.85" title="Share of total corruption targets assigned to groups instead of the random field.">
+                            <span class="val" id="cluBiasVal">85%</span>
+                        </div>
+                        <div class="ctrl">
+                            <label>GROUP SIZE</label>
+                            <input id="cluSpread" type="range" min="1" max="300" step="1" value="80" title="Maximum radius of each corruption group.">
+                            <span class="val" id="cluSpreadVal">80 px</span>
+                        </div>
+                        <div class="ctrl">
+                            <label>HOLLOW</label>
+                            <input id="cluMinSpread" type="range" min="0" max="150" step="1" value="0" title="Empty radius around each group center. Increase to turn a cloud into a ring or shell.">
+                            <span class="val" id="cluMinSpreadVal">0 px</span>
+                        </div>
+                        <div class="ctrl">
+                            <label>Z SPREAD</label>
+                            <input id="cluDepth" type="range" min="0" max="1" step="0.01" value="0.35" title="Spread cluster groups through simulated Z depth. Larger values make different groups appear nearer or farther.">
+                            <span class="val" id="cluDepthVal">35%</span>
+                        </div>
+                        <div class="ctrl">
+                            <label>SHAPE HOLD</label>
+                            <input id="cluCohere" type="range" min="0" max="1" step="0.01" value="0.8" title="How strongly each group keeps its internal patch arrangement: 0 boils, 1 locks the constellation.">
+                            <span class="val" id="cluCohereVal">80%</span>
+                        </div>
+                        <div class="ctrl">
+                            <label>PULSE SIZE</label>
+                            <input id="cluBreathe" type="range" min="0" max="0.9" step="0.01" value="0" title="Expand and contract each group radius over time.">
+                            <span class="val" id="cluBreatheVal">0%</span>
+                        </div>
+                    </div>
+
+                    <div class="corrupt-section cluster-only">
+                        <div class="corrupt-section-title">Group XYZ</div>
+                        <div class="ctrl">
+                            <label>MOVE X</label>
+                            <input id="cluMoveX" type="range" min="-600" max="600" step="1" value="0" title="Move cluster centers horizontally in pixels per second. SPEED scales this motion.">
+                            <span class="val" id="cluMoveXVal">0 px/s</span>
+                        </div>
+                        <div class="ctrl">
+                            <label>MOVE Y</label>
+                            <input id="cluMoveY" type="range" min="-600" max="600" step="1" value="0" title="Move cluster centers vertically in pixels per second. SPEED scales this motion.">
+                            <span class="val" id="cluMoveYVal">0 px/s</span>
+                        </div>
+                        <div class="ctrl">
+                            <label>MOVE Z</label>
+                            <input id="cluMoveZ" type="range" min="-1.5" max="1.5" step="0.01" value="0" title="Move cluster centers through simulated depth. Positive begins toward camera; negative begins away. SPEED scales this motion.">
+                            <span class="val" id="cluMoveZVal">0.00 z/s</span>
+                        </div>
+                    </div>
+
+                    <div class="corrupt-section cluster-only">
+                        <div class="corrupt-section-title">Group Dynamics</div>
+                        <div class="ctrl">
+                            <label>ORGANIC SPEED</label>
+                            <input id="cluSpeed" type="range" min="0" max="10" step="0.01" value="0" title="Additional noise-steered travel speed for the group centers. Use Group XYZ for direct movement.">
+                            <span class="val" id="cluSpeedVal">0.0</span>
+                        </div>
+                        <div class="ctrl">
+                            <label>TURN RATE</label>
+                            <input id="cluSteer" type="range" min="0" max="10" step="0.01" value="1" title="How quickly the group travel direction changes.">
+                            <span class="val" id="cluSteerVal">1.00</span>
+                        </div>
+                        <div class="ctrl">
+                            <label>WANDER</label>
+                            <input id="cluDrift" type="range" min="0" max="5" step="0.01" value="0" title="Add noise-driven unpredictable movement to group centers.">
+                            <span class="val" id="cluDriftVal">0.00</span>
+                        </div>
+                        <div class="ctrl">
+                            <label>SPEED VAR</label>
+                            <input id="cluSpeedVar" type="range" min="0" max="2" step="0.01" value="0" title="Difference in travel speed between groups.">
+                            <span class="val" id="cluSpeedVarVal">0%</span>
+                        </div>
+                        <div class="ctrl">
+                            <label>KICK</label>
+                            <input id="cluPulse" type="range" min="0" max="10" step="0.1" value="0" title="Periodic velocity impulse applied to the moving groups.">
+                            <span class="val" id="cluPulseVal">0.0</span>
+                        </div>
+                        <div class="ctrl">
+                            <label>MOMENTUM</label>
+                            <input id="cluInertia" type="range" min="0.01" max="0.99" step="0.01" value="0.92" title="How strongly a group keeps its existing velocity. High values glide; low values react quickly.">
+                            <span class="val" id="cluInertiaVal">92%</span>
+                        </div>
+                        <div class="ctrl">
+                            <label>EDGE</label>
+                            <select id="cluBounds" title="BOUNCE reflects group motion at the frame edge. WRAP moves the group to the opposite side.">
+                                <option value="bounce">BOUNCE</option>
+                                <option value="wrap">WRAP</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="corrupt-section">
+                        <div class="corrupt-section-title">Patch XYZ</div>
+                        <div class="ctrl">
+                            <label>POSITION X</label>
+                            <input id="glitchBaseX" type="range" min="-1000" max="1000" step="1" value="0" title="Offset every corrupted patch horizontally.">
+                            <span class="val" id="glitchBaseXVal">0 px</span>
+                        </div>
+                        <div class="ctrl">
+                            <label>POSITION Y</label>
+                            <input id="glitchBaseY" type="range" min="-1000" max="1000" step="1" value="0" title="Offset every corrupted patch vertically.">
+                            <span class="val" id="glitchBaseYVal">0 px</span>
+                        </div>
+                        <div class="ctrl">
+                            <label>POSITION Z</label>
+                            <input id="glitchBaseZ" type="range" min="-1" max="1" step="0.01" value="0" title="Move Corrupt through simulated depth. Negative recedes toward frame center; positive comes forward and expands away from center.">
+                            <span class="val" id="glitchBaseZVal">0%</span>
+                        </div>
+                        <div class="ctrl">
+                            <label>MOVE X</label>
+                            <input id="corruptMoveX" type="range" min="-1200" max="1200" step="1" value="0" title="Continuously move the Corrupt field horizontally in pixels per second. SPEED scales this motion.">
+                            <span class="val" id="corruptMoveXVal">0 px/s</span>
+                        </div>
+                        <div class="ctrl">
+                            <label>MOVE Y</label>
+                            <input id="corruptMoveY" type="range" min="-1200" max="1200" step="1" value="0" title="Continuously move the Corrupt field vertically in pixels per second. SPEED scales this motion.">
+                            <span class="val" id="corruptMoveYVal">0 px/s</span>
+                        </div>
+                        <div class="ctrl">
+                            <label>MOVE Z</label>
+                            <input id="corruptMoveZ" type="range" min="-1.5" max="1.5" step="0.01" value="0" title="Continuously move the Corrupt field toward/away from camera in simulated depth. The motion bounces at the near/far limits. SPEED scales this motion.">
+                            <span class="val" id="corruptMoveZVal">0.00 z/s</span>
+                        </div>
+                        <button id="corruptResetXYZBtn" class="btn-dim" style="font-size:9px;padding:2px 7px" title="Reset Corrupt X/Y/Z position and movement to neutral">↺ Reset XYZ</button>
+                    </div>
+
+                    <div class="corrupt-section">
+                        <div class="corrupt-section-title">Patch Repeat</div>
+                        <div class="ctrl">
+                            <label>REPEATS</label>
+                            <input id="glitchSmear" type="range" min="0" max="200" step="0.01" value="6" title="Number of additional copies drawn along the selected direction.">
+                            <span class="val" id="glitchSmearVal">6</span>
+                        </div>
+                        <div class="ctrl">
+                            <label>DIRECTION</label>
+                            <input id="glitchSmearAngle" type="range" min="0" max="360" step="1" value="0" title="Direction of repeated patches. 0 uses the automatic noise-driven direction.">
+                            <span class="val" id="glitchSmearAngleVal">AUTO</span>
+                        </div>
+                        <div class="ctrl">
+                            <label>FIELD RATE</label>
+                            <input id="corruptRate" type="range" min="0" max="1" step="0.001" value="0.104" title="Rate of Corrupt's internal noise field. Master SPEED scales this along with XYZ and cluster motion. This control still drives the exact legacy SPEED/FINE/MULT runtime stack for compatibility.">
+                            <span class="val" id="corruptRateVal">0.80×</span>
+                        </div>
+                    </div>
+
+                    <div class="corrupt-section">
+                        <div class="corrupt-section-title">Composite</div>
+                        <div class="ctrl">
+                            <label>MIX</label>
+                            <input id="glitchAlpha" type="range" min="0" max="1" step="0.01" value="1.0" title="Strength of corrupted image material over the current image.">
+                            <span class="val" id="glitchAlphaVal">100%</span>
+                        </div>
+                    </div>
                 </div>
-            </div>
             </div>
 
             <!-- PIPELINE RECIPE — validated serial routes only -->
@@ -1341,7 +1480,7 @@
                 <div class="group-row">
                     <div class="ctrl">
                         <label>RECIPE</label>
-                        <select id="pipelineRecipe" style="font-size:10px;padding:1px 2px" title="CLASSIC preserves the Pass 22 order. CRISP FINISH draws Glitch, Luma Key, and Scanlines after the transform/color stages.">
+                        <select id="pipelineRecipe" style="font-size:10px;padding:1px 2px" title="CLASSIC preserves the Pass 22 order. CRISP FINISH draws Corrupt, Luma Key, and Scanlines after the transform/color stages.">
                             <option value="classic">CLASSIC</option>
                             <option value="crisp-finish">CRISP FINISH</option>
                         </select>
@@ -1360,7 +1499,7 @@
                         <label>PRIORITY</label>
                         <select id="layerPriority" style="font-size:10px;padding:1px 2px">
                             <option value="scan">SCAN TOP</option>
-                            <option value="glitch">GLITCH TOP</option>
+                            <option value="glitch">CORRUPT TOP</option>
                             <option value="neutral">NEUTRAL</option>
                             <option value="pulse">PULSE</option>
                         </select>

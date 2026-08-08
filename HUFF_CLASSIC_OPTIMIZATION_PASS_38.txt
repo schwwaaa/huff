@@ -1,0 +1,50 @@
+HUFF Classic Optimization Pass 38
+CORRUPT XYZ + Cluster Toggle + Master Speed / Luma Performance Boundary
+
+Baseline: runtime-positive Pass 37 package, with Cluster behavior specifically under review.
+
+Primary objective:
+Make CORRUPT more playable and spatially legible without expanding the Luma readback path or changing accepted Flow/Luma behavior.
+
+Major changes:
+- added visible CORRUPT master SPEED (0x–4x);
+- master SPEED scales autonomous Corrupt field motion, XYZ travel and cluster dynamics while leaving STROBE/MULTIGRAB decoded-frame timing explicit;
+- added general POSITION X/Y/Z and MOVE X/Y/Z controls;
+- Position/Move Z use bounded Canvas2D 2.5D projection: negative recedes, positive approaches;
+- added Reset XYZ action;
+- restored Clusters as an explicit visible ON/OFF toggle: OFF = RANDOM, ON = grouped persistent bodies;
+- added per-group Z SPREAD and direct GROUP MOVE X/Y/Z;
+- retained existing organic cluster dynamics under a separate Group Dynamics section for runtime evaluation;
+- visible derived RATE renamed FIELD RATE to distinguish it from master SPEED;
+- old distribution select remains hidden as a compatibility alias;
+- old presets default new XYZ to neutral and new cluster depth to flat.
+
+Luma performance investigation:
+- Pass 36/37 Pipeline Luma source section is byte-identical;
+- no new getImageData / putImageData path;
+- no new full-resolution buffer;
+- CORRUPT stencil mask still reuses stored 8-bit Luma stencil data;
+- XYZ adds scalar math and existing drawImage scaling only;
+- runtime FPS must be tested before any performance claim.
+
+Runtime files changed:
+- src/index.html
+- src/canvas.js
+- src/effects.js
+
+Compatibility/documentation changed:
+- src/midi/FORMAT.md
+- src/osc/FORMAT.md
+- docs/docs/parameter-reference.html
+- docs-v1/docs/parameter-reference.html
+- package.json
+- scripts/validate-pass38.mjs
+- documentation suite
+
+Protected:
+- Pass 22 Flow exact implementation;
+- Pass 36/37 Luma exact implementation;
+- pipeline recipes;
+- Feedback / Scanlines / Symmetry / Solarize algorithms;
+- FrameRing ownership and decoder/output lifecycle;
+- src-tauri native tree.

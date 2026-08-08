@@ -92,6 +92,7 @@ class GlitchPlacementWorkspace {
   constructor() {
     this.x = new Int32Array(0);
     this.y = new Int32Array(0);
+    this.z = new Float32Array(0);
     this.next = new Int32Array(0);
     this.head = new Int32Array(0);
     this.count = 0;
@@ -107,9 +108,10 @@ class GlitchPlacementWorkspace {
     while (cap < required) cap *= 2;
     const nx = new Int32Array(cap);
     const ny = new Int32Array(cap);
+    const nz = new Float32Array(cap);
     const nn = new Int32Array(cap);
-    nx.set(this.x); ny.set(this.y); nn.set(this.next);
-    this.x = nx; this.y = ny; this.next = nn;
+    nx.set(this.x); ny.set(this.y); nz.set(this.z); nn.set(this.next);
+    this.x = nx; this.y = ny; this.z = nz; this.next = nn;
   }
 
   _ensureGridCapacity(required) {
@@ -138,11 +140,12 @@ class GlitchPlacementWorkspace {
     this.head.fill(-1, 0, cells);
   }
 
-  add(x, y) {
+  add(x, y, z = 0) {
     if (this.gap <= 0) {
       const i = this.count++;
       this.x[i] = x;
       this.y[i] = y;
+      this.z[i] = z;
       return true;
     }
 
@@ -168,6 +171,7 @@ class GlitchPlacementWorkspace {
     const i = this.count++;
     this.x[i] = x;
     this.y[i] = y;
+    this.z[i] = z;
     const key = gy * this.gridW + gx;
     this.next[i] = this.head[key];
     this.head[key] = i;
@@ -266,12 +270,17 @@ function ensureClusterTileCapacity(center, required) {
 // per-frame options object. Random/noise call order and equations are unchanged.
 function updateClusterPhysics(
   cluCenters, cluSpeedVar, cluSteer, cluPulse, cluTravel,
-  cluInertia, cluDrift, cluBounce, canvasWidth, canvasHeight
+  cluInertia, cluDrift, cluBounce, canvasWidth, canvasHeight,
+  cluMoveX = 0, cluMoveY = 0, cluMoveZ = 0,
+  masterSpeed = 1, dt = 1 / 60, timeSec = 0
 ) {
   while (_cluPhysics.length < cluCenters) {
     _cluPhysics.push({
       x: random(canvasWidth),
       y: random(canvasHeight),
+      zBase: random(-1, 1),
+      zMotion: 0,
+      zDir: 1,
       vx: (random() - 0.5) * 2,
       vy: (random() - 0.5) * 2,
       noiseOffX: random(1000),
@@ -284,12 +293,18 @@ function updateClusterPhysics(
   }
   _cluPhysics.length = cluCenters;
 
-  _cluPhysT += cluSteer * 0.004;
+  const speed = Math.max(0, Number.isFinite(masterSpeed) ? masterSpeed : 1);
+  const frameDt = Math.max(0, Math.min(0.05, Number.isFinite(dt) ? dt : 1 / 60));
+  if (speed <= 0) return _cluPhysics;
+
+  // Master SPEED advances both the organic steering field and direct XYZ travel.
+  // At SPEED 1 the legacy organic equations retain their established cadence.
+  _cluPhysT += cluSteer * 0.004 * speed;
 
   if (cluPulse > 0) {
     const pulseInterval = Math.max(0.2, 3 - cluPulse * 0.25);
-    const nowSec = millis() / 1000;
-    if (!_cluPhysics._lastPulse) _cluPhysics._lastPulse = nowSec;
+    const nowSec = Number.isFinite(timeSec) ? timeSec : 0;
+    if (!Number.isFinite(_cluPhysics._lastPulse)) _cluPhysics._lastPulse = nowSec;
     if (nowSec - _cluPhysics._lastPulse >= pulseInterval) {
       _cluPhysics._lastPulse = nowSec;
       for (const c of _cluPhysics) {
@@ -300,6 +315,10 @@ function updateClusterPhysics(
       }
     }
   }
+
+  const directDX = (Number(cluMoveX) || 0) * frameDt * speed;
+  const directDY = (Number(cluMoveY) || 0) * frameDt * speed;
+  const directDZ = (Number(cluMoveZ) || 0) * frameDt * speed;
 
   for (const c of _cluPhysics) {
     const effectiveSpeed = cluTravel * (c.speedMul ?? 1);
@@ -316,8 +335,10 @@ function updateClusterPhysics(
       c.vy += (noise(c.noiseOffY * 2.1 + _cluPhysT * 1.1) - 0.5) * cluDrift * 0.5;
     }
 
-    const nxp = c.x + c.vx;
-    const nyp = c.y + c.vy;
+    // Organic center motion historically used px/render. SPEED scales that
+    // cadence; explicit Group XYZ is expressed in px/s so it remains legible.
+    const nxp = c.x + c.vx * speed + directDX;
+    const nyp = c.y + c.vy * speed + directDY;
     if (cluBounce) {
       if      (nxp < 0)           { c.x = -nxp;                    c.vx = -c.vx; }
       else if (nxp > canvasWidth) { c.x = 2 * canvasWidth - nxp;  c.vx = -c.vx; }
@@ -328,6 +349,19 @@ function updateClusterPhysics(
     } else {
       c.x = (nxp % canvasWidth  + canvasWidth)  % canvasWidth;
       c.y = (nyp % canvasHeight + canvasHeight) % canvasHeight;
+    }
+
+    if (directDZ !== 0) {
+      let nz = (Number(c.zMotion) || 0) + directDZ * (c.zDir || 1);
+      if (cluBounce) {
+        while (nz > 1 || nz < -1) {
+          if (nz > 1)  { nz = 2 - nz;  c.zDir = -(c.zDir || 1); }
+          if (nz < -1) { nz = -2 - nz; c.zDir = -(c.zDir || 1); }
+        }
+      } else {
+        nz = ((((nz + 1) % 2) + 2) % 2) - 1;
+      }
+      c.zMotion = nz;
     }
   }
   return _cluPhysics;
@@ -764,8 +798,20 @@ function applyScanlines(density, angleOverride = null, scanPriority = 1.0, state
 }
 
 
-// ─── Glitch ───────────────────────────────────────────────────────────────────
+// ─── CORRUPT (legacy applyGlitch runtime name retained for compatibility) ─────
 // Note: randomSeed is set by draw() once per frame. No re-seeding here.
+
+// ─── CORRUPT region eligibility ─────────────────────────────────────────────
+// FULL accepts all targets. STENCIL reuses the already-captured bounded
+// Fairlight-inspired Luma stencil as a process mask. No new image readback is
+// introduced here: candidate positions only sample the stored 8-bit luminance.
+function _corruptStencilAllows(x, y, canvasW, canvasH, threshold, brightSide) {
+  if (!_plkStencilLuma || _plkStencilW <= 0 || _plkStencilH <= 0) return false;
+  const sx = Math.max(0, Math.min(_plkStencilW - 1, Math.floor((x / Math.max(1, canvasW)) * _plkStencilW)));
+  const sy = Math.max(0, Math.min(_plkStencilH - 1, Math.floor((y / Math.max(1, canvasH)) * _plkStencilH)));
+  const luma = _plkStencilLuma[sy * _plkStencilW + sx];
+  return brightSide ? luma >= threshold : luma <= threshold;
+}
 
 function applyGlitch(density = 1, baseDX = 0, baseDY = 0, glitchPriority = 1.0, state = window.HUFF_RENDER_STATE) {
   const rs = state || window.HUFF_RENDER_STATE || {};
@@ -807,8 +853,16 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0, glitchPriority = 1.0, 
   const corruptMul   = Math.max(0.05, 1.0 + corruptDrift * driftMod);
   let count = Math.max(1, Math.floor(total * corrupt * corruptMul));
 
+  const corruptMaskMode = String(rs.corruptMaskMode || 'full');
+  const useStencilMask = corruptMaskMode === 'stencil';
+  const corruptMaskThreshold = Math.max(0, Math.min(255, Math.trunc(Number(rs.corruptMaskThreshold) || 128)));
+  const corruptMaskBright = String(rs.corruptMaskSide || 'bright') !== 'dark';
+  if (useStencilMask && (!_plkStencilLuma || _plkStencilW <= 0 || _plkStencilH <= 0)) return;
+
   const gap          = Math.trunc(rs.spatialGap);
-  const useCluTiles  = !!rs.clusterTiles;
+  const useCluTiles  = (typeof rs.clusterTiles === 'boolean')
+    ? rs.clusterTiles
+    : String(rs.corruptDistribution || 'random') === 'cluster';
   const cluCenters   = Math.trunc(rs.cluCenters);
   const cluSpread    = Math.trunc(rs.cluSpread);
   const cluMinSpread = Math.trunc(rs.cluMinSpread);
@@ -824,13 +878,20 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0, glitchPriority = 1.0, 
   const cluSteer     = rs.cluSteer;
   const cluBreathe   = rs.cluBreathe;
   const cluBounce    = (rs.cluBounds || 'bounce') === 'bounce';
-  const cluBreatheF  = cluBreathe > 0 ? (1 + Math.sin(millis() * 0.0006) * cluBreathe) : 1;
+  const corruptMotion = window.HUFF_CORRUPT_MOTION || { x:0, y:0, z:0, dt:1/60, speed:1, timeSec:0 };
+  const masterSpeed = Math.max(0, Math.min(4, Number.isFinite(Number(corruptMotion.speed)) ? Number(corruptMotion.speed) : 1));
+  const motionTimeSec = Number.isFinite(Number(corruptMotion.timeSec)) ? Number(corruptMotion.timeSec) : 0;
+  const cluBreatheF  = cluBreathe > 0 ? (1 + Math.sin(motionTimeSec * 0.6) * cluBreathe) : 1;
   // COHERENCE — how much each center's tile offsets persist frame to frame, so a
   // cluster reads as a BODY that travels with its center instead of re-rolling
   // into static every frame. 0 = full per-frame boil (original), 1 = rigid
   // constellation, between = slowly morphing blob. This is what makes the physics
   // (steer / inertia / bounce) legible — there's finally something to watch move.
   const cluCohere    = rs.cluCohere;
+  const cluDepth     = Math.max(0, Math.min(1, Number(rs.cluDepth) || 0));
+  const cluMoveX     = Number(rs.cluMoveX) || 0;
+  const cluMoveY     = Number(rs.cluMoveY) || 0;
+  const cluMoveZ     = Number(rs.cluMoveZ) || 0;
   // Recalibrated travel: exponential so the slow, watchable range spreads across
   // the lower half of the SPEED slider instead of bunching at the bottom, and the
   // top is calmer than the old linear px/frame.
@@ -841,6 +902,12 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0, glitchPriority = 1.0, 
   // insertion order remain the same as the previous Array/Map implementation.
   const targets = _glitchTargets;
   targets.begin(count, width, height, gap);
+
+  const addCorruptTarget = (x, y, z = 0) => {
+    const tx = Math.floor(x), ty = Math.floor(y);
+    if (useStencilMask && !_corruptStencilAllows(tx, ty, width, height, corruptMaskThreshold, corruptMaskBright)) return false;
+    return targets.add(tx, ty, z);
+  };
 
   // Note: randomSeed is set by draw() once per frame; no re-seeding here.
   // applyScanlines ran first and consumed some random state — that ordering is intentional.
@@ -860,7 +927,8 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0, glitchPriority = 1.0, 
     // even at speed=0 — that looked like movement when there should be none.
     const centers = updateClusterPhysics(
       cluCenters, cluSpeedVar, cluSteer, cluPulse, cluTravel,
-      cluInertia, cluDrift, cluBounce, width, height
+      cluInertia, cluDrift, cluBounce, width, height,
+      cluMoveX, cluMoveY, cluMoveZ, masterSpeed, corruptMotion.dt, motionTimeSec
     );
     const biasCount  = Math.round(count * cluBias);
     const per        = Math.max(1, Math.floor(biasCount / cluCenters));
@@ -889,14 +957,18 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0, glitchPriority = 1.0, 
         const r = effMin + c.tileRadii[i] * Math.max(1, effSpread - effMin);
         const x = (c.x + Math.cos(angle) * r + width)  % width;
         const y = (c.y + Math.sin(angle) * r + height) % height;
-        let ok = targets.add(Math.floor(x), Math.floor(y)), tries = 0;
+        const targetZ = Math.max(-1.5, Math.min(1.5,
+          (Number(c.zBase) || 0) * cluDepth + (Number(c.zMotion) || 0)
+        ));
+        let ok = addCorruptTarget(x, y, targetZ), tries = 0;
         while (!ok && tries++ < 6) {
           // Collision fallback — transient random probe, doesn't disturb the body
           const a2 = random(TWO_PI);
           const r2 = effMin + random() * Math.max(1, effSpread - effMin);
-          ok = targets.add(
-            Math.floor((c.x + Math.cos(a2) * r2 + width)  % width),
-            Math.floor((c.y + Math.sin(a2) * r2 + height) % height)
+          ok = addCorruptTarget(
+            (c.x + Math.cos(a2) * r2 + width)  % width,
+            (c.y + Math.sin(a2) * r2 + height) % height,
+            targetZ
           );
         }
       }
@@ -904,11 +976,11 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0, glitchPriority = 1.0, 
     }
     let guard = 0;
     while (targets.count < count && guard++ < count * 4)
-      targets.add(Math.floor(random(cols)) * block, Math.floor(random(rows)) * block);
+      addCorruptTarget(Math.floor(random(cols)) * block, Math.floor(random(rows)) * block);
   } else {
     let attempts = 0;
     while (targets.count < count && attempts++ < count * 8)
-      targets.add(Math.floor(random(cols)) * block, Math.floor(random(rows)) * block);
+      addCorruptTarget(Math.floor(random(cols)) * block, Math.floor(random(rows)) * block);
   }
 
   // ── Blit tiles ─────────────────────────────────────────────────────────────
@@ -947,8 +1019,37 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0, glitchPriority = 1.0, 
     const h = Math.min(tileSpan, height - cy);
     if (w <= 0 || h <= 0) continue;
 
-    const dstX = Math.max(0, Math.min(width  - w, cx + baseDX));
-    const dstY = Math.max(0, Math.min(height - h, cy + baseDY));
+    const motionX = Number(corruptMotion.x) || 0;
+    const motionY = Number(corruptMotion.y) || 0;
+    const dynamicX = motionX === 0 ? cx : ((cx + motionX) % width + width) % width;
+    const dynamicY = motionY === 0 ? cy : ((cy + motionY) % height + height) % height;
+    const staticZ = Number(rs.glitchBaseZ) || 0;
+    const dynamicZ = Number(corruptMotion.z) || 0;
+    const clusterZ = Number(targets.z[i]) || 0;
+    const z = Math.max(-1.5, Math.min(1.5, staticZ + dynamicZ + clusterZ));
+
+    let dstX, dstY, dstW = w, dstH = h, zScale = 1;
+    const neutralXYZ = motionX === 0 && motionY === 0 && z === 0;
+    if (neutralXYZ) {
+      // Exact legacy destination path for neutral XYZ settings.
+      dstX = Math.max(0, Math.min(width  - w, cx + baseDX));
+      dstY = Math.max(0, Math.min(height - h, cy + baseDY));
+    } else if (z === 0) {
+      dstX = Math.max(0, Math.min(width  - w, dynamicX + baseDX));
+      dstY = Math.max(0, Math.min(height - h, dynamicY + baseDY));
+    } else {
+      // Canvas2D 2.5D adaptation: Z changes apparent size and radial distance
+      // around the frame center. It adds scalar math only—no new buffer/readback.
+      zScale = Math.pow(2, z * 0.75);
+      dstW = w * zScale;
+      dstH = h * zScale;
+      const sourceCenterX = dynamicX + w * 0.5;
+      const sourceCenterY = dynamicY + h * 0.5;
+      const projectedCenterX = width  * 0.5 + (sourceCenterX - width  * 0.5) * zScale + baseDX;
+      const projectedCenterY = height * 0.5 + (sourceCenterY - height * 0.5) * zScale + baseDY;
+      dstX = projectedCenterX - dstW * 0.5;
+      dstY = projectedCenterY - dstH * 0.5;
+    }
 
     // Stable ring frame selection per video frame using _vfc hash.
     // Previously random(1, maxBack+1) reseeded from frameCount — every draw()
@@ -963,13 +1064,20 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0, glitchPriority = 1.0, 
     const src       = ringFrames[idx];
     if (!src) continue;
 
-    ctx.drawImage(src, cx, cy, w, h, dstX, dstY, w, h);
+    ctx.drawImage(src, cx, cy, w, h, dstX, dstY, dstW, dstH);
 
     if (smearLen > 0) {
       for (let s = 1; s <= smearLen; s++) {
-        const sx2 = Math.max(0, Math.min(width  - w, dstX + smearX[s]));
-        const sy2 = Math.max(0, Math.min(height - h, dstY + smearY[s]));
-        ctx.drawImage(src, cx, cy, w, h, sx2, sy2, w, h);
+        if (z === 0) {
+          const sx2 = Math.max(0, Math.min(width  - w, dstX + smearX[s]));
+          const sy2 = Math.max(0, Math.min(height - h, dstY + smearY[s]));
+          ctx.drawImage(src, cx, cy, w, h, sx2, sy2, w, h);
+        } else {
+          ctx.drawImage(src, cx, cy, w, h,
+            dstX + smearX[s] * zScale,
+            dstY + smearY[s] * zScale,
+            dstW, dstH);
+        }
       }
     }
   }

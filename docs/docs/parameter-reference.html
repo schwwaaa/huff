@@ -176,23 +176,48 @@ body {
     <tr><td>fbY</td><td>FB Y</td><td>-1</td><td>1</td><td></td></tr>
     <tr><td>fbZ</td><td>FB Z</td><td>0.98</td><td>1.03</td><td>1.0 = no zoom</td></tr>
     <tr><td>fbTheta</td><td>FB θ</td><td>-2</td><td>2</td><td>degrees/frame</td></tr>
-    <tr><td>depth</td><td>Depth</td><td>0</td><td>0.5</td><td></td></tr>
-    <tr><td>depthScatter</td><td>Scatter</td><td>0</td><td>1</td><td></td></tr>
-    <tr><td>corrupt</td><td>Corrupt %</td><td>0</td><td>7</td><td></td></tr>
-    <tr><td>corruptDrift</td><td>Corrupt Drift</td><td>0</td><td>1</td><td></td></tr>
-    <tr><td>block</td><td>Pixel Size</td><td>150</td><td>2000</td><td></td></tr>
-    <tr><td>glitchSize</td><td>Glitch Size</td><td>1</td><td>60</td><td></td></tr>
-    <tr><td>glitchAlpha</td><td>Tile Opacity</td><td>0</td><td>1</td><td></td></tr>
-    <tr><td>glitchJitter</td><td>Jitter</td><td>0</td><td>1</td><td></td></tr>
-    <tr><td>glitchSmear</td><td>Smear</td><td>0</td><td>200</td><td></td></tr>
-    <tr><td>glitchSmearAngle</td><td>Smear Angle</td><td>0</td><td>360</td><td>0 = noise-driven</td></tr>
-    <tr><td>glitchStrobeEvery</td><td>Glitch Strobe Every</td><td>1</td><td>30</td><td>Decoded source frames; active only while Glitch Strobe is enabled</td></tr>
-    <tr><td>glitchSpeed</td><td>Glitch Speed</td><td>0</td><td>5</td><td></td></tr>
-    <tr><td>glitchSpeedFine</td><td>Fine Speed</td><td>0</td><td>10</td><td></td></tr>
-    <tr><td>glitchSpeedMul</td><td>Speed Mult</td><td>0</td><td>10</td><td></td></tr>
-    <tr><td>glitchBaseX</td><td>Glitch X</td><td>-1000</td><td>1000</td><td></td></tr>
-    <tr><td>glitchBaseY</td><td>Glitch Y</td><td>-1000</td><td>1000</td><td></td></tr>
-    <tr><td>abMix</td><td>A/B Mix</td><td>0</td><td>1</td><td>0 = Glitch priority, 1 = Scanlines priority. Recessive side floors at 0.35</td></tr>
+    <tr><td>depth</td><td>Corrupt Age</td><td>0</td><td>0.5</td><td>How far back into the bounded FrameRing Corrupt may borrow patches.</td></tr>
+    <tr><td>depthScatter</td><td>Age Spread</td><td>0</td><td>1</td><td>Variation in borrowed-frame age between patches.</td></tr>
+    <tr><td>corrupt</td><td>Amount</td><td>0</td><td>7</td><td>Relative number of corruption targets.</td></tr>
+    <tr><td>corruptDrift</td><td>Amount Drift</td><td>0</td><td>1</td><td>Slowly varies the active target count.</td></tr>
+    <tr><td>block</td><td>Grid</td><td>150</td><td>2000</td><td>Candidate-region spacing in pixels.</td></tr>
+    <tr><td>glitchSize</td><td>Patch Size</td><td>1</td><td>60</td><td>Displayed as a multiplier of the Grid cell.</td></tr>
+    <tr><td>spatialGap</td><td>Gap</td><td>0</td><td>200</td><td>Minimum spacing between accepted target centers.</td></tr>
+    <tr><td>glitchJitter</td><td>Jitter</td><td>0</td><td>1</td><td>Random positional displacement of patches.</td></tr>
+    <tr><td>glitchAlpha</td><td>Mix</td><td>0</td><td>1</td><td>Strength of Corrupt material.</td></tr>
+    <tr><td>glitchSmear</td><td>Repeats</td><td>0</td><td>200</td><td>Additional copies drawn along Direction.</td></tr>
+    <tr><td>glitchSmearAngle</td><td>Direction</td><td>0</td><td>360</td><td>0 is displayed as AUTO and uses the existing noise-driven direction.</td></tr>
+    <tr><td>glitchStrobeEvery</td><td>Strobe Interval</td><td>1</td><td>30</td><td>Decoded source frames; used only in STROBE mode.</td></tr>
+    <tr><td>corruptHoldFrames</td><td>MultiGrab Hold</td><td>1</td><td>60</td><td>Decoded frames held before the live-update window.</td></tr>
+    <tr><td>corruptLiveFrames</td><td>MultiGrab Live</td><td>1</td><td>30</td><td>Decoded frames during which Corrupt updates before the next hold.</td></tr>
+    <tr><td>corruptMaskThreshold</td><td>Stencil Level</td><td>0</td><td>255</td><td>Threshold for the already-captured Luma Stencil when Corrupt Mask is STENCIL.</td></tr>
+    <tr><td>corruptSpeed</td><td>Corrupt Speed</td><td>0</td><td>4</td><td>Master autonomous motion speed. Scales field motion, XYZ travel, cluster movement and time-based group dynamics; does not change explicit STROBE/MULTIGRAB decoded-frame timings.</td></tr>
+    <tr><td>glitchBaseX</td><td>Position X</td><td>-1000</td><td>1000</td><td>Static horizontal destination offset in pixels.</td></tr>
+    <tr><td>glitchBaseY</td><td>Position Y</td><td>-1000</td><td>1000</td><td>Static vertical destination offset in pixels.</td></tr>
+    <tr><td>glitchBaseZ</td><td>Position Z</td><td>-1</td><td>1</td><td>Canvas2D 2.5D depth: negative recedes toward frame center; positive enlarges and projects outward.</td></tr>
+    <tr><td>corruptMoveX</td><td>Move X</td><td>-1200</td><td>1200</td><td>Continuous horizontal Corrupt travel in pixels/second, scaled by master Speed.</td></tr>
+    <tr><td>corruptMoveY</td><td>Move Y</td><td>-1200</td><td>1200</td><td>Continuous vertical Corrupt travel in pixels/second, scaled by master Speed.</td></tr>
+    <tr><td>corruptMoveZ</td><td>Move Z</td><td>-1.5</td><td>1.5</td><td>Continuous near/far 2.5D travel; bounces at the depth limits and is scaled by master Speed.</td></tr>
+    <tr><td>cluCenters</td><td>Groups</td><td>1</td><td>20</td><td>Number of moving Corrupt groups in CLUSTER layout.</td></tr>
+    <tr><td>cluBias</td><td>Group Amount</td><td>0</td><td>1</td><td>Share of total targets assigned to groups.</td></tr>
+    <tr><td>cluSpread</td><td>Group Size</td><td>1</td><td>300</td><td>Maximum group radius in pixels.</td></tr>
+    <tr><td>cluMinSpread</td><td>Hollow</td><td>0</td><td>150</td><td>Empty inner radius around each group center.</td></tr>
+    <tr><td>cluCohere</td><td>Shape Hold</td><td>0</td><td>1</td><td>0 boils/re-rolls patch positions; 1 locks the internal constellation.</td></tr>
+    <tr><td>cluBreathe</td><td>Pulse Size</td><td>0</td><td>0.9</td><td>Expands/contracts the group radius using the master Corrupt motion clock.</td></tr>
+    <tr><td>cluDepth</td><td>Z Spread</td><td>0</td><td>1</td><td>Amount of per-group Z separation. Zero keeps groups flat; higher values spread group bodies through simulated depth.</td></tr>
+    <tr><td>cluMoveX</td><td>Group Move X</td><td>-600</td><td>600</td><td>Direct horizontal group-center travel in pixels/second.</td></tr>
+    <tr><td>cluMoveY</td><td>Group Move Y</td><td>-600</td><td>600</td><td>Direct vertical group-center travel in pixels/second.</td></tr>
+    <tr><td>cluMoveZ</td><td>Group Move Z</td><td>-1.5</td><td>1.5</td><td>Direct near/far group-center travel in normalized depth units/second.</td></tr>
+    <tr><td>cluSpeed</td><td>Organic Speed</td><td>0</td><td>10</td><td>Additional noise-steered travel of group centers; distinct from direct Group XYZ movement.</td></tr>
+    <tr><td>cluSteer</td><td>Turn Rate</td><td>0</td><td>10</td><td>Rate at which group heading changes.</td></tr>
+    <tr><td>cluDrift</td><td>Wander</td><td>0</td><td>5</td><td>Noise-driven extra movement.</td></tr>
+    <tr><td>cluSpeedVar</td><td>Speed Variation</td><td>0</td><td>2</td><td>Difference in travel speed between groups.</td></tr>
+    <tr><td>cluPulse</td><td>Kick</td><td>0</td><td>10</td><td>Periodic random velocity impulse.</td></tr>
+    <tr><td>cluInertia</td><td>Momentum</td><td>0.01</td><td>0.99</td><td>Persistence of group velocity.</td></tr>
+    <tr><td>glitchSpeed</td><td>Legacy Corrupt Speed</td><td>0</td><td>5</td><td>Compatibility parameter. The UI presents FIELD RATE over SPEED × FINE × MULT²; the separate master Corrupt SPEED scales autonomous motion without rewriting this legacy contract.</td></tr>
+    <tr><td>glitchSpeedFine</td><td>Legacy Fine Speed</td><td>0</td><td>10</td><td>Compatibility parameter for old presets/MIDI/OSC maps.</td></tr>
+    <tr><td>glitchSpeedMul</td><td>Legacy Speed Mult</td><td>0</td><td>10</td><td>Compatibility parameter; old runtime uses the multiplier squared.</td></tr>
+    <tr><td>abMix</td><td>A/B Mix</td><td>0</td><td>1</td><td>0 = Corrupt priority, 1 = Scanlines priority. Recessive side floors at 0.35</td></tr>
     <tr><td>lumaKeyAB</td><td>Luma Key Clip</td><td>0</td><td>1</td><td>Threshold between clean and processed image ownership.</td></tr>
     <tr><td>lumaKeyMix</td><td>Luma Key Mix</td><td>0</td><td>1</td><td>Overall strength of the pipeline luma key</td></tr>
     <tr><td>lumaKeyGain</td><td>Luma Key Gain</td><td>0.25</td><td>4</td><td>1.00 preserves the established 64-level rolloff; higher values harden the edge, lower values soften it.</td></tr>
@@ -208,22 +233,12 @@ body {
     <tr><td>scanSpinSpeed</td><td>Scan Spin Speed</td><td>0.1</td><td>10</td><td>Only active when Spin L or Spin R is on</td></tr>
     <tr><td>scanShift</td><td>Scan Shift</td><td>0</td><td>0.5</td><td></td></tr>
     <tr><td>scanDrift</td><td>Scan Drift</td><td>0</td><td>3</td><td>Dual-frequency: slow wander + fast jitter</td></tr>
-    <tr><td>scanSpeed</td><td>Scan Speed</td><td>0</td><td>5</td><td>Independent of glitch speed</td></tr>
+    <tr><td>scanSpeed</td><td>Scan Speed</td><td>0</td><td>5</td><td>Independent of Corrupt rate</td></tr>
     <tr><td>scanGap</td><td>Scan Gap</td><td>0</td><td>200</td><td></td></tr>
     <tr><td>scanSkew</td><td>Scan Skew</td><td>-1</td><td>1</td><td></td></tr>
     <tr><td>scanAlpha</td><td>Scan Opacity</td><td>0</td><td>1</td><td></td></tr>
     <tr><td>clusterCount</td><td>Scan Bands</td><td>1</td><td>50</td><td>Displaces current frame — no ring sampling</td></tr>
     <tr><td>clusterRadius</td><td>Band Size</td><td>1</td><td>120</td><td></td></tr>
-    <tr><td>cluCenters</td><td>Clu Centers</td><td>1</td><td>20</td><td></td></tr>
-    <tr><td>cluSpread</td><td>Clu Spread</td><td>1</td><td>300</td><td></td></tr>
-    <tr><td>cluMinSpread</td><td>Clu Min Rad</td><td>0</td><td>150</td><td></td></tr>
-    <tr><td>spatialGap</td><td>Spatial Gap</td><td>0</td><td>200</td><td></td></tr>
-    <tr><td>cluBias</td><td>Clu Bias</td><td>0</td><td>1</td><td></td></tr>
-    <tr><td>cluDrift</td><td>Clu Drift</td><td>0</td><td>5</td><td></td></tr>
-    <tr><td>cluSpeed</td><td>Clu Speed</td><td>0</td><td>10</td><td>Step 0.01. 0 = centres glide to a stop and hold</td></tr>
-    <tr><td>cluSpeedVar</td><td>Clu Spd Var</td><td>0</td><td>2</td><td>Per-centre speed multiplier variance</td></tr>
-    <tr><td>cluPulse</td><td>Clu Pulse</td><td>0</td><td>10</td><td>Periodic velocity burst frequency</td></tr>
-    <tr><td>cluInertia</td><td>Clu Inertia</td><td>0.01</td><td>0.99</td><td></td></tr>
     <tr><td>globalMixAmt</td><td>Global Mix Amount</td><td>0</td><td>1</td><td>Opacity of base video in the blend</td></tr>
     <tr><td>solarizeThresh</td><td>Sol Thresh</td><td>0</td><td>1</td><td></td></tr>
     <tr><td>solarizeAmt</td><td>Sol Amount</td><td>0</td><td>1</td><td></td></tr>
@@ -246,13 +261,13 @@ body {
 <div class="table-responsive"><table class="win-table">
   <thead><tr><th>ID</th><th>Label</th></tr></thead>
   <tbody>
-    <tr><td>corruptOn</td><td>Glitch On</td></tr>
-    <tr><td>glitchStrobe</td><td>Glitch Strobe On</td></tr>
+    <tr><td>corruptOn</td><td>Corrupt On</td></tr>
+    <tr><td>glitchStrobe</td><td>Legacy Corrupt Strobe Alias</td></tr>
     <tr><td>baseOn</td><td>Base Video</td></tr>
     <tr><td>seedOnLoad</td><td>Seed on Load</td></tr>
     <tr><td>symOn</td><td>Symmetry On</td></tr>
     <tr><td>clusters</td><td>Scanlines On</td></tr>
-    <tr><td>clusterTiles</td><td>Cluster Tiles On</td></tr>
+    <tr><td>clusterTiles</td><td>Clusters On</td></tr>
     <tr><td>scanSpinLeft</td><td>Scan Spin Left</td></tr>
     <tr><td>scanSpinRight</td><td>Scan Spin Right</td></tr>
     <tr><td>lumaKeyOn</td><td>Luma Key On</td></tr>
@@ -271,6 +286,11 @@ body {
 <div class="table-responsive"><table class="win-table">
   <thead><tr><th>ID</th><th>Label</th><th>Options</th></tr></thead>
   <tbody>
+    <tr><td>corruptUpdateMode</td><td>Corrupt Update Mode</td><td>continuous, strobe, multigrab</td></tr>
+    <tr><td>corruptDistribution</td><td>Corrupt Layout Compatibility Alias</td><td>random, cluster</td></tr>
+    <tr><td>corruptMaskMode</td><td>Corrupt Mask</td><td>full, stencil</td></tr>
+    <tr><td>corruptMaskSide</td><td>Corrupt Stencil Side</td><td>bright, dark</td></tr>
+    <tr><td>cluBounds</td><td>Corrupt Group Edge</td><td>bounce, wrap</td></tr>
     <tr><td>globalMixBlend</td><td>Global Mix Blend</td><td>screen, multiply, overlay, difference, hard-light, lighter</td></tr>
     <tr><td>lumaKeySource</td><td>Luma Key Source</td><td>clean, stencil</td></tr>
     <tr><td>lumaKeyFade</td><td>Luma Fade Mode</td><td>xfade, add</td><td>add is presented as SOFT ADD and uses bounded Screen compositing rather than Canvas lighter.</td></tr>
