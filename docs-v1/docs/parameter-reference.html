@@ -167,12 +167,16 @@ body {
     <tr><td>baseMix</td><td>Base Mix</td><td>0</td><td>1</td><td></td></tr>
     <tr><td>seed</td><td>Seed</td><td>1</td><td>99999</td><td>Randomisation seed. Same seed = same output</td></tr>
     <tr><td>quality</td><td>Quality</td><td>0</td><td>3</td><td>Scales ring depth + performance</td></tr>
-    <tr><td>feedback</td><td>Feedback</td><td>0</td><td>3</td><td>Values &gt; 1 over-expose</td></tr>
-    <tr><td>persistence</td><td>Persistence</td><td>0</td><td>10</td><td></td></tr>
-    <tr><td>fbX</td><td>FB X</td><td>-1</td><td>1</td><td></td></tr>
-    <tr><td>fbY</td><td>FB Y</td><td>-1</td><td>1</td><td></td></tr>
-    <tr><td>fbZ</td><td>FB Z</td><td>0.98</td><td>1.03</td><td>1.0 = no zoom</td></tr>
-    <tr><td>fbTheta</td><td>FB θ</td><td>-2</td><td>2</td><td>degrees/frame</td></tr>
+    <tr><td>feedback</td><td>FEEDBACK · RETURN</td><td>0</td><td>3</td><td>Original performance parameter preserved; renderer clamps redraw alpha to 1. The semantic suffix explains the visible action without replacing the ID/range.</td></tr>
+    <tr><td>persistence</td><td>PERSISTENCE · MEMORY</td><td>0</td><td>10</td><td>Original persistent-buffer decay parameter; independent of Feedback Enable/Strobe.</td></tr>
+    <tr><td>feedbackEnabled</td><td>Feedback Enable</td><td>off/on</td><td>—</td><td>Bypasses only the Feedback transform and Restore layer; does not rewrite or gate PERSISTENCE.</td></tr>
+    <tr><td>feedbackStrobe</td><td>FB STROBE</td><td>off/on</td><td>—</td><td>Optional: gates only the established Feedback transform; does not gate PERSISTENCE.</td></tr>
+    <tr><td>feedbackStrobeEvery</td><td>INTERVAL</td><td>1</td><td>30</td><td>Decoded source frames between Feedback-transform updates while FB STROBE is on.</td></tr>
+    <tr><td>feedbackRestore</td><td>RESTORE</td><td>0</td><td>1</td><td>Optional clean-source catch-up overlay; 0 preserves legacy behavior.</td></tr>
+    <tr><td>fbX</td><td>FB X · Drift</td><td>-1 classic / -8 wide</td><td>1 classic / 8 wide</td><td>Same original parameter. RANGE only changes UI limits; CLASSIC is the default.</td></tr>
+    <tr><td>fbY</td><td>FB Y · Drift</td><td>-1 classic / -8 wide</td><td>1 classic / 8 wide</td><td>Same original parameter. RANGE only changes UI limits; CLASSIC is the default.</td></tr>
+    <tr><td>fbZ</td><td>FB Z · Zoom</td><td>0.98 classic / 0.95 wide</td><td>1.03 classic / 1.05 wide</td><td>Same original parameter; 1.0 = neutral zoom.</td></tr>
+    <tr><td>fbTheta</td><td>FB θ · Rotate</td><td>-2 classic / -5 wide</td><td>2 classic / 5 wide</td><td>Same original parameter; degrees per Feedback update.</td></tr>
     <tr><td>depth</td><td>Corrupt Age</td><td>0</td><td>0.5</td><td>How far back into the bounded FrameRing Corrupt may borrow patches.</td></tr>
     <tr><td>depthScatter</td><td>Age Spread</td><td>0</td><td>1</td><td>Variation in borrowed-frame age between patches.</td></tr>
     <tr><td>corrupt</td><td>Amount</td><td>0</td><td>7</td><td>Relative number of corruption targets.</td></tr>
@@ -188,19 +192,20 @@ body {
     <tr><td>corruptHoldFrames</td><td>MultiGrab Hold</td><td>1</td><td>60</td><td>Decoded frames held before the live-update window.</td></tr>
     <tr><td>corruptLiveFrames</td><td>MultiGrab Live</td><td>1</td><td>30</td><td>Decoded frames during which Corrupt updates before the next hold.</td></tr>
     <tr><td>corruptMaskThreshold</td><td>Stencil Level</td><td>0</td><td>255</td><td>Threshold for the already-captured Luma Stencil when Corrupt Mask is STENCIL.</td></tr>
-    <tr><td>corruptSpeed</td><td>Corrupt Speed</td><td>0</td><td>4</td><td>Master autonomous motion speed. Scales field motion, XYZ travel, cluster movement and time-based group dynamics; does not change explicit STROBE/MULTIGRAB decoded-frame timings.</td></tr>
+    <tr><td>corruptSpeed</td><td>Random Speed</td><td>0</td><td>4</td><td>Overall RANDOM Corrupt time scale. In CONTINUOUS mode, 0 holds the Random Corrupt layer, sub-1 values slow its visible evolution, and 1 preserves the established cadence. Independent of Cluster Speed.</td></tr>
     <tr><td>glitchBaseX</td><td>Position X</td><td>-1000</td><td>1000</td><td>Static horizontal destination offset in pixels.</td></tr>
     <tr><td>glitchBaseY</td><td>Position Y</td><td>-1000</td><td>1000</td><td>Static vertical destination offset in pixels.</td></tr>
     <tr><td>glitchBaseZ</td><td>Position Z</td><td>-1</td><td>1</td><td>Canvas2D 2.5D depth: negative recedes toward frame center; positive enlarges and projects outward.</td></tr>
     <tr><td>corruptMoveX</td><td>Move X</td><td>-1200</td><td>1200</td><td>Continuous horizontal Corrupt travel in pixels/second, scaled by master Speed.</td></tr>
     <tr><td>corruptMoveY</td><td>Move Y</td><td>-1200</td><td>1200</td><td>Continuous vertical Corrupt travel in pixels/second, scaled by master Speed.</td></tr>
     <tr><td>corruptMoveZ</td><td>Move Z</td><td>-1.5</td><td>1.5</td><td>Continuous near/far 2.5D travel; bounces at the depth limits and is scaled by master Speed.</td></tr>
+    <tr><td>clusterMasterSpeed</td><td>Cluster Speed</td><td>0</td><td>4</td><td>Overall CLUSTER Corrupt time scale. In CONTINUOUS mode, 0 holds the Cluster Corrupt layer; low values create slow evolving cluster bodies; high values accelerate Group XYZ, organic motion and shape evolution. Independent of Random Speed.</td></tr>
     <tr><td>cluCenters</td><td>Groups</td><td>1</td><td>20</td><td>Number of moving Corrupt groups in CLUSTER layout.</td></tr>
     <tr><td>cluBias</td><td>Group Amount</td><td>0</td><td>1</td><td>Share of total targets assigned to groups.</td></tr>
     <tr><td>cluSpread</td><td>Group Size</td><td>1</td><td>300</td><td>Maximum group radius in pixels.</td></tr>
     <tr><td>cluMinSpread</td><td>Hollow</td><td>0</td><td>150</td><td>Empty inner radius around each group center.</td></tr>
     <tr><td>cluCohere</td><td>Shape Hold</td><td>0</td><td>1</td><td>0 boils/re-rolls patch positions; 1 locks the internal constellation.</td></tr>
-    <tr><td>cluBreathe</td><td>Pulse Size</td><td>0</td><td>0.9</td><td>Expands/contracts the group radius using the master Corrupt motion clock.</td></tr>
+    <tr><td>cluBreathe</td><td>Pulse Size</td><td>0</td><td>0.9</td><td>Expands/contracts group radius using the independent Cluster Speed clock.</td></tr>
     <tr><td>cluDepth</td><td>Z Spread</td><td>0</td><td>1</td><td>Amount of per-group Z separation. Zero keeps groups flat; higher values spread group bodies through simulated depth.</td></tr>
     <tr><td>cluMoveX</td><td>Group Move X</td><td>-600</td><td>600</td><td>Direct horizontal group-center travel in pixels/second.</td></tr>
     <tr><td>cluMoveY</td><td>Group Move Y</td><td>-600</td><td>600</td><td>Direct vertical group-center travel in pixels/second.</td></tr>
@@ -259,6 +264,7 @@ body {
     <tr><td>clusters</td><td>Scanlines On</td></tr>
     <tr><td>scanRandSize</td><td>Rand Band Size</td></tr>
     <tr><td>clusterTiles</td><td>Clusters On</td></tr>
+    <tr><td>feedbackEnabled</td><td>Feedback Transform Enable</td></tr>
     <tr><td>solarizeOn</td><td>Solarize On</td></tr>
     <tr><td>flowOn</td><td>Flow Warp On</td></tr>
     <tr><td>trailOn</td><td>Trails On</td></tr>
@@ -273,6 +279,7 @@ body {
 <div class="table-responsive"><table class="win-table">
   <thead><tr><th>ID</th><th>Label</th><th>Options</th></tr></thead>
   <tbody>
+    <tr><td>feedbackMotionRange</td><td>Feedback Motion Range</td><td>classic, wide</td></tr>
     <tr><td>corruptUpdateMode</td><td>Corrupt Update Mode</td><td>continuous, strobe, multigrab</td></tr>
     <tr><td>corruptDistribution</td><td>Corrupt Layout Compatibility Alias</td><td>random, cluster</td></tr>
     <tr><td>corruptMaskMode</td><td>Corrupt Mask</td><td>full, stencil</td></tr>

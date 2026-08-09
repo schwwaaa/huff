@@ -1,0 +1,40 @@
+HUFF CLASSIC OPTIMIZATION PASS 39R
+================================
+
+Status: implementation + static validation complete; runtime user validation required.
+Baseline: exact accepted Pass 38 package. Rejected Pass 39 is NOT part of this lineage.
+
+Purpose
+-------
+Recover the original Feedback instrument exactly after rejected Pass 39 changed its controls and persistent-buffer semantics. Keep the original FEEDBACK, PERSISTENCE, FB X/Y/Z/theta ranges and Reset Motion defaults. Add only two neutral-by-default experiments: transform-only FB STROBE and clean-source RESTORE.
+
+Original Feedback contract preserved
+----------------------------------
+FEEDBACK      0..3, default 0.6
+PERSISTENCE   0..10, default 0.7
+FB X          -1..1, default 1
+FB Y          -1..1, default 1
+FB Z          0.98..1.03, default 1.000
+FB theta      -2..2, default 0.01
+Reset Motion  X=1, Y=1, Z=1.000, theta=0.01
+
+PERSISTENCE remains an independent persistent-decay stage. It is NOT gated by the new strobe control.
+
+Additive experiments
+--------------------
+FB STROBE OFF/ON
+INTERVAL 1..30 decoded source frames
+RESTORE 0..100%
+
+FB STROBE gates only the established Feedback snapshot/transform/redraw operation. RESTORE overlays the current clean source after the Feedback transform. With FB STROBE OFF and RESTORE 0%, the Feedback runtime path is intended to be Pass-38-equivalent.
+
+Performance boundary
+--------------------
+No new getImageData/putImageData calls.
+No new full-resolution graphics buffer.
+RESTORE adds one existing-canvas draw only when >0.
+FB STROBE can reduce Feedback transform applications when enabled, but no FPS claim is made without runtime measurement.
+
+Protected
+---------
+CORRUPT/Clusters/XYZ, Luma, Flow, Scanlines, Symmetry, Solarize, pipeline recipes, FrameRing, source decode, output paths and native Tauri tree are unchanged from Pass 38.

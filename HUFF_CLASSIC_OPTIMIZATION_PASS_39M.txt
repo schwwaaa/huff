@@ -1,0 +1,6 @@
+HUFF Classic Optimization Pass 39M
+Feedback Merge + Independent Cluster Speed
+Date: 2026-08-08
+
+Baseline: accepted Pass 38, with the Pass 39R feedback recovery retained as the safe merge foundation.
+Runtime candidate: requires user validation.

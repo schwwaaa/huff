@@ -1,67 +1,24 @@
-# HUFF Classic — Current Status
+# HUFF Classic Current Status
 
-**Current candidate:** Pass 38 — CORRUPT XYZ + Cluster Toggle + Master Speed
+**Current candidate:** Pass 39N — Corrupt Clock Separation + UI Readability  
+**Baseline lineage:** accepted Pass 38 → Pass 39 rejected → Pass 39R recovery → Pass 39M merge candidate → Pass 39N repair candidate  
+**Runtime acceptance:** pending user test
 
-**Runtime-positive baseline:** Pass 37 for CORRUPT semantics; Pass 36 for Luma stability; Pass 22 remains the frozen Flow reference.
+## Candidate contents
+- Pass 39M Feedback merge preserved exactly.
+- Current Corrupt/XYZ/Cluster feature set preserved.
+- RANDOM SPEED and CLUSTER SPEED now have explicit independent ownership.
+- CONTINUOUS speed below 1x genuinely slows/holds visible Corrupt updates.
+- Neon-green text replaced with black UI text.
 
-## CORRUPT model
+## Exact regression test
+Corrupt ON → Clusters ON → Clusters OFF → RANDOM SPEED 0x.
 
-```text
-CORRUPT
-├── UPDATE
-│   ├── ON
-│   ├── SPEED
-│   ├── CONTINUOUS
-│   ├── STROBE / INTERVAL
-│   └── MULTIGRAB / HOLD / LIVE
-├── TIME
-│   ├── AGE
-│   └── AGE SPREAD
-├── REGIONS
-│   ├── AMOUNT / AMOUNT DRIFT
-│   ├── GRID / PATCH SIZE / GAP / JITTER
-│   └── MASK FULL / STENCIL
-├── CLUSTERS ON/OFF
-│   ├── GROUP SHAPE
-│   │   ├── GROUPS / AMOUNT / SIZE / HOLLOW
-│   │   ├── Z SPREAD
-│   │   ├── SHAPE HOLD
-│   │   └── PULSE SIZE
-│   ├── GROUP XYZ
-│   │   └── MOVE X / Y / Z
-│   └── GROUP DYNAMICS
-│       └── ORGANIC SPEED / TURN / WANDER / VAR / KICK / MOMENTUM / EDGE
-├── PATCH XYZ
-│   ├── POSITION X / Y / Z
-│   └── MOVE X / Y / Z
-├── PATCH REPEAT
-│   ├── REPEATS / DIRECTION
-│   └── FIELD RATE
-└── COMPOSITE
-    └── MIX
-```
+Expected: Random Corrupt establishes one state and then holds rather than continuing at full visible speed.
 
-## Luma performance status
-
-No Luma runtime code changed in Pass 38. The known cost remains LIVE mode's bounded synchronous readback/CPU transform/upload on decoded-frame rebuilds. STENCIL avoids normal-playback readback after capture.
-
-Use the backtick profiler to compare `luma read/xform/upload/cache` with `gl draws` before changing the Luma architecture again.
-
-## Protected systems
-
-- Flow frozen at accepted Pass 22 behavior.
-- Luma implementation exact from Pass 36/37.
-- CLASSIC / CRISP FINISH routes unchanged.
-- no new full-resolution buffer;
-- no native Tauri changes;
-- no decoder/output clock changes.
-
-## Decision after runtime test
-
-Judge controls by immediacy. The strongest Pass 38 questions are:
-
-1. Does master SPEED make CORRUPT substantially more playable?
-2. Is Z immediately understandable in RANDOM mode?
-3. Does Clusters ON now feel like a genuinely different spatial mode?
-4. Are Group Z SPREAD and Group XYZ useful enough to keep?
-5. Does LIVE Luma still create unacceptable FPS loss under high CORRUPT draw-call load?
+## Protected constraints
+- Flow frozen.
+- Luma unchanged.
+- no new full-resolution framebuffer.
+- no new synchronous pixel readback/upload.
+- native runtime unchanged.

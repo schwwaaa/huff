@@ -88,13 +88,15 @@ Use for huff's action buttons: `refreshBtn` (reseed) and `resetMotionBtn` (reset
 | `fbY` | 0 | 2 | Feedback Y offset |
 | `fbTheta` | -1 | 1 | Feedback rotation |
 | `persistence` | 0 | 1 | Trail persistence |
+| `feedbackStrobeEvery` | 1 | 30 | Feedback-transform strobe interval in decoded frames |
+| `feedbackRestore` | 0 | 1 | Clean-source restore amount; neutral at 0 |
 | `block` | 1 | 64 | Pixel block size |
 | `glitchSize` | 1 | 60 | Corrupt patch size |
 | `glitchSmear` | 0 | 200 | Corrupt repeats |
 | `glitchAlpha` | 0 | 1 | Corrupt mix |
 | `glitchJitter` | 0 | 1 | Positional jitter |
 | `corruptDrift` | 0 | 1 | Corrupt amount drift |
-| `corruptSpeed` | 0 | 4 | Master Corrupt motion speed |
+| `corruptSpeed` | 0 | 4 | RANDOM Corrupt master time scale |
 | `depthScatter` | 0 | 1 | Corrupt age spread |
 | `glitchBaseX` | -1000 | 1000 | Corrupt position X |
 | `glitchBaseY` | -1000 | 1000 | Corrupt position Y |
@@ -123,7 +125,7 @@ Use for huff's action buttons: `refreshBtn` (reseed) and `resetMotionBtn` (reset
 | `trailDepth` | 0 | 1 | Trail depth |
 | `quality` | 0 | 1 | Render quality |
 
-> **Pass 38 Corrupt note:** HUFF presents **FIELD RATE** for the legacy `speed × fine × mult²` field contract and a separate **SPEED** (`corruptSpeed`) for autonomous Corrupt/XYZ/Cluster motion. Existing OSC mappings to the legacy speed IDs remain valid.
+> **Pass 38 Corrupt note:** HUFF presents **FIELD RATE** for the legacy `speed × fine × mult²` field contract, **RANDOM SPEED** (`corruptSpeed`) for RANDOM-mode evolution, and **CLUSTER SPEED** (`clusterMasterSpeed`) for CLUSTER-mode evolution. Existing OSC mappings to the legacy speed IDs remain valid.
 
 ### Toggles (checked = ON)
 
@@ -179,3 +181,9 @@ To send OSC from software running on the same machine as huff:
 **SuperCollider:** `NetAddr("127.0.0.1", 9000).sendMsg("/huff/feedback", 0.75)`  
 **TouchDesigner:** CHOP → OSC Out DAT, host `127.0.0.1`, port `9000`  
 **Python (pythonosc):** `udp_client.SimpleUDPClient("127.0.0.1", 9000)`
+
+
+Pass 39R note: Feedback Strobe is additive and transform-only. It does not gate the established `persistence` stage. Legacy Feedback IDs remain valid.
+
+
+Pass 39M note: Feedback keeps the original `feedback`, `persistence`, `fbX`, `fbY`, `fbZ`, and `fbTheta` addresses/IDs. Additive controls are `feedbackEnabled`, `feedbackStrobe`, `feedbackStrobeEvery`, `feedbackRestore`, and `feedbackMotionRange`. `clusterMasterSpeed` (0..4) controls CLUSTER-mode evolution independently from `corruptSpeed`, which now explicitly controls RANDOM-mode evolution. In CONTINUOUS mode 0x holds the selected mode after establishing one state.

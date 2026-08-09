@@ -12,6 +12,8 @@
  *  - Pass 31: decoded-frame Glitch-only strobe; Luma Key and all other stages remain live
  *  - Pass 34: Fairlight-style stored Luma Stencil + INDIGO Cleanup/Density + bounded Soft Add
  *  - Pass 36: LIVE Luma stability rebase + stateless stored-stencil mask rebuilds
+ *  - Pass 39R: restore exact Pass 38 Feedback controls/behavior; add optional transform-only strobe + clean restore
+ *  - Pass 39M: merge additive Feedback enable/range controls without replacing legacy controls; add independent Cluster Speed
  *  - Pass 8: p5.Graphics and pixel-processing scratch canvases resize in place
  *  - Pass 8: final presentation uses direct Canvas2D blits
  *  - Pass 9: ring capture contexts stay in copy mode and capacity math is cached
@@ -161,6 +163,7 @@ function _retireCurrentSource({ revokeBlob = true } = {}) {
   _seekPending = false;
   _rvfcOwnsGCur = false;
   _resetGlitchStrobeGate('source-retired');
+  _resetFeedbackStrobeGate('source-retired');
   window.resetPipelineLumaKeyState?.();
   _updateLumaStencilStatus?.('EMPTY');
 
@@ -269,7 +272,7 @@ let nPhaseX = 0, nPhaseY = 1000;
 // Pass 38: one explicit Corrupt motion clock. SPEED scales autonomous Corrupt
 // movement without changing decoded-frame STROBE / MULTIGRAB timing semantics.
 let _corruptClock = 0;
-const _corruptMotion = Object.seal({ x:0, y:0, z:0, zDir:1, dt:1/60, speed:1, timeSec:0, serial:0 });
+const _corruptMotion = Object.seal({ x:0, y:0, z:0, zDir:1, dt:1/60, speed:1, timeSec:0, serial:0, clusterSpeed:1, clusterTimeSec:0 });
 window.HUFF_CORRUPT_MOTION = _corruptMotion;
 function _resetCorruptAxisMotion() {
   _corruptClock = 0;
@@ -281,6 +284,8 @@ function _resetCorruptAxisMotion() {
   _corruptMotion.speed = 1;
   _corruptMotion.timeSec = 0;
   _corruptMotion.serial = 0;
+  _corruptMotion.clusterSpeed = 1;
+  _corruptMotion.clusterTimeSec = 0;
 }
 let nPhaseScanX = 0, nPhaseScanY = 2000; // independent scanline phase
 let _scanSpinAngle = 0;                   // continuous spin accumulator (degrees)
@@ -453,7 +458,7 @@ function showToast(msg, isError = false) {
     document.body.appendChild(t);
   }
   const errStyle = { background:'#600', color:'#f88', border:'1px solid #f44' };
-  const okStyle  = { background:'rgba(0,0,0,0.78)', color:'#0f0', border:'1px solid #0f0' };
+  const okStyle  = { background:'#D4D0C8', color:'#000', border:'1px solid #404040' };
   Object.assign(t.style, isError ? errStyle : okStyle);
   t.textContent    = msg;
   t.style.display  = 'block';
@@ -478,7 +483,7 @@ function _syncUIIndicator() {
     ind.id = '_uiInd';
     Object.assign(ind.style, {
       position:'fixed', bottom:'10px', left:'50%', transform:'translateX(-50%)',
-      background:'rgba(0,0,0,0.72)', color:'#0f0', fontFamily:'monospace',
+      background:'#D4D0C8', color:'#000', fontFamily:'monospace',
       padding:'3px 14px', borderRadius:'3px', fontSize:'12px',
       pointerEvents:'none', zIndex:'999998', display:'none',
     });
@@ -507,9 +512,9 @@ const PRESET_IDS = [
   'glitchAlpha','glitchJitter','glitchSmearAngle','glitchStrobeEvery',
   'corruptUpdateMode','corruptHoldFrames','corruptLiveFrames','corruptSpeed',
   'corruptMaskMode','corruptMaskThreshold','corruptMaskSide','corruptDistribution','seed',
-  'corruptOn','feedback','persistence','fbX','fbY','fbZ','fbTheta',
+  'corruptOn','feedbackEnabled','feedback','persistence','feedbackMotionRange','fbX','fbY','fbZ','fbTheta','feedbackStrobe','feedbackStrobeEvery','feedbackRestore',
   'clusters','clusterCount','clusterRadius','spatialGap',
-  'cluCenters','cluSpread','cluMinSpread','cluDepth','cluBias','cluDrift','cluSpeed','cluInertia','cluMoveX','cluMoveY','cluMoveZ',
+  'cluCenters','cluSpread','cluMinSpread','cluDepth','cluBias','cluDrift','cluSpeed','cluInertia','clusterMasterSpeed','cluMoveX','cluMoveY','cluMoveZ',
   'flowOn','flowStrength','flowScale','flowPulse','flowImpl','flowSpeed','flowTurb','flowSwirl','flowSpread',
   'baseOn','baseMix','seedOnLoad',
   'symOn','symMode','symPos',
@@ -577,6 +582,14 @@ function applyPreset(data) {
   if (!('corruptMoveY' in sourceData)) sourceData.corruptMoveY = '0';
   if (!('corruptMoveZ' in sourceData)) sourceData.corruptMoveZ = '0';
 
+  // Pass 39M is additive: old presets receive neutral Feedback merge controls
+  // while FEEDBACK, PERSISTENCE and FB X/Y/Z/theta keep their original IDs, values and equations.
+  if (!('feedbackEnabled' in sourceData)) sourceData.feedbackEnabled = true;
+  if (!('feedbackMotionRange' in sourceData)) sourceData.feedbackMotionRange = 'classic';
+  if (!('feedbackStrobe' in sourceData)) sourceData.feedbackStrobe = false;
+  if (!('feedbackStrobeEvery' in sourceData)) sourceData.feedbackStrobeEvery = '4';
+  if (!('feedbackRestore' in sourceData)) sourceData.feedbackRestore = '0';
+
   // Clusters are now a distribution mode rather than a separate effect block.
   if (!('corruptDistribution' in sourceData)) {
     sourceData.corruptDistribution = sourceData.clusterTiles ? 'cluster' : 'random';
@@ -585,6 +598,7 @@ function applyPreset(data) {
   // flat unless they explicitly store the new parameter. Fresh sessions use
   // the UI default so turning Clusters on immediately reveals depth.
   if (!('cluDepth' in sourceData)) sourceData.cluDepth = '0';
+  if (!('clusterMasterSpeed' in sourceData)) sourceData.clusterMasterSpeed = '1';
   if (!('cluMoveX' in sourceData)) sourceData.cluMoveX = '0';
   if (!('cluMoveY' in sourceData)) sourceData.cluMoveY = '0';
   if (!('cluMoveZ' in sourceData)) sourceData.cluMoveZ = '0';
@@ -1012,7 +1026,7 @@ function _tickFPS() {
     if (!el) {
       el = document.createElement('span');
       el.id = '_fpsDisplay';
-      Object.assign(el.style, { marginLeft:'10px', color:'#0f0', fontFamily:'monospace', fontSize:'12px' });
+      Object.assign(el.style, { marginLeft:'10px', color:'#000', fontFamily:'monospace', fontSize:'12px' });
       const status = _$('status');
       if (status) status.parentNode?.insertBefore(el, status.nextSibling);
       else document.body.appendChild(el);
@@ -1064,6 +1078,7 @@ function windowResized() {
     [gBuf, gScratch].forEach(_clearGraphics);
     frameRing.clear(true);
     _resetGlitchStrobeGate('resize');
+    _resetFeedbackStrobeGate('resize');
     window.resetPipelineLumaKeyState?.();
     _updateLumaStencilStatus?.('EMPTY');
     seededOnce = false;
@@ -1080,6 +1095,7 @@ function clearAll() {
   [gBuf, gScratch].forEach(_clearGraphics);
   frameRing.clear();
   _resetGlitchStrobeGate('clear');
+  _resetFeedbackStrobeGate('clear');
   window.resetPipelineLumaKeyState?.();
   _updateLumaStencilStatus?.('EMPTY');
   seededOnce = false;
@@ -1112,13 +1128,13 @@ function hookUI() {
     'glitchStrobe','glitchStrobeEvery','glitchStrobeEveryVal',
     'corruptUpdateMode','corruptHoldFrames','corruptHoldFramesVal','corruptLiveFrames','corruptLiveFramesVal',
     'corruptDistribution','clusterModeStatus','corruptMaskMode','corruptMaskThreshold','corruptMaskThresholdVal','corruptMaskSide','corruptMaskStatus','seed',
-    'feedback','feedbackVal','persistence','persistenceVal',
+    'feedbackEnabled','feedback','feedbackVal','persistence','persistenceVal','feedbackMotionRange','feedbackStrobe','feedbackStrobeEvery','feedbackStrobeEveryVal','feedbackRestore','feedbackRestoreVal',
     'fbX','fbXVal','fbY','fbYVal','fbZ','fbZVal','fbTheta','fbThetaVal',
     'clusters','clusterTiles','clusterCount','clusterCountVal',
     'clusterRadius','clusterRadiusVal','spatialGap','spatialGapVal',
     'cluCenters','cluCentersVal','cluSpread','cluSpreadVal','cluDepth','cluDepthVal',
     'cluMinSpread','cluMinSpreadVal','cluBias','cluBiasVal','cluDrift','cluDriftVal',
-    'cluSpeed','cluSpeedVal','cluSteer','cluSteerVal','cluInertia','cluInertiaVal','cluCohere','cluCohereVal',
+    'clusterMasterSpeed','clusterMasterSpeedVal','cluSpeed','cluSpeedVal','cluSteer','cluSteerVal','cluInertia','cluInertiaVal','cluCohere','cluCohereVal',
     'cluMoveX','cluMoveXVal','cluMoveY','cluMoveYVal','cluMoveZ','cluMoveZVal',
     'flowOn','flowStrength','flowStrengthVal','flowScale','flowScaleVal',
     'flowPulse','flowPulseVal','flowImpl','flowImplVal',
@@ -1337,8 +1353,8 @@ function _updateLumaStencilStatus(forcedText = '') {
     const w = status?.width || 0;
     const h = status?.height || 0;
     label = w && h ? `STENCIL STORED ${w}×${h}` : 'STENCIL STORED';
-    color = '#a7ffb5';
-    glow = '0 0 7px rgba(120,255,150,.55)';
+    color = '#000000';
+    glow = 'none';
   } else if (noSource) {
     label = 'NO SOURCE';
     color = '#ff9b9b';
@@ -1355,8 +1371,8 @@ function _updateLumaStencilStatus(forcedText = '') {
   if (els.lumaKeyCaptureBtn) {
     els.lumaKeyCaptureBtn.classList.toggle('active', isReady);
     els.lumaKeyCaptureBtn.setAttribute('aria-pressed', isReady ? 'true' : 'false');
-    els.lumaKeyCaptureBtn.style.color = isReady ? 'var(--term-green)' : '';
-    els.lumaKeyCaptureBtn.style.textShadow = isReady ? '0 0 7px rgba(120,255,150,.55)' : '';
+    els.lumaKeyCaptureBtn.style.color = isReady ? '#000000' : '';
+    els.lumaKeyCaptureBtn.style.textShadow = 'none';
   }
   if (typeof _syncCorruptContextUI === 'function') _syncCorruptContextUI();
 }
@@ -1414,13 +1430,30 @@ function _syncCorruptRateFromLegacy() {
   }
 }
 
+function _applyFeedbackMotionRange() {
+  const wide = String(els.feedbackMotionRange?.value || 'classic') === 'wide';
+  const specs = wide
+    ? { fbX:[-8,8,0.01], fbY:[-8,8,0.01], fbZ:[0.95,1.05,0.001], fbTheta:[-5,5,0.01] }
+    : { fbX:[-1,1,0.001], fbY:[-1,1,0.001], fbZ:[0.98,1.03,0.005], fbTheta:[-2,2,0.005] };
+  for (const [id, [min,max,step]] of Object.entries(specs)) {
+    const el = els[id];
+    if (!el) continue;
+    el.min = String(min); el.max = String(max); el.step = String(step);
+    const n = Number(el.value);
+    if (Number.isFinite(n) && (n < min || n > max)) {
+      el.value = String(Math.max(min, Math.min(max, n)));
+      el.dispatchEvent(new Event('input', { bubbles:true }));
+    }
+  }
+}
+
 function hookSliders() {
   const sliderIds = [
     'quality','depth','corrupt','block','glitchSpeed','glitchSpeedFine','glitchSpeedMul','corruptSpeed',
     'glitchSize','glitchSmear','glitchBaseX','glitchBaseY','glitchBaseZ','corruptMoveX','corruptMoveY','corruptMoveZ','glitchStrobeEvery',
     'corruptHoldFrames','corruptLiveFrames','corruptMaskThreshold',
-    'feedback','persistence','fbX','fbY','fbZ','fbTheta',
-    'spatialGap','clusterCount','clusterRadius','cluCenters','cluSpread','cluDepth','cluMoveX','cluMoveY','cluMoveZ',
+    'feedback','persistence','fbX','fbY','fbZ','fbTheta','feedbackStrobeEvery','feedbackRestore',
+    'spatialGap','clusterCount','clusterRadius','cluCenters','cluSpread','cluDepth','clusterMasterSpeed','cluMoveX','cluMoveY','cluMoveZ',
     'cluMinSpread','cluBias','cluDrift','cluSpeed','cluSteer','cluInertia','cluCohere',
     'scanAlpha','scanShift','scanDrift','scanSpeed','scanGap','scanSkew','scanFocus','scanRoll',
     'glitchAlpha','glitchJitter','glitchSmearAngle',
@@ -1450,11 +1483,31 @@ function hookSliders() {
   }
 
   // Checkboxes and selects also get snapshotted for undo
-  ['corruptOn','corruptUpdateMode','corruptDistribution','clusterTiles','corruptMaskMode','corruptMaskSide','clusters','flowOn','baseOn','symOn','solarizeOn',
+  ['corruptOn','corruptUpdateMode','corruptDistribution','clusterTiles','corruptMaskMode','corruptMaskSide','clusters','feedbackEnabled','feedbackMotionRange','feedbackStrobe','flowOn','baseOn','symOn','solarizeOn',
    'cluBounds','pipelineRecipe','layerPriority','seedOnLoad','bgMode','symMode',
    'lumaKeyOn','lumaKeyInvert','lumaKeySource','lumaKeyFade','globalMixOn','globalMixBlend','globalMixPos','scanSpinLeft','scanSpinRight'].forEach(id => {
     _$(id)?.addEventListener('change', snapshotForUndo);
   });
+
+  const syncFeedbackExperimentalUI = () => {
+    if (els.feedbackStrobeEvery) els.feedbackStrobeEvery.disabled = !els.feedbackStrobe?.checked;
+  };
+  els.feedbackStrobe?.addEventListener('change', () => {
+    _resetFeedbackStrobeGate('toggle');
+    syncFeedbackExperimentalUI();
+    updateLabels();
+  });
+  els.feedbackStrobeEvery?.addEventListener('input', () => _resetFeedbackStrobeGate('interval'));
+  els.feedbackEnabled?.addEventListener('change', () => {
+    _resetFeedbackStrobeGate('enable');
+    updateLabels();
+  });
+  els.feedbackMotionRange?.addEventListener('change', () => {
+    _applyFeedbackMotionRange();
+    updateLabels();
+  });
+  _applyFeedbackMotionRange();
+  syncFeedbackExperimentalUI();
 
   els.baseOn?.addEventListener('change', () => {
     if (els.baseMix) els.baseMix.disabled = !els.baseOn.checked;
@@ -1610,9 +1663,15 @@ function _syncCorruptContextUI() {
   document.querySelectorAll('.cluster-only').forEach(el => {
     el.style.display = clustered ? '' : 'none';
   });
+  document.querySelectorAll('.random-speed-only').forEach(el => {
+    el.style.display = clustered ? 'none' : '';
+  });
+  document.querySelectorAll('.cluster-speed-only').forEach(el => {
+    el.style.display = clustered ? '' : 'none';
+  });
   if (els.clusterModeStatus) {
     els.clusterModeStatus.classList.remove('ready', 'warn');
-    els.clusterModeStatus.textContent = clustered ? 'CLUSTERED' : 'RANDOM';
+    els.clusterModeStatus.textContent = clustered ? 'CLUSTER CLOCK ACTIVE' : 'RANDOM CLOCK ACTIVE';
     if (clustered) els.clusterModeStatus.classList.add('ready');
   }
 
@@ -1659,6 +1718,9 @@ function updateLabels() {
   set(els.glitchSmear,      els.glitchSmearVal,      v => String(Math.max(0, Math.trunc(+v || 0))));
   set(els.feedback,         els.feedbackVal,         f2);
   set(els.persistence,      els.persistenceVal,      f2);
+  set(els.feedbackStrobeEvery, els.feedbackStrobeEveryVal, v => `${Math.max(1, Math.trunc(+v || 1))} fr`);
+  set(els.feedbackRestore,  els.feedbackRestoreVal,  pct);
+  set(els.clusterMasterSpeed, els.clusterMasterSpeedVal, v => `${(+v).toFixed(2)}×`);
   set(els.fbX,              els.fbXVal,              f2);
   set(els.fbY,              els.fbYVal,              f2);
   set(els.fbZ,              els.fbZVal,              f2);
@@ -1883,6 +1945,9 @@ const _glitchStrobeGate = Object.seal({
   lastLive: 2,
   lastBucket: -1,
   lastCycle: -1,
+  lastContinuousSpeed: 1,
+  lastClustered: false,
+  continuousAccumulator: 0,
   updates: 0,
   heldRenders: 0,
   resets: 0,
@@ -1909,6 +1974,9 @@ function _resetGlitchStrobeGate(reason = 'reset') {
   _glitchStrobeGate.lastLive = 2;
   _glitchStrobeGate.lastBucket = -1;
   _glitchStrobeGate.lastCycle = -1;
+  _glitchStrobeGate.lastContinuousSpeed = 1;
+  _glitchStrobeGate.lastClustered = false;
+  _glitchStrobeGate.continuousAccumulator = 0;
   _glitchStrobeGate.resets++;
   _glitchStrobeGate.lastResetReason = String(reason);
 }
@@ -1924,15 +1992,64 @@ function _shouldApplyGlitchThisRender(state) {
   const mode = String(state.corruptUpdateMode || (state.glitchStrobe ? 'strobe' : 'continuous'));
 
   if (mode === 'continuous') {
+    const clustered = !!state.clusterTiles;
+    const rawSpeed = clustered ? Number(state.clusterMasterSpeed) : Number(state.corruptSpeed);
+    const speed = Math.max(0, Math.min(4, Number.isFinite(rawSpeed) ? rawSpeed : 1));
+    const entering =
+      !gate.wasGlitchActive ||
+      gate.lastMode !== 'continuous' ||
+      gate.lastClustered !== clustered;
+    const speedChanged = Math.abs(speed - gate.lastContinuousSpeed) > 1e-9;
+
     gate.wasGlitchActive = true;
     gate.lastMode = 'continuous';
     gate.lastBucket = -1;
     gate.lastCycle = -1;
-    gate.updates++;
-    return true;
+    gate.lastClustered = clustered;
+    gate.lastContinuousSpeed = speed;
+
+    // RANDOM SPEED / CLUSTER SPEED are true master evolution controls in
+    // CONTINUOUS mode. 1x preserves the established every-render cadence.
+    // Below 1x we sample/hold the CORRUPT layer at a proportionally lower rate;
+    // 0x renders one state on entry/change and then holds it. This fixes the
+    // previous "0x still looks full-speed" behavior caused by re-applying
+    // historical patches every render while the FrameRing continued advancing.
+    if (speed >= 1) {
+      gate.continuousAccumulator = 0;
+      gate.updates++;
+      return true;
+    }
+
+    if (speed <= 0) {
+      gate.continuousAccumulator = 0;
+      if (entering || speedChanged) {
+        gate.updates++;
+        return true;
+      }
+      gate.heldRenders++;
+      return false;
+    }
+
+    if (entering || speedChanged) {
+      gate.continuousAccumulator = 0;
+      gate.updates++;
+      return true;
+    }
+
+    const dt = Math.max(0, Math.min(0.05, Number(window.HUFF_CORRUPT_MOTION?.dt) || (1 / 60)));
+    gate.continuousAccumulator += speed * dt * 60;
+    if (gate.continuousAccumulator >= 1) {
+      gate.continuousAccumulator -= Math.floor(gate.continuousAccumulator);
+      gate.updates++;
+      return true;
+    }
+
+    gate.heldRenders++;
+    return false;
   }
 
   if (mode === 'strobe') {
+    gate.continuousAccumulator = 0;
     const rate = _glitchStrobeRate(state.glitchStrobeEvery);
     const bucket = Math.floor(Math.max(0, _vfc) / rate);
     const shouldUpdate =
@@ -1956,6 +2073,7 @@ function _shouldApplyGlitchThisRender(state) {
   }
 
   if (mode === 'multigrab') {
+    gate.continuousAccumulator = 0;
     const hold = _corruptFrameCount(state.corruptHoldFrames, 8, 60);
     const live = _corruptFrameCount(state.corruptLiveFrames, 2, 30);
     const cycleLen = hold + live;
@@ -1991,6 +2109,57 @@ function _shouldApplyGlitchThisRender(state) {
 }
 
 // ─── draw loop ────────────────────────────────────────────────────────────────
+
+// ─── Pass 39M Feedback merge: transform-only strobe ─────────────────────────
+// IMPORTANT: this gate never touches PERSISTENCE. The established Pass 38
+// persistent-decay stage remains independent and executes at its original
+// cadence. Only the existing snapshot/transform/redraw Feedback operation is
+// optionally sampled by decoded-frame interval.
+const _feedbackStrobeGate = Object.seal({
+  wasActive: false,
+  lastRate: 4,
+  lastBucket: -1,
+  updates: 0,
+  heldRenders: 0,
+  resets: 0,
+  lastResetReason: 'startup',
+});
+window.HUFF_FEEDBACK_STROBE_TELEMETRY = _feedbackStrobeGate;
+
+function _resetFeedbackStrobeGate(reason = 'reset') {
+  _feedbackStrobeGate.wasActive = false;
+  _feedbackStrobeGate.lastRate = 4;
+  _feedbackStrobeGate.lastBucket = -1;
+  _feedbackStrobeGate.resets++;
+  _feedbackStrobeGate.lastResetReason = String(reason);
+}
+
+function _shouldApplyFeedbackTransformThisRender(state) {
+  const gate = _feedbackStrobeGate;
+  if (!state.feedbackStrobe) {
+    gate.wasActive = false;
+    gate.lastBucket = -1;
+    gate.updates++;
+    return true;
+  }
+
+  const rate = _glitchStrobeRate(state.feedbackStrobeEvery);
+  const bucket = Math.floor(Math.max(0, _vfc) / rate);
+  const shouldUpdate =
+    !gate.wasActive ||
+    gate.lastRate !== rate ||
+    gate.lastBucket !== bucket;
+
+  gate.wasActive = true;
+  gate.lastRate = rate;
+  if (shouldUpdate) {
+    gate.lastBucket = bucket;
+    gate.updates++;
+    return true;
+  }
+  gate.heldRenders++;
+  return false;
+}
 
 // ─── Draw-loop helpers ───────────────────────────────────────────────────────
 // Defined once rather than recreated as closures on every render frame.
@@ -2111,7 +2280,10 @@ function _resolveFrameActivity(state) {
     state.scanAlpha > 0;
   const luma = !!state.lumaKeyOn && state.lumaKeyMix > 0;
   const globalMix = !!state.globalMixOn && state.globalMixAmt > 0;
-  const feedback = _feedbackHasVisibleEffect(state);
+  // FEEDBACK ENABLE bypasses only the transform/Restore layer. Keep the original
+  // Feedback activity decision intact so PERSISTENCE remains on the established
+  // persistent-buffer path rather than being accidentally tied to the new switch.
+  const feedback = _feedbackHasVisibleEffect(state) || (state.feedbackEnabled !== false && (Number(state.feedbackRestore) || 0) > 0);
   const flow = !!state.flowOn && Math.trunc(state.flowStrength) > 0;
   const symmetry = _symmetryHasVisibleEffect(state);
   const solarize = _solarizeHasVisibleEffect(state);
@@ -2241,8 +2413,14 @@ function _runGlobalMixStage(frame, step) {
 
 function _runFeedbackStage(frame) {
   const activity = frame.activity;
-  if (activity.feedback) {
-    const s = frame.state;
+  if (frame.state.feedbackEnabled === false || !activity.feedback) return;
+
+  const s = frame.state;
+
+  // Exact Pass 38 Feedback transform. The only new condition is the optional
+  // transform-only strobe gate. With FB STROBE off this executes identically
+  // to Pass 38; PERSISTENCE remains a separate, untouched pipeline stage.
+  if (_feedbackHasVisibleEffect(s) && _shouldApplyFeedbackTransformThisRender(s)) {
     const fb = s.feedback;
     const fx = s.fbX;
     const fy = s.fbY;
@@ -2261,6 +2439,22 @@ function _runFeedbackStage(frame) {
     ctx.scale(fz, fz);
     ctx.drawImage(feedbackSource, -gBuf.width / 2, -gBuf.height / 2, gBuf.width, gBuf.height);
     ctx.restore();
+  }
+
+  // Optional Fairlight-inspired catch-up/restore experiment. It is additive,
+  // defaults to zero, and does not alter FEEDBACK/PERSISTENCE semantics.
+  // Restore remains live even while the Feedback transform itself is strobed.
+  const restore = Math.max(0, Math.min(1, Number(s.feedbackRestore) || 0));
+  if (restore > 0) {
+    const clean = _graphicsCanvas(gCur);
+    if (clean) {
+      const ctx = gBuf.drawingContext;
+      ctx.save();
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.globalAlpha = restore;
+      ctx.drawImage(clean, 0, 0, gBuf.width, gBuf.height);
+      ctx.restore();
+    }
   }
 }
 
@@ -2388,30 +2582,37 @@ function draw() {
   // Preserve phase progression even when the corresponding stage is currently
   // neutral. Re-enabling an effect therefore resumes at the same temporal point
   // as the pre-optimization renderer.
-  // FIELD RATE controls the internal corruption field while master SPEED
-  // scales autonomous motion. Hidden FINE/MULT aliases remain at 1 for
+  // FIELD RATE controls the internal corruption field. RANDOM SPEED owns the
+  // RANDOM Corrupt clock; CLUSTER SPEED owns the CLUSTER Corrupt clock. Only the
+  // active mode advances autonomous Corrupt phase/XYZ motion.
+  // Hidden FINE/MULT aliases remain at 1 for
   // normal UI/preset use, but the exact legacy multiplication path stays alive
   // for old custom MIDI/OSC mappings that still target those stable IDs.
   const legacyMul = Number(s.glitchSpeedMul) || 0;
   const density = Math.max(0, (Number(s.glitchSpeed) || 0) * (Number(s.glitchSpeedFine) || 0) * legacyMul * legacyMul);
   const corruptSpeed = Math.max(0, Math.min(4, Number.isFinite(Number(s.corruptSpeed)) ? Number(s.corruptSpeed) : 1));
+  const clusterMasterSpeed = Math.max(0, Math.min(4, Number.isFinite(Number(s.clusterMasterSpeed)) ? Number(s.clusterMasterSpeed) : 1));
+  const clusteredCorrupt = !!s.clusterTiles;
+  const activeCorruptSpeed = clusteredCorrupt ? clusterMasterSpeed : corruptSpeed;
   const corruptDt = Math.max(0, Math.min(0.05, (Number(deltaTime) || 16.6667) / 1000));
   _corruptMotion.dt = corruptDt;
-  _corruptMotion.speed = corruptSpeed;
-  _corruptClock += corruptSpeed * corruptDt * 60;
+  _corruptMotion.speed = activeCorruptSpeed;
+  _corruptClock += activeCorruptSpeed * corruptDt * 60;
   _corruptMotion.timeSec = _corruptClock / 60;
   _corruptMotion.serial = Math.floor(_corruptClock);
-  nPhaseX += density * corruptSpeed * 0.01;
-  nPhaseY += density * corruptSpeed * 0.011;
+  _corruptMotion.clusterSpeed = clusterMasterSpeed;
+  if (clusteredCorrupt) _corruptMotion.clusterTimeSec += clusterMasterSpeed * corruptDt;
+  nPhaseX += density * activeCorruptSpeed * 0.01;
+  nPhaseY += density * activeCorruptSpeed * 0.011;
 
   if (s.corruptOn) {
     const moveX = Number(s.corruptMoveX) || 0;
     const moveY = Number(s.corruptMoveY) || 0;
     const moveZ = Number(s.corruptMoveZ) || 0;
-    if (width > 0) _corruptMotion.x = ((_corruptMotion.x + moveX * corruptSpeed * corruptDt) % width + width) % width;
-    if (height > 0) _corruptMotion.y = ((_corruptMotion.y + moveY * corruptSpeed * corruptDt) % height + height) % height;
-    if (moveZ !== 0 && corruptSpeed > 0) {
-      let nz = _corruptMotion.z + moveZ * corruptSpeed * corruptDt * _corruptMotion.zDir;
+    if (width > 0) _corruptMotion.x = ((_corruptMotion.x + moveX * activeCorruptSpeed * corruptDt) % width + width) % width;
+    if (height > 0) _corruptMotion.y = ((_corruptMotion.y + moveY * activeCorruptSpeed * corruptDt) % height + height) % height;
+    if (moveZ !== 0 && activeCorruptSpeed > 0) {
+      let nz = _corruptMotion.z + moveZ * activeCorruptSpeed * corruptDt * _corruptMotion.zDir;
       while (nz > 1 || nz < -1) {
         if (nz > 1) { nz = 2 - nz; _corruptMotion.zDir *= -1; }
         if (nz < -1) { nz = -2 - nz; _corruptMotion.zDir *= -1; }
@@ -3054,8 +3255,8 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
     overlay.style.cssText = [
       'position:fixed', 'top:8px', 'right:8px', 'z-index:99999',
       'font:11px/1.45 ui-monospace,Menlo,Consolas,monospace',
-      'color:#0f0', 'background:rgba(0,0,0,0.82)', 'padding:8px 10px',
-      'border:1px solid #0a0', 'border-radius:4px', 'white-space:pre',
+      'color:#000', 'background:#D4D0C8', 'padding:8px 10px',
+      'border:1px solid #404040', 'border-radius:4px', 'white-space:pre',
       'pointer-events:none', 'letter-spacing:0.3px'
     ].join(';');
     overlay.style.display = 'none';

@@ -1,0 +1,30 @@
+HUFF Classic Optimization Pass 39N
+==================================
+
+Purpose
+-------
+Fix the Corrupt speed regression found while switching Clusters on/off, make RANDOM and CLUSTER speed ownership explicit, and replace neon-green UI text with black text for readability.
+
+Runtime changes
+---------------
+1. RANDOM SPEED now owns RANDOM-mode Corrupt evolution.
+2. CLUSTER SPEED now owns CLUSTER-mode Corrupt evolution.
+3. In CONTINUOUS mode, speed below 1x slows visible Corrupt update cadence; 0x establishes one state and then holds it.
+4. Switching Clusters on/off immediately switches the active Corrupt clock.
+5. Only the active mode advances autonomous Corrupt phase/XYZ time.
+6. STROBE and MULTIGRAB retain their explicit decoded-frame timing semantics.
+7. All neon-green UI text was converted to black text; light Win95 surfaces are used where black text would otherwise have been placed on black.
+
+Protected
+---------
+- Pass 39M Feedback merge remains exact.
+- effects.js is byte-identical to Pass 39M.
+- Flow remains frozen.
+- Luma Key / Stencil implementation remains unchanged.
+- No new full-resolution buffer.
+- No new getImageData()/putImageData() path.
+- Native Tauri tree unchanged.
+
+Runtime acceptance still required
+---------------------------------
+Static validation cannot prove the visual feel. Test the exact reported sequence: Corrupt ON -> Clusters ON -> Clusters OFF -> RANDOM SPEED 0x. The Random Corrupt layer should establish one state and hold rather than continuing to refresh at full speed.

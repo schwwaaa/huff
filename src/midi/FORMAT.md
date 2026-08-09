@@ -53,6 +53,8 @@ Use for `refreshBtn`, `resetMotionBtn`, etc.
 | `quality` | QUALITY | 0 | 3 |
 | `feedback` | FEEDBACK | 0 | 3 |
 | `persistence` | PERSISTENCE | 0 | 10 |
+| `feedbackStrobeEvery` | Feedback strobe interval | 1 | 30 |
+| `feedbackRestore` | Feedback restore | 0 | 1 |
 | `fbX` | FB X | -1 | 1 |
 | `fbY` | FB Y | -1 | 1 |
 | `fbZ` | FB Z | 0.98 | 1.03 |
@@ -61,7 +63,7 @@ Use for `refreshBtn`, `resetMotionBtn`, etc.
 | `depthScatter` | AGE SPREAD | 0 | 1 |
 | `corrupt` | AMOUNT | 0 | 7 |
 | `corruptDrift` | AMOUNT DRIFT | 0 | 1 |
-| `corruptSpeed` | CORRUPT SPEED | 0 | 4 |
+| `corruptSpeed` | RANDOM SPEED | 0 | 4 |
 | `block` | GRID | 150 | 2000 |
 | `glitchSize` | PATCH SIZE | 1 | 60 |
 | `glitchAlpha` | MIX | 0 | 1 |
@@ -110,7 +112,7 @@ Use for `refreshBtn`, `resetMotionBtn`, etc.
 | `flowPulse` | PULSE | 0 | 200 |
 | `flowImpl` | IMPLODE | 0 | 1 |
 
-> **Pass 38 Corrupt note:** the visible **FIELD RATE** control remains a derived performance control over the legacy `glitchSpeed × glitchSpeedFine × glitchSpeedMul²` runtime contract. The new **SPEED** control (`corruptSpeed`) independently scales autonomous Corrupt/XYZ/Cluster motion. Existing MIDI maps that target legacy speed IDs still work.
+> **Pass 38 Corrupt note:** the visible **FIELD RATE** control remains a derived performance control over the legacy `glitchSpeed × glitchSpeedFine × glitchSpeedMul²` runtime contract. The **RANDOM SPEED** control (`corruptSpeed`) owns RANDOM-mode Corrupt evolution and Patch XYZ motion. **CLUSTER SPEED** (`clusterMasterSpeed`) independently owns CLUSTER-mode evolution. Existing MIDI maps that target legacy speed IDs still work.
 
 ### Toggles (checkboxes)
 | ID | Label |
@@ -161,3 +163,9 @@ Use for `refreshBtn`, `resetMotionBtn`, etc.
 - **`channel: -1`** is almost always what you want — most controllers send on channel 1 (index 0) by default but some send on "any".
 - **Virtual MIDI ports** — On macOS enable the IAC Driver in Audio MIDI Setup. On Windows install loopMIDI. Start the huff MIDI Bridge after creating the virtual port. Max/MSP and Pure Data can then send MIDI to that port and huff will receive it.
 - **The bridge polls for new ports every 2 seconds.** You can connect/disconnect hardware controllers while both huff and the bridge are running.
+
+
+Pass 39R note: `feedbackStrobe` is a boolean control. The original `feedback`, `persistence`, `fbX`, `fbY`, `fbZ`, and `fbTheta` IDs/ranges are preserved.
+
+
+Pass 39M note: Feedback keeps the original `feedback`, `persistence`, `fbX`, `fbY`, `fbZ`, and `fbTheta` IDs. `feedbackEnabled`, `feedbackStrobe`, `feedbackStrobeEvery`, `feedbackRestore`, and `feedbackMotionRange` are additive. `clusterMasterSpeed` (0..4) is the independent CLUSTER-mode time scale; `corruptSpeed` (0..4) is the RANDOM-mode time scale. In CONTINUOUS mode each can sample/hold its own Corrupt layer below 1x; 0x holds after establishing one state.

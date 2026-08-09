@@ -878,9 +878,13 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0, glitchPriority = 1.0, 
   const cluSteer     = rs.cluSteer;
   const cluBreathe   = rs.cluBreathe;
   const cluBounce    = (rs.cluBounds || 'bounce') === 'bounce';
-  const corruptMotion = window.HUFF_CORRUPT_MOTION || { x:0, y:0, z:0, dt:1/60, speed:1, timeSec:0 };
-  const masterSpeed = Math.max(0, Math.min(4, Number.isFinite(Number(corruptMotion.speed)) ? Number(corruptMotion.speed) : 1));
-  const motionTimeSec = Number.isFinite(Number(corruptMotion.timeSec)) ? Number(corruptMotion.timeSec) : 0;
+  const corruptMotion = window.HUFF_CORRUPT_MOTION || { x:0, y:0, z:0, dt:1/60, speed:1, timeSec:0, clusterSpeed:1, clusterTimeSec:0 };
+  // CLUSTER SPEED is intentionally independent from the general CORRUPT SPEED.
+  // It is a single time-scale for cluster evolution: Group XYZ, organic center
+  // travel/steering/wander, kick cadence and pulse-size breathing all slow down,
+  // freeze, or accelerate together without changing RANDOM Corrupt motion.
+  const masterSpeed = Math.max(0, Math.min(4, Number.isFinite(Number(corruptMotion.clusterSpeed)) ? Number(corruptMotion.clusterSpeed) : 1));
+  const motionTimeSec = Number.isFinite(Number(corruptMotion.clusterTimeSec)) ? Number(corruptMotion.clusterTimeSec) : 0;
   const cluBreatheF  = cluBreathe > 0 ? (1 + Math.sin(motionTimeSec * 0.6) * cluBreathe) : 1;
   // COHERENCE — how much each center's tile offsets persist frame to frame, so a
   // cluster reads as a BODY that travels with its center instead of re-rolling
@@ -937,7 +941,10 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0, glitchPriority = 1.0, 
     // contracts. cluBreatheF is 1 when BREATHE is 0 (static, original behaviour).
     const effSpread = Math.max(1, cluSpread * cluBreatheF);
     const effMin    = cluMinSpread * cluBreatheF;
-    const reroll    = 1 - cluCohere;   // per-frame chance each offset re-rolls
+    // CLUSTER SPEED also time-scales internal shape evolution. At 0 the cluster
+    // constellation freezes; at 1 this is exact Pass 38 cadence; higher values
+    // make low-coherence clusters boil more aggressively.
+    const reroll    = Math.min(1, (1 - cluCohere) * masterSpeed);
 
     for (const c of centers) {
       ensureClusterTileCapacity(c, per);

@@ -50,13 +50,15 @@
             --term-yel:   #FFFF00;
             --term-cyan:  #00FFFF;
             --term-mag:   #FF00FF;
+            --ui-text:    #000000;
+            --ui-field:   #E8E8E8;
             color-scheme: dark;
         }
 
         html, body {
             margin: 0; height: 100%;
             background: var(--term-bg);
-            color: var(--term-green);
+            color: var(--ui-text);
             font-family: 'VT323', 'Courier New', monospace;
             overflow: hidden;
             font-size: 14px;
@@ -260,10 +262,10 @@
         }
         .corrupt-hidden { display: none !important; }
         .corrupt-status {
-            font-family: 'Share Tech Mono', monospace; font-size: 10px; color: var(--term-dgreen);
+            font-family: 'Share Tech Mono', monospace; font-size: 10px; color: var(--ui-text);
             padding: 1px 4px; white-space: nowrap;
         }
-        .corrupt-status.ready { color: var(--term-green); text-shadow: 0 0 4px rgba(0,255,0,.45); }
+        .corrupt-status.ready { color: var(--ui-text); font-weight: bold; text-shadow: none; }
         .corrupt-status.warn { color: var(--term-yel); }
 
         /* ═══════════════════════════════════════════════
@@ -272,7 +274,7 @@
         .ctrl {
             display: inline-flex; align-items: center; gap: 4px;
             padding: 1px 5px;
-            background: var(--term-bg);
+            background: var(--win-bg);
             border-top:    1px solid var(--win-dark);
             border-left:   1px solid var(--win-dark);
             border-bottom: 1px solid var(--win-light);
@@ -284,7 +286,7 @@
         }
         .ctrl label {
             font-family: 'VT323', monospace;
-            font-size: 11px; color: var(--term-dgreen);
+            font-size: 11px; color: var(--ui-text);
             white-space: nowrap; letter-spacing: .06em; text-transform: uppercase;
             user-select: none;
         }
@@ -334,21 +336,21 @@
         }
         input[type=number] {
             width: 60px;
-            background: var(--term-bg);
+            background: var(--ui-field);
             border-top:    1px solid var(--win-dark);
             border-left:   1px solid var(--win-dark);
             border-bottom: 1px solid var(--win-light);
             border-right:  1px solid var(--win-light);
-            color: var(--term-green); padding: 1px 3px;
+            color: var(--ui-text); padding: 1px 3px;
             font-size: 12px; font-family: 'Share Tech Mono', monospace;
         }
         select {
-            background: var(--term-bg);
+            background: var(--ui-field);
             border-top:    1px solid var(--win-dark);
             border-left:   1px solid var(--win-dark);
             border-bottom: 1px solid var(--win-light);
             border-right:  1px solid var(--win-light);
-            color: var(--term-green);
+            color: var(--ui-text);
             padding: 1px 2px; font-size: 12px;
             font-family: 'VT323', monospace; cursor: pointer;
         }
@@ -384,13 +386,13 @@
 
         /* Primary "danger" button — black bg, green text */
         .btn-red {
-            background: var(--term-bg);
-            color: var(--term-green);
+            background: var(--win-bg);
+            color: var(--ui-text);
             border-top-color:  var(--win-light);
             border-left-color: var(--win-light);
             font-weight: normal;
         }
-        .btn-red:hover { background: #001100; color: var(--term-green); }
+        .btn-red:hover { background: #D4D0C8; color: var(--ui-text); }
 
         /* Dim secondary */
         .btn-dim {
@@ -412,15 +414,15 @@
         .pill {
             font-family: 'VT323', monospace;
             font-size: 12px; padding: 1px 6px;
-            background: var(--term-bg);
+            background: var(--win-bg);
             border-top:    1px solid var(--win-dark);
             border-left:   1px solid var(--win-dark);
             border-bottom: 1px solid var(--win-light);
             border-right:  1px solid var(--win-light);
-            color: var(--term-green); white-space: nowrap; flex-shrink: 0;
+            color: var(--ui-text); white-space: nowrap; flex-shrink: 0;
             letter-spacing: .04em;
         }
-        #status   { color: var(--term-dgreen); }
+        #status   { color: var(--ui-text); }
         #midiPill {
             color: var(--term-mag);
             display: none;
@@ -498,9 +500,9 @@
         #aboutBox h1 {
             font-family: 'VT323', monospace;
             font-size: 28px; font-weight: normal; letter-spacing: .14em;
-            color: var(--term-green); margin: 12px 0 2px;
+            color: var(--ui-text); margin: 12px 0 2px;
             text-transform: uppercase;
-            text-shadow: 1px 1px 0 #003300;
+            text-shadow: none;
         }
         #aboutBox .build {
             font-size: 12px; letter-spacing: .1em;
@@ -551,22 +553,22 @@
 
         #midiStatusRow {
             display: flex; align-items: center; gap: 8px;
-            background: var(--term-bg);
+            background: var(--win-bg);
             border-top:    1px solid var(--win-dark);
             border-left:   1px solid var(--win-dark);
             border-bottom: 1px solid var(--win-light);
             border-right:  1px solid var(--win-light);
             padding: 6px 10px; margin-bottom: 12px; flex-wrap: wrap;
         }
-        #midiPortList { font-size: 12px; color: var(--term-green); flex: 1; min-width: 100px; }
+        #midiPortList { font-size: 12px; color: var(--ui-text); flex: 1; min-width: 100px; }
         #midiBridgeStatus {
             font-size: 11px; padding: 1px 6px;
             border-top:  1px solid var(--win-dark); border-left:  1px solid var(--win-dark);
             border-bottom: 1px solid var(--win-light); border-right: 1px solid var(--win-light);
-            background: var(--term-bg); color: var(--term-mag);
+            background: var(--ui-field); color: var(--term-mag);
             white-space: nowrap; font-family: 'Share Tech Mono', monospace;
         }
-        #midiBridgeStatus.connected { color: var(--term-green); }
+        #midiBridgeStatus.connected { color: var(--ui-text); }
         #midiBridgeStatus.error     { color: var(--term-red); animation: blink .5s step-end infinite; }
 
         .midi-section-label {
@@ -577,8 +579,8 @@
         }
         #midiMapRow { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 4px; }
         #midiMapName {
-            font-size: 11px; color: var(--term-green); padding: 2px 6px;
-            background: var(--term-bg);
+            font-size: 11px; color: var(--ui-text); padding: 2px 6px;
+            background: var(--ui-field);
             border-top: 1px solid var(--win-dark); border-left: 1px solid var(--win-dark);
             border-bottom: 1px solid var(--win-light); border-right: 1px solid var(--win-light);
             flex: 1; min-width: 110px; font-family: 'Share Tech Mono', monospace;
@@ -631,11 +633,11 @@
         }
         #syphonClose:hover { background: #D4D0C8; }
         #syphonStatus {
-            background: var(--term-bg);
+            background: var(--ui-field);
             border-top: 1px solid var(--win-dark); border-left: 1px solid var(--win-dark);
             border-bottom: 1px solid var(--win-light); border-right: 1px solid var(--win-light);
             margin: 0 14px 10px; padding: 8px 10px; font-size: 11px;
-            color: var(--term-dgreen); line-height: 1.6;
+            color: var(--ui-text); line-height: 1.6;
             font-family: 'Share Tech Mono', monospace;
         }
         #syphonStatus.active { color: var(--term-cyan); }
@@ -643,10 +645,10 @@
         .syph-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 0 14px 8px; }
         .syph-label { font-size: 12px; color: #505050; letter-spacing:.05em; width: 52px; }
         .syph-row select, .syph-row input[type=number] {
-            background: var(--term-bg);
+            background: var(--ui-field);
             border-top: 1px solid var(--win-dark); border-left: 1px solid var(--win-dark);
             border-bottom: 1px solid var(--win-light); border-right: 1px solid var(--win-light);
-            color: var(--term-green); padding: 2px 5px; font-size: 12px;
+            color: var(--ui-text); padding: 2px 5px; font-size: 12px;
         }
         #syphonToggleBtn {
             background: var(--term-bg); color: var(--term-cyan);
@@ -657,7 +659,7 @@
             margin: 0 14px 14px;
         }
         #syphonToggleBtn:hover { background: #001111; }
-        #syphonToggleBtn.active { color: var(--term-green); animation: blink 1s step-end infinite; }
+        #syphonToggleBtn.active { color: var(--ui-text); background: var(--win-bg); animation: blink 1s step-end infinite; }
 
         /* ── Spout modal ── */
         #spoutBox {
@@ -680,11 +682,11 @@
         }
         #spoutClose:hover { background: #D4D0C8; }
         #spoutStatus {
-            background: var(--term-bg);
+            background: var(--ui-field);
             border-top: 1px solid var(--win-dark); border-left: 1px solid var(--win-dark);
             border-bottom: 1px solid var(--win-light); border-right: 1px solid var(--win-light);
             margin: 0 14px 10px; padding: 8px 10px; font-size: 11px;
-            color: var(--term-dgreen); line-height: 1.6;
+            color: var(--ui-text); line-height: 1.6;
             font-family: 'Share Tech Mono', monospace;
         }
         #spoutStatus.active { color: var(--term-yel); }
@@ -692,10 +694,10 @@
         .spout-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 0 14px 8px; }
         .spout-label { font-size: 12px; color: #505050; letter-spacing:.05em; width: 52px; }
         .spout-row select, .spout-row input[type=number] {
-            background: var(--term-bg);
+            background: var(--ui-field);
             border-top: 1px solid var(--win-dark); border-left: 1px solid var(--win-dark);
             border-bottom: 1px solid var(--win-light); border-right: 1px solid var(--win-light);
-            color: var(--term-green); padding: 2px 5px; font-size: 12px;
+            color: var(--ui-text); padding: 2px 5px; font-size: 12px;
         }
         #spoutToggleBtn {
             background: var(--term-bg); color: var(--term-yel);
@@ -706,7 +708,7 @@
             margin: 0 14px 14px;
         }
         #spoutToggleBtn:hover { background: #111100; }
-        #spoutToggleBtn.active { color: var(--term-green); animation: blink 1s step-end infinite; }
+        #spoutToggleBtn.active { color: var(--ui-text); background: var(--win-bg); animation: blink 1s step-end infinite; }
 
         /* ── OSC modal ── */
         #oscBox {
@@ -716,7 +718,7 @@
         }
         #oscBox h2 {
             font-size: 16px; font-weight: normal; letter-spacing: .1em;
-            color: var(--term-green); text-transform: uppercase; margin: 12px 14px 3px;
+            color: var(--ui-text); text-transform: uppercase; margin: 12px 14px 3px;
         }
         #oscBox .osc-sub {
             font-size: 10px; color: #606060; letter-spacing: .05em; margin: 0 14px 12px;
@@ -732,23 +734,23 @@
         #oscClose:hover { background: #D4D0C8; }
         .osc-section-label {
             font-size: 12px; font-weight: normal; letter-spacing: .14em;
-            text-transform: uppercase; color: var(--term-green);
+            text-transform: uppercase; color: var(--ui-text);
             margin: 10px 14px 5px; font-family: 'VT323', monospace;
         }
         #oscStatusBox {
-            background: var(--term-bg);
+            background: var(--ui-field);
             border-top: 1px solid var(--win-dark); border-left: 1px solid var(--win-dark);
             border-bottom: 1px solid var(--win-light); border-right: 1px solid var(--win-light);
             margin: 0 14px 6px; padding: 7px 10px;
             font-size: 11px; min-height: 24px; line-height: 1.5;
-            color: var(--term-dgreen); font-family: 'Share Tech Mono', monospace;
+            color: var(--ui-text); font-family: 'Share Tech Mono', monospace;
         }
-        #oscStatusBox.ok    { color: var(--term-green); }
+        #oscStatusBox.ok    { color: var(--ui-text); }
         #oscStatusBox.error { color: var(--term-red); animation: blink .5s step-end infinite; }
         #oscMapRow { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin: 0 14px 4px; }
         #oscMapName {
-            font-size: 11px; color: var(--term-green); padding: 2px 6px;
-            background: var(--term-bg);
+            font-size: 11px; color: var(--ui-text); padding: 2px 6px;
+            background: var(--ui-field);
             border-top: 1px solid var(--win-dark); border-left: 1px solid var(--win-dark);
             border-bottom: 1px solid var(--win-light); border-right: 1px solid var(--win-light);
             flex: 1; min-width: 110px; font-family: 'Share Tech Mono', monospace;
@@ -758,7 +760,7 @@
         }
         #oscMapTable th {
             text-align: left; font-size: 10px; letter-spacing: .12em;
-            text-transform: uppercase; color: var(--term-green);
+            text-transform: uppercase; color: var(--ui-text);
             padding: 3px 5px; border-bottom: 1px solid #808080;
             font-family: 'VT323', monospace; background: var(--win-bg);
         }
@@ -772,18 +774,18 @@
         #oscMapTable .type-cell  { color: #006666; }
         #oscMapTable .dis        { opacity: .32; text-decoration: line-through; }
         .ctrl.osc-active {
-            background: #001A00 !important;
+            background: #B7E3B7 !important;
             border-top-color: var(--term-green) !important; border-left-color: var(--term-green) !important;
             transition: none !important;
         }
-        .ctrl.osc-active label { color: var(--term-green) !important; }
+        .ctrl.osc-active label { color: var(--ui-text) !important; }
 
         /* ── groups inside modal content pads ── */
         #midiBox .group-body, #oscBox .group-body { padding-left: 14px; padding-right: 14px; }
 
         /* file input */
         input[type=file] {
-            font-size: 11px; color: var(--term-dgreen); max-width: 155px;
+            font-size: 11px; color: var(--ui-text); max-width: 155px;
             font-family: 'VT323', monospace;
         }
     </style>
@@ -1054,7 +1056,7 @@
             <div style="flex:1"></div>
             <span class="pill" id="status">WS: …</span>
             <span class="pill" id="midiPill" style="color:rgba(255,160,0,.7);border-color:rgba(255,160,0,.25);cursor:pointer" title="Open MIDI settings">MIDI: —</span>
-            <span class="pill" id="oscPill"    style="color:rgba(80,220,120,.6);border-color:rgba(80,220,120,.2);cursor:pointer"  title="Open OSC settings">OSC: —</span>
+            <span class="pill" id="oscPill"    style="color:#000;border-color:rgba(80,220,120,.35);cursor:pointer"  title="Open OSC settings">OSC: —</span>
             <span class="pill" id="syphonPill" style="color:rgba(180,100,255,.6);border-color:rgba(180,100,255,.2);cursor:pointer" title="Open Syphon settings">SYPHON: OFF</span>
             <span class="pill" id="spoutPill"  style="color:rgba(0,200,220,.6);border-color:rgba(0,200,220,.2);cursor:pointer"  title="Open Spout settings">SPOUT: OFF</span>
             <button id="midiBtn"   class="btn-dim">MIDI</button>
@@ -1066,7 +1068,7 @@
 
         <!-- seek / time row -->
         <div class="transport-row">
-            <span style="font-family:'VT323',monospace;font-size:11px;color:var(--term-dgreen);opacity:.7;flex-shrink:0;letter-spacing:.06em">POS</span>
+            <span style="font-family:'VT323',monospace;font-size:11px;color:var(--ui-text);opacity:.7;flex-shrink:0;letter-spacing:.06em">POS</span>
             <input id="seekBar" type="range" min="0" max="1000" step="1" value="0">
             <span id="timeDisplay">0:00 / 0:00</span>
         </div>
@@ -1138,44 +1140,78 @@
             </div>
             </div>
 
-            <!-- FEEDBACK -->
-            <div class="group">
+            <!-- FEEDBACK — established Classic instrument + additive memory policies -->
+            <div class="group" id="feedbackGroup">
                 <div class="group-label">Feedback</div>
                 <div class="group-body">
-                <div class="group-row">
-                    <div class="ctrl">
-                        <label>FEEDBACK</label>
-                        <input id="feedback" type="range" min="0" max="3" step="0.05" value="0.6">
-                        <span class="val" id="feedbackVal">0.60</span>
+                    <div class="corrupt-section">
+                        <div class="corrupt-section-title">Core — original controls preserved</div>
+                        <div class="ctrl">
+                            <label>ENABLE</label>
+                            <input id="feedbackEnabled" type="checkbox" checked title="Bypass only the Feedback transform and Restore layer. PERSISTENCE remains independent and keeps its established Classic behavior.">
+                        </div>
+                        <div class="ctrl">
+                            <label>FEEDBACK · RETURN</label>
+                            <input id="feedback" type="range" min="0" max="3" step="0.05" value="0.6" title="Original HUFF FEEDBACK parameter. Controls how strongly the transformed previous composite is returned; the historical renderer clamps draw alpha at 1.0.">
+                            <span class="val" id="feedbackVal">0.60</span>
+                        </div>
+                        <div class="ctrl">
+                            <label>PERSISTENCE · MEMORY</label>
+                            <input id="persistence" type="range" min="0" max="10" step="0.05" value="0.7" title="Original HUFF PERSISTENCE parameter. This remains its own persistent-buffer decay stage and is never gated by Feedback Strobe or ENABLE.">
+                            <span class="val" id="persistenceVal">0.70</span>
+                        </div>
                     </div>
-                    <div class="ctrl">
-                        <label>PERSISTENCE</label>
-                        <input id="persistence" type="range" min="0" max="10" step="0.05" value="0.7">
-                        <span class="val" id="persistenceVal">0.70</span>
+
+                    <div class="corrupt-section">
+                        <div class="corrupt-section-title">Motion — original parameters preserved</div>
+                        <div class="ctrl">
+                            <label>RANGE</label>
+                            <select id="feedbackMotionRange" title="CLASSIC preserves the original slider ranges. WIDE exposes more aggressive travel while using the same FB X/Y/Z/θ runtime parameters and neutral values.">
+                                <option value="classic">CLASSIC</option>
+                                <option value="wide">WIDE</option>
+                            </select>
+                        </div>
+                        <div class="ctrl">
+                            <label>FB X · DRIFT</label>
+                            <input id="fbX" type="range" min="-1" max="1" step="0.001" value="1" title="Original FB X. Horizontal translation of the returned Feedback image per Feedback update.">
+                            <span class="val" id="fbXVal">1.00</span>
+                        </div>
+                        <div class="ctrl">
+                            <label>FB Y · DRIFT</label>
+                            <input id="fbY" type="range" min="-1" max="1" step="0.001" value="1" title="Original FB Y. Vertical translation of the returned Feedback image per Feedback update.">
+                            <span class="val" id="fbYVal">1.00</span>
+                        </div>
+                        <div class="ctrl">
+                            <label>FB Z · ZOOM</label>
+                            <input id="fbZ" type="range" min="0.98" max="1.03" step="0.005" value="1.000" title="Original FB Z. Recursive scale: below 1 recedes, above 1 expands.">
+                            <span class="val" id="fbZVal">1.00</span>
+                        </div>
+                        <div class="ctrl">
+                            <label>FB θ · ROTATE</label>
+                            <input id="fbTheta" type="range" min="-2.0" max="2.0" step="0.005" value="0.01" title="Original FB θ. Rotation in degrees per Feedback update.">
+                            <span class="val" id="fbThetaVal">0.01</span>
+                        </div>
+                        <button id="resetMotionBtn" class="btn-dim" style="font-size:9px;padding:2px 7px" title="Reset original Feedback motion defaults: X 1, Y 1, Z 1.000, θ 0.01">↺ Reset Motion</button>
                     </div>
-                    <div class="ctrl">
-                        <label>FB X</label>
-                        <input id="fbX" type="range" min="-1" max="1" step="0.001" value="1">
-                        <span class="val" id="fbXVal">1</span>
+
+                    <div class="corrupt-section">
+                        <div class="corrupt-section-title">Memory Behavior — additive</div>
+                        <div class="ctrl">
+                            <label>FB STROBE</label>
+                            <input id="feedbackStrobe" type="checkbox" title="Strobe only the established Feedback transform. PERSISTENCE, video, Corrupt, Luma, Scanlines and Flow continue independently.">
+                        </div>
+                        <div class="ctrl feedback-strobe-only">
+                            <label>INTERVAL</label>
+                            <input id="feedbackStrobeEvery" type="range" min="1" max="30" step="1" value="4" title="Apply the existing Feedback transform once every N decoded source frames while FB STROBE is enabled.">
+                            <span class="val" id="feedbackStrobeEveryVal">4 fr</span>
+                        </div>
+                        <div class="ctrl">
+                            <label>RESTORE</label>
+                            <input id="feedbackRestore" type="range" min="0" max="1" step="0.01" value="0" title="Blend the current clean source back over the established Feedback result. 0% preserves exact original Feedback behavior.">
+                            <span class="val" id="feedbackRestoreVal">0%</span>
+                        </div>
                     </div>
-                    <div class="ctrl">
-                        <label>FB Y</label>
-                        <input id="fbY" type="range" min="-1" max="1" step="0.001" value="1">
-                        <span class="val" id="fbYVal">1</span>
-                    </div>
-                    <div class="ctrl">
-                        <label>FB Z</label>
-                        <input id="fbZ" type="range" min="0.98" max="1.03" step="0.005" value="1.000">
-                        <span class="val" id="fbZVal">1.00</span>
-                    </div>
-                    <div class="ctrl">
-                        <label>FB θ</label>
-                        <input id="fbTheta" type="range" min="-2.0" max="2.0" step="0.005" value="0.01">
-                        <span class="val" id="fbThetaVal">0</span>
-                    </div>
-                    <button id="resetMotionBtn" class="btn-dim" style="font-size:9px;padding:2px 7px" title="Reset X, Y, Z, Delta to defaults">↺ Reset Motion</button>
                 </div>
-            </div>
             </div>
 
             <!-- CORRUPT — temporal region corruption + spatial distribution -->
@@ -1202,9 +1238,9 @@
                     <div class="corrupt-section">
                         <div class="corrupt-section-title">Update</div>
                         <div class="ctrl"><label>ON</label><input id="corruptOn" type="checkbox" title="Enable temporal region corruption."></div>
-                        <div class="ctrl">
-                            <label>SPEED</label>
-                            <input id="corruptSpeed" type="range" min="0" max="4" step="0.01" value="1" title="Master Corrupt motion speed. Scales autonomous patch motion, cluster movement, drift, and XYZ travel without changing explicit STROBE / MULTIGRAB frame timings.">
+                        <div class="ctrl random-speed-only">
+                            <label>RANDOM SPEED</label>
+                            <input id="corruptSpeed" type="range" min="0" max="4" step="0.01" value="1" title="Overall RANDOM Corrupt time scale. In CONTINUOUS mode, 0× holds Random Corrupt, low values create slow evolution, and 1× preserves the established cadence. Independent of CLUSTER SPEED.">
                             <span class="val" id="corruptSpeedVal">1.00×</span>
                         </div>
                         <div class="ctrl">
@@ -1306,7 +1342,12 @@
                             <label>ON</label>
                             <input id="clusterTiles" type="checkbox" title="Group Corrupt patches into persistent moving bodies. Off uses the normal RANDOM placement field.">
                         </div>
-                        <span id="clusterModeStatus" class="corrupt-status">RANDOM</span>
+                        <div class="ctrl cluster-speed-only">
+                            <label>CLUSTER SPEED</label>
+                            <input id="clusterMasterSpeed" type="range" min="0" max="4" step="0.01" value="1" title="Overall CLUSTER Corrupt time scale. In CONTINUOUS mode, 0× holds Cluster Corrupt, low values create slow evolving cluster bodies, and high values accelerate Group XYZ, organic motion and shape evolution. Independent of RANDOM SPEED.">
+                            <span class="val" id="clusterMasterSpeedVal">1.00×</span>
+                        </div>
+                        <span id="clusterModeStatus" class="corrupt-status">RANDOM CLOCK</span>
                     </div>
 
                     <div class="corrupt-section cluster-only">
@@ -1352,17 +1393,17 @@
                         <div class="corrupt-section-title">Group XYZ</div>
                         <div class="ctrl">
                             <label>MOVE X</label>
-                            <input id="cluMoveX" type="range" min="-600" max="600" step="1" value="0" title="Move cluster centers horizontally in pixels per second. SPEED scales this motion.">
+                            <input id="cluMoveX" type="range" min="-600" max="600" step="1" value="0" title="Move cluster centers horizontally in pixels per second. CLUSTER SPEED scales this motion.">
                             <span class="val" id="cluMoveXVal">0 px/s</span>
                         </div>
                         <div class="ctrl">
                             <label>MOVE Y</label>
-                            <input id="cluMoveY" type="range" min="-600" max="600" step="1" value="0" title="Move cluster centers vertically in pixels per second. SPEED scales this motion.">
+                            <input id="cluMoveY" type="range" min="-600" max="600" step="1" value="0" title="Move cluster centers vertically in pixels per second. CLUSTER SPEED scales this motion.">
                             <span class="val" id="cluMoveYVal">0 px/s</span>
                         </div>
                         <div class="ctrl">
                             <label>MOVE Z</label>
-                            <input id="cluMoveZ" type="range" min="-1.5" max="1.5" step="0.01" value="0" title="Move cluster centers through simulated depth. Positive begins toward camera; negative begins away. SPEED scales this motion.">
+                            <input id="cluMoveZ" type="range" min="-1.5" max="1.5" step="0.01" value="0" title="Move cluster centers through simulated depth. Positive begins toward camera; negative begins away. CLUSTER SPEED scales this motion.">
                             <span class="val" id="cluMoveZVal">0.00 z/s</span>
                         </div>
                     </div>
@@ -1457,7 +1498,7 @@
                         </div>
                         <div class="ctrl">
                             <label>FIELD RATE</label>
-                            <input id="corruptRate" type="range" min="0" max="1" step="0.001" value="0.104" title="Rate of Corrupt's internal noise field. Master SPEED scales this along with XYZ and cluster motion. This control still drives the exact legacy SPEED/FINE/MULT runtime stack for compatibility.">
+                            <input id="corruptRate" type="range" min="0" max="1" step="0.001" value="0.104" title="Rate of Corrupt's internal noise field. CORRUPT SPEED scales this field and Patch XYZ motion; CLUSTER SPEED is independent. This control still drives the exact legacy SPEED/FINE/MULT runtime stack for compatibility.">
                             <span class="val" id="corruptRateVal">0.80×</span>
                         </div>
                     </div>
@@ -3181,7 +3222,7 @@
             statusBox.textContent  = `Listening on UDP port ${port} · Send OSC to this machine on port ${port}`;
             statusBox.className = 'ok';
             pill.textContent    = `OSC :${port}`;
-            pill.style.color    = 'rgba(80,220,120,.85)';
+            pill.style.color    = '#000000';
             pill.style.borderColor = 'rgba(80,220,120,.3)';
         }
 
@@ -3221,7 +3262,7 @@
             let html = '';
             for (const e of map.mappings) {
                 if (e._section) {
-                    html += `<tr><td colspan="5" style="padding:7px 6px 2px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(80,220,120,.3)">${e._section}</td></tr>`;
+                    html += `<tr><td colspan="5" style="padding:7px 6px 2px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:#000">${e._section}</td></tr>`;
                     continue;
                 }
                 const dis  = e.enabled === false ? ' class="dis"' : '';
