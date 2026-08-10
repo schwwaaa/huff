@@ -1,70 +1,83 @@
-# Testing Checklist — Pass 40U
+# Testing Checklist — Pass 40W
 
-## A. BANDS regression check — do this first
+## A. Exact reported case
 
-Set:
-- Scanlines ON
-- PANEL LAYOUT = BANDS
-- ZOOM = 1.00x, then 1.50x / 2.00x
-- existing Shift / Skew / Focus / Drift / Roll controls as you normally use them
-
-Expected: the Pass 40T candidate behavior is unchanged. If BANDS feels different,
-reject Pass 40U before evaluating FIELD.
-
-## B. FIELD immediacy
-
-Switch only:
+Start with:
+- Scan ON
 - PANEL LAYOUT = FIELD
+- Luma ON
+- TARGET = SCAN
+- fixed Layer Priority: `SCAN TOP` first
+- Corrupt MODE = CONTINUOUS
 
-The stored defaults are intentionally nonzero. Expected: panels immediately
-separate into a collage field rather than remaining a uniform band stack.
+Turn Corrupt ON and sweep RANDOM SPEED:
 
-Move one control at a time:
-- SPREAD X — obvious horizontal separation;
-- SPREAD Y — obvious vertical separation;
-- SPREAD Z — obvious near/far panel scale variation;
-- SIZE VAR — panel dimensions become less uniform;
-- DRIFT — individual XY positions evolve;
-- DEPTH DRIFT — individual apparent depth evolves.
+```text
+1.00x
+0.50x
+0.15x
+0.05x
+0.00x
+```
 
-Report any control as PASS / OPAQUE / DEAD / TOO SENSITIVE.
+Expected:
+- Corrupt remains visibly part of the composite at every speed;
+- lowering Speed slows Corrupt evolution instead of making it appear for isolated render frames;
+- changing Speed should not create one single Corrupt flash followed by Scan-only frames;
+- at 0x patch placement and historical delay choice stay fixed while delayed video remains live inside patches.
 
-## C. Speed contract
+## B. Fixed layer priority
 
-With FIELD active and nonzero DRIFT / DEPTH DRIFT:
-- SPEED 1.00x
-- SPEED 0.15x
-- SPEED 0.05x
-- SPEED 0.00x
+Repeat with:
+- `SCAN TOP`
+- `CORRUPT TOP`
 
-Expected at 0x: FIELD motion freezes, while live video continues updating inside
-held panel geometry. No sample/hold should appear.
+Expected: both are stable compositing orders in CONTINUOUS mode.
 
-## D. General vs per-panel spatial distinction
+Then compare `ALTERNATE` / `PULSE ORDER`. Those intentionally change top order and
+should not be judged as stable-layer modes.
 
-- General POS X/Y should move the whole Scan instrument.
-- General ZOOM should scale the overall panel vocabulary.
-- FIELD SPREAD X/Y/Z should change relationships *between* individual panels.
+## C. Luma interaction
 
-If those roles are not visually distinct, the FIELD control surface needs further cleanup.
+With TARGET=SCAN, adjust:
+- CLIP
+- GAIN
+- CLEANUP
+- DENSITY
+- INVERT
 
-## E. Buffer composition
+Expected: Scan panel participation changes while Corrupt's speed remains
+controllable. The Pass 40V bounded Luma cache/readback behavior should remain.
 
-Test:
-1. Scan FIELD alone.
-2. + Feedback.
-3. + Flow.
-4. + Feedback + Flow.
+Repeat with TARGET=CORRUPT and TARGET=COMPOSITE for routing sanity.
 
-Expected: persistent layers/tunnels can be built from differently-positioned
-panels without Scan internally duplicating Feedback or Flow functionality.
+## D. Random vs Cluster
 
-## F. Performance / Luma boundary
+Clusters OFF:
+- sweep RANDOM SPEED 0x -> 4x.
 
-Stress with many bands + high SPREAD Z / ZOOM:
-- Luma OFF
-- Luma LIVE
-- Luma STENCIL
+Clusters ON:
+- sweep CLUSTER SPEED 0x -> 4x.
 
-No performance improvement is claimed by Pass 40U. Note whether LIVE Luma remains
-the disproportionate FPS hit.
+Expected: each control owns its respective evolution. At 0x the relevant spatial
+organization holds; historical-delay choice also holds.
+
+## E. Stress test
+
+Use Scan FIELD + Luma + Corrupt with high:
+- AMOUNT
+- PATCH SIZE
+- REPEATS
+- Scan panel count / large Z spread
+
+Open profiler. Record actual FPS and draw counts.
+
+Pass 40W adds no readback/buffer, but CONTINUOUS Corrupt now draws every render
+below 1x to preserve layer presence. Do not accept if this creates a new sustained
+FPS regression on normal artistic settings.
+
+## F. Explicit modes not redesigned
+
+Test STROBE and MULTIGRAB with Scan separately. They retain their explicit update
+gates in this pass. Report whether their held states need true independent layer
+retention; do not conflate that result with the CONTINUOUS repair.

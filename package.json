@@ -50,7 +50,11 @@
     "validate:pass40t": "node scripts/validate-pass40t.mjs",
     "simulate:pass40t": "node scripts/simulate-pass40t-scan-panels.mjs",
     "validate:pass40u": "node scripts/validate-pass40u.mjs",
-    "simulate:pass40u": "node scripts/simulate-pass40u-scan-field.mjs"
+    "simulate:pass40u": "node scripts/simulate-pass40u-scan-field.mjs",
+    "validate:pass40v": "node scripts/validate-pass40v.mjs",
+    "simulate:pass40v": "node scripts/simulate-pass40v-luma-handoff.mjs",
+    "validate:pass40w": "node scripts/validate-pass40w.mjs",
+    "simulate:pass40w": "node scripts/simulate-pass40w-layer-handoff.mjs"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^1.6.3"

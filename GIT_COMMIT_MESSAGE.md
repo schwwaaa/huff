@@ -2,9 +2,9 @@
 
 ```bash
 git add . && git commit \
-  -m "feat: add panel field layout to Scanlines" \
-  -m "Keep the existing Scanlines band generator and Pass 40T panel-aware general Zoom, while adding one alternate PANEL LAYOUT: BANDS preserves the established organization and FIELD releases those same live-video panels into deterministic per-panel X/Y/apparent-Z collage positions." \
-  -m "Add FIELD Spread X/Y/Z, Size Var, Drift and Depth Drift with useful contextual defaults; keep the single Scanlines SPEED control authoritative for all FIELD motion so 0x freezes panel evolution while live video remains active inside the held geometry." \
-  -m "Use deterministic per-panel seeds without consuming p5 random/noise state, add no framebuffer, image readback/upload, FrameRing sampling or temporal update mode, and preserve Corrupt, Cluster clocks, Feedback, Persistence, Luma, frozen Flow, pipeline routing and native runtime." \
-  -m "Add Pass 40U simulation, validation, parameter-reference updates and the complete documentation suite."
+  -m "fix: stabilize slowed Corrupt in Scan composites" \
+  -m "Separate CONTINUOUS Corrupt layer presence from RANDOM/CLUSTER SPEED so Corrupt remains composited every render instead of disappearing between sub-1x updates while Scan continues repainting the shared persistent buffer." \
+  -m "Add a speed-scaled decoded-frame Corrupt source clock so historical AGE choice evolves with RANDOM/CLUSTER SPEED: 1x follows decoded cadence, low values evolve slowly, and 0x locks patch/cluster geometry plus delay choice while delayed video remains live inside the held regions." \
+  -m "Keep STROBE and MULTIGRAB as the explicit temporal update policies, preserve Pass 40V Luma TARGET/cache behavior and Pass 40U Scan FIELD geometry, and add no framebuffer, image readback/upload, FrameRing storage or native-runtime change." \
+  -m "Add Pass 40W layer-handoff simulation, validation, documentation and updated MIDI/OSC/parameter-reference semantics."
 ```

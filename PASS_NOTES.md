@@ -1,16 +1,20 @@
 # Pass Notes
 
-## Pass 40U — Scanlines Panel Field candidate
+## Pass 40W — Corrupt / Scan layer-presence repair candidate
 
-Pass 40U continues from the Pass 40T panel-collage candidate and adds one
-alternate panel organization: `BANDS / FIELD`.
+Pass 40V correctly separated Luma targets/readback caches, but runtime testing
+exposed a second issue: CONTINUOUS Corrupt below 1x was being removed from most
+render frames by its speed gate. Scan continued repainting the shared persistent
+composite, so slowing Corrupt produced intermittent layer presence rather than a
+slow, stable composition. A speed edit could force one isolated Corrupt frame,
+which looked like a frame glitch even while FPS stayed healthy.
 
-The pass intentionally avoids adding filters or a new temporal architecture.
-FIELD acts after the existing band generator and distributes the already-created
-live-video panels across X/Y/apparent-Z with optional size variation and drift.
+Pass 40W separates **layer presence** from **evolution**:
 
-The single existing Scanlines `SPEED` remains authoritative for all Scan motion.
-No FIELD RATE or second speed control is introduced.
+- CONTINUOUS Corrupt is composited every render;
+- Random/Cluster Speed controls geometry/motion/age-choice evolution;
+- 0x locks geometry and historical delay choice while delayed video remains live;
+- STROBE/MULTIGRAB remain the explicit temporal update policies.
 
-Pass 39N remains the last user-confirmed baseline. Pass 40U is not accepted until
-runtime testing confirms both BANDS preservation and FIELD usefulness.
+No new full-resolution buffer or pixel readback is introduced. Pass 40V's Luma
+TARGET/cache architecture and the successful Scan FIELD design remain intact.

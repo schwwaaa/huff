@@ -1,19 +1,31 @@
 # Current Status
 
-## Last user-confirmed baseline
-**Pass 39N** — Corrupt Random/Cluster clocks and UI readability accepted.
+## User-confirmed direction
 
-## Scan review branch
-- Pass 40 — rejected Raster Scan reinterpretation.
-- Pass 40R — rejected conceptual/speed/zoom reinterpretation.
-- Pass 40S — recovery candidate; zoom was still too constrained.
-- Pass 40T — panel-aware collage Zoom candidate.
-- **Pass 40U — current candidate:** adds optional BANDS/FIELD panel organization on top of the 40T panel geometry.
+Scan FIELD itself is successful and should be preserved. Pass 40V improved Luma
+routing/readback behavior but exposed a separate layer-presence bug when Scan,
+Luma and slowed Corrupt were combined.
 
-Do not treat 40U as accepted until runtime feedback.
+## Current candidate
 
-## Frozen / protected
-- Pass 22 Flow implementation remains frozen.
-- Pass 36 Luma stability architecture remains protected.
-- Pass 39N Corrupt timing/readability remains protected.
-- merged Feedback/Persistence behavior remains protected.
+**Pass 40W — CONTINUOUS Corrupt / Scan layer-presence repair.**
+
+Not accepted until runtime testing confirms:
+- Scan FIELD retains its successful visual character;
+- Luma TARGET=SCAN remains responsive;
+- enabling Corrupt no longer makes a slowed CONTINUOUS composite flash one bad frame;
+- Random/Cluster Speed produce visibly slow evolution while fixed SCAN TOP or CORRUPT TOP remains stable;
+- application FPS remains acceptable under the extra CONTINUOUS Corrupt draw cadence below 1x.
+
+## Protected
+- Pass 40V Luma target/cache architecture;
+- Pass 40U Scan FIELD geometry;
+- frozen Flow;
+- merged Feedback/Persistence;
+- pipeline runtime;
+- decoder/output/native Tauri tree.
+
+## Explicit boundary
+
+Pass 40W fixes `CONTINUOUS`. STROBE/MULTIGRAB keep their explicit decoded-frame
+update gates and require separate runtime evaluation when layered with Scan.

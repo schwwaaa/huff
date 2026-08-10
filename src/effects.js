@@ -707,7 +707,8 @@ function _scanlineProfileFrame(bandCount) {
 
 // Deterministic per-panel seeds for FIELD layout. These are intentionally
 // independent of p5 random()/noise() state so switching layouts does not disturb
-// Corrupt, Flow, or the established ScanlineBandWorkspace sequence.
+// Corrupt, Flow, or the established ScanlineBandWorkspace sequence. Pass 40V
+// caches them instead of recomputing six integer hashes per panel per render.
 function _scanPanelFieldSeed01(index, salt) {
   let x = (((index + 1) * 0x9e3779b1) ^ salt) >>> 0;
   x ^= x >>> 16;
@@ -718,6 +719,46 @@ function _scanPanelFieldSeed01(index, salt) {
   return x / 4294967295;
 }
 
+class ScanPanelFieldSeedWorkspace {
+  constructor() {
+    this.capacity = 0;
+    this.x = new Float64Array(0);
+    this.y = new Float64Array(0);
+    this.z = new Float64Array(0);
+    this.size = new Float64Array(0);
+    this.phaseA = new Float64Array(0);
+    this.phaseB = new Float64Array(0);
+  }
+
+  ensure(required) {
+    if (this.capacity >= required) return this;
+    let cap = Math.max(32, this.capacity || 0);
+    while (cap < required) cap *= 2;
+    const x = new Float64Array(cap);
+    const y = new Float64Array(cap);
+    const z = new Float64Array(cap);
+    const size = new Float64Array(cap);
+    const phaseA = new Float64Array(cap);
+    const phaseB = new Float64Array(cap);
+    x.set(this.x); y.set(this.y); z.set(this.z); size.set(this.size);
+    phaseA.set(this.phaseA); phaseB.set(this.phaseB);
+    for (let i = this.capacity; i < cap; i++) {
+      x[i] = _scanPanelFieldSeed01(i, 0x13579bdf) * 2 - 1;
+      y[i] = _scanPanelFieldSeed01(i, 0x2468ace1) * 2 - 1;
+      z[i] = _scanPanelFieldSeed01(i, 0x51f15e5d) * 2 - 1;
+      size[i] = _scanPanelFieldSeed01(i, 0xa5a5f00d) * 2 - 1;
+      phaseA[i] = _scanPanelFieldSeed01(i, 0xc001d00d) * Math.PI * 2;
+      phaseB[i] = _scanPanelFieldSeed01(i, 0x7f4a7c15) * Math.PI * 2;
+    }
+    this.capacity = cap;
+    this.x = x; this.y = y; this.z = z; this.size = size;
+    this.phaseA = phaseA; this.phaseB = phaseB;
+    return this;
+  }
+}
+
+const _scanPanelFieldSeeds = new ScanPanelFieldSeedWorkspace();
+
 function applyScanlines(density, angleOverride = null, scanPriority = 1.0, state = window.HUFF_RENDER_STATE) {
   const rs = state || window.HUFF_RENDER_STATE || {};
   if (!rs.clusters) return;
@@ -727,6 +768,10 @@ function applyScanlines(density, angleOverride = null, scanPriority = 1.0, state
 
   const bandAlpha = rs.scanAlpha * scanPriority;
   if (!(bandAlpha > 0)) return;
+  const lumaTargetsScan =
+    !!rs.lumaKeyOn &&
+    String(rs.lumaKeyTarget || 'composite') === 'scan' &&
+    Number(rs.lumaKeyMix) > 0;
 
   // Pass 40T keeps the established Pass 39N slice generator intact and changes
   // only the optional spatial wrapper. ZOOM is now panel-aware: exactly 1x is
@@ -791,6 +836,7 @@ function applyScanlines(density, angleOverride = null, scanPriority = 1.0, state
     phY,
   );
   if (bandCount <= 0) return;
+  if (fieldMode) _scanPanelFieldSeeds.ensure(bandCount);
 
   const ctx = gBuf.drawingContext;
   const sourceCanvas = gCur.drawingContext.canvas;
@@ -809,6 +855,17 @@ function applyScanlines(density, angleOverride = null, scanPriority = 1.0, state
         const bandStart = starts[i];
         const bandLength = lengths[i];
         const bandCross = crossLengths[i];
+        if (lumaTargetsScan) {
+          const keyAlpha = _pipelineLumaObjectRegionAlpha(
+            sourceOffsets[i], bandStart, bandCross, bandLength,
+            width, height,
+            rs.lumaKeyAB, !!rs.lumaKeyInvert, rs.lumaKeyGain,
+            rs.lumaKeySource, rs.lumaKeyCleanup, rs.lumaKeyDensity,
+            rs.lumaKeyMix, typeof _vfc === 'number' ? _vfc : -1
+          );
+          if (keyAlpha <= 0.001) continue;
+          ctx.globalAlpha = bandAlpha * keyAlpha;
+        }
         ctx.drawImage(
           sourceCanvas,
           sourceOffsets[i], bandStart, bandCross, bandLength,
@@ -855,12 +912,12 @@ function applyScanlines(density, angleOverride = null, scanPriority = 1.0, state
     let sizeScale = 1;
 
     if (fieldMode) {
-      const seedX = _scanPanelFieldSeed01(i, 0x13579bdf) * 2 - 1;
-      const seedY = _scanPanelFieldSeed01(i, 0x2468ace1) * 2 - 1;
-      const seedZ = _scanPanelFieldSeed01(i, 0x51f15e5d) * 2 - 1;
-      const seedSize = _scanPanelFieldSeed01(i, 0xa5a5f00d) * 2 - 1;
-      const phaseA = _scanPanelFieldSeed01(i, 0xc001d00d) * Math.PI * 2;
-      const phaseB = _scanPanelFieldSeed01(i, 0x7f4a7c15) * Math.PI * 2;
+      const seedX = _scanPanelFieldSeeds.x[i];
+      const seedY = _scanPanelFieldSeeds.y[i];
+      const seedZ = _scanPanelFieldSeeds.z[i];
+      const seedSize = _scanPanelFieldSeeds.size[i];
+      const phaseA = _scanPanelFieldSeeds.phaseA[i];
+      const phaseB = _scanPanelFieldSeeds.phaseB[i];
 
       // SPREAD X/Y releases panels from their original lanes without replacing
       // the band generator. DRIFT moves around those anchors using the existing
@@ -888,7 +945,21 @@ function applyScanlines(density, angleOverride = null, scanPriority = 1.0, state
 
     if (localNeutralZoom && fieldOffsetX === 0 && fieldOffsetY === 0 && sizeScale === 1) {
       // 1x BANDS (or a zeroed FIELD) remains the exact old flat-band draw even
-      // when X/Y or angle require the transformed path.
+      // when X/Y or angle require the transformed path. Targeted Luma scales
+      // only this Scan panel; it does not key Corrupt or the persistent buffer.
+      if (lumaTargetsScan) {
+        const keyAlpha = _pipelineLumaObjectRegionAlpha(
+          sourceOffset, bandStart, bandCross, bandLength,
+          width, height,
+          rs.lumaKeyAB, !!rs.lumaKeyInvert, rs.lumaKeyGain,
+          rs.lumaKeySource, rs.lumaKeyCleanup, rs.lumaKeyDensity,
+          rs.lumaKeyMix, typeof _vfc === 'number' ? _vfc : -1
+        );
+        if (keyAlpha <= 0.001) continue;
+        ctx.globalAlpha = bandAlpha * keyAlpha;
+      } else {
+        ctx.globalAlpha = bandAlpha;
+      }
       ctx.drawImage(
         sourceCanvas,
         sourceOffset, bandStart, bandCross, bandLength,
@@ -912,6 +983,20 @@ function applyScanlines(density, angleOverride = null, scanPriority = 1.0, state
     const destinationHeight = panelHeight * localZoom * sizeScale;
     const destinationX = destinationCenterX - destinationWidth * 0.5;
     const destinationY = destinationCenterY - destinationHeight * 0.5;
+
+    if (lumaTargetsScan) {
+      const keyAlpha = _pipelineLumaObjectRegionAlpha(
+        sourceOffset, sourceY, bandCross, sampledHeight,
+        width, height,
+        rs.lumaKeyAB, !!rs.lumaKeyInvert, rs.lumaKeyGain,
+        rs.lumaKeySource, rs.lumaKeyCleanup, rs.lumaKeyDensity,
+        rs.lumaKeyMix, typeof _vfc === 'number' ? _vfc : -1
+      );
+      if (keyAlpha <= 0.001) continue;
+      ctx.globalAlpha = bandAlpha * keyAlpha;
+    } else {
+      ctx.globalAlpha = bandAlpha;
+    }
 
     ctx.drawImage(
       sourceCanvas,
@@ -1128,9 +1213,15 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0, glitchPriority = 1.0, 
   const smearX = _glitchBlits.smearX;
   const smearY = _glitchBlits.smearY;
 
-  // tileAlpha is constant for all tiles — set once, restore once.
-  // glitchPriority scales contribution relative to scanlines (A/B mix).
-  ctx.globalAlpha = (tileAlpha / 255) * glitchPriority;
+  // tileAlpha is constant unless Luma is explicitly targeted at CORRUPT.
+  // Targeted keying modulates each patch from the bounded clean/stencil luma
+  // plane without a full-resolution intermediate layer.
+  const baseTileAlpha = (tileAlpha / 255) * glitchPriority;
+  const lumaTargetsCorrupt =
+    !!rs.lumaKeyOn &&
+    String(rs.lumaKeyTarget || 'composite') === 'corrupt' &&
+    Number(rs.lumaKeyMix) > 0;
+  ctx.globalAlpha = baseTileAlpha;
 
   const jitterMin = -block * 2;
   const jitterMax =  block * 2;
@@ -1185,18 +1276,33 @@ function applyGlitch(density = 1, baseDX = 0, baseDY = 0, glitchPriority = 1.0, 
       dstY = projectedCenterY - dstH * 0.5;
     }
 
-    // Stable ring frame selection per video frame using _vfc hash.
-    // Previously random(1, maxBack+1) reseeded from frameCount — every draw()
-    // at 60fps picked a different historical frame per tile. Between two video
-    // frames each tile would flash through different time-slices of the person,
-    // causing the temporal stutter on movement.
-    // _vfc only increments when a real decoded frame arrives (~30fps), so this
-    // hash is identical across all draw() calls sharing the same video frame.
-    const randBack  = Math.max(1, ((_vfc * 1664525 + i * 1013904223) >>> 0) % maxBack + 1);
+    // Pass 40W: historical age selection follows Corrupt's speed-scaled decoded
+    // source clock, not the live _vfc directly. This is the layering half of the
+    // CONTINUOUS repair: Corrupt can be redrawn every render (so Scan cannot
+    // erase it between slow updates) while RANDOM/CLUSTER SPEED still controls
+    // how quickly each patch chooses a different historical delay. At 0x the
+    // chosen delay is fixed, but the video at that fixed delay remains live.
+    const sourceSerial = Number.isFinite(Number(corruptMotion.sourceSerial))
+      ? Math.trunc(Number(corruptMotion.sourceSerial))
+      : (typeof _vfc === 'number' ? _vfc : 0);
+    const randBack  = Math.max(1, (((sourceSerial * 1664525) + i * 1013904223) >>> 0) % maxBack + 1);
     const blendBack = Math.round(baseBack + (randBack - baseBack) * depthScatter);
     const idx       = Math.max(1, Math.min(maxBack, blendBack));
     const src       = ringFrames[idx];
     if (!src) continue;
+
+    if (lumaTargetsCorrupt) {
+      const keyAlpha = _pipelineLumaObjectAlpha(
+        cx + w * 0.5, cy + h * 0.5, width, height,
+        rs.lumaKeyAB, !!rs.lumaKeyInvert, rs.lumaKeyGain,
+        rs.lumaKeySource, rs.lumaKeyCleanup, rs.lumaKeyDensity,
+        rs.lumaKeyMix, typeof _vfc === 'number' ? _vfc : -1
+      );
+      if (keyAlpha <= 0.001) continue;
+      ctx.globalAlpha = baseTileAlpha * keyAlpha;
+    } else {
+      ctx.globalAlpha = baseTileAlpha;
+    }
 
     ctx.drawImage(src, cx, cy, w, h, dstX, dstY, dstW, dstH);
 
@@ -1788,36 +1894,56 @@ function applySymmetry(src, dst, mode = 'v', pos = 0.5) {
 }
 
 // ─── Pipeline Luma Key ────────────────────────────────────────────────────────
-// Applied in draw() between applyGlitch() and applyScanlines().
-//
-// Pass 36 stability rebase:
-//   - LIVE returns to the known-good Pass 31/34 single-scratch architecture.
-//     One bounded clean patch is analyzed/cached by decoded source frame and
-//     then composited exactly as before. No 15 Hz wall-clock gate and no
-//     per-render split CUT/FILL path.
-//   - STENCIL keeps the accepted Fairlight-inspired stored luminance plane,
-//     but its reusable alpha mask is rebuilt by direct byte assignment. This
-//     avoids the Pass 35 cumulative-alpha bug where repeated threshold/invert
-//     changes multiplied a new mask by the previously shaped mask.
-//   - Selecting STENCIL without a valid capture no longer silently falls back
-//     to LIVE; the stage simply waits for CAPTURE, matching the UI state.
-//
-// INDIGO-inspired GAIN, CLEANUP, DENSITY, X-FADE and SOFT ADD remain.
-// Operates at 640px max width for performance. No new full-resolution surface.
+// Pass 40V interaction/performance repair:
+//   - LIVE luminance extraction is cached separately from key shaping. Changing
+//     INVERT / CLIP / GAIN / CLEANUP / DENSITY no longer forces another source
+//     getImageData() when the decoded source frame has not changed.
+//   - INVERT preserves the accepted Pass 36/40U polarity while no longer forcing
+//     a redundant LIVE source readback on same-frame key-shaping edits.
+//   - COMPOSITE preserves the established clean-patch overlay behavior.
+//   - CORRUPT and SCAN targets use the same bounded luminance plane as an
+//     object-level eligibility/opacity gate inside those effects. They add no
+//     full-resolution layer, mask upload, or gBuf→CPU readback.
+//   - STENCIL remains a one-shot luminance capture and never silently falls back
+//     to LIVE.
+// Operates at 640px max width for performance.
 
 let _plkCanvas = null, _plkCtx = null;
 let _plkStencilMaskCanvas = null, _plkStencilMaskCtx = null;
 let _plkStencilMaskImageData = null;
 
-// LIVE cached clean patch.
+// LIVE source luminance is independent of key shaping. This separation is the
+// important Pass 40V handoff fix: UI key edits can reuse the current decoded
+// frame's luminance instead of synchronously reading the source canvas again.
+let _plkLiveLuma = null;
+let _plkLiveLumaFrame = -1;
+let _plkLiveLumaW = 0, _plkLiveLumaH = 0;
+
+// Targeted CORRUPT/SCAN keying only needs object-level luminance eligibility.
+// Keep that readback on its own smaller scratch surface so a dense Scan FIELD
+// does not force the 640px COMPOSITE key handoff. This is bounded CPU scratch,
+// not a full-resolution render layer.
+let _plkObjectCanvas = null, _plkObjectCtx = null;
+let _plkObjectLiveLuma = null;
+let _plkObjectLiveLumaFrame = -1;
+let _plkObjectLiveLumaW = 0, _plkObjectLiveLumaH = 0;
+
+// The shaped COMPOSITE RGB patch must still follow live RGB when KEY SRC is
+// STENCIL. Keep its frame identity separate from the stencil/mask cache.
+let _plkPatchFrame = -1;
+
+// Compatibility/cache fields retained under their established names. They now
+// describe the reusable shaped mask/clean patch rather than owning source readback.
 let _plkCacheFrame = -1;
 let _plkCacheThresh = NaN;
 let _plkCacheInvert = false;
 let _plkCacheGain = NaN;
 let _plkCacheCleanup = NaN;
 let _plkCacheDensity = NaN;
+let _plkCacheSource = '';
+let _plkPatchValid = false;
 
-// Fairlight-inspired stored stencil: bounded 8-bit luminance only.
+// Stored stencil luminance plane.
 let _plkStencilLuma = null;
 let _plkStencilW = 0, _plkStencilH = 0;
 let _plkStencilVersion = 0;
@@ -1829,7 +1955,6 @@ let _plkStencilMaskCleanup = NaN;
 let _plkStencilMaskDensity = NaN;
 
 // INDIGO Cleanup/Density is applied as a 256-entry alpha shaping table.
-// The table is rebuilt only when these two controls change.
 const _plkShapeLut = new Uint8Array(256);
 let _plkShapeCleanup = NaN;
 let _plkShapeDensity = NaN;
@@ -1838,6 +1963,10 @@ let _plkShapeIdentity = true;
 const _plkTelemetry = window.__huffLumaKeyTelemetry || {
   readbackMs: 0,
   readbackSamples: 0,
+  sourceReuses: 0,
+  objectReadbackMs: 0,
+  objectReadbackSamples: 0,
+  objectSourceReuses: 0,
   transformMs: 0,
   transformSamples: 0,
   uploadMs: 0,
@@ -1846,6 +1975,7 @@ const _plkTelemetry = window.__huffLumaKeyTelemetry || {
   presentSamples: 0,
   rebuiltFrames: 0,
   reusedFrames: 0,
+  objectSamples: 0,
   stencilCaptureMs: 0,
   stencilCaptureSamples: 0,
   stencilCaptures: 0,
@@ -1855,12 +1985,6 @@ window.__huffLumaKeyTelemetry = _plkTelemetry;
 
 function _plkProfileAdd(name, amount = 1) {
   _plkTelemetry[name] = (_plkTelemetry[name] || 0) + amount;
-}
-
-function _multiplyByteAlpha(sourceAlpha, maskAlpha) {
-  if (sourceAlpha === 255) return maskAlpha;
-  if (sourceAlpha === 0 || maskAlpha === 0) return 0;
-  return Math.floor((sourceAlpha * maskAlpha + 127) / 255);
 }
 
 function _ensurePipelineShapeLut(cleanup, density) {
@@ -1887,101 +2011,37 @@ function _ensurePipelineShapeLut(cleanup, density) {
     }
     _plkShapeLut[i] = Math.max(0, Math.min(255, (a * 255 + 0.5) | 0));
   }
-
   return _plkShapeLut;
 }
 
-// LIVE key path: mutate only the alpha of the bounded clean patch. This is the
-// same architecture that was stable before the Pass 35 CUT/FILL experiment.
-function _pipelineLumaPixelsBytesClean(patchPix, threshold, invert, safeGain, shapeLut) {
-  if (invert) {
-    for (let i = 0; i < patchPix.length; i += 4) {
-      const lum = _lumaR[patchPix[i]] + _lumaG[patchPix[i + 1]] + _lumaB[patchPix[i + 2]];
-      const roll = Math.max(0, Math.min(1, ((lum - threshold) * safeGain) / 64));
-      const reveal = 1 - roll;
-      let maskAlpha = ((1 - reveal) * 255 + 0.5) | 0;
-      if (shapeLut) maskAlpha = shapeLut[maskAlpha];
-      patchPix[i + 3] = _multiplyByteAlpha(patchPix[i + 3], maskAlpha);
-    }
-    return;
-  }
+function _pipelineLumaMaskByte(luma, threshold, invert, safeGain, shapeLut) {
+  const roll = Math.max(0, Math.min(1, ((luma - threshold) * safeGain) / 64));
+  // Preserve the accepted Pass 36/40U matte polarity exactly: normal keeps the
+  // darker side (1-roll); INVERT selects the complementary brighter side (roll).
+  let maskAlpha = (((invert ? roll : (1 - roll)) * 255) + 0.5) | 0;
+  if (shapeLut) maskAlpha = shapeLut[maskAlpha];
+  return maskAlpha;
+}
 
-  for (let i = 0; i < patchPix.length; i += 4) {
-    const lum = _lumaR[patchPix[i]] + _lumaG[patchPix[i + 1]] + _lumaB[patchPix[i + 2]];
-    const roll = Math.max(0, Math.min(1, ((lum - threshold) * safeGain) / 64));
-    let maskAlpha = ((1 - roll) * 255 + 0.5) | 0;
-    if (shapeLut) maskAlpha = shapeLut[maskAlpha];
-    patchPix[i + 3] = _multiplyByteAlpha(patchPix[i + 3], maskAlpha);
+function _pipelineLumaMaskFromLuma(lumaPlane, maskBytes, threshold, invert, safeGain, shapeLut) {
+  for (let p = 0, i = 0; p < lumaPlane.length; p++, i += 4) {
+    maskBytes[i + 3] = _pipelineLumaMaskByte(
+      lumaPlane[p], threshold, invert, safeGain, shapeLut
+    );
   }
 }
 
-function _pipelineLumaPixelsWordsClean(patchPix, threshold, invert, safeGain, shapeLut) {
-  const words = new Uint32Array(
-    patchPix.buffer,
-    patchPix.byteOffset,
-    patchPix.byteLength >>> 2
-  );
-
-  if (invert) {
-    for (let i = 0; i < words.length; i++) {
-      const packed = words[i];
-      const r = packed & 0xff;
-      const g = (packed >>> 8) & 0xff;
-      const b = (packed >>> 16) & 0xff;
-      const lum = _lumaR[r] + _lumaG[g] + _lumaB[b];
-      const roll = Math.max(0, Math.min(1, ((lum - threshold) * safeGain) / 64));
-      const reveal = 1 - roll;
-      let maskAlpha = ((1 - reveal) * 255 + 0.5) | 0;
-      if (shapeLut) maskAlpha = shapeLut[maskAlpha];
-      const outputAlpha = _multiplyByteAlpha(packed >>> 24, maskAlpha);
-      words[i] = ((packed & 0x00ffffff) | (outputAlpha << 24)) >>> 0;
-    }
-    return;
-  }
-
-  for (let i = 0; i < words.length; i++) {
-    const packed = words[i];
-    const r = packed & 0xff;
-    const g = (packed >>> 8) & 0xff;
-    const b = (packed >>> 16) & 0xff;
-    const lum = _lumaR[r] + _lumaG[g] + _lumaB[b];
-    const roll = Math.max(0, Math.min(1, ((lum - threshold) * safeGain) / 64));
-    let maskAlpha = ((1 - roll) * 255 + 0.5) | 0;
-    if (shapeLut) maskAlpha = shapeLut[maskAlpha];
-    const outputAlpha = _multiplyByteAlpha(packed >>> 24, maskAlpha);
-    words[i] = ((packed & 0x00ffffff) | (outputAlpha << 24)) >>> 0;
-  }
-}
-
-// STENCIL mask path. Crucially, alpha is ASSIGNED from the stored luminance on
-// every mask rebuild. It is never multiplied by the previous mask alpha.
-function _pipelineLumaStencilMask(stencilLuma, maskBytes, threshold, invert, safeGain, shapeLut) {
-  if (invert) {
-    for (let p = 0, i = 0; p < stencilLuma.length; p++, i += 4) {
-      const roll = Math.max(0, Math.min(1, ((stencilLuma[p] - threshold) * safeGain) / 64));
-      const reveal = 1 - roll;
-      let maskAlpha = ((1 - reveal) * 255 + 0.5) | 0;
-      if (shapeLut) maskAlpha = shapeLut[maskAlpha];
-      maskBytes[i + 3] = maskAlpha;
-    }
-    return;
-  }
-
-  for (let p = 0, i = 0; p < stencilLuma.length; p++, i += 4) {
-    const roll = Math.max(0, Math.min(1, ((stencilLuma[p] - threshold) * safeGain) / 64));
-    let maskAlpha = ((1 - roll) * 255 + 0.5) | 0;
-    if (shapeLut) maskAlpha = shapeLut[maskAlpha];
-    maskBytes[i + 3] = maskAlpha;
-  }
-}
-
-function _invalidatePipelineLumaCaches() {
+function _invalidatePipelineLumaShapeCache() {
+  _plkPreparedObjectKey = null;
   _plkCacheFrame = -1;
   _plkCacheThresh = NaN;
   _plkCacheInvert = false;
   _plkCacheGain = NaN;
   _plkCacheCleanup = NaN;
   _plkCacheDensity = NaN;
+  _plkCacheSource = '';
+  _plkPatchValid = false;
+  _plkPatchFrame = -1;
   _plkStencilMaskVersion = -1;
   _plkStencilMaskThresh = NaN;
   _plkStencilMaskInvert = false;
@@ -1989,7 +2049,20 @@ function _invalidatePipelineLumaCaches() {
   _plkStencilMaskCleanup = NaN;
   _plkStencilMaskDensity = NaN;
 }
-window.invalidatePipelineLumaKeyCache = _invalidatePipelineLumaCaches;
+window.invalidatePipelineLumaKeyCache = _invalidatePipelineLumaShapeCache;
+
+function _invalidatePipelineLumaSourceCache() {
+  _plkLiveLumaFrame = -1;
+  _plkLiveLumaW = 0;
+  _plkLiveLumaH = 0;
+  _plkObjectLiveLumaFrame = -1;
+  _plkObjectLiveLumaW = 0;
+  _plkObjectLiveLumaH = 0;
+  _plkPatchValid = false;
+  _plkPatchFrame = -1;
+  _invalidatePipelineLumaShapeCache();
+}
+window.invalidatePipelineLumaSourceCache = _invalidatePipelineLumaSourceCache;
 
 function _ensurePipelineLumaCanvas(sw, sh) {
   if (!_plkCanvas) {
@@ -2004,7 +2077,6 @@ function _ensurePipelineLumaCanvas(sw, sh) {
   const resized =
     _plkCanvas.width !== sw || _plkCanvas.height !== sh ||
     _plkStencilMaskCanvas.width !== sw || _plkStencilMaskCanvas.height !== sh;
-
   if (!resized) return;
 
   _plkCanvas.width = sw;
@@ -2021,7 +2093,8 @@ function _ensurePipelineLumaCanvas(sw, sh) {
     maskBytes[i + 3] = 255;
   }
 
-  _invalidatePipelineLumaCaches();
+  _plkLiveLuma = new Uint8Array(sw * sh);
+  _invalidatePipelineLumaSourceCache();
 
   // A stored stencil belongs to its capture dimensions. Do not silently scale
   // it after a renderer resize.
@@ -2033,11 +2106,7 @@ function _ensurePipelineLumaCanvas(sw, sh) {
 
 function _captureLumaBytesFromImageData(data, target) {
   if (_solLittleEndian) {
-    const words = new Uint32Array(
-      data.buffer,
-      data.byteOffset,
-      data.byteLength >>> 2
-    );
+    const words = new Uint32Array(data.buffer, data.byteOffset, data.byteLength >>> 2);
     for (let i = 0; i < words.length; i++) {
       const packed = words[i];
       target[i] = (
@@ -2048,31 +2117,316 @@ function _captureLumaBytesFromImageData(data, target) {
     }
     return;
   }
-
   for (let p = 0, i = 0; i < data.length; p++, i += 4) {
-    target[p] = (
-      _lumaR[data[i]] +
-      _lumaG[data[i + 1]] +
-      _lumaB[data[i + 2]] + 0.5
-    ) | 0;
+    target[p] = (_lumaR[data[i]] + _lumaG[data[i + 1]] + _lumaB[data[i + 2]] + 0.5) | 0;
   }
 }
 
-window.capturePipelineLumaStencil = function capturePipelineLumaStencil() {
-  if (!gBuf || !gCur) return false;
-
+function _pipelineLumaDimensions() {
+  if (!gBuf) return null;
   const W = gBuf.width, H = gBuf.height;
-  if (!W || !H) return false;
-
+  if (!W || !H) return null;
   const MAX_W = 640;
   const scale = W > MAX_W ? MAX_W / W : 1;
-  const sw = Math.max(1, Math.round(W * scale));
-  const sh = Math.max(1, Math.round(H * scale));
+  return {
+    W, H,
+    sw: Math.max(1, Math.round(W * scale)),
+    sh: Math.max(1, Math.round(H * scale)),
+  };
+}
+
+function _ensureLivePipelineLuma(sourceFrameSerial, profile = false) {
+  const dims = _pipelineLumaDimensions();
+  if (!dims || !gCur) return null;
+  const { sw, sh } = dims;
+  _ensurePipelineLumaCanvas(sw, sh);
+
+  if (
+    _plkLiveLuma &&
+    _plkLiveLumaFrame === sourceFrameSerial &&
+    _plkLiveLumaW === sw &&
+    _plkLiveLumaH === sh
+  ) {
+    if (profile) _plkProfileAdd('sourceReuses');
+    return { ...dims, luma: _plkLiveLuma, sourceToken: `live:${sourceFrameSerial}` };
+  }
+
+  const gCurEl = gCur.elt ?? gCur.drawingContext?.canvas;
+  if (!gCurEl) return null;
+
+  try {
+    const started = profile ? performance.now() : 0;
+    copyCanvasFrame(_plkCtx, gCurEl, sw, sh);
+    const sourceData = _plkCtx.getImageData(0, 0, sw, sh);
+    if (profile) {
+      _plkProfileAdd('readbackMs', performance.now() - started);
+      _plkProfileAdd('readbackSamples');
+    }
+
+    if (!_plkLiveLuma || _plkLiveLuma.length !== sw * sh) {
+      _plkLiveLuma = new Uint8Array(sw * sh);
+    }
+    const transformStarted = profile ? performance.now() : 0;
+    _captureLumaBytesFromImageData(sourceData.data, _plkLiveLuma);
+    if (profile) {
+      _plkProfileAdd('transformMs', performance.now() - transformStarted);
+      _plkProfileAdd('transformSamples');
+    }
+
+    _plkLiveLumaFrame = sourceFrameSerial;
+    _plkLiveLumaW = sw;
+    _plkLiveLumaH = sh;
+    _plkPatchValid = false;
+    return { ...dims, luma: _plkLiveLuma, sourceToken: `live:${sourceFrameSerial}` };
+  } catch (err) {
+    console.warn('[huff] live luma source update failed', err);
+    _plkLiveLumaFrame = -1;
+    return null;
+  }
+}
+
+function _pipelineLumaObjectDimensions() {
+  if (!gBuf) return null;
+  const W = gBuf.width, H = gBuf.height;
+  if (!W || !H) return null;
+  // Object targeting samples panel/patch eligibility rather than generating a
+  // pixel-perfect matte. 320px is intentionally smaller than COMPOSITE's 640px
+  // workspace to reduce synchronous LIVE-key handoff pressure in Scan FIELD.
+  const MAX_W = 320;
+  const scale = W > MAX_W ? MAX_W / W : 1;
+  return {
+    W, H,
+    sw: Math.max(1, Math.round(W * scale)),
+    sh: Math.max(1, Math.round(H * scale)),
+  };
+}
+
+function _ensureLivePipelineLumaObject(sourceFrameSerial, profile = false) {
+  const dims = _pipelineLumaObjectDimensions();
+  if (!dims || !gCur) return null;
+  const { sw, sh } = dims;
+
+  if (!_plkObjectCanvas) {
+    _plkObjectCanvas = document.createElement('canvas');
+    _plkObjectCtx = _plkObjectCanvas.getContext('2d', { willReadFrequently: true });
+  }
+  if (_plkObjectCanvas.width !== sw || _plkObjectCanvas.height !== sh) {
+    _plkObjectCanvas.width = sw;
+    _plkObjectCanvas.height = sh;
+    _plkObjectLiveLuma = new Uint8Array(sw * sh);
+    _plkObjectLiveLumaFrame = -1;
+    _plkObjectLiveLumaW = sw;
+    _plkObjectLiveLumaH = sh;
+  }
+
+  if (
+    _plkObjectLiveLuma &&
+    _plkObjectLiveLumaFrame === sourceFrameSerial &&
+    _plkObjectLiveLumaW === sw &&
+    _plkObjectLiveLumaH === sh
+  ) {
+    if (profile) _plkProfileAdd('objectSourceReuses');
+    return { ...dims, luma: _plkObjectLiveLuma, sourceToken: `object-live:${sourceFrameSerial}` };
+  }
+
+  const gCurEl = gCur.elt ?? gCur.drawingContext?.canvas;
+  if (!gCurEl) return null;
+  try {
+    const started = profile ? performance.now() : 0;
+    copyCanvasFrame(_plkObjectCtx, gCurEl, sw, sh);
+    const sourceData = _plkObjectCtx.getImageData(0, 0, sw, sh);
+    if (profile) {
+      _plkProfileAdd('objectReadbackMs', performance.now() - started);
+      _plkProfileAdd('objectReadbackSamples');
+    }
+    if (!_plkObjectLiveLuma || _plkObjectLiveLuma.length !== sw * sh) {
+      _plkObjectLiveLuma = new Uint8Array(sw * sh);
+    }
+    _captureLumaBytesFromImageData(sourceData.data, _plkObjectLiveLuma);
+    _plkObjectLiveLumaFrame = sourceFrameSerial;
+    _plkObjectLiveLumaW = sw;
+    _plkObjectLiveLumaH = sh;
+    return { ...dims, luma: _plkObjectLiveLuma, sourceToken: `object-live:${sourceFrameSerial}` };
+  } catch (err) {
+    console.warn('[huff] targeted luma source update failed', err);
+    _plkObjectLiveLumaFrame = -1;
+    return null;
+  }
+}
+
+function _resolvePipelineLumaObjectPlane(sourceFrameSerial, keySource, profile = false) {
+  if (keySource === 'stencil') {
+    // STENCIL has no ongoing readback. Reuse the accepted stored luminance plane
+    // at its capture dimensions; object sampling maps coordinates into it.
+    const dims = _pipelineLumaDimensions();
+    if (!dims) return null;
+    const ready = !!_plkStencilLuma && _plkStencilW === dims.sw && _plkStencilH === dims.sh;
+    if (!ready) return null;
+    if (profile) _plkProfileAdd('stencilReuses');
+    return {
+      ...dims,
+      luma: _plkStencilLuma,
+      sourceToken: `stencil:${_plkStencilVersion}`,
+    };
+  }
+  return _ensureLivePipelineLumaObject(sourceFrameSerial, profile);
+}
+
+function _resolvePipelineLumaPlane(sourceFrameSerial, keySource, profile = false) {
+  const dims = _pipelineLumaDimensions();
+  if (!dims) return null;
+  _ensurePipelineLumaCanvas(dims.sw, dims.sh);
+
+  if (keySource === 'stencil') {
+    const ready = !!_plkStencilLuma && _plkStencilW === dims.sw && _plkStencilH === dims.sh;
+    if (!ready) return null;
+    if (profile) _plkProfileAdd('stencilReuses');
+    return {
+      ...dims,
+      luma: _plkStencilLuma,
+      sourceToken: `stencil:${_plkStencilVersion}`,
+    };
+  }
+  return _ensureLivePipelineLuma(sourceFrameSerial, profile);
+}
+
+let _plkPreparedObjectKey = null;
+
+window.preparePipelineLumaObjectSource = function preparePipelineLumaObjectSource(
+  sourceFrameSerial = -1,
+  keySource = 'clean',
+  thresh = 0.5,
+  invert = false,
+  gain = 1,
+  cleanup = 0,
+  density = 0,
+  mix = 1
+) {
+  const normalizedSource = keySource === 'stencil' ? 'stencil' : 'clean';
+  const planeInfo = _resolvePipelineLumaObjectPlane(
+    sourceFrameSerial, normalizedSource, window.__huffProfilerActive === true
+  );
+  const safeGain = Math.max(0.25, Math.min(4, Number.isFinite(Number(gain)) ? Number(gain) : 1));
+  const safeCleanup = Math.max(0, Math.min(1, Number.isFinite(Number(cleanup)) ? Number(cleanup) : 0));
+  const safeDensity = Math.max(0, Math.min(1, Number.isFinite(Number(density)) ? Number(density) : 0));
+  const safeMix = Math.max(0, Math.min(1, Number(mix) || 0));
+  _plkPreparedObjectKey = {
+    planeInfo,
+    sourceFrameSerial,
+    keySource: normalizedSource,
+    thresh: Number(thresh) || 0,
+    invert: !!invert,
+    gain: safeGain,
+    cleanup: safeCleanup,
+    density: safeDensity,
+    mix: safeMix,
+    threshold: (1 - (Number(thresh) || 0)) * 255,
+    shapeLut: _ensurePipelineShapeLut(safeCleanup, safeDensity),
+  };
+  return !!planeInfo;
+};
+
+function _preparePipelineLumaObjectKeyIfNeeded(
+  thresh, invert, gain, keySource, cleanup, density, mix, sourceFrameSerial
+) {
+  const safeMix = Math.max(0, Math.min(1, Number(mix) || 0));
+  if (safeMix <= 0) return null;
+  const normalizedSource = keySource === 'stencil' ? 'stencil' : 'clean';
+  const safeGain = Math.max(0.25, Math.min(4, Number.isFinite(Number(gain)) ? Number(gain) : 1));
+  const safeCleanup = Math.max(0, Math.min(1, Number.isFinite(Number(cleanup)) ? Number(cleanup) : 0));
+  const safeDensity = Math.max(0, Math.min(1, Number.isFinite(Number(density)) ? Number(density) : 0));
+  const t = Number(thresh) || 0;
+
+  let prepared = _plkPreparedObjectKey;
+  if (
+    !prepared ||
+    prepared.sourceFrameSerial !== sourceFrameSerial ||
+    prepared.keySource !== normalizedSource ||
+    prepared.thresh !== t ||
+    prepared.invert !== !!invert ||
+    prepared.gain !== safeGain ||
+    prepared.cleanup !== safeCleanup ||
+    prepared.density !== safeDensity ||
+    prepared.mix !== safeMix
+  ) {
+    window.preparePipelineLumaObjectSource(
+      sourceFrameSerial, normalizedSource, t, invert, safeGain,
+      safeCleanup, safeDensity, safeMix
+    );
+    prepared = _plkPreparedObjectKey;
+  }
+  return prepared;
+}
+
+function _samplePreparedPipelineLumaAlpha(prepared, x, y, canvasW, canvasH) {
+  const planeInfo = prepared?.planeInfo;
+  if (!planeInfo?.luma) return prepared?.keySource === 'stencil' ? 0 : 1;
+
+  const sx = Math.max(0, Math.min(planeInfo.sw - 1, Math.floor((x / Math.max(1, canvasW)) * planeInfo.sw)));
+  const sy = Math.max(0, Math.min(planeInfo.sh - 1, Math.floor((y / Math.max(1, canvasH)) * planeInfo.sh)));
+  const luma = planeInfo.luma[sy * planeInfo.sw + sx];
+  const maskAlpha = _pipelineLumaMaskByte(
+    luma, prepared.threshold, prepared.invert, prepared.gain, prepared.shapeLut
+  ) / 255;
+  if (window.__huffProfilerActive === true) _plkProfileAdd('objectSamples');
+  return 1 - prepared.mix * (1 - maskAlpha);
+}
+
+function _pipelineLumaObjectAlpha(
+  x, y, canvasW, canvasH,
+  thresh, invert, gain, keySource, cleanup, density, mix,
+  sourceFrameSerial = -1
+) {
+  const safeMix = Math.max(0, Math.min(1, Number(mix) || 0));
+  if (safeMix <= 0) return 1;
+  const prepared = _preparePipelineLumaObjectKeyIfNeeded(
+    thresh, invert, gain, keySource, cleanup, density, safeMix, sourceFrameSerial
+  );
+  if (!prepared) return 1;
+  return _samplePreparedPipelineLumaAlpha(prepared, x, y, canvasW, canvasH);
+}
+window.pipelineLumaObjectAlpha = _pipelineLumaObjectAlpha;
+
+// Large FIELD panels can span very different luminance regions. A center-only
+// sample made Luma appear disconnected from the panel contents. Scan uses this
+// five-point coverage estimate (center + quadrant centers) while Corrupt keeps
+// the cheaper center sample for small patches.
+function _pipelineLumaObjectRegionAlpha(
+  x, y, w, h, canvasW, canvasH,
+  thresh, invert, gain, keySource, cleanup, density, mix,
+  sourceFrameSerial = -1
+) {
+  const safeMix = Math.max(0, Math.min(1, Number(mix) || 0));
+  if (safeMix <= 0) return 1;
+  const prepared = _preparePipelineLumaObjectKeyIfNeeded(
+    thresh, invert, gain, keySource, cleanup, density, safeMix, sourceFrameSerial
+  );
+  if (!prepared) return 1;
+
+  const x0 = x, y0 = y;
+  const x1 = x + w, y1 = y + h;
+  const cx = x + w * 0.5, cy = y + h * 0.5;
+  const qx0 = (x0 + cx) * 0.5, qx1 = (cx + x1) * 0.5;
+  const qy0 = (y0 + cy) * 0.5, qy1 = (cy + y1) * 0.5;
+  return (
+    _samplePreparedPipelineLumaAlpha(prepared, cx, cy, canvasW, canvasH) +
+    _samplePreparedPipelineLumaAlpha(prepared, qx0, qy0, canvasW, canvasH) +
+    _samplePreparedPipelineLumaAlpha(prepared, qx1, qy0, canvasW, canvasH) +
+    _samplePreparedPipelineLumaAlpha(prepared, qx0, qy1, canvasW, canvasH) +
+    _samplePreparedPipelineLumaAlpha(prepared, qx1, qy1, canvasW, canvasH)
+  ) * 0.2;
+}
+window.pipelineLumaObjectRegionAlpha = _pipelineLumaObjectRegionAlpha;
+
+window.capturePipelineLumaStencil = function capturePipelineLumaStencil() {
+  if (!gBuf || !gCur) return false;
+  const dims = _pipelineLumaDimensions();
+  if (!dims) return false;
+  const { sw, sh } = dims;
   _ensurePipelineLumaCanvas(sw, sh);
 
   const gCurEl = gCur.elt ?? gCur.drawingContext?.canvas;
   if (!gCurEl) return false;
-
   const profile = window.__huffProfilerActive === true;
   const started = profile ? performance.now() : 0;
 
@@ -2080,20 +2434,20 @@ window.capturePipelineLumaStencil = function capturePipelineLumaStencil() {
     copyCanvasFrame(_plkCtx, gCurEl, sw, sh);
     const keyData = _plkCtx.getImageData(0, 0, sw, sh);
     const pixelCount = sw * sh;
-
     if (!_plkStencilLuma || _plkStencilLuma.length !== pixelCount) {
       _plkStencilLuma = new Uint8Array(pixelCount);
     }
-
     _captureLumaBytesFromImageData(keyData.data, _plkStencilLuma);
     _plkStencilW = sw;
     _plkStencilH = sh;
     _plkStencilVersion++;
     _plkStencilMaskVersion = -1;
+    _plkPatchValid = false;
+    _plkPatchFrame = -1;
+    _plkPreparedObjectKey = null;
 
     if (profile) {
-      const elapsed = performance.now() - started;
-      _plkProfileAdd('stencilCaptureMs', elapsed);
+      _plkProfileAdd('stencilCaptureMs', performance.now() - started);
       _plkProfileAdd('stencilCaptureSamples');
       _plkProfileAdd('stencilCaptures');
     }
@@ -2114,20 +2468,81 @@ window.getPipelineLumaStencilStatus = function getPipelineLumaStencilStatus() {
 };
 
 window.resetPipelineLumaKeyState = function resetPipelineLumaKeyState() {
-  _invalidatePipelineLumaCaches();
+  _invalidatePipelineLumaSourceCache();
   _plkStencilLuma = null;
   _plkStencilW = 0;
   _plkStencilH = 0;
   _plkStencilVersion++;
 };
 
+function _ensurePipelineLumaMask(
+  planeInfo, thresh, invert, safeGain, safeCleanup, safeDensity, profile
+) {
+  if (!planeInfo?.luma) return false;
+  const threshold = (1 - thresh) * 255;
+  const shapeLut = _ensurePipelineShapeLut(safeCleanup, safeDensity);
+  const stencilSource = planeInfo.sourceToken.startsWith('stencil:');
+  const sourceVersion = stencilSource ? _plkStencilVersion : _plkLiveLumaFrame;
+  const cacheMatches =
+    _plkCacheSource === planeInfo.sourceToken &&
+    _plkCacheFrame === sourceVersion &&
+    thresh === _plkCacheThresh &&
+    invert === _plkCacheInvert &&
+    safeGain === _plkCacheGain &&
+    safeCleanup === _plkCacheCleanup &&
+    safeDensity === _plkCacheDensity;
+
+  if (cacheMatches) {
+    if (profile) _plkProfileAdd('reusedFrames');
+    return true;
+  }
+
+  const transformStarted = profile ? performance.now() : 0;
+  _pipelineLumaMaskFromLuma(
+    planeInfo.luma,
+    _plkStencilMaskImageData.data,
+    threshold,
+    invert,
+    safeGain,
+    shapeLut
+  );
+  if (profile) {
+    _plkProfileAdd('transformMs', performance.now() - transformStarted);
+    _plkProfileAdd('transformSamples');
+  }
+
+  const uploadStarted = profile ? performance.now() : 0;
+  _plkStencilMaskCtx.putImageData(_plkStencilMaskImageData, 0, 0);
+  if (profile) {
+    _plkProfileAdd('uploadMs', performance.now() - uploadStarted);
+    _plkProfileAdd('uploadSamples');
+    _plkProfileAdd('rebuiltFrames');
+  }
+
+  _plkCacheSource = planeInfo.sourceToken;
+  _plkCacheFrame = sourceVersion;
+  _plkCacheThresh = thresh;
+  _plkCacheInvert = invert;
+  _plkCacheGain = safeGain;
+  _plkCacheCleanup = safeCleanup;
+  _plkCacheDensity = safeDensity;
+  _plkPatchValid = false;
+  _plkPatchFrame = -1;
+
+  if (stencilSource) {
+    _plkStencilMaskVersion = _plkStencilVersion;
+    _plkStencilMaskThresh = thresh;
+    _plkStencilMaskInvert = invert;
+    _plkStencilMaskGain = safeGain;
+    _plkStencilMaskCleanup = safeCleanup;
+    _plkStencilMaskDensity = safeDensity;
+  }
+  return true;
+}
+
 function _drawPipelineLumaPatch(ctx, safeFadeMode, mix, W, H, sw, sh) {
   ctx.save();
-  if (safeFadeMode === 'add') {
-    ctx.globalCompositeOperation = 'screen';
-  } else {
-    ctx.globalCompositeOperation = 'source-over';
-  }
+  ctx.globalCompositeOperation = safeFadeMode === 'add' ? 'screen' : 'source-over';
   ctx.globalAlpha = mix;
   if (sw === W && sh === H) ctx.drawImage(_plkCanvas, 0, 0);
   else ctx.drawImage(_plkCanvas, 0, 0, W, H);
@@ -2147,156 +2562,47 @@ function applyPipelineLumaKey(
 ) {
   if (mix <= 0 || !gBuf || !gCur) return;
 
-  const W = gBuf.width, H = gBuf.height;
-  if (!W || !H) return;
+  const planeInfo = _resolvePipelineLumaPlane(
+    sourceFrameSerial,
+    keySource === 'stencil' ? 'stencil' : 'clean',
+    window.__huffProfilerActive === true
+  );
+  if (!planeInfo) return;
 
-  const MAX_W = 640;
-  const scale = W > MAX_W ? MAX_W / W : 1;
-  const sw = Math.max(1, Math.round(W * scale));
-  const sh = Math.max(1, Math.round(H * scale));
-  _ensurePipelineLumaCanvas(sw, sh);
-
-  const gCurEl = gCur.elt ?? gCur.drawingContext?.canvas;
-  if (!gCurEl) return;
-
-  const safeGain = Math.max(0.25, Math.min(4, Number.isFinite(gain) ? gain : 1));
-  const safeCleanup = Math.max(0, Math.min(1, Number.isFinite(cleanup) ? cleanup : 0));
-  const safeDensity = Math.max(0, Math.min(1, Number.isFinite(density) ? density : 0));
+  const { W, H, sw, sh } = planeInfo;
+  const safeGain = Math.max(0.25, Math.min(4, Number.isFinite(Number(gain)) ? Number(gain) : 1));
+  const safeCleanup = Math.max(0, Math.min(1, Number.isFinite(Number(cleanup)) ? Number(cleanup) : 0));
+  const safeDensity = Math.max(0, Math.min(1, Number.isFinite(Number(density)) ? Number(density) : 0));
   const safeFadeMode = fadeMode === 'add' ? 'add' : 'xfade';
   const profile = window.__huffProfilerActive === true;
-  const threshold = (1 - thresh) * 255;
-  const shapeLut = _ensurePipelineShapeLut(safeCleanup, safeDensity);
-  const ctx = gBuf.drawingContext;
 
-  // STENCIL is explicit: if no stored matte exists, do not silently behave as
-  // LIVE. The UI says CAPTURE FIRST and the image remains untouched.
-  if (keySource === 'stencil') {
-    const stencilReady =
-      !!_plkStencilLuma && _plkStencilW === sw && _plkStencilH === sh;
-    if (!stencilReady) return;
+  if (!_ensurePipelineLumaMask(
+    planeInfo, thresh, !!invert, safeGain, safeCleanup, safeDensity, profile
+  )) return;
 
-    if (profile) _plkProfileAdd('stencilReuses');
-
-    const maskRebuild =
-      _plkStencilMaskVersion !== _plkStencilVersion ||
-      thresh !== _plkStencilMaskThresh ||
-      invert !== _plkStencilMaskInvert ||
-      safeGain !== _plkStencilMaskGain ||
-      safeCleanup !== _plkStencilMaskCleanup ||
-      safeDensity !== _plkStencilMaskDensity;
-
-    if (maskRebuild) {
-      const phaseStart = profile ? performance.now() : 0;
-      _pipelineLumaStencilMask(
-        _plkStencilLuma,
-        _plkStencilMaskImageData.data,
-        threshold,
-        invert,
-        safeGain,
-        shapeLut
-      );
-      if (profile) {
-        _plkProfileAdd('transformMs', performance.now() - phaseStart);
-        _plkProfileAdd('transformSamples');
-      }
-
-      const uploadStart = profile ? performance.now() : 0;
-      _plkStencilMaskCtx.putImageData(_plkStencilMaskImageData, 0, 0);
-      if (profile) {
-        _plkProfileAdd('uploadMs', performance.now() - uploadStart);
-        _plkProfileAdd('uploadSamples');
-        _plkProfileAdd('rebuiltFrames');
-      }
-
-      _plkStencilMaskVersion = _plkStencilVersion;
-      _plkStencilMaskThresh = thresh;
-      _plkStencilMaskInvert = invert;
-      _plkStencilMaskGain = safeGain;
-      _plkStencilMaskCleanup = safeCleanup;
-      _plkStencilMaskDensity = safeDensity;
-    } else if (profile) {
-      _plkProfileAdd('reusedFrames');
-    }
-
-    // Current clean RGB passes through the stored mask using Canvas2D only;
-    // there is no synchronous readback after the one-shot CAPTURE.
-    const presentStart = profile ? performance.now() : 0;
+  // The clean RGB patch follows every decoded source frame even when KEY SRC is
+  // STENCIL. Parameter edits can reshape cached luminance without another
+  // getImageData(), but they must never freeze the live RGB carried by a stencil.
+  if (!_plkPatchValid || _plkPatchFrame !== sourceFrameSerial) {
+    const gCurEl = gCur.elt ?? gCur.drawingContext?.canvas;
+    if (!gCurEl) return;
+    const presentStarted = profile ? performance.now() : 0;
     copyCanvasFrame(_plkCtx, gCurEl, sw, sh);
     _plkCtx.save();
     _plkCtx.globalAlpha = 1;
     _plkCtx.globalCompositeOperation = 'destination-in';
     _plkCtx.drawImage(_plkStencilMaskCanvas, 0, 0, sw, sh);
     _plkCtx.restore();
-    _drawPipelineLumaPatch(ctx, safeFadeMode, mix, W, H, sw, sh);
+    _plkPatchValid = true;
+    _plkPatchFrame = sourceFrameSerial;
     if (profile) {
-      _plkProfileAdd('presentMs', performance.now() - presentStart);
+      _plkProfileAdd('presentMs', performance.now() - presentStarted);
       _plkProfileAdd('presentSamples');
     }
-    return;
-  }
-
-  // LIVE: restore the pre-Pass-35 single-scratch behavior. The cached patch is
-  // rebuilt on decoded source frames or parameter changes and otherwise reused.
-  const rebuild =
-    sourceFrameSerial !== _plkCacheFrame ||
-    thresh !== _plkCacheThresh ||
-    invert !== _plkCacheInvert ||
-    safeGain !== _plkCacheGain ||
-    safeCleanup !== _plkCacheCleanup ||
-    safeDensity !== _plkCacheDensity;
-
-  if (rebuild) {
-    try {
-      let phaseStart = profile ? performance.now() : 0;
-      copyCanvasFrame(_plkCtx, gCurEl, sw, sh);
-      const patchData = _plkCtx.getImageData(0, 0, sw, sh);
-      if (profile) {
-        _plkProfileAdd('readbackMs', performance.now() - phaseStart);
-        _plkProfileAdd('readbackSamples');
-      }
-
-      phaseStart = profile ? performance.now() : 0;
-      if (_solLittleEndian) {
-        _pipelineLumaPixelsWordsClean(
-          patchData.data, threshold, invert, safeGain, shapeLut
-        );
-      } else {
-        _pipelineLumaPixelsBytesClean(
-          patchData.data, threshold, invert, safeGain, shapeLut
-        );
-      }
-      if (profile) {
-        _plkProfileAdd('transformMs', performance.now() - phaseStart);
-        _plkProfileAdd('transformSamples');
-      }
-
-      phaseStart = profile ? performance.now() : 0;
-      _plkCtx.putImageData(patchData, 0, 0);
-      if (profile) {
-        _plkProfileAdd('uploadMs', performance.now() - phaseStart);
-        _plkProfileAdd('uploadSamples');
-        _plkProfileAdd('rebuiltFrames');
-      }
-
-      _plkCacheFrame = sourceFrameSerial;
-      _plkCacheThresh = thresh;
-      _plkCacheInvert = invert;
-      _plkCacheGain = safeGain;
-      _plkCacheCleanup = safeCleanup;
-      _plkCacheDensity = safeDensity;
-    } catch (err) {
-      // A transient canvas readback failure should skip this key pass, not take
-      // down the renderer or leave the control surface appearing wedged.
-      console.warn('[huff] live luma key update failed', err);
-      _plkCacheFrame = -1;
-      return;
-    }
-  } else if (profile) {
-    _plkProfileAdd('reusedFrames');
   }
 
   const presentStart = profile ? performance.now() : 0;
-  _drawPipelineLumaPatch(ctx, safeFadeMode, mix, W, H, sw, sh);
+  _drawPipelineLumaPatch(gBuf.drawingContext, safeFadeMode, mix, W, H, sw, sh);
   if (profile) {
     _plkProfileAdd('presentMs', performance.now() - presentStart);
     _plkProfileAdd('presentSamples');

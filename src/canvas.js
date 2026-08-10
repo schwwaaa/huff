@@ -272,7 +272,13 @@ let nPhaseX = 0, nPhaseY = 1000;
 // Pass 38: one explicit Corrupt motion clock. SPEED scales autonomous Corrupt
 // movement without changing decoded-frame STROBE / MULTIGRAB timing semantics.
 let _corruptClock = 0;
-const _corruptMotion = Object.seal({ x:0, y:0, z:0, zDir:1, dt:1/60, speed:1, timeSec:0, serial:0, clusterSpeed:1, clusterTimeSec:0 });
+// Pass 40W separates Corrupt's visual-presence clock from its evolution clock.
+// CONTINUOUS Corrupt stays composited every render so Scan/Luma cannot erase a
+// slowed layer between updates. A decoded-frame source clock advances at the
+// active Random/Cluster SPEED and chooses a stable historical age per patch.
+let _corruptSourceClock = 0;
+let _corruptSourceLastVfc = -1;
+const _corruptMotion = Object.seal({ x:0, y:0, z:0, zDir:1, dt:1/60, speed:1, timeSec:0, serial:0, sourceSerial:0, clusterSpeed:1, clusterTimeSec:0 });
 window.HUFF_CORRUPT_MOTION = _corruptMotion;
 function _resetCorruptAxisMotion() {
   _corruptClock = 0;
@@ -284,6 +290,9 @@ function _resetCorruptAxisMotion() {
   _corruptMotion.speed = 1;
   _corruptMotion.timeSec = 0;
   _corruptMotion.serial = 0;
+  _corruptSourceClock = 0;
+  _corruptSourceLastVfc = -1;
+  _corruptMotion.sourceSerial = 0;
   _corruptMotion.clusterSpeed = 1;
   _corruptMotion.clusterTimeSec = 0;
 }
@@ -535,7 +544,7 @@ const PRESET_IDS = [
   'cluSpeedVar','cluPulse',
   'cluSteer','cluBreathe','cluBounds','cluCohere',
   'pipelineRecipe','layerPriority','layerPulseSpeed',
-  'lumaKeyOn','lumaKeyMix','lumaKeyAB','lumaKeyInvert','lumaKeyGain','lumaKeySource','lumaKeyFade','lumaKeyCleanup','lumaKeyDensity',
+  'lumaKeyOn','lumaKeyTarget','lumaKeyMix','lumaKeyAB','lumaKeyInvert','lumaKeyGain','lumaKeySource','lumaKeyFade','lumaKeyCleanup','lumaKeyDensity',
   'globalMixOn','globalMixBlend','globalMixAmt','globalMixPos',
 ];
 
@@ -634,6 +643,7 @@ function applyPreset(data) {
   // Pass 34 removes the rejected GLITCH key source. Legacy/self/glitch key
   // presets migrate safely to LIVE. Stored stencil pixels are intentionally not
   // serialized in presets; only the selected process source is.
+  if (!('lumaKeyTarget' in sourceData)) sourceData.lumaKeyTarget = 'composite';
   if (!('lumaKeyGain' in sourceData)) sourceData.lumaKeyGain = '1';
   if (!('lumaKeySource' in sourceData) || sourceData.lumaKeySource === 'glitch') {
     sourceData.lumaKeySource = 'clean';
@@ -1182,8 +1192,8 @@ function hookUI() {
     'depthScatter','depthScatterVal','corruptDrift','corruptDriftVal',
     'scanAngle','bgMode','dim',
     'cluSpeedVar','cluSpeedVarVal','cluPulse','cluPulseVal','cluBreathe','cluBreatheVal','cluBounds',
-    'pipelineRecipe','layerPriority','layerPulseSpeed','layerPulseSpeedVal',
-    'lumaKeyOn','lumaKeyMix','lumaKeyMixVal','lumaKeyAB','lumaKeyABVal','lumaKeyInvert',
+    'pipelineRecipe','layerPriority','layerPriorityState','layerPulseSpeed','layerPulseSpeedVal',
+    'lumaKeyOn','lumaKeyTarget','lumaKeyTargetState','lumaKeyMix','lumaKeyMixVal','lumaKeyAB','lumaKeyABVal','lumaKeyInvert',
     'lumaKeyGain','lumaKeyGainVal','lumaKeySource','lumaKeyFade','lumaKeyCleanup','lumaKeyCleanupVal','lumaKeyDensity','lumaKeyDensityVal','lumaKeyCaptureBtn','lumaKeyStencilState',
     'globalMixOn','globalMixBlend','globalMixAmt','globalMixAmtVal','globalMixPos',
   ].forEach(k => els[k] = _$(k));
@@ -1552,10 +1562,27 @@ function hookSliders() {
   });
   syncScanFieldUI();
 
+  const syncLayerPriorityUI = () => {
+    const mode = String(els.layerPriority?.value || 'scan');
+    if (els.layerPulseSpeed) els.layerPulseSpeed.disabled = mode !== 'pulse';
+    if (els.layerPriorityState) {
+      els.layerPriorityState.textContent = mode === 'glitch' ? 'STABLE · CORRUPT TOP'
+        : mode === 'neutral' ? 'ALTERNATES EVERY FRAME'
+        : mode === 'pulse' ? 'ALTERNATES BY PULSE'
+        : 'STABLE · SCAN TOP';
+      els.layerPriorityState.classList.toggle('warn', mode === 'neutral' || mode === 'pulse');
+    }
+  };
+  els.layerPriority?.addEventListener('change', () => {
+    syncLayerPriorityUI();
+    updateLabels();
+  });
+  syncLayerPriorityUI();
+
   // Checkboxes and selects also get snapshotted for undo
   ['corruptOn','corruptUpdateMode','corruptDistribution','clusterTiles','corruptMaskMode','corruptMaskSide','clusters','feedbackEnabled','feedbackMotionRange','feedbackStrobe','flowOn','baseOn','symOn','solarizeOn',
    'cluBounds','pipelineRecipe','layerPriority','seedOnLoad','bgMode','symMode',
-   'lumaKeyOn','lumaKeyInvert','lumaKeySource','lumaKeyFade','globalMixOn','globalMixBlend','globalMixPos','scanSpinLeft','scanSpinRight','scanPanelLayout'].forEach(id => {
+   'lumaKeyOn','lumaKeyTarget','lumaKeyInvert','lumaKeySource','lumaKeyFade','globalMixOn','globalMixBlend','globalMixPos','scanSpinLeft','scanSpinRight','scanPanelLayout'].forEach(id => {
     _$(id)?.addEventListener('change', snapshotForUndo);
   });
 
@@ -1645,14 +1672,47 @@ function hookSliders() {
     updateLabels();
   });
 
+  const syncLumaTargetUI = () => {
+    const target = String(els.lumaKeyTarget?.value || 'composite');
+    if (els.lumaKeyFade) {
+      els.lumaKeyFade.disabled = target !== 'composite';
+      els.lumaKeyFade.title = target === 'composite'
+        ? 'X-FADE / SOFT ADD for the legacy composite clean-patch key.'
+        : 'Fade mode belongs to COMPOSITE target only. CORRUPT/SCAN target the effect objects directly.';
+    }
+    if (els.lumaKeyTargetState) {
+      const active = target === 'scan' ? !!els.clusters?.checked
+        : target === 'corrupt' ? !!els.corruptOn?.checked
+        : true;
+      els.lumaKeyTargetState.textContent = target === 'scan'
+        ? (active ? 'SCAN PANELS' : 'SCAN OFF')
+        : target === 'corrupt'
+          ? (active ? 'CORRUPT PATCHES' : 'CORRUPT OFF')
+          : 'COMPOSITE';
+      els.lumaKeyTargetState.classList.toggle('warn', !active);
+    }
+  };
+
+  els.lumaKeyTarget?.addEventListener('change', () => {
+    window.invalidatePipelineLumaKeyCache?.();
+    syncLumaTargetUI();
+    updateLabels();
+  });
+  els.corruptOn?.addEventListener('change', syncLumaTargetUI);
+  els.clusters?.addEventListener('change', syncLumaTargetUI);
+
   els.lumaKeySource?.addEventListener('change', () => {
     window.invalidatePipelineLumaKeyCache?.();
     _updateLumaStencilStatus();
+    syncLumaTargetUI();
   });
 
-  // Key-shaping changes invalidate only the bounded Luma caches. This keeps
-  // mode changes explicit and prevents stale alpha state from surviving an
-  // INVERT / GAIN / CLEANUP / DENSITY edit.
+  syncLumaTargetUI();
+
+  // Key-shaping changes invalidate only the shaped Luma cache. The decoded
+  // LIVE luminance plane is retained, so INVERT / CLIP / GAIN edits do not
+  // force an extra synchronous source readback on the same video frame.
+  // This also prevents stale shaped alpha from surviving an edit.
   ['lumaKeyAB','lumaKeyGain','lumaKeyCleanup','lumaKeyDensity'].forEach(id => {
     els[id]?.addEventListener('input', () => window.invalidatePipelineLumaKeyCache?.());
   });
@@ -1741,7 +1801,7 @@ function _syncCorruptContextUI() {
   });
   if (els.clusterModeStatus) {
     els.clusterModeStatus.classList.remove('ready', 'warn');
-    els.clusterModeStatus.textContent = clustered ? 'CLUSTER CLOCK ACTIVE' : 'RANDOM CLOCK ACTIVE';
+    els.clusterModeStatus.textContent = clustered ? 'CLUSTER EVOLUTION ACTIVE' : 'RANDOM EVOLUTION ACTIVE';
     if (clustered) els.clusterModeStatus.classList.add('ready');
   }
 
@@ -2077,11 +2137,6 @@ function _shouldApplyGlitchThisRender(state) {
     const clustered = !!state.clusterTiles;
     const rawSpeed = clustered ? Number(state.clusterMasterSpeed) : Number(state.corruptSpeed);
     const speed = Math.max(0, Math.min(4, Number.isFinite(rawSpeed) ? rawSpeed : 1));
-    const entering =
-      !gate.wasGlitchActive ||
-      gate.lastMode !== 'continuous' ||
-      gate.lastClustered !== clustered;
-    const speedChanged = Math.abs(speed - gate.lastContinuousSpeed) > 1e-9;
 
     gate.wasGlitchActive = true;
     gate.lastMode = 'continuous';
@@ -2089,45 +2144,17 @@ function _shouldApplyGlitchThisRender(state) {
     gate.lastCycle = -1;
     gate.lastClustered = clustered;
     gate.lastContinuousSpeed = speed;
+    gate.continuousAccumulator = 0;
 
-    // RANDOM SPEED / CLUSTER SPEED are true master evolution controls in
-    // CONTINUOUS mode. 1x preserves the established every-render cadence.
-    // Below 1x we sample/hold the CORRUPT layer at a proportionally lower rate;
-    // 0x renders one state on entry/change and then holds it. This fixes the
-    // previous "0x still looks full-speed" behavior caused by re-applying
-    // historical patches every render while the FrameRing continued advancing.
-    if (speed >= 1) {
-      gate.continuousAccumulator = 0;
-      gate.updates++;
-      return true;
-    }
-
-    if (speed <= 0) {
-      gate.continuousAccumulator = 0;
-      if (entering || speedChanged) {
-        gate.updates++;
-        return true;
-      }
-      gate.heldRenders++;
-      return false;
-    }
-
-    if (entering || speedChanged) {
-      gate.continuousAccumulator = 0;
-      gate.updates++;
-      return true;
-    }
-
-    const dt = Math.max(0, Math.min(0.05, Number(window.HUFF_CORRUPT_MOTION?.dt) || (1 / 60)));
-    gate.continuousAccumulator += speed * dt * 60;
-    if (gate.continuousAccumulator >= 1) {
-      gate.continuousAccumulator -= Math.floor(gate.continuousAccumulator);
-      gate.updates++;
-      return true;
-    }
-
-    gate.heldRenders++;
-    return false;
+    // Pass 40W layering repair: CONTINUOUS describes layer presence, not a
+    // sample/hold compositor gate. Corrupt is therefore redrawn every render so
+    // SCAN TOP / CORRUPT TOP remain stable when both effects are active. SPEED
+    // controls geometry, motion, cluster evolution, and historical-age choice.
+    // At 0x the patch layout and chosen age stay fixed while the delayed video
+    // inside those patches remains live. STROBE and MULTIGRAB remain the explicit
+    // temporal hold/update policies.
+    gate.updates++;
+    return true;
   }
 
   if (mode === 'strobe') {
@@ -2246,14 +2273,23 @@ function _shouldApplyFeedbackTransformThisRender(state) {
 // ─── Draw-loop helpers ───────────────────────────────────────────────────────
 // Defined once rather than recreated as closures on every render frame.
 function _emitGlitchGroup(state, density, glitchPriority, lumaMix) {
+  const lumaTarget = String(state.lumaKeyTarget || 'composite');
+  const targetedCorruptLuma = !!state.lumaKeyOn && lumaMix > 0 && lumaTarget === 'corrupt';
+  if (targetedCorruptLuma) {
+    // Prime the bounded luminance source once before the Corrupt hot loop. Tile
+    // sampling then stays CPU-local and adds no mask upload/full-resolution pass.
+    window.preparePipelineLumaObjectSource?.(_vfc, state.lumaKeySource, state.lumaKeyAB, !!state.lumaKeyInvert, state.lumaKeyGain, state.lumaKeyCleanup, state.lumaKeyDensity, lumaMix);
+  }
+
   const glitchUpdated = _shouldApplyGlitchThisRender(state);
   if (glitchUpdated) {
     applyGlitch(density, Math.trunc(state.glitchBaseX), Math.trunc(state.glitchBaseY), glitchPriority, state);
   }
-  // Luma Key remains independent of the Glitch strobe gate. LIVE uses the
-  // proven decoded-frame cached clean patch; STENCIL uses a one-shot stored
-  // luminance matte inspired by Fairlight's internal stencil/live-key split.
-  if (state.lumaKeyOn && lumaMix > 0) {
+
+  // COMPOSITE is the legacy Luma behavior. Targeted CORRUPT/SCAN modes do not
+  // also paint the clean key patch, so a user can unambiguously choose which
+  // front-stage effect the key is processing.
+  if (state.lumaKeyOn && lumaMix > 0 && lumaTarget === 'composite') {
     applyPipelineLumaKey(
       state.lumaKeyAB, lumaMix, !!state.lumaKeyInvert, _vfc,
       state.lumaKeyGain, state.lumaKeySource, state.lumaKeyFade,
@@ -2360,7 +2396,13 @@ function _resolveFrameActivity(state) {
     !!state.clusters &&
     Math.trunc(state.clusterCount) > 0 &&
     state.scanAlpha > 0;
-  const luma = !!state.lumaKeyOn && state.lumaKeyMix > 0;
+  const lumaRequested = !!state.lumaKeyOn && state.lumaKeyMix > 0;
+  const lumaTarget = String(state.lumaKeyTarget || 'composite');
+  const luma = lumaRequested && (
+    lumaTarget === 'composite' ||
+    (lumaTarget === 'corrupt' && glitch) ||
+    (lumaTarget === 'scan' && scanlines)
+  );
   const globalMix = !!state.globalMixOn && state.globalMixAmt > 0;
   // FEEDBACK ENABLE bypasses only the transform/Restore layer. Keep the original
   // Feedback activity decision intact so PERSISTENCE remains on the established
@@ -2461,9 +2503,17 @@ function _runGlitchLumaFrontGroup(frame) {
 }
 
 function _runScanlineFrontGroup(frame) {
-  if (frame.activity.scanlines) {
-    applyScanlines(frame.density, frame.scanAngleArg, frame.scanPriority, frame.state);
+  if (!frame.activity.scanlines) return;
+  const s = frame.state;
+  if (
+    s.lumaKeyOn && frame.lumaMix > 0 &&
+    String(s.lumaKeyTarget || 'composite') === 'scan'
+  ) {
+    // Prepare once before the panel loop. FIELD mode samples this bounded plane
+    // per panel, avoiding the old COMPOSITE handoff and its mask upload.
+    window.preparePipelineLumaObjectSource?.(_vfc, s.lumaKeySource, s.lumaKeyAB, !!s.lumaKeyInvert, s.lumaKeyGain, s.lumaKeyCleanup, s.lumaKeyDensity, frame.lumaMix);
   }
+  applyScanlines(frame.density, frame.scanAngleArg, frame.scanPriority, s);
 }
 
 const _frontStageGroupHandlers = Object.freeze({
@@ -2682,6 +2732,21 @@ function draw() {
   _corruptClock += activeCorruptSpeed * corruptDt * 60;
   _corruptMotion.timeSec = _corruptClock / 60;
   _corruptMotion.serial = Math.floor(_corruptClock);
+
+  // Slow the *selection* of historical patch ages without removing the Corrupt
+  // layer from the compositor. At 1x this follows decoded source frames; below
+  // 1x the selected delay changes more slowly; at 0x it stays fixed. The source
+  // video inside a fixed-delay patch remains live, matching Scan's stable-panel
+  // behavior and avoiding the one-frame flash caused by the old render gate.
+  if (_corruptSourceLastVfc < 0) {
+    _corruptSourceLastVfc = _vfc;
+    _corruptSourceClock = _vfc;
+  } else if (_vfc !== _corruptSourceLastVfc) {
+    const decodedDelta = Math.max(0, _vfc - _corruptSourceLastVfc);
+    _corruptSourceClock += decodedDelta * activeCorruptSpeed;
+    _corruptSourceLastVfc = _vfc;
+  }
+  _corruptMotion.sourceSerial = Math.floor(_corruptSourceClock);
   _corruptMotion.clusterSpeed = clusterMasterSpeed;
   if (clusteredCorrupt) _corruptMotion.clusterTimeSec += clusterMasterSpeed * corruptDt;
   nPhaseX += density * activeCorruptSpeed * 0.01;
@@ -3394,6 +3459,11 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
     return {
       readbackMs: t.readbackMs || 0,
       readbackSamples: t.readbackSamples || 0,
+      sourceReuses: t.sourceReuses || 0,
+      objectReadbackMs: t.objectReadbackMs || 0,
+      objectReadbackSamples: t.objectReadbackSamples || 0,
+      objectSourceReuses: t.objectSourceReuses || 0,
+      objectSamples: t.objectSamples || 0,
       transformMs: t.transformMs || 0,
       transformSamples: t.transformSamples || 0,
       uploadMs: t.uploadMs || 0,
@@ -3557,6 +3627,12 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
       const lumaPresentSamples = lumaNow.presentSamples - lastLumaTelemetry.presentSamples;
       const lumaReadbackAvg = lumaReadbackSamples > 0
         ? (lumaNow.readbackMs - lastLumaTelemetry.readbackMs) / lumaReadbackSamples : 0;
+      const lumaSourceReuseDelta = lumaNow.sourceReuses - lastLumaTelemetry.sourceReuses;
+      const lumaObjectReadbackSamples = lumaNow.objectReadbackSamples - lastLumaTelemetry.objectReadbackSamples;
+      const lumaObjectReadbackAvg = lumaObjectReadbackSamples > 0
+        ? (lumaNow.objectReadbackMs - lastLumaTelemetry.objectReadbackMs) / lumaObjectReadbackSamples : 0;
+      const lumaObjectSourceReuseDelta = lumaNow.objectSourceReuses - lastLumaTelemetry.objectSourceReuses;
+      const lumaObjectSamplesDelta = lumaNow.objectSamples - lastLumaTelemetry.objectSamples;
       const lumaTransformAvg = lumaTransformSamples > 0
         ? (lumaNow.transformMs - lastLumaTelemetry.transformMs) / lumaTransformSamples : 0;
       const lumaUploadAvg = lumaUploadSamples > 0
@@ -3700,6 +3776,9 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
         'sol present' + solarPresentAvg.toFixed(2).padStart(6) + ' ms\n' +
         'sol cache  ' + `${solarProcessedDelta}/${solarReusedDelta}`.padStart(6) + ' process/reuse\n' +
         'luma read  ' + lumaReadbackAvg.toFixed(2).padStart(6) + ' ms\n' +
+        'luma src   ' + `${lumaReadbackSamples}/${lumaSourceReuseDelta}`.padStart(6) + ' read/reuse\n' +
+        'luma obj rd' + lumaObjectReadbackAvg.toFixed(2).padStart(6) + ' ms\n' +
+        'luma obj   ' + `${lumaObjectReadbackSamples}/${lumaObjectSourceReuseDelta}/${lumaObjectSamplesDelta}`.padStart(10) + ' read/reuse/sample\n' +
         'luma xform ' + lumaTransformAvg.toFixed(2).padStart(6) + ' ms\n' +
         'luma upload' + lumaUploadAvg.toFixed(2).padStart(6) + ' ms\n' +
         'luma pres  ' + lumaPresentAvg.toFixed(2).padStart(6) + ' ms\n' +

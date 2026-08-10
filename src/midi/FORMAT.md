@@ -89,6 +89,7 @@ Use for `refreshBtn`, `resetMotionBtn`, etc.
 | `scanPlaceY` | POS Y | -1000 | 1000 |
 | `scanZoom` | ZOOM | 0.25 | 4 |
 | `scanPanelLayout` | PANEL LAYOUT | select | BANDS / FIELD |
+| `lumaKeyTarget` | LUMA TARGET | select | COMPOSITE / CORRUPT / SCAN |
 | `scanFieldSpreadX` | SPREAD X | 0 | 1 |
 | `scanFieldSpreadY` | SPREAD Y | 0 | 1 |
 | `scanFieldSpreadZ` | SPREAD Z | 0 | 1 |
@@ -181,4 +182,4 @@ Use for `refreshBtn`, `resetMotionBtn`, etc.
 Pass 39R note: `feedbackStrobe` is a boolean control. The original `feedback`, `persistence`, `fbX`, `fbY`, `fbZ`, and `fbTheta` IDs/ranges are preserved.
 
 
-Pass 39M note: Feedback keeps the original `feedback`, `persistence`, `fbX`, `fbY`, `fbZ`, and `fbTheta` IDs. `feedbackEnabled`, `feedbackStrobe`, `feedbackStrobeEvery`, `feedbackRestore`, and `feedbackMotionRange` are additive. `clusterMasterSpeed` (0..4) is the independent CLUSTER-mode time scale; `corruptSpeed` (0..4) is the RANDOM-mode time scale. In CONTINUOUS mode each can sample/hold its own Corrupt layer below 1x; 0x holds after establishing one state.
+Pass 39M note: Feedback keeps the original `feedback`, `persistence`, `fbX`, `fbY`, `fbZ`, and `fbTheta` IDs. `feedbackEnabled`, `feedbackStrobe`, `feedbackStrobeEvery`, `feedbackRestore`, and `feedbackMotionRange` are additive. `clusterMasterSpeed` (0..4) is the independent CLUSTER-mode time scale; `corruptSpeed` (0..4) is the RANDOM-mode time scale. Pass 40W note: in CONTINUOUS mode the Corrupt layer stays composited every render so Scan/Luma overlap has stable layer order. RANDOM/CLUSTER SPEED controls spatial evolution and historical-age selection; at 0x placement/age choice lock while delayed video remains live inside the patches. Use STROBE/MULTIGRAB for explicit temporal holds.

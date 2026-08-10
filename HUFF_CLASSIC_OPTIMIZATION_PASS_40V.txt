@@ -1,0 +1,44 @@
+HUFF CLASSIC OPTIMIZATION PASS 40V
+=================================
+
+Purpose
+-------
+Stabilize the accepted Pass 40U Scan FIELD when used simultaneously with CORRUPT
+and LUMA KEY, and remove the Luma handoff/cache behavior that could cause severe
+runtime stalls when key controls such as INVERT were changed.
+
+What changed
+------------
+1. LUMA TARGET selector: COMPOSITE / CORRUPT / SCAN.
+2. SCAN target keys Scan panels directly with a five-point per-panel luminance
+   coverage estimate. CORRUPT target keys Corrupt patches directly.
+3. Targeted LIVE Luma uses a separate bounded 320px readback workspace; the
+   legacy COMPOSITE target keeps its 640px workspace.
+4. Targeted SCAN/CORRUPT keying adds no mask upload, full-resolution layer, or
+   gBuf CPU readback.
+5. LIVE source luminance is cached independently from key shaping. Same-frame
+   CLIP/INVERT/GAIN/CLEANUP/DENSITY edits reuse the raw luminance plane instead
+   of forcing another source getImageData().
+6. STENCIL composite RGB now explicitly follows decoded source frames while its
+   stored matte remains cached.
+7. Scan FIELD deterministic panel seeds are cached in typed arrays instead of
+   recalculating six integer hashes per panel on every render.
+8. Layer Priority legacy NEUTRAL is visibly renamed ALTERNATE because it has
+   always alternated Scan/Corrupt paint order every render frame. PULSE is shown
+   as PULSE ORDER. Stable SCAN TOP and CORRUPT TOP modes are identified as such.
+9. Profiler now exposes targeted-Luma read/reuse/sample telemetry.
+
+Important behavior boundary
+---------------------------
+TARGET=SCAN and TARGET=CORRUPT are deliberately object-level process keys in
+Classic. They modulate whole Scan panels / Corrupt patches from bounded luma
+samples; they are not pixel-perfect full-resolution mattes inside each object.
+This avoids another full-resolution effect layer and avoids a per-object pixel
+readback path.
+
+Performance claim
+-----------------
+Static validation confirms the redundant same-frame source readback was removed,
+and the targeted LIVE key uses a smaller bounded workspace with no mask upload.
+This package does NOT claim a measured FPS improvement. Runtime performance on the
+user's actual WebKit/GPU path is authoritative.

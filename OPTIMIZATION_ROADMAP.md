@@ -1,16 +1,20 @@
 # HUFF Classic Optimization Roadmap
 
 1. Pass 39N — accepted Corrupt/Feedback/readability checkpoint.
-2. Scanlines review branch:
+2. Scan review:
    - 40 / 40R rejected;
-   - 40S recovered original concept;
-   - 40T introduced free panel-aware Zoom;
-   - 40U tests one complementary spatial organization: BANDS / FIELD.
-3. If 40U is accepted, freeze Scan for broader endurance testing before adding any filters/stencil ideas.
-4. Review Symmetry.
-5. Review Solarize with special attention to readback cost.
-6. Overall interaction/redundancy audit.
-7. Classic release hardening and cross-platform packaging verification.
+   - 40S recovery;
+   - 40T free-panel Zoom;
+   - 40U successful Panel FIELD;
+   - 40V Luma target/cache handoff repair;
+   - 40W current CONTINUOUS Scan/Luma/Corrupt layer-presence repair.
+3. Runtime-validate Pass 40W before adding another Scan mode/filter.
+4. If accepted, decide whether STROBE/MULTIGRAB need retained-layer semantics when combined with Scan.
+5. Freeze Scan/Corrupt/Luma front-stage behavior for endurance testing.
+6. Review Symmetry.
+7. Review Solarize with special attention to synchronous readback cost.
+8. Overall interaction/redundancy audit.
+9. Classic release hardening and cross-platform packaging verification.
 
-Rule: do not grow Scan by duplicating Flow, Feedback, Luma, or Corrupt. New behavior
-must strengthen Scan's specific role as a live slice/panel collage instrument.
+Rule: do not solve front-stage layering by silently adding full-resolution buffers.
+Any future retained-layer architecture must be explicit, profiled, and justified.

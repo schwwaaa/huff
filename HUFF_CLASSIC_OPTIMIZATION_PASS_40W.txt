@@ -1,0 +1,45 @@
+HUFF CLASSIC OPTIMIZATION PASS 40W
+=================================
+
+Purpose
+-------
+Repair the Scan + Luma + Corrupt interaction where lowering RANDOM/CLUSTER SPEED
+made Corrupt appear as isolated glitch frames rather than a controllable slow
+layer, even while overall application FPS remained healthy.
+
+Confirmed root cause
+--------------------
+Pass 40V used RANDOM/CLUSTER SPEED below 1x as a CONTINUOUS-mode compositor gate.
+At 0.15x, for example, Corrupt was not painted on most render frames. Scan kept
+painting into the shared persistent composite. Changing Corrupt speed forced one
+immediate Corrupt update, which could appear as one bad/glitch frame, then Corrupt
+was absent again until the next gated update.
+
+This was a layer-presence problem, not a global FPS problem.
+
+What changed
+------------
+1. CONTINUOUS Corrupt is now composited every render frame.
+2. RANDOM SPEED / CLUSTER SPEED now control Corrupt evolution rather than whether
+   the layer exists in the current front-stage composite.
+3. A decoded-frame Corrupt source clock advances at the active speed and controls
+   historical AGE selection. At 1x it tracks decoded frames; below 1x historical
+   delay choices change more slowly; at 0x the chosen delay stays fixed.
+4. At 0x, patch/cluster geometry and selected historical delay stay fixed while
+   video inside that fixed-delay patch remains live. This mirrors Scan's useful
+   "held geometry / live video" behavior.
+5. STROBE and MULTIGRAB remain the explicit temporal update/hold policies.
+6. Luma TARGET routing and Pass 40V's bounded readback/cache repair are unchanged.
+7. Scan FIELD, Flow, Feedback, pipeline runtime, native runtime and output systems
+   are unchanged.
+
+Performance boundary
+--------------------
+No new framebuffer, getImageData(), putImageData(), FrameRing allocation, or
+full-resolution layer was added. CONTINUOUS Corrupt now draws every render as a
+layer, as it already did at speed >=1x. Runtime GPU/Canvas cost with very heavy
+Corrupt settings must still be tested on the user's machine.
+
+Acceptance status
+-----------------
+Candidate only until the exact Scan FIELD + Luma + Corrupt runtime case is tested.

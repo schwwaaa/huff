@@ -112,6 +112,7 @@ Use for huff's action buttons: `refreshBtn` (reseed) and `resetMotionBtn` (reset
 | `scanPlaceY` | -1000 | 1000 | Scanlines position Y px |
 | `scanZoom` | 0.25 | 4 | Panel-aware zoom: 1x exact flat bands; away from 1x bands open into free video panels |
 | `scanPanelLayout` | bands | field | Panel organization: original BANDS or per-panel FIELD collage |
+| `lumaKeyTarget` | composite | corrupt / scan | Luma processing target: legacy composite key, Corrupt patches, or Scan panels |
 | `scanFieldSpreadX` | 0 | 1 | FIELD horizontal panel spread |
 | `scanFieldSpreadY` | 0 | 1 | FIELD vertical panel spread |
 | `scanFieldSpreadZ` | 0 | 1 | FIELD apparent-Z/local-zoom spread |
@@ -139,6 +140,8 @@ Use for huff's action buttons: `refreshBtn` (reseed) and `resetMotionBtn` (reset
 | `quality` | 0 | 1 | Render quality |
 
 > **Pass 38 Corrupt note:** HUFF presents **FIELD RATE** for the legacy `speed × fine × mult²` field contract, **RANDOM SPEED** (`corruptSpeed`) for RANDOM-mode evolution, and **CLUSTER SPEED** (`clusterMasterSpeed`) for CLUSTER-mode evolution. Existing OSC mappings to the legacy speed IDs remain valid.
+
+> **Pass 40W layering note:** in CONTINUOUS mode Corrupt remains composited every render. RANDOM/CLUSTER SPEED now scales evolution and historical-age choice rather than removing the Corrupt layer between slow updates. At 0× the patch organization and chosen delay lock while delayed video remains live inside the patches. STROBE/MULTIGRAB remain the explicit temporal hold policies.
 
 ### Toggles (checked = ON)
 

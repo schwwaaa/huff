@@ -192,14 +192,14 @@ body {
     <tr><td>corruptHoldFrames</td><td>MultiGrab Hold</td><td>1</td><td>60</td><td>Decoded frames held before the live-update window.</td></tr>
     <tr><td>corruptLiveFrames</td><td>MultiGrab Live</td><td>1</td><td>30</td><td>Decoded frames during which Corrupt updates before the next hold.</td></tr>
     <tr><td>corruptMaskThreshold</td><td>Stencil Level</td><td>0</td><td>255</td><td>Threshold for the already-captured Luma Stencil when Corrupt Mask is STENCIL.</td></tr>
-    <tr><td>corruptSpeed</td><td>Random Speed</td><td>0</td><td>4</td><td>Overall RANDOM Corrupt time scale. In CONTINUOUS mode, 0 holds the Random Corrupt layer, sub-1 values slow its visible evolution, and 1 preserves the established cadence. Independent of Cluster Speed.</td></tr>
+    <tr><td>corruptSpeed</td><td>Random Speed</td><td>0</td><td>4</td><td>Overall RANDOM Corrupt evolution speed. In CONTINUOUS mode the Corrupt layer remains composited every render: 0 locks patch placement and historical-age choice while delayed video remains live inside the patches; low values evolve slowly. STROBE/MULTIGRAB remain the explicit temporal hold modes. Independent of Cluster Speed.</td></tr>
     <tr><td>glitchBaseX</td><td>Position X</td><td>-1000</td><td>1000</td><td>Static horizontal destination offset in pixels.</td></tr>
     <tr><td>glitchBaseY</td><td>Position Y</td><td>-1000</td><td>1000</td><td>Static vertical destination offset in pixels.</td></tr>
     <tr><td>glitchBaseZ</td><td>Position Z</td><td>-1</td><td>1</td><td>Canvas2D 2.5D depth: negative recedes toward frame center; positive enlarges and projects outward.</td></tr>
     <tr><td>corruptMoveX</td><td>Move X</td><td>-1200</td><td>1200</td><td>Continuous horizontal Corrupt travel in pixels/second, scaled by master Speed.</td></tr>
     <tr><td>corruptMoveY</td><td>Move Y</td><td>-1200</td><td>1200</td><td>Continuous vertical Corrupt travel in pixels/second, scaled by master Speed.</td></tr>
     <tr><td>corruptMoveZ</td><td>Move Z</td><td>-1.5</td><td>1.5</td><td>Continuous near/far 2.5D travel; bounces at the depth limits and is scaled by master Speed.</td></tr>
-    <tr><td>clusterMasterSpeed</td><td>Cluster Speed</td><td>0</td><td>4</td><td>Overall CLUSTER Corrupt time scale. In CONTINUOUS mode, 0 holds the Cluster Corrupt layer; low values create slow evolving cluster bodies; high values accelerate Group XYZ, organic motion and shape evolution. Independent of Random Speed.</td></tr>
+    <tr><td>clusterMasterSpeed</td><td>Cluster Speed</td><td>0</td><td>4</td><td>Overall CLUSTER Corrupt evolution speed. In CONTINUOUS mode the Corrupt layer remains composited every render: 0 locks cluster bodies, shape evolution and historical-age choice while delayed video remains live inside patches; higher values accelerate Group XYZ and organic evolution. STROBE/MULTIGRAB remain the explicit temporal hold modes. Independent of Random Speed.</td></tr>
     <tr><td>cluCenters</td><td>Groups</td><td>1</td><td>20</td><td>Number of moving Corrupt groups in CLUSTER layout.</td></tr>
     <tr><td>cluBias</td><td>Group Amount</td><td>0</td><td>1</td><td>Share of total targets assigned to groups.</td></tr>
     <tr><td>cluSpread</td><td>Group Size</td><td>1</td><td>300</td><td>Maximum group radius in pixels.</td></tr>
@@ -219,7 +219,7 @@ body {
     <tr><td>glitchSpeed</td><td>Legacy Corrupt Speed</td><td>0</td><td>5</td><td>Compatibility parameter. The UI presents FIELD RATE over SPEED × FINE × MULT²; the separate master Corrupt SPEED scales autonomous motion without rewriting this legacy contract.</td></tr>
     <tr><td>glitchSpeedFine</td><td>Legacy Fine Speed</td><td>0</td><td>10</td><td>Compatibility parameter for old presets/MIDI/OSC maps.</td></tr>
     <tr><td>glitchSpeedMul</td><td>Legacy Speed Mult</td><td>0</td><td>10</td><td>Compatibility parameter; old runtime uses the multiplier squared.</td></tr>
-    <tr><td>lumaKeyAB</td><td>Luma Key Clip</td><td>0</td><td>1</td><td>Threshold between clean and processed image ownership.</td></tr>
+    <tr><td>lumaKeyAB</td><td>Luma Key Clip</td><td>0</td><td>1</td><td>Threshold for the luminance matte. With TARGET=SCAN/CORRUPT it gates those effect objects directly; COMPOSITE preserves the legacy clean-key overlay.</td></tr>
     <tr><td>lumaKeyMix</td><td>Luma Key Mix</td><td>0</td><td>1</td><td>Overall key opacity.</td></tr>
     <tr><td>lumaKeyGain</td><td>Luma Key Gain</td><td>0.25</td><td>4</td><td>Key edge steepness; 1.00 preserves established HUFF behavior.</td></tr>
     <tr><td>lumaKeyCleanup</td><td>Luma Cleanup</td><td>0</td><td>1</td><td>Low-end key cleanup.</td></tr>

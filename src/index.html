@@ -1240,12 +1240,12 @@
                         <div class="ctrl"><label>ON</label><input id="corruptOn" type="checkbox" title="Enable temporal region corruption."></div>
                         <div class="ctrl random-speed-only">
                             <label>RANDOM SPEED</label>
-                            <input id="corruptSpeed" type="range" min="0" max="4" step="0.01" value="1" title="Overall RANDOM Corrupt time scale. In CONTINUOUS mode, 0× holds Random Corrupt, low values create slow evolution, and 1× preserves the established cadence. Independent of CLUSTER SPEED.">
+                            <input id="corruptSpeed" type="range" min="0" max="4" step="0.01" value="1" title="Overall RANDOM Corrupt evolution speed. In CONTINUOUS mode the Corrupt layer stays present every render: 0× locks patch placement and historical-age choice while delayed video remains live inside the patches; low values evolve slowly. Use STROBE or MULTIGRAB for temporal hold/update behavior. Independent of CLUSTER SPEED.">
                             <span class="val" id="corruptSpeedVal">1.00×</span>
                         </div>
                         <div class="ctrl">
                             <label>MODE</label>
-                            <select id="corruptUpdateMode" title="CONTINUOUS updates Corrupt normally. STROBE refreshes only at an interval. MULTIGRAB alternates held and live-update periods.">
+                            <select id="corruptUpdateMode" title="CONTINUOUS keeps the Corrupt layer continuously composited while SPEED controls its evolution. STROBE refreshes Corrupt only at an interval. MULTIGRAB alternates held and live-update periods.">
                                 <option value="continuous">CONTINUOUS</option>
                                 <option value="strobe">STROBE</option>
                                 <option value="multigrab">MULTIGRAB</option>
@@ -1344,10 +1344,10 @@
                         </div>
                         <div class="ctrl cluster-speed-only">
                             <label>CLUSTER SPEED</label>
-                            <input id="clusterMasterSpeed" type="range" min="0" max="4" step="0.01" value="1" title="Overall CLUSTER Corrupt time scale. In CONTINUOUS mode, 0× holds Cluster Corrupt, low values create slow evolving cluster bodies, and high values accelerate Group XYZ, organic motion and shape evolution. Independent of RANDOM SPEED.">
+                            <input id="clusterMasterSpeed" type="range" min="0" max="4" step="0.01" value="1" title="Overall CLUSTER Corrupt evolution speed. In CONTINUOUS mode the Corrupt layer stays continuously composited: 0× locks cluster bodies, shape evolution and historical-age choice while delayed video remains live inside patches; higher values accelerate Group XYZ and organic evolution. Use STROBE or MULTIGRAB for temporal hold/update behavior. Independent of RANDOM SPEED.">
                             <span class="val" id="clusterMasterSpeedVal">1.00×</span>
                         </div>
-                        <span id="clusterModeStatus" class="corrupt-status">RANDOM CLOCK</span>
+                        <span id="clusterModeStatus" class="corrupt-status">RANDOM EVOLUTION</span>
                     </div>
 
                     <div class="corrupt-section cluster-only">
@@ -1541,10 +1541,11 @@
                         <select id="layerPriority" style="font-size:10px;padding:1px 2px">
                             <option value="scan">SCAN TOP</option>
                             <option value="glitch">CORRUPT TOP</option>
-                            <option value="neutral">NEUTRAL</option>
-                            <option value="pulse">PULSE</option>
+                            <option value="neutral" title="Alternates SCAN TOP and CORRUPT TOP every render frame. This is intentionally flickery, not a neutral/stable mix.">ALTERNATE</option>
+                            <option value="pulse" title="Alternates SCAN TOP and CORRUPT TOP at PULSE SPEED.">PULSE ORDER</option>
                         </select>
                     </div>
+                    <span id="layerPriorityState" style="font-size:9px;color:#000;background:#d4d0c8;border:1px solid #808080;padding:1px 4px;font-family:'Share Tech Mono',monospace;white-space:nowrap">STABLE · SCAN TOP</span>
                     <div class="ctrl">
                         <label>PULSE SPEED</label>
                         <input id="layerPulseSpeed" type="range" min="0.2" max="12" step="0.1" value="2">
@@ -1560,18 +1561,27 @@
                 <div class="group-body">
                 <div class="group-row">
                     <div class="ctrl"><label>ON</label><input id="lumaKeyOn" type="checkbox"></div>
-                    <span style="font-size:9px;color:rgba(255,255,255,.4);font-family:'Share Tech Mono',monospace;white-space:nowrap">CLEAN ←</span>
+                    <div class="ctrl">
+                        <label>TARGET</label>
+                        <select id="lumaKeyTarget" title="Choose exactly what Luma processes. COMPOSITE preserves the established clean-key overlay. CORRUPT keys Corrupt patches. SCAN keys Scan panels, including FIELD mode.">
+                            <option value="composite">COMPOSITE</option>
+                            <option value="corrupt">CORRUPT</option>
+                            <option value="scan">SCAN</option>
+                        </select>
+                    </div>
+                    <span id="lumaKeyTargetState" style="font-size:9px;color:#000;background:#d4d0c8;border:1px solid #808080;padding:1px 4px;font-family:'Share Tech Mono',monospace;white-space:nowrap">COMPOSITE</span>
+                    <span style="font-size:9px;color:rgba(255,255,255,.4);font-family:'Share Tech Mono',monospace;white-space:nowrap">DARK ←</span>
                     <div class="ctrl" style="flex:1">
                         <input id="lumaKeyAB" type="range" min="0" max="1" step="0.01" value="0.5" style="width:100%" title="Clip / threshold. Determines where the luminance key changes ownership between clean and processed image.">
                     </div>
-                    <span style="font-size:9px;color:rgba(255,255,255,.4);font-family:'Share Tech Mono',monospace;white-space:nowrap">→ PROCESSED</span>
+                    <span style="font-size:9px;color:rgba(255,255,255,.4);font-family:'Share Tech Mono',monospace;white-space:nowrap">→ BRIGHT</span>
                     <span class="val" id="lumaKeyABVal" style="min-width:30px;text-align:right">0.50</span>
                     <div class="ctrl">
                         <label>MIX</label>
                         <input id="lumaKeyMix" type="range" min="0" max="1" step="0.01" value="0" title="Overall key opacity. Kept separate from Clip/Gain, following INDIGO's key-control model.">
                         <span class="val" id="lumaKeyMixVal">0.00</span>
                     </div>
-                    <div class="ctrl"><label>INVERT</label><input id="lumaKeyInvert" type="checkbox"></div>
+                    <div class="ctrl"><label>INVERT</label><input id="lumaKeyInvert" type="checkbox" title="Invert the luminance matte. Pass 40V keeps the accepted matte polarity while avoiding a redundant same-frame LIVE source readback when this switch changes."></div>
                 </div>
                 <div class="group-row">
                     <div class="ctrl">
@@ -1581,7 +1591,7 @@
                     </div>
                     <div class="ctrl">
                         <label>KEY SRC</label>
-                        <select id="lumaKeySource" title="LIVE follows incoming luminance continuously. STENCIL uses a captured internal luminance stencil, inspired by Fairlight's stored-stencil/live-key distinction.">
+                        <select id="lumaKeySource" title="LIVE follows incoming luminance continuously from one bounded cached luminance plane per decoded frame. STENCIL uses the captured internal luminance plane and requires no ongoing source readback.">
                             <option value="clean">LIVE</option>
                             <option value="stencil">STENCIL</option>
                         </select>
