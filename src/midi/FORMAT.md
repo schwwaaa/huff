@@ -85,6 +85,19 @@ Use for `refreshBtn`, `resetMotionBtn`, etc.
 | `scanShift` | SHIFT | 0 | 0.5 |
 | `scanDrift` | DRIFT | 0 | 3 |
 | `scanSpeed` | SPEED | 0 | 5 |
+| `scanPlaceX` | POS X | -1000 | 1000 |
+| `scanPlaceY` | POS Y | -1000 | 1000 |
+| `scanZoom` | ZOOM | 0.25 | 4 |
+| `scanPanelLayout` | PANEL LAYOUT | select | BANDS / FIELD |
+| `scanFieldSpreadX` | SPREAD X | 0 | 1 |
+| `scanFieldSpreadY` | SPREAD Y | 0 | 1 |
+| `scanFieldSpreadZ` | SPREAD Z | 0 | 1 |
+| `scanFieldSizeVar` | SIZE VAR | 0 | 1 |
+| `scanFieldDrift` | FIELD DRIFT | 0 | 1 |
+| `scanFieldDepthDrift` | DEPTH DRIFT | 0 | 1 |
+| `scanMoveX` | MOVE X | -1000 | 1000 |
+| `scanMoveY` | MOVE Y | -1000 | 1000 |
+| `scanMoveZ` | MOVE Z | -2 | 2 |
 | `scanGap` | GAP | 0 | 200 |
 | `scanSkew` | SKEW | -1 | 1 |
 | `scanAlpha` | OPACITY | 0 | 1 |

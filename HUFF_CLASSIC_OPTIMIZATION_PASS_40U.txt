@@ -1,0 +1,73 @@
+HUFF CLASSIC — OPTIMIZATION / FEATURE REVIEW PASS 40U
+=====================================================
+
+STATUS
+------
+Candidate only. Pass 39N remains the last user-confirmed baseline.
+Pass 40U continues the Scanlines panel-collage experiment from 40T without
+changing the underlying live-video band generator.
+
+PURPOSE
+-------
+Add one second organizational mode for Scanlines panels, analogous in scope to
+Corrupt's RANDOM / CLUSTER distinction:
+
+  PANEL LAYOUT
+    BANDS  = existing Scanlines organization
+    FIELD  = the same panels released into independent X/Y/apparent-Z collage positions
+
+FIELD CONTROLS
+--------------
+  SPREAD X
+  SPREAD Y
+  SPREAD Z
+  SIZE VAR
+  DRIFT
+  DEPTH DRIFT
+  ZERO FIELD
+
+CORE RULES
+----------
+- BANDS remains the default and preserves the 40T / Pass39N-derived behavior.
+- FIELD does not add a new video source, temporal memory, FrameRing read, filter,
+  framebuffer, or sample/hold policy.
+- General Scan ZOOM still moves the entire Scan instrument.
+- FIELD SPREAD Z varies individual panels around that general Zoom.
+- The single Scanlines SPEED control owns FIELD DRIFT and DEPTH DRIFT rate.
+- SPEED 0 freezes FIELD drift because the existing Scan phases stop advancing.
+- Zeroing every FIELD parameter collapses FIELD back onto BANDS geometry.
+- The existing ScanlineBandWorkspace is unchanged.
+
+PERFORMANCE BOUNDARY
+--------------------
+No new getImageData(), putImageData(), createGraphics(), FrameRing sampling,
+or full-resolution persistent buffer was added. FIELD adds deterministic
+per-panel arithmetic before the same per-panel Canvas drawImage calls.
+
+RUNTIME FILES CHANGED
+---------------------
+src/index.html
+src/canvas.js
+src/effects.js
+
+COMPATIBILITY / DOC FILES CHANGED
+---------------------------------
+src/midi/FORMAT.md
+src/osc/FORMAT.md
+docs/docs/parameter-reference.html
+docs-v1/docs/parameter-reference.html
+package.json
+scripts/validate-pass40u.mjs
+scripts/simulate-pass40u-scan-field.mjs
+
+RUNTIME ACCEPTANCE QUESTIONS
+----------------------------
+1. BANDS: does the existing 40T panel behavior still feel unchanged?
+2. FIELD: does switching modes immediately create a useful collage instead of a tile grid?
+3. SPREAD X/Y: do panels visibly leave their original lanes?
+4. SPREAD Z: do foreground/midground/background relationships emerge?
+5. SIZE VAR: does it increase collage heterogeneity without feeling random for its own sake?
+6. SPEED 0: does FIELD motion stop while live video remains alive inside panels?
+7. Does Flow / Feedback build useful accumulated collages from FIELD panels?
+
+Do not commit until runtime acceptance.

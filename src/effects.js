@@ -705,6 +705,19 @@ function _scanlineProfileFrame(bandCount) {
   else _scanlineTelemetry.transformedFrames++;
 }
 
+// Deterministic per-panel seeds for FIELD layout. These are intentionally
+// independent of p5 random()/noise() state so switching layouts does not disturb
+// Corrupt, Flow, or the established ScanlineBandWorkspace sequence.
+function _scanPanelFieldSeed01(index, salt) {
+  let x = (((index + 1) * 0x9e3779b1) ^ salt) >>> 0;
+  x ^= x >>> 16;
+  x = Math.imul(x, 0x7feb352d) >>> 0;
+  x ^= x >>> 15;
+  x = Math.imul(x, 0x846ca68b) >>> 0;
+  x ^= x >>> 16;
+  return x / 4294967295;
+}
+
 function applyScanlines(density, angleOverride = null, scanPriority = 1.0, state = window.HUFF_RENDER_STATE) {
   const rs = state || window.HUFF_RENDER_STATE || {};
   if (!rs.clusters) return;
@@ -715,6 +728,13 @@ function applyScanlines(density, angleOverride = null, scanPriority = 1.0, state
   const bandAlpha = rs.scanAlpha * scanPriority;
   if (!(bandAlpha > 0)) return;
 
+  // Pass 40T keeps the established Pass 39N slice generator intact and changes
+  // only the optional spatial wrapper. ZOOM is now panel-aware: exactly 1x is
+  // the original flat 2D band compositor. Moving away from 1x lets each band
+  // unfold into a video panel and scale independently in the existing scan
+  // coordinate system. This allows the persistent buffer / Flow / Feedback
+  // stages to accumulate multi-scale collage layers instead of scaling one
+  // constrained strip field as a single canvas object.
   const angleDeg = angleOverride !== null ? angleOverride : rs.scanAngle;
   const shiftScale = rs.scanShift;
   const driftAmt = rs.scanDrift;
@@ -725,6 +745,33 @@ function applyScanlines(density, angleOverride = null, scanPriority = 1.0, state
   const bandSize = Math.max(4, Math.floor(Math.trunc(rs.clusterRadius) * 3));
   const phX = nPhaseScanX;
   const phY = nPhaseScanY;
+
+  const baseX = Number(rs.scanPlaceX) || 0;
+  const baseY = Number(rs.scanPlaceY) || 0;
+  const motionX = Number(rs.__scanMotionX) || 0;
+  const motionY = Number(rs.__scanMotionY) || 0;
+  const baseZoom = Math.max(0.25, Math.min(4, Number.isFinite(Number(rs.scanZoom)) ? Number(rs.scanZoom) : 1));
+  const motionZoomOffset = Number(rs.__scanMotionZoomOffset) || 0;
+  const placeX = baseX + motionX;
+  const placeY = baseY + motionY;
+  const zoom = Math.max(0.25, Math.min(4, baseZoom + motionZoomOffset));
+  const neutralZoom = Math.abs(zoom - 1) < 1e-9;
+  const panelLayout = String(rs.scanPanelLayout || 'bands');
+  const fieldMode = panelLayout === 'field';
+  const fieldSpreadX = Math.max(0, Math.min(1, Number(rs.scanFieldSpreadX) || 0));
+  const fieldSpreadY = Math.max(0, Math.min(1, Number(rs.scanFieldSpreadY) || 0));
+  const fieldSpreadZ = Math.max(0, Math.min(1, Number(rs.scanFieldSpreadZ) || 0));
+  const fieldSizeVar = Math.max(0, Math.min(1, Number(rs.scanFieldSizeVar) || 0));
+  const fieldDrift = Math.max(0, Math.min(1, Number(rs.scanFieldDrift) || 0));
+  const fieldDepthDrift = Math.max(0, Math.min(1, Number(rs.scanFieldDepthDrift) || 0));
+  const neutralField = !fieldMode || (fieldSpreadX === 0 && fieldSpreadY === 0 && fieldSpreadZ === 0 && fieldSizeVar === 0 && fieldDrift === 0 && fieldDepthDrift === 0);
+  const neutralSpatial = placeX === 0 && placeY === 0 && neutralZoom && neutralField;
+
+  // General ZOOM still owns the whole Scan instrument. FIELD only adds a
+  // per-panel organization layer after the existing band generator: deterministic
+  // X/Y placement, apparent Z, size variation, and phase-driven drift.
+  // BANDS remains exact 40T behavior, and a zeroed FIELD collapses back to BANDS.
+  const sourceAspect = Math.max(0.0001, width / Math.max(1, height));
 
   const workspace = _scanlineBands.resolveGeometry(width, height, angleDeg);
   const dim = workspace.dim;
@@ -753,9 +800,8 @@ function applyScanlines(density, angleOverride = null, scanPriority = 1.0, state
   const destinationOffsets = workspace.dstOff;
   const crossLengths = workspace.crossLength;
 
-  if (workspace.directHorizontal) {
-    // At exact 0°, the legacy translate pair is a mathematical identity.
-    // Avoid save/translate/translate/restore and restore only globalAlpha.
+  if (workspace.directHorizontal && neutralSpatial) {
+    // Exact Pass 39N fast path at neutral X/Y/Zoom and BANDS/zeroed FIELD.
     const previousAlpha = ctx.globalAlpha;
     try {
       ctx.globalAlpha = bandAlpha;
@@ -777,19 +823,100 @@ function applyScanlines(density, angleOverride = null, scanPriority = 1.0, state
   }
 
   ctx.save();
-  ctx.translate(workspace.halfWidth, workspace.halfHeight);
-  if (workspace.rotatePattern) ctx.rotate(workspace.angleRad);
-  ctx.translate(workspace.negativeHalfWidth, workspace.negativeHalfDim);
+
+  // X/Y remain a general placement wrapper. ZOOM is intentionally *not* a
+  // ctx.scale() here: doing that constrained all bands into one scaled field.
+  // Panel-aware ZOOM is applied per band below so each live-video slice can
+  // become an independent collage panel while still returning to exact 2D at 1x.
+  if (placeX !== 0 || placeY !== 0) ctx.translate(placeX, placeY);
+
+  if (workspace.directHorizontal) {
+    // Direct horizontal panel geometry already uses screen-space scan coordinates.
+  } else {
+    // Preserve the established Pass 39N angle/spin geometry. Panel rectangles
+    // live inside that same coordinate system rather than replacing it.
+    ctx.translate(workspace.halfWidth, workspace.halfHeight);
+    if (workspace.rotatePattern) ctx.rotate(workspace.angleRad);
+    ctx.translate(workspace.negativeHalfWidth, workspace.negativeHalfDim);
+  }
+
   ctx.globalAlpha = bandAlpha;
 
   for (let i = 0; i < bandCount; i++) {
     const bandStart = starts[i];
     const bandLength = lengths[i];
     const bandCross = crossLengths[i];
+    const sourceOffset = sourceOffsets[i];
+    const destinationOffset = destinationOffsets[i];
+
+    let localZoom = zoom;
+    let fieldOffsetX = 0;
+    let fieldOffsetY = 0;
+    let sizeScale = 1;
+
+    if (fieldMode) {
+      const seedX = _scanPanelFieldSeed01(i, 0x13579bdf) * 2 - 1;
+      const seedY = _scanPanelFieldSeed01(i, 0x2468ace1) * 2 - 1;
+      const seedZ = _scanPanelFieldSeed01(i, 0x51f15e5d) * 2 - 1;
+      const seedSize = _scanPanelFieldSeed01(i, 0xa5a5f00d) * 2 - 1;
+      const phaseA = _scanPanelFieldSeed01(i, 0xc001d00d) * Math.PI * 2;
+      const phaseB = _scanPanelFieldSeed01(i, 0x7f4a7c15) * Math.PI * 2;
+
+      // SPREAD X/Y releases panels from their original lanes without replacing
+      // the band generator. DRIFT moves around those anchors using the existing
+      // Scan phases, so the single Scanlines SPEED still owns all motion.
+      fieldOffsetX = seedX * cross * 0.46 * fieldSpreadX;
+      fieldOffsetY = seedY * dim * 0.46 * fieldSpreadY;
+      if (fieldDrift > 0) {
+        fieldOffsetX += Math.sin(phX * 0.85 + phaseA) * cross * 0.16 * fieldDrift;
+        fieldOffsetY += Math.cos(phY * 0.72 + phaseB) * dim * 0.16 * fieldDrift;
+      }
+
+      // Z spread and depth drift are per-panel local zoom multipliers. This is
+      // deliberately Canvas2D apparent depth: no extra framebuffer or fake 3D
+      // surface. General ZOOM remains the master scale around which panels vary.
+      let zPosition = seedZ * fieldSpreadZ;
+      if (fieldDepthDrift > 0) zPosition += Math.sin(phY * 0.58 + phaseA + phaseB) * fieldDepthDrift * 0.70;
+      const depthScale = Math.pow(2, Math.max(-1.35, Math.min(1.35, zPosition * 1.35)));
+      localZoom = Math.max(0.25, Math.min(4, zoom * depthScale));
+      sizeScale = Math.max(0.35, 1 + seedSize * 0.72 * fieldSizeVar);
+    }
+
+    const localNeutralZoom = Math.abs(localZoom - 1) < 1e-9;
+    const localZoomDepth = localNeutralZoom ? 0 : Math.min(1, Math.abs(Math.log2(localZoom)));
+    const panelMix = localZoomDepth * localZoomDepth * (3 - 2 * localZoomDepth);
+
+    if (localNeutralZoom && fieldOffsetX === 0 && fieldOffsetY === 0 && sizeScale === 1) {
+      // 1x BANDS (or a zeroed FIELD) remains the exact old flat-band draw even
+      // when X/Y or angle require the transformed path.
+      ctx.drawImage(
+        sourceCanvas,
+        sourceOffset, bandStart, bandCross, bandLength,
+        destinationOffset, bandStart, bandCross, bandLength,
+      );
+      continue;
+    }
+
+    // Expand the source window vertically toward source aspect as local panel Z
+    // leaves 1x. Individual FIELD panels therefore become actual live-video
+    // rectangles rather than stretched strips, just like 40T general ZOOM.
+    const desiredPanelHeight = Math.max(bandLength, bandCross / sourceAspect);
+    const sampledHeight = Math.min(sourceCanvas.height, bandLength + (desiredPanelHeight - bandLength) * panelMix);
+    const sourceCenterY = bandStart + bandLength * 0.5;
+    const sourceY = Math.max(0, Math.min(sourceCanvas.height - sampledHeight, sourceCenterY - sampledHeight * 0.5));
+
+    const panelHeight = bandLength + (desiredPanelHeight - bandLength) * panelMix;
+    const destinationCenterX = destinationOffset + bandCross * 0.5 + fieldOffsetX;
+    const destinationCenterY = bandStart + bandLength * 0.5 + fieldOffsetY;
+    const destinationWidth = bandCross * localZoom * sizeScale;
+    const destinationHeight = panelHeight * localZoom * sizeScale;
+    const destinationX = destinationCenterX - destinationWidth * 0.5;
+    const destinationY = destinationCenterY - destinationHeight * 0.5;
+
     ctx.drawImage(
       sourceCanvas,
-      sourceOffsets[i], bandStart, bandCross, bandLength,
-      destinationOffsets[i], bandStart, bandCross, bandLength,
+      sourceOffset, sourceY, bandCross, sampledHeight,
+      destinationX, destinationY, destinationWidth, destinationHeight,
     );
   }
 

@@ -44,7 +44,13 @@
     "validate:pass38": "node scripts/validate-pass38.mjs",
     "validate:pass39r": "node scripts/validate-pass39r.mjs",
     "validate:pass39m": "node scripts/validate-pass39m.mjs",
-    "validate:pass39n": "node scripts/validate-pass39n.mjs"
+    "validate:pass39n": "node scripts/validate-pass39n.mjs",
+    "validate:pass40s": "node scripts/validate-pass40s.mjs",
+    "simulate:pass40s": "node scripts/simulate-pass40s-scanlines.mjs",
+    "validate:pass40t": "node scripts/validate-pass40t.mjs",
+    "simulate:pass40t": "node scripts/simulate-pass40t-scan-panels.mjs",
+    "validate:pass40u": "node scripts/validate-pass40u.mjs",
+    "simulate:pass40u": "node scripts/simulate-pass40u-scan-field.mjs"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^1.6.3"

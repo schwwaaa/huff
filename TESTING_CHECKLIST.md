@@ -1,59 +1,70 @@
-# HUFF Classic Pass 39N — Runtime Testing Checklist
+# Testing Checklist — Pass 40U
 
-## 1. Exact reported bug
-1. Enable CORRUPT.
-2. Keep MODE = CONTINUOUS.
-3. Enable CLUSTERS.
-4. Move CLUSTER SPEED and confirm it clearly changes cluster evolution.
-5. Disable CLUSTERS.
-6. Move RANDOM SPEED to `0.00x`.
+## A. BANDS regression check — do this first
 
-Expected: Random Corrupt draws/establishes a state, then holds rather than visibly continuing at full cadence.
+Set:
+- Scanlines ON
+- PANEL LAYOUT = BANDS
+- ZOOM = 1.00x, then 1.50x / 2.00x
+- existing Shift / Skew / Focus / Drift / Roll controls as you normally use them
 
-## 2. RANDOM SPEED continuum
-With Clusters OFF, compare:
-- 0.00x — hold
-- 0.05x — extremely slow evolution
-- 0.15x — slow evolution
-- 0.50x — moderate
-- 1.00x — established cadence
-- 2.00x / 4.00x — faster autonomous motion/phase
+Expected: the Pass 40T candidate behavior is unchanged. If BANDS feels different,
+reject Pass 40U before evaluating FIELD.
 
-The main acceptance question: does moving RANDOM SPEED visibly and predictably change the temporal character?
+## B. FIELD immediacy
 
-## 3. CLUSTER SPEED continuum
-With Clusters ON, hold RANDOM SPEED at any arbitrary value and compare CLUSTER SPEED:
-- 0.00x
-- 0.05x
-- 0.15x
-- 0.50x
-- 1.00x
-- 2.00x
-- 4.00x
+Switch only:
+- PANEL LAYOUT = FIELD
 
-Expected: Cluster evolution responds to CLUSTER SPEED independently of RANDOM SPEED.
+The stored defaults are intentionally nonzero. Expected: panels immediately
+separate into a collage field rather than remaining a uniform band stack.
 
-## 4. Mode switching
-Repeatedly toggle Clusters ON/OFF at very different speed settings, for example:
-- RANDOM SPEED 0.05x
-- CLUSTER SPEED 3.00x
+Move one control at a time:
+- SPREAD X — obvious horizontal separation;
+- SPREAD Y — obvious vertical separation;
+- SPREAD Z — obvious near/far panel scale variation;
+- SIZE VAR — panel dimensions become less uniform;
+- DRIFT — individual XY positions evolve;
+- DEPTH DRIFT — individual apparent depth evolves.
 
-Expected: the active temporal character switches immediately with the mode; the inactive speed should not dominate the current mode.
+Report any control as PASS / OPAQUE / DEAD / TOO SENSITIVE.
 
-## 5. Explicit timing policies
-Check STROBE and MULTIGRAB after the speed repair. Their INTERVAL / HOLD / LIVE behavior should remain intact.
+## C. Speed contract
 
-## 6. Feedback regression
-Use Feedback exactly as in Pass 39M. The Pass 39M Feedback functions are protected by exact source hashes in the validator.
+With FIELD active and nonzero DRIFT / DEPTH DRIFT:
+- SPEED 1.00x
+- SPEED 0.15x
+- SPEED 0.05x
+- SPEED 0.00x
 
-## 7. Readability
-Scan the main UI and MIDI/OSC/Syphon/Spout dialogs for neon-green text. Text should be black. Green borders/checkbox accents are allowed.
+Expected at 0x: FIELD motion freezes, while live video continues updating inside
+held panel geometry. No sample/hold should appear.
 
-## 8. Performance
-Stress:
-- heavy Corrupt + Repeats;
-- Clusters + Z motion;
-- Feedback;
-- LIVE Luma.
+## D. General vs per-panel spatial distinction
 
-No performance improvement is claimed by this pass; verify no regression from the scalar speed gate/UI change.
+- General POS X/Y should move the whole Scan instrument.
+- General ZOOM should scale the overall panel vocabulary.
+- FIELD SPREAD X/Y/Z should change relationships *between* individual panels.
+
+If those roles are not visually distinct, the FIELD control surface needs further cleanup.
+
+## E. Buffer composition
+
+Test:
+1. Scan FIELD alone.
+2. + Feedback.
+3. + Flow.
+4. + Feedback + Flow.
+
+Expected: persistent layers/tunnels can be built from differently-positioned
+panels without Scan internally duplicating Feedback or Flow functionality.
+
+## F. Performance / Luma boundary
+
+Stress with many bands + high SPREAD Z / ZOOM:
+- Luma OFF
+- Luma LIVE
+- Luma STENCIL
+
+No performance improvement is claimed by Pass 40U. Note whether LIVE Luma remains
+the disproportionate FPS hit.

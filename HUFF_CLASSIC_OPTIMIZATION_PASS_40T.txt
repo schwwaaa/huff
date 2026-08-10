@@ -1,0 +1,31 @@
+HUFF CLASSIC — PASS 40T
+SCANLINES PANEL-COLLAGE ZOOM RECOVERY
+
+STATUS
+Candidate runtime pass. Pass 39N remains the last fully user-confirmed baseline. Pass 40T preserves the single-speed/XYZ intent from the Scanlines recovery work but replaces the constrained whole-field zoom.
+
+USER-REPORTED PROBLEM
+The previous zoom scaled the complete Scanlines field as one Canvas2D object. The individual bands stayed trapped in their strip geometry, so zoom did not recover the older flying-panel / multi-layer collage behavior visible when Scanlines interacted with persistent buffers, Feedback and Flow.
+
+FIX
+- ZOOM 1.00x remains exact flat 2D Scanlines geometry.
+- Moving ZOOM away from 1.00x lets each band independently open into a source-aspect video panel and scale around its own center.
+- The source sampling window expands vertically with the panel so the panel reveals more live video instead of merely stretching a thin strip.
+- The panels may overlap and extend beyond their old band lanes; Canvas output clipping is the only final screen boundary.
+- MOVE Z animates this same panel-aware zoom. Crossing 1.00x collapses the panels back into the original flat band geometry.
+- With persistence / Feedback / Flow, successive panel sizes and positions can accumulate as collage layers, matching the intended use shown in the supplied prior-version references.
+
+PRESERVED
+- Existing ScanlineBandWorkspace / band generator.
+- Existing SHIFT, SKEW, FOCUS, DRIFT, ROLL, BAND count/size, ANGLE and SPIN behavior.
+- One SPEED clock only. No Field Rate.
+- POS X/Y and MOVE X/Y/Z.
+- No Raster Scan conversion.
+- No field/content/both zoom mode selector.
+- No historical FrameRing sampling.
+
+PERFORMANCE BOUNDARY
+No new full-resolution buffer, getImageData, putImageData, FrameRing read, or additional pass is added. The only extra work occurs in per-band source/destination rectangle math when ZOOM != 1x.
+
+RUNTIME ACCEPTANCE
+The key test is whether Scanlines can move from exact 2D strips at 1x into overlapping floating video panels away from 1x, then return cleanly to the original 2D state. The user runtime test remains authoritative.

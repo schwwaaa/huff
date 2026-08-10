@@ -289,6 +289,13 @@ function _resetCorruptAxisMotion() {
 }
 let nPhaseScanX = 0, nPhaseScanY = 2000; // independent scanline phase
 let _scanSpinAngle = 0;                   // continuous spin accumulator (degrees)
+const _scanSpatialMotion = { x:0, y:0, zoomOffset:0, zDir:1 };
+function _resetScanSpatialMotion() {
+  _scanSpatialMotion.x = 0;
+  _scanSpatialMotion.y = 0;
+  _scanSpatialMotion.zoomOffset = 0;
+  _scanSpatialMotion.zDir = 1;
+}
 
 // ─── FrameRing ────────────────────────────────────────────────────────────────
 // Replaces the plain array + shift() pattern.
@@ -522,6 +529,8 @@ const PRESET_IDS = [
   'scanAlpha','scanShift','scanDrift','scanSpeed','scanGap','scanSkew',
   'scanAngle','scanFocus','scanRoll',
   'scanSpinLeft','scanSpinRight','scanSpinSpeed',
+  'scanPlaceX','scanPlaceY','scanZoom','scanMoveX','scanMoveY','scanMoveZ',
+  'scanPanelLayout','scanFieldSpreadX','scanFieldSpreadY','scanFieldSpreadZ','scanFieldSizeVar','scanFieldDrift','scanFieldDepthDrift',
   'bgMode',
   'cluSpeedVar','cluPulse',
   'cluSteer','cluBreathe','cluBounds','cluCohere',
@@ -605,6 +614,23 @@ function applyPreset(data) {
   if (!('corruptMaskMode' in sourceData)) sourceData.corruptMaskMode = 'full';
   if (!('corruptMaskThreshold' in sourceData)) sourceData.corruptMaskThreshold = '128';
   if (!('corruptMaskSide' in sourceData)) sourceData.corruptMaskSide = 'bright';
+  // Pass 40S is spatially additive. Legacy presets keep exact Scanlines behavior.
+  if (!('scanPlaceX' in sourceData)) sourceData.scanPlaceX = '0';
+  if (!('scanPlaceY' in sourceData)) sourceData.scanPlaceY = '0';
+  if (!('scanZoom' in sourceData)) sourceData.scanZoom = '1';
+  if (!('scanMoveX' in sourceData)) sourceData.scanMoveX = '0';
+  if (!('scanMoveY' in sourceData)) sourceData.scanMoveY = '0';
+  if (!('scanMoveZ' in sourceData)) sourceData.scanMoveZ = '0';
+  // Pass 40U adds an alternate organization of the same Scan panels.
+  // Existing presets remain BANDS; FIELD parameters are preloaded with useful
+  // values so deliberately switching layout immediately reveals the collage mode.
+  if (!('scanPanelLayout' in sourceData)) sourceData.scanPanelLayout = 'bands';
+  if (!('scanFieldSpreadX' in sourceData)) sourceData.scanFieldSpreadX = '0.55';
+  if (!('scanFieldSpreadY' in sourceData)) sourceData.scanFieldSpreadY = '0.45';
+  if (!('scanFieldSpreadZ' in sourceData)) sourceData.scanFieldSpreadZ = '0.50';
+  if (!('scanFieldSizeVar' in sourceData)) sourceData.scanFieldSizeVar = '0.20';
+  if (!('scanFieldDrift' in sourceData)) sourceData.scanFieldDrift = '0.15';
+  if (!('scanFieldDepthDrift' in sourceData)) sourceData.scanFieldDepthDrift = '0.10';
   // Pass 34 removes the rejected GLITCH key source. Legacy/self/glitch key
   // presets migrate safely to LIVE. Stored stencil pixels are intentionally not
   // serialized in presets; only the selected process source is.
@@ -633,6 +659,7 @@ function applyPreset(data) {
     // RATE is a derived performance view over the exact legacy speed stack.
     // Preset recall leaves SPEED/FINE/MULT byte-for-byte semantically intact.
     _syncCorruptRateFromLegacy();
+    _resetScanSpatialMotion();
     updateLabels();
     setSeedFromUI();
   } finally {
@@ -1109,6 +1136,7 @@ function refreshGlitch() {
   clearAll();
   nPhaseX = 0; nPhaseY = 1000;
   nPhaseScanX = 0; nPhaseScanY = 2000;
+  _resetScanSpatialMotion();
 }
 
 // ─── UI wiring ────────────────────────────────────────────────────────────────
@@ -1147,6 +1175,10 @@ function hookUI() {
     'scanSpeed','scanSpeedVal','scanGap','scanGapVal','scanSkew','scanSkewVal',
     'scanAngle','scanAngleVal','scanFocus','scanFocusVal','scanRoll','scanRollVal',
     'scanSpinLeft','scanSpinRight','scanSpinSpeed','scanSpinSpeedVal',
+    'scanPlaceX','scanPlaceXVal','scanPlaceY','scanPlaceYVal','scanZoom','scanZoomVal',
+    'scanMoveX','scanMoveXVal','scanMoveY','scanMoveYVal','scanMoveZ','scanMoveZVal','scanResetXYZBtn',
+    'scanPanelLayout','scanFieldSpreadX','scanFieldSpreadXVal','scanFieldSpreadY','scanFieldSpreadYVal','scanFieldSpreadZ','scanFieldSpreadZVal',
+    'scanFieldSizeVar','scanFieldSizeVarVal','scanFieldDrift','scanFieldDriftVal','scanFieldDepthDrift','scanFieldDepthDriftVal','scanFieldResetBtn',
     'depthScatter','depthScatterVal','corruptDrift','corruptDriftVal',
     'scanAngle','bgMode','dim',
     'cluSpeedVar','cluSpeedVarVal','cluPulse','cluPulseVal','cluBreathe','cluBreatheVal','cluBounds',
@@ -1455,7 +1487,8 @@ function hookSliders() {
     'feedback','persistence','fbX','fbY','fbZ','fbTheta','feedbackStrobeEvery','feedbackRestore',
     'spatialGap','clusterCount','clusterRadius','cluCenters','cluSpread','cluDepth','clusterMasterSpeed','cluMoveX','cluMoveY','cluMoveZ',
     'cluMinSpread','cluBias','cluDrift','cluSpeed','cluSteer','cluInertia','cluCohere',
-    'scanAlpha','scanShift','scanDrift','scanSpeed','scanGap','scanSkew','scanFocus','scanRoll',
+    'scanAlpha','scanShift','scanDrift','scanSpeed','scanGap','scanSkew','scanFocus','scanRoll','scanPlaceX','scanPlaceY','scanZoom','scanMoveX','scanMoveY','scanMoveZ',
+    'scanFieldSpreadX','scanFieldSpreadY','scanFieldSpreadZ','scanFieldSizeVar','scanFieldDrift','scanFieldDepthDrift',
     'glitchAlpha','glitchJitter','glitchSmearAngle',
     'flowStrength','flowScale','flowPulse','flowImpl','flowSpeed','flowTurb','flowSwirl','flowSpread','baseMix','symPos',
     'depthScatter','corruptDrift',
@@ -1482,10 +1515,47 @@ function hookSliders() {
     });
   }
 
+  els.scanResetXYZBtn?.addEventListener('click', () => {
+    if (els.scanPlaceX) els.scanPlaceX.value = '0';
+    if (els.scanPlaceY) els.scanPlaceY.value = '0';
+    if (els.scanZoom) els.scanZoom.value = '1';
+    if (els.scanMoveX) els.scanMoveX.value = '0';
+    if (els.scanMoveY) els.scanMoveY.value = '0';
+    if (els.scanMoveZ) els.scanMoveZ.value = '0';
+    for (const id of ['scanPlaceX','scanPlaceY','scanZoom','scanMoveX','scanMoveY','scanMoveZ']) _syncRenderControl(id);
+    _resetScanSpatialMotion();
+    window.invalidateScanlineCache?.();
+    updateLabels();
+    snapshotForUndo();
+  });
+
+  const syncScanFieldUI = () => {
+    const active = String(els.scanPanelLayout?.value || 'bands') === 'field';
+    document.querySelectorAll('.scan-field-control').forEach(node => {
+      node.style.display = active ? '' : 'none';
+    });
+  };
+  els.scanPanelLayout?.addEventListener('change', () => {
+    syncScanFieldUI();
+    updateLabels();
+    window.invalidateScanlineCache?.();
+  });
+  els.scanFieldResetBtn?.addEventListener('click', () => {
+    const zeros = ['scanFieldSpreadX','scanFieldSpreadY','scanFieldSpreadZ','scanFieldSizeVar','scanFieldDrift','scanFieldDepthDrift'];
+    for (const id of zeros) {
+      if (!els[id]) continue;
+      els[id].value = '0';
+      _syncRenderControl(id);
+    }
+    updateLabels();
+    snapshotForUndo();
+  });
+  syncScanFieldUI();
+
   // Checkboxes and selects also get snapshotted for undo
   ['corruptOn','corruptUpdateMode','corruptDistribution','clusterTiles','corruptMaskMode','corruptMaskSide','clusters','feedbackEnabled','feedbackMotionRange','feedbackStrobe','flowOn','baseOn','symOn','solarizeOn',
    'cluBounds','pipelineRecipe','layerPriority','seedOnLoad','bgMode','symMode',
-   'lumaKeyOn','lumaKeyInvert','lumaKeySource','lumaKeyFade','globalMixOn','globalMixBlend','globalMixPos','scanSpinLeft','scanSpinRight'].forEach(id => {
+   'lumaKeyOn','lumaKeyInvert','lumaKeySource','lumaKeyFade','globalMixOn','globalMixBlend','globalMixPos','scanSpinLeft','scanSpinRight','scanPanelLayout'].forEach(id => {
     _$(id)?.addEventListener('change', snapshotForUndo);
   });
 
@@ -1767,7 +1837,19 @@ function updateLabels() {
   set(els.scanAlpha,        els.scanAlphaVal,        f2);
   set(els.scanShift,        els.scanShiftVal,        f2);
   set(els.scanDrift,        els.scanDriftVal,        f2);
-  set(els.scanSpeed,        els.scanSpeedVal,        f2);
+  set(els.scanSpeed,        els.scanSpeedVal,        v => { const n=+v; return `${(n < 0.1 ? n.toFixed(3) : n.toFixed(2))}×`; });
+  set(els.scanPlaceX,       els.scanPlaceXVal,       v => `${Math.trunc(+v || 0)} px`);
+  set(els.scanPlaceY,       els.scanPlaceYVal,       v => `${Math.trunc(+v || 0)} px`);
+  set(els.scanZoom,         els.scanZoomVal,         v => `${(+v).toFixed(2)}×`);
+  set(els.scanMoveX,        els.scanMoveXVal,        v => `${Math.trunc(+v || 0)} px/s`);
+  set(els.scanMoveY,        els.scanMoveYVal,        v => `${Math.trunc(+v || 0)} px/s`);
+  set(els.scanMoveZ,        els.scanMoveZVal,        v => `${(+v).toFixed(2)}×/s`);
+  set(els.scanFieldSpreadX, els.scanFieldSpreadXVal, pct);
+  set(els.scanFieldSpreadY, els.scanFieldSpreadYVal, pct);
+  set(els.scanFieldSpreadZ, els.scanFieldSpreadZVal, pct);
+  set(els.scanFieldSizeVar, els.scanFieldSizeVarVal, pct);
+  set(els.scanFieldDrift, els.scanFieldDriftVal, pct);
+  set(els.scanFieldDepthDrift, els.scanFieldDepthDriftVal, pct);
   set(els.scanGap,          els.scanGapVal,          v => (v|0));
   set(els.scanSkew,         els.scanSkewVal,         f2);
   set(els.scanAngle,        els.scanAngleVal,        v => Math.round(v)+'°');
@@ -2621,22 +2703,50 @@ function draw() {
     }
   }
 
-  const scanSpeed = s.scanSpeed;
+  // Pass 40S: one SPEED control owns Scanlines motion. It preserves the
+  // established Pass 39N band generator at 1x, but 0x now means actual motion
+  // stability: noise phases, roll, spin and added XYZ movement all stop while
+  // applyScanlines() still writes live gCur pixels through the held geometry.
+  const scanSpeed = Math.max(0, Number(s.scanSpeed) || 0);
   nPhaseScanX += scanSpeed * 0.008;
   nPhaseScanY += scanSpeed * 0.009;
 
-  // Left and right are separate toggles; right wins if both are active.
-  // Continue the accumulator while Scanlines are visually neutral so toggling
-  // alpha/count/on-state does not restart or pause the spin.
+  const scanDt = Math.max(0, Math.min(0.05, (Number(deltaTime) || 16.6667) / 1000));
+  const scanMoveX = Number(s.scanMoveX) || 0;
+  const scanMoveY = Number(s.scanMoveY) || 0;
+  const scanMoveZ = Number(s.scanMoveZ) || 0;
+  if (width > 0) {
+    const spanX = width * 2;
+    _scanSpatialMotion.x = (((_scanSpatialMotion.x + scanMoveX * scanSpeed * scanDt + width) % spanX) + spanX) % spanX - width;
+  }
+  if (height > 0) {
+    const spanY = height * 2;
+    _scanSpatialMotion.y = (((_scanSpatialMotion.y + scanMoveY * scanSpeed * scanDt + height) % spanY) + spanY) % spanY - height;
+  }
+  if (scanMoveZ !== 0 && scanSpeed > 0) {
+    const baseZoom = Math.max(0.25, Math.min(4, Number.isFinite(Number(s.scanZoom)) ? Number(s.scanZoom) : 1));
+    let nz = baseZoom + _scanSpatialMotion.zoomOffset + scanMoveZ * scanSpeed * scanDt * _scanSpatialMotion.zDir;
+    while (nz > 4 || nz < 0.25) {
+      if (nz > 4) { nz = 8 - nz; _scanSpatialMotion.zDir *= -1; }
+      if (nz < 0.25) { nz = 0.5 - nz; _scanSpatialMotion.zDir *= -1; }
+    }
+    _scanSpatialMotion.zoomOffset = nz - baseZoom;
+  }
+  s.__scanMotionX = _scanSpatialMotion.x;
+  s.__scanMotionY = _scanSpatialMotion.y;
+  s.__scanMotionZoomOffset = _scanSpatialMotion.zoomOffset;
+
+  // Left and right remain the established toggles. SPEED now scales their
+  // automatic motion too, so SPEED=0 is a true stable spatial state.
   const spinSpeed = s.scanSpinSpeed;
   const spinLeft  = !!s.scanSpinLeft;
   const spinRight = !!s.scanSpinRight;
   let scanAngleArg = null;
   if (spinRight) {
-    _scanSpinAngle = (_scanSpinAngle + spinSpeed * 0.5) % 360;
+    _scanSpinAngle = (_scanSpinAngle + spinSpeed * scanSpeed * 0.5) % 360;
     scanAngleArg   = _scanSpinAngle;
   } else if (spinLeft) {
-    _scanSpinAngle = ((_scanSpinAngle - spinSpeed * 0.5) % 360 + 360) % 360;
+    _scanSpinAngle = ((_scanSpinAngle - spinSpeed * scanSpeed * 0.5) % 360 + 360) % 360;
     scanAngleArg   = _scanSpinAngle;
   } else {
     _scanSpinAngle = s.scanAngle;

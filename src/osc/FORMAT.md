@@ -107,7 +107,20 @@ Use for huff's action buttons: `refreshBtn` (reseed) and `resetMotionBtn` (reset
 | `scanShift` | -200 | 200 | Scanline horizontal shift |
 | `scanDrift` | 0 | 5 | Scanline drift speed |
 | `scanAlpha` | 0 | 1 | Scanline band opacity |
-| `scanSpeed` | 0 | 5 | Scanline global speed |
+| `scanSpeed` | 0 | 5 | Scanlines overall motion speed; 0 holds geometry/motion while live pixels continue |
+| `scanPlaceX` | -1000 | 1000 | Scanlines position X px |
+| `scanPlaceY` | -1000 | 1000 | Scanlines position Y px |
+| `scanZoom` | 0.25 | 4 | Panel-aware zoom: 1x exact flat bands; away from 1x bands open into free video panels |
+| `scanPanelLayout` | bands | field | Panel organization: original BANDS or per-panel FIELD collage |
+| `scanFieldSpreadX` | 0 | 1 | FIELD horizontal panel spread |
+| `scanFieldSpreadY` | 0 | 1 | FIELD vertical panel spread |
+| `scanFieldSpreadZ` | 0 | 1 | FIELD apparent-Z/local-zoom spread |
+| `scanFieldSizeVar` | 0 | 1 | FIELD independent panel size variation |
+| `scanFieldDrift` | 0 | 1 | FIELD X/Y drift amount; Scan Speed owns rate |
+| `scanFieldDepthDrift` | 0 | 1 | FIELD depth drift amount; Scan Speed owns rate |
+| `scanMoveX` | -1000 | 1000 | Scanlines move X px/s, scaled by SPEED |
+| `scanMoveY` | -1000 | 1000 | Scanlines move Y px/s, scaled by SPEED |
+| `scanMoveZ` | -2 | 2 | Scanlines zoom motion /s, scaled by SPEED |
 | `scanGap` | 0 | 200 | Scanline gap quantise |
 | `scanSkew` | -1 | 1 | Scanline skew |
 | `cluSpread` | 1 | 300 | Corrupt group size |

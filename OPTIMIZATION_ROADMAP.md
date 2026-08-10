@@ -1,14 +1,16 @@
 # HUFF Classic Optimization Roadmap
 
-## Immediate
-Runtime-test Pass 39N. Do not expand Corrupt further until RANDOM SPEED and CLUSTER SPEED are confirmed immediately understandable and the exact 0x regression is gone.
+1. Pass 39N — accepted Corrupt/Feedback/readability checkpoint.
+2. Scanlines review branch:
+   - 40 / 40R rejected;
+   - 40S recovered original concept;
+   - 40T introduced free panel-aware Zoom;
+   - 40U tests one complementary spatial organization: BANDS / FIELD.
+3. If 40U is accepted, freeze Scan for broader endurance testing before adding any filters/stencil ideas.
+4. Review Symmetry.
+5. Review Solarize with special attention to readback cost.
+6. Overall interaction/redundancy audit.
+7. Classic release hardening and cross-platform packaging verification.
 
-## If accepted
-Freeze the current Corrupt feature set and resume feature review elsewhere. Feedback remains the Pass 39M merged instrument.
-
-## If speed behavior still feels ambiguous
-Do not add more Corrupt controls. Revisit only the ownership/update model and simplify it further.
-
-## Performance constraint
-Avoid any new Luma readback path or full-resolution storage while this review cycle continues.
-
+Rule: do not grow Scan by duplicating Flow, Feedback, Luma, or Corrupt. New behavior
+must strengthen Scan's specific role as a live slice/panel collage instrument.

@@ -1,30 +1,50 @@
-# Validation Report — HUFF Classic Pass 39N
+# Validation Report — Pass 40U
 
-## Passed
-- `npm run validate:pass39n`
-  - Pass 22 Flow/Scanline validator inherited: PASS
-  - 57 Pass 39N speed/readability/protection checks: PASS
-  - executable gate tests reproduce the reported Clusters ON → OFF → RANDOM SPEED 0x sequence and verify it holds
-  - RANDOM/CLUSTER speed independence tests: PASS
-  - STROBE explicit timing preservation test: PASS
-  - no neon-green text declarations in readable UI: PASS
-  - no new Canvas pixel readback/upload/buffer in the speed gate: PASS
-- JavaScript syntax for `src/**` and `scripts/**`: PASS
-- inline scripts in `src/index.html`: PASS (7)
-- `package.json` parse: PASS
-- release static preflight: 38 passed / 0 warnings / 0 blockers
+Completed before packaging:
 
-## Protected exact hashes
-- `src/effects.js` matches Pass 39M exactly: `2bafe602c11d121da981dbbef09fc003b4ff9472571db099a22f9f56b8298230`
-- `src/pipeline-runtime.js` matches Pass 39M exactly: `f5c80efe0c052fbdac5ddc6b14c91b23d531fff543929fd4d99e7e37757a6188`
-- `_runPersistentDecayStage`: exact Pass 39M hash
-- `_runFeedbackStage`: exact Pass 39M hash
-- `_shouldApplyFeedbackTransformThisRender`: exact Pass 39M hash
+- `npm run simulate:pass40u` — PASS.
+- `npm run validate:pass40u` — PASS, **90 dedicated checks**.
+- `npm run validate:pass22` — PASS: **12,000 scanline cases, 760,519 bands, 3,802,595 exact band-field comparisons**.
+- `validate:pass9` — PASS.
+- `validate:pass10` — PASS.
+- `validate:pass13s` — PASS.
+- `validate:pass14` — PASS.
+- `validate:pass15` — PASS.
+- `validate:pass16` — PASS, 8,391,032 exact pixel comparisons.
+- `validate:pass16s` — PASS.
+- `validate:pass19` — PASS.
+- `validate:pass20` — PASS, 2,500,000 exact arithmetic comparisons.
+- `validate:pass21` — PASS, 5,000 Flow cases / 4,417,878 exact field-draw comparisons.
+- `release:preflight` — **38 passed / 0 warnings / 0 blockers**.
+- JavaScript-family syntax — **55 files PASS**.
+- Inline HTML scripts — **32 PASS**.
+- JSON — **33 files PASS**.
+- Shell syntax — **8 scripts PASS**.
+- `src-tauri/**` — exact Pass 40T tree comparison: **0 differences**.
+- `src/pipeline-runtime.js` — exact Pass 40T match.
+- `src/capability-instrumentation.js` — exact Pass 40T match.
 
-## Historical validator note
-Pass 38/39M textual validators expect the old master-speed implementation literally, so they are not directly applicable after intentionally changing the speed clock. Pass 39N replaces those assertions with behavior-level tests while retaining exact hashes for protected code.
+## Pass 11 historical validator
 
-## Not proven statically
-- subjective slow/evolving feel;
-- actual runtime FPS;
-- whether every black-text surface meets the user's preferred contrast on their display.
+`validate:pass11` is **not a current regression signal**. It fails on the already-superseded literal source marker `if (activity.feedback)`; the current Feedback architecture predates Pass 40U and does not contain that historical source form. Pass 40U does not modify the Feedback implementation.
+
+## Pass 40U dedicated assertions
+
+The dedicated validator confirms:
+
+- BANDS remains the default layout;
+- legacy presets migrate to BANDS;
+- FIELD controls are contextual;
+- no rejected Scanlines FIELD RATE, Raster Scan naming, or Zoom Target modes return;
+- one Scanlines SPEED still owns phases, XYZ motion and spin;
+- deterministic FIELD seeds do not consume p5 `random()` or `noise()` state;
+- zeroed FIELD collapses to neutral BANDS geometry;
+- default FIELD creates diverse X/Y/apparent-Z/size values;
+- zero FIELD drift is phase-stable;
+- `ScanlineBandWorkspace` hash remains exact to the accepted Pass39N lineage;
+- Corrupt, Flow and Luma protected section hashes remain exact;
+- no `getImageData()`, `putImageData()`, `createGraphics()`, or FrameRing access is added by Scan FIELD.
+
+## Runtime status
+
+Static validation cannot confirm artistic usefulness, app responsiveness, or actual FPS. No runtime speedup is claimed. User testing is authoritative.

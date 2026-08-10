@@ -1,25 +1,36 @@
-# Changed Files — Pass 39N
+# Changed Files — Pass 40U
 
-## Runtime/UI
-- `src/index.html`
-  - RANDOM/CLUSTER speed labeling/context
-  - neon-green text → black text readability pass
-- `src/canvas.js`
-  - CONTINUOUS Corrupt speed gate
-  - active RANDOM/CLUSTER clock ownership
-  - contextual speed visibility/status
-  - dynamic black-text status/profiler/toast updates
+## Runtime
+- `src/index.html` — adds BANDS/FIELD selector and contextual FIELD controls.
+- `src/canvas.js` — preset/state wiring, contextual UI, value labels, legacy defaults.
+- `src/effects.js` — deterministic per-panel FIELD X/Y/apparent-Z/size/drift wrapper after the unchanged band generator.
 
-## Runtime algorithm protected
-- `src/effects.js` — unchanged, exact Pass 39M hash
-- `src/pipeline-runtime.js` — unchanged
-- `src-tauri/**` — unchanged
-
-## Compatibility/docs
+## Compatibility/reference docs
 - `src/midi/FORMAT.md`
 - `src/osc/FORMAT.md`
 - `docs/docs/parameter-reference.html`
 - `docs-v1/docs/parameter-reference.html`
-- `scripts/validate-pass39n.mjs`
+
+## Validation / simulation
 - `package.json`
-- current-pass documentation suite
+- `scripts/validate-pass40u.mjs`
+- `scripts/simulate-pass40u-scan-field.mjs`
+- `SCANLINES_PANEL_FIELD_SIMULATION.md`
+- `SCANLINES_PANEL_FIELD_SIMULATION.png`
+
+## Pass documentation
+- `HUFF_CLASSIC_OPTIMIZATION_PASS_40U.txt`
+- `SCANLINES_PASS40U_PANEL_FIELD_AUDIT.md`
+- `DOCUMENTATION_INDEX.md`
+- `PASS_NOTES.md`
+- `CHANGELOG.md`
+- `CHANGED_FILES.md`
+- `TESTING_CHECKLIST.md`
+- `VALIDATION_REPORT.md`
+- `CURRENT_STATUS.md`
+- `OPTIMIZATION_ROADMAP.md`
+- `GIT_COMMIT_MESSAGE.md`
+
+## Integrity manifests
+- `baseline/pass40u-src.sha256`
+- `baseline/pass40u-src-tauri.sha256`

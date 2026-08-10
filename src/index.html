@@ -1638,12 +1638,86 @@
             </div>
             </div>
 
-            <!-- SCANLINES -->
+            <!-- SCANLINES — Pass 40U keeps the 40T panel zoom and adds one alternate panel organization: BANDS / FIELD. -->
             <div class="group">
                 <div class="group-label">Scanlines</div>
                 <div class="group-body">
                 <div class="group-row">
                     <div class="ctrl"><label>ON</label><input id="clusters" type="checkbox"></div>
+                    <div class="ctrl">
+                        <label>SPEED</label>
+                        <input id="scanSpeed" type="range" min="0" max="5" step="0.005" value="1.0" title="Overall Scanlines motion speed. 0 freezes automatic slice motion, roll, spin, and XYZ movement while live video continues playing inside the held geometry. 1 preserves the Pass 39N cadence.">
+                        <span class="val" id="scanSpeedVal">1.00×</span>
+                    </div>
+                    <div class="ctrl">
+                        <label>POS X</label>
+                        <input id="scanPlaceX" type="range" min="-1000" max="1000" step="1" value="0" title="Move the complete existing Scanlines result horizontally. This does not change the slice generator.">
+                        <span class="val" id="scanPlaceXVal">0 px</span>
+                    </div>
+                    <div class="ctrl">
+                        <label>POS Y</label>
+                        <input id="scanPlaceY" type="range" min="-1000" max="1000" step="1" value="0" title="Move the complete existing Scanlines result vertically. This does not change the slice generator.">
+                        <span class="val" id="scanPlaceYVal">0 px</span>
+                    </div>
+                    <div class="ctrl">
+                        <label>ZOOM</label>
+                        <input id="scanZoom" type="range" min="0.25" max="4" step="0.01" value="1" title="Panel-aware ZOOM. 1× is the exact flat 2D Scanlines geometry. Moving away from 1× lets each live-video band open into a free rectangular panel and scale around its own center, so buffers/Feedback/Flow can build multi-layer collages.">
+                        <span class="val" id="scanZoomVal">1.00×</span>
+                    </div>
+                    <div class="ctrl">
+                        <label>PANEL LAYOUT</label>
+                        <select id="scanPanelLayout" title="BANDS preserves the existing Scanlines panel lanes. FIELD releases those same live-video panels into a deterministic X/Y/Z collage field. No new source, buffer, or temporal effect is introduced.">
+                            <option value="bands" selected>BANDS</option>
+                            <option value="field">FIELD</option>
+                        </select>
+                    </div>
+                    <div class="ctrl scan-field-control" style="display:none">
+                        <label>SPREAD X</label>
+                        <input id="scanFieldSpreadX" type="range" min="0" max="1" step="0.01" value="0.55" title="Scatter individual Scan panels horizontally. 0 keeps their original X lanes; 100% releases them across the collage field.">
+                        <span class="val" id="scanFieldSpreadXVal">55%</span>
+                    </div>
+                    <div class="ctrl scan-field-control" style="display:none">
+                        <label>SPREAD Y</label>
+                        <input id="scanFieldSpreadY" type="range" min="0" max="1" step="0.01" value="0.45" title="Scatter individual Scan panels vertically. 0 keeps their original Y lanes; 100% releases them across the collage field.">
+                        <span class="val" id="scanFieldSpreadYVal">45%</span>
+                    </div>
+                    <div class="ctrl scan-field-control" style="display:none">
+                        <label>SPREAD Z</label>
+                        <input id="scanFieldSpreadZ" type="range" min="0" max="1" step="0.01" value="0.50" title="Give individual panels different apparent depths. This changes each panel's local zoom while the general ZOOM still moves the whole Scan instrument.">
+                        <span class="val" id="scanFieldSpreadZVal">50%</span>
+                    </div>
+                    <div class="ctrl scan-field-control" style="display:none">
+                        <label>SIZE VAR</label>
+                        <input id="scanFieldSizeVar" type="range" min="0" max="1" step="0.01" value="0.20" title="Vary panel size independently of depth so the FIELD reads as collage rather than a uniform tile array.">
+                        <span class="val" id="scanFieldSizeVarVal">20%</span>
+                    </div>
+                    <div class="ctrl scan-field-control" style="display:none">
+                        <label>DRIFT</label>
+                        <input id="scanFieldDrift" type="range" min="0" max="1" step="0.01" value="0.15" title="Slowly move individual FIELD panels around their distributed X/Y positions. The single Scanlines SPEED control owns the rate; SPEED 0 freezes this motion.">
+                        <span class="val" id="scanFieldDriftVal">15%</span>
+                    </div>
+                    <div class="ctrl scan-field-control" style="display:none">
+                        <label>DEPTH DRIFT</label>
+                        <input id="scanFieldDepthDrift" type="range" min="0" max="1" step="0.01" value="0.10" title="Slowly move individual FIELD panels forward/back in apparent Z. The single Scanlines SPEED control owns the rate; SPEED 0 freezes this motion.">
+                        <span class="val" id="scanFieldDepthDriftVal">10%</span>
+                    </div>
+                    <button id="scanFieldResetBtn" class="btn-dim scan-field-control" style="display:none;font-size:9px;padding:2px 7px" title="Zero FIELD distribution and drift without changing the original Scanlines controls or general XYZ">↺ Zero Field</button>
+                    <div class="ctrl">
+                        <label>MOVE X</label>
+                        <input id="scanMoveX" type="range" min="-1000" max="1000" step="1" value="0" title="Continuous horizontal motion in pixels per second. The main SPEED control scales this motion.">
+                        <span class="val" id="scanMoveXVal">0 px/s</span>
+                    </div>
+                    <div class="ctrl">
+                        <label>MOVE Y</label>
+                        <input id="scanMoveY" type="range" min="-1000" max="1000" step="1" value="0" title="Continuous vertical motion in pixels per second. The main SPEED control scales this motion.">
+                        <span class="val" id="scanMoveYVal">0 px/s</span>
+                    </div>
+                    <div class="ctrl">
+                        <label>MOVE Z</label>
+                        <input id="scanMoveZ" type="range" min="-2" max="2" step="0.01" value="0" title="Continuous panel-depth motion through the ZOOM control. As Z moves away from 1×, flat bands open into free video panels; crossing 1× returns them to the original 2D band geometry. Motion reflects at 0.25× / 4× and is scaled by SPEED.">
+                        <span class="val" id="scanMoveZVal">0.00×/s</span>
+                    </div>
+                    <button id="scanResetXYZBtn" class="btn-dim" style="font-size:9px;padding:2px 7px" title="Reset Scanlines X/Y/Zoom placement and accumulated XYZ motion">↺ Reset XYZ</button>
                     <div class="ctrl">
                         <label>ANGLE</label>
                         <input id="scanAngle" type="range" min="-180" max="180" step="0.5" value="0">
@@ -1693,11 +1767,6 @@
                         <label>ROLL</label>
                         <input id="scanRoll" type="range" min="-2" max="2" step="0.01" value="0">
                         <span class="val" id="scanRollVal">0.00</span>
-                    </div>
-                    <div class="ctrl">
-                        <label>SPEED</label>
-                        <input id="scanSpeed" type="range" min="0" max="5" step="0.01" value="1.0">
-                        <span class="val" id="scanSpeedVal">1.00</span>
                     </div>
                     <div class="ctrl">
                         <label>GAP</label>

@@ -230,7 +230,20 @@ body {
     <tr><td>symPos</td><td>Sym Position</td><td>0</td><td>1</td><td>0.5 = centre</td></tr>
     <tr><td>scanShift</td><td>Scan Shift</td><td>0</td><td>0.5</td><td></td></tr>
     <tr><td>scanDrift</td><td>Scan Drift</td><td>0</td><td>3</td><td></td></tr>
-    <tr><td>scanSpeed</td><td>Scan Speed</td><td>0</td><td>5</td><td>Independent of Corrupt rate</td></tr>
+    <tr><td>scanSpeed</td><td>Scan Speed</td><td>0</td><td>5</td><td>Single overall Scanlines motion speed. 0 holds band geometry, roll, spin and XYZ motion while live video can continue inside the held slices; 1 preserves the Pass 39N cadence.</td></tr>
+    <tr><td>scanPlaceX</td><td>Scan Pos X</td><td>-1000</td><td>1000</td><td>Pixels; translates the complete existing effect without changing its band generator.</td></tr>
+    <tr><td>scanPlaceY</td><td>Scan Pos Y</td><td>-1000</td><td>1000</td><td>Pixels; translates the complete existing effect without changing its band generator.</td></tr>
+    <tr><td>scanZoom</td><td>Scan Zoom</td><td>0.25</td><td>4</td><td>Panel-aware zoom. 1× is exact flat Scanlines geometry; away from 1× each band can open into a free source-aspect video panel and scale around its own center for collage/depth use.</td></tr>
+    <tr><td>scanPanelLayout</td><td>Panel Layout</td><td colspan="2">bands / field</td><td>BANDS preserves the existing band lanes. FIELD distributes those same panels independently in X/Y/apparent Z without changing source or temporal behavior.</td></tr>
+    <tr><td>scanFieldSpreadX</td><td>Field Spread X</td><td>0</td><td>1</td><td>Horizontal per-panel distribution amount.</td></tr>
+    <tr><td>scanFieldSpreadY</td><td>Field Spread Y</td><td>0</td><td>1</td><td>Vertical per-panel distribution amount.</td></tr>
+    <tr><td>scanFieldSpreadZ</td><td>Field Spread Z</td><td>0</td><td>1</td><td>Per-panel apparent-depth/local-zoom spread around the general Scan Zoom.</td></tr>
+    <tr><td>scanFieldSizeVar</td><td>Field Size Variation</td><td>0</td><td>1</td><td>Independent panel-size variation.</td></tr>
+    <tr><td>scanFieldDrift</td><td>Field Drift</td><td>0</td><td>1</td><td>Per-panel X/Y drift amount; rate is owned by the single Scan Speed control.</td></tr>
+    <tr><td>scanFieldDepthDrift</td><td>Field Depth Drift</td><td>0</td><td>1</td><td>Per-panel apparent-Z drift amount; rate is owned by the single Scan Speed control.</td></tr>
+    <tr><td>scanMoveX</td><td>Scan Move X</td><td>-1000</td><td>1000</td><td>Pixels/second, scaled by Scan Speed.</td></tr>
+    <tr><td>scanMoveY</td><td>Scan Move Y</td><td>-1000</td><td>1000</td><td>Pixels/second, scaled by Scan Speed.</td></tr>
+    <tr><td>scanMoveZ</td><td>Scan Move Z</td><td>-2</td><td>2</td><td>Panel-depth zoom motion per second, scaled by Scan Speed; crossing 1× returns to flat 2D bands and moving away from 1× opens free panels; reflects at 0.25× and 4×.</td></tr>
     <tr><td>scanGap</td><td>Scan Gap</td><td>0</td><td>200</td><td></td></tr>
     <tr><td>scanSkew</td><td>Scan Skew</td><td>-1</td><td>1</td><td></td></tr>
     <tr><td>scanAlpha</td><td>Scan Opacity</td><td>0</td><td>1</td><td></td></tr>

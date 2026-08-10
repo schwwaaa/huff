@@ -1,0 +1,29 @@
+HUFF CLASSIC — PASS 40S
+SCANLINES CONCEPT RECOVERY + GENERAL ZOOM / XYZ MOTION
+
+STATUS
+Candidate runtime pass. Pass 39N remains the last user-confirmed baseline until Pass 40S is tested and accepted.
+
+WHY THIS PASS EXISTS
+Pass 40 and Pass 40R were rejected. They over-interpreted Scanlines as Raster Scan / split field-content zoom and introduced a second Field Rate concept. Pass 40S starts again from exact Pass 39N and preserves the existing Scanlines band compositor.
+
+CHANGES
+- Keep the visible feature name Scanlines as a working name.
+- Keep the established band generator and current-frame write behavior.
+- Keep one SPEED control only: the existing scanSpeed ID.
+- SPEED 1x preserves Pass 39N phase and spin cadence.
+- SPEED 0x freezes all automatic Scanlines motion (band phases, roll evolution, spin, MOVE X/Y/Z) while applyScanlines continues each render so live video remains visible inside held geometry.
+- Add POS X / POS Y.
+- Add one general ZOOM for the complete existing Scanlines result. No FIELD/CONTENT/BOTH zoom modes.
+- Add MOVE X / MOVE Y / MOVE Z. MOVE Z animates the same general zoom and reflects at 0.25x / 4x.
+- Keep all prior Scanlines controls and names: ANGLE, SPIN L/R, SPIN SPD, BANDS, SIZE, FOCUS, SHIFT, SKEW, DRIFT, ROLL, GAP, OPACITY.
+
+NOT CHANGED
+Corrupt, Cluster clocks, Feedback, Persistence, Luma, Flow, routing, decoder, outputs, native Tauri runtime.
+
+NO NEW PERFORMANCE COST CLASS
+- no getImageData
+- no putImageData
+- no FrameRing sampling
+- no new p5.Graphics/full-resolution framebuffer
+- no new scanline source-history path
