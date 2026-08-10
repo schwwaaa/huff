@@ -1,0 +1,59 @@
+HUFF CLASSIC OPTIMIZATION PASS 41A
+PLAYBACK FIDELITY / 1080P CLASSIC BOUNDARY
+
+Purpose
+-------
+Define and enforce HUFF Classic as a 1080p-class instrument while repairing the
+media-path problems identified during playback review.
+
+Runtime changes
+---------------
+1. Processing resolution is now explicit:
+   - AUTO: follows the app window but never exceeds the 1080p-class ceiling.
+   - 720P: fixed 1280x720 processing.
+   - 1080P: fixed 1920x1080 processing and the maximum-fidelity Classic path.
+   - Fixed 720P/1080P processing no longer changes when the window is resized.
+
+2. Source mapping is explicit:
+   - STRETCH: exact historical Classic behavior.
+   - FIT: preserve source aspect ratio with letterbox/pillarbox.
+   - FILL: preserve source aspect ratio while center-cropping.
+   - 1:1: center source pixels without scaling; crop or border as required.
+
+3. The misleading public QUALITY control is replaced by HISTORY.
+   - HISTORY requests decoded-frame snapshots.
+   - FrameRing is strictly limited to 192 MiB.
+   - 1080P therefore permits at most 24 full RGBA history snapshots.
+   - The old `quality` ID remains hidden for old presets/MIDI/OSC maps.
+   - QUALITY no longer alters mirror JPEG quality or mirror FPS.
+
+4. FrameRing safety bug fixed.
+   - FrameRing no longer enforces an unconditional four-frame minimum that could
+     violate the memory budget at very large dimensions.
+   - Runtime capacity is derived strictly from bytes-per-frame and the 192 MiB
+     ceiling, even if a future code path bypasses the Classic resolution cap.
+
+5. Playback diagnostics added.
+   requestVideoFrameCallback metadata now records:
+   - mediaTime;
+   - presentedFrames;
+   - callback gaps;
+   - processingDuration average/max;
+   - rVFC support state.
+   The profiler also reports browser getVideoPlaybackQuality dropped/total frames,
+   source resolution, processing resolution, source scale, and source-fit mode.
+
+6. Seeking is now fast while dragging and precise when released.
+   - Drag: fastSeek() where available.
+   - Release: exact currentTime seek.
+
+7. File/container feedback is clearer.
+   - Picker explicitly advertises MP4/M4V/MOV/WebM while retaining video/*.
+   - H.264/AAC MP4 remains the Classic portability recommendation.
+   - Other container/codec combinations continue to depend on the platform WebView.
+
+Protected
+---------
+Pass 40W Corrupt/Scan/Luma behavior, Pass 40U Scan FIELD geometry, Feedback,
+Flow, pipeline runtime, capability instrumentation, and the full native Tauri
+runtime are unchanged.

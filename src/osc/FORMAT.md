@@ -137,7 +137,8 @@ Use for huff's action buttons: `refreshBtn` (reseed) and `resetMotionBtn` (reset
 | `symPos` | 0 | 1 | Symmetry axis position |
 | `solarizeThresh` | 0 | 1 | Solarize threshold |
 | `trailDepth` | 0 | 1 | Trail depth |
-| `quality` | 0 | 1 | Render quality |
+| `historyFrames` | 4 | dynamic ≤120 | Decoded history frames, memory-budgeted |
+| `quality` | 0 | 3 | Legacy hidden HISTORY alias |
 
 > **Pass 38 Corrupt note:** HUFF presents **FIELD RATE** for the legacy `speed × fine × mult²` field contract, **RANDOM SPEED** (`corruptSpeed`) for RANDOM-mode evolution, and **CLUSTER SPEED** (`clusterMasterSpeed`) for CLUSTER-mode evolution. Existing OSC mappings to the legacy speed IDs remain valid.
 
@@ -203,3 +204,6 @@ Pass 39R note: Feedback Strobe is additive and transform-only. It does not gate 
 
 
 Pass 39M note: Feedback keeps the original `feedback`, `persistence`, `fbX`, `fbY`, `fbZ`, and `fbTheta` addresses/IDs. Additive controls are `feedbackEnabled`, `feedbackStrobe`, `feedbackStrobeEvery`, `feedbackRestore`, and `feedbackMotionRange`. `clusterMasterSpeed` (0..4) controls CLUSTER-mode evolution independently from `corruptSpeed`, which now explicitly controls RANDOM-mode evolution. In CONTINUOUS mode 0x holds the selected mode after establishing one state.
+
+
+> **Pass 41A playback note:** `historyFrames` replaces the misleading public QUALITY control and is clamped to the 192 MiB FrameRing budget (24 RGBA frames at 1080p). Legacy `/quality` mappings remain compatible but affect HISTORY only; mirror preview fidelity is fixed independently. `processResolution` and `sourceFit` are discrete UI/preset controls.

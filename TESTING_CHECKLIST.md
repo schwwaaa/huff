@@ -1,83 +1,80 @@
-# Testing Checklist — Pass 40W
+# Testing Checklist — Pass 41A
 
-## A. Exact reported case
+## 1. Existing visual regression first
 
-Start with:
-- Scan ON
-- PANEL LAYOUT = FIELD
-- Luma ON
-- TARGET = SCAN
-- fixed Layer Priority: `SCAN TOP` first
-- Corrupt MODE = CONTINUOUS
+Load the same file/preset used in Pass 40W with:
+- PROCESS = AUTO
+- SOURCE FIT = STRETCH
 
-Turn Corrupt ON and sweep RANDOM SPEED:
+Expected: Corrupt, Scan FIELD, Luma targeting, Feedback and Flow retain Pass 40W visual behavior. If not, reject the pass before testing new playback controls.
 
-```text
-1.00x
-0.50x
-0.15x
-0.05x
-0.00x
-```
+## 2. Processing-resolution separation
 
-Expected:
-- Corrupt remains visibly part of the composite at every speed;
-- lowering Speed slows Corrupt evolution instead of making it appear for isolated render frames;
-- changing Speed should not create one single Corrupt flash followed by Scan-only frames;
-- at 0x patch placement and historical delay choice stay fixed while delayed video remains live inside patches.
+On a display/window larger than 1920×1080:
+- PROCESS = AUTO -> source-status pill must report a processing size no larger than the 1080p-class ceiling.
+- PROCESS = 1080P -> must report exactly 1920×1080.
+- Resize the app window while PROCESS = 1080P -> processing dimensions must remain 1920×1080.
+- PROCESS = 720P -> must report 1280×720.
 
-## B. Fixed layer priority
+Open the backtick profiler and confirm its `process` row matches the source-status pill.
 
-Repeat with:
-- `SCAN TOP`
-- `CORRUPT TOP`
+## 3. Higher-resolution source
 
-Expected: both are stable compositing orders in CONTINUOUS mode.
+Load a 4K source if available.
+Expected at PROCESS = 1080P:
+- source row reports 3840×2160 (or the file's real dimensions);
+- process row reports 1920×1080;
+- the source-status pill clearly shows source -> process;
+- playback remains delegated to the WebView decoder; no 4K processing allocation occurs.
 
-Then compare `ALTERNATE` / `PULSE ORDER`. Those intentionally change top order and
-should not be judged as stable-layer modes.
+## 4. SOURCE FIT
 
-## C. Luma interaction
+Use a non-16:9 file if possible, ideally 4:3.
+- STRETCH: legacy full-canvas stretch.
+- FIT: complete undistorted source with black bars.
+- FILL: undistorted full canvas with center crop.
+- 1:1: native pixels centered, with crop/border as needed.
 
-With TARGET=SCAN, adjust:
-- CLIP
-- GAIN
-- CLEANUP
-- DENSITY
-- INVERT
+Changing SOURCE FIT while paused should repaint immediately.
 
-Expected: Scan panel participation changes while Corrupt's speed remains
-controllable. The Pass 40V bounded Luma cache/readback behavior should remain.
+## 5. HISTORY
 
-Repeat with TARGET=CORRUPT and TARGET=COMPOSITE for routing sanity.
+At PROCESS = 1080P:
+- HISTORY max should show 24 frames / about 190 MiB.
+- reducing HISTORY should release retired ring slots over subsequent resize/capture behavior and the profiler should report the lower ring capacity.
+- changing HISTORY must not change mirror preview FPS/JPEG tuning.
 
-## D. Random vs Cluster
+At PROCESS = 720P:
+- HISTORY maximum should increase (currently 54 frames under the 192 MiB budget).
 
-Clusters OFF:
-- sweep RANDOM SPEED 0x -> 4x.
+## 6. Scrubbing
 
-Clusters ON:
-- sweep CLUSTER SPEED 0x -> 4x.
+While playing:
+- drag seek quickly; response should remain fast;
+- release at a recognizable position;
+- final position should settle on the exact requested timestamp rather than only a nearby keyframe;
+- playback should resume if it was playing before the drag.
 
-Expected: each control owns its respective evolution. At 0x the relevant spatial
-organization holds; historical-delay choice also holds.
+## 7. Profiler playback diagnostics
 
-## E. Stress test
+Press backtick and confirm rows exist for:
+- source
+- process
+- src fit
+- src scale
+- rvfc
+- presented
+- rvfc gaps
+- video drop
+- dec proc
+- media time
 
-Use Scan FIELD + Luma + Corrupt with high:
-- AMOUNT
-- PATCH SIZE
-- REPEATS
-- Scan panel count / large Z spread
+Do not interpret `rvfc gaps` alone as proven dropped frames; use the browser `video drop` row as the stronger drop counter where available.
 
-Open profiler. Record actual FPS and draw counts.
+## 8. Format sanity
 
-Pass 40W adds no readback/buffer, but CONTINUOUS Corrupt now draws every render
-below 1x to preserve layer presence. Do not accept if this creates a new sustained
-FPS regression on normal artistic settings.
+Test at minimum:
+- known-good H.264/AAC MP4;
+- a MOV or WebM available on the target machine.
 
-## F. Explicit modes not redesigned
-
-Test STROBE and MULTIGRAB with Scan separately. They retain their explicit update
-gates in this pass. Report whether their held states need true independent layer
-retention; do not conflate that result with the CONTINUOUS repair.
+Expected: unsupported codec/container combinations fail with a clearer decode message recommending H.264/AAC MP4 rather than silently implying all `.mov`/`.webm` files are guaranteed.

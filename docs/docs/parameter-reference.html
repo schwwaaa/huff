@@ -169,7 +169,8 @@ body {
   <tbody>
     <tr><td>baseMix</td><td>Base Mix</td><td>0</td><td>1</td><td></td></tr>
     <tr><td>seed</td><td>Seed</td><td>1</td><td>99999</td><td>Randomisation seed. Same seed = same output</td></tr>
-    <tr><td>quality</td><td>Quality</td><td>0</td><td>3</td><td>Scales ring depth + performance</td></tr>
+    <tr><td>historyFrames</td><td>History</td><td>4</td><td>dynamic ≤120</td><td>Requested decoded-frame history depth. Runtime clamps to the 192 MiB FrameRing budget; 1080p max is 24 RGBA frames.</td></tr>
+    <tr><td>quality</td><td>Legacy History Alias</td><td>0</td><td>3</td><td>Hidden compatibility ID for old presets/MIDI/OSC maps. Mirrors HISTORY only; no longer changes preview JPEG quality or FPS.</td></tr>
     <tr><td>feedback</td><td>FEEDBACK · RETURN</td><td>0</td><td>3</td><td>Original performance parameter preserved; renderer clamps redraw alpha to 1. The semantic suffix explains the visible action without replacing the ID/range.</td></tr>
     <tr><td>persistence</td><td>PERSISTENCE · MEMORY</td><td>0</td><td>10</td><td>Original persistent-buffer decay parameter; independent of Feedback Enable/Strobe.</td></tr>
     <tr><td>feedbackEnabled</td><td>Feedback Enable</td><td>off/on</td><td>—</td><td>Bypasses only the Feedback transform and Restore layer; does not rewrite or gate PERSISTENCE.</td></tr>
@@ -376,7 +377,8 @@ body {
 <strong>MIDI maps</strong> use cc: 0–127, mapped linearly to the parameter's min–max. You do not specify the output range in a MIDI map.<br/><br/>
 <strong>OSC maps</strong> use inputMin/inputMax to tell huff what range your sender outputs. TouchOSC faders: inputMin: 0, inputMax: 1. MIDI-to-OSC bridges: inputMin: 0, inputMax: 127.<br/><br/>
 <strong>fbZ</strong> has a narrow range (0.98–1.03) because zoom is applied multiplicatively every frame. Even 1.005 produces dramatic zoom over a few seconds of feedback.<br/><br/>
-<strong>quality</strong> range is 0–3 but 0–1 is the practical working range. Values &gt; 1 increase ring depth beyond 60 frames and can cause memory pressure at high resolutions.<br/><br/>
+<strong>historyFrames</strong> is the public temporal-history control. HUFF Classic clamps the requested history depth to a strict 192 MiB FrameRing budget. At 1920×1080 this is 24 RGBA snapshots. <strong>quality</strong> remains only as a hidden compatibility alias for older maps/presets and no longer controls mirror-preview fidelity.<br/><br/>
+<strong>processResolution</strong> selects AUTO, 720P, or 1080P processing. Classic never exceeds the 1080p-class ceiling; HUFF HD owns 4K+ processing. <strong>sourceFit</strong> selects STRETCH (legacy), FIT, FILL, or 1:1 mapping of the decoded source into that processing canvas.<br/><br/>
 <strong>clusterCount (Scan Bands)</strong> displaces the <em>current</em> video frame spatially — it does not sample from the ring buffer. There is no temporal artifact; bands are smooth even with fast camera movement.<br/><br/>
 <strong>abMix</strong> and <strong>lumaKeyAB</strong> are layer-priority mixes, not crossfades — the recessive side never drops below a 0.35 floor, so both contributors always remain visible.<br/><br/>
 <strong>scanSpinSpeed</strong> only has an effect while <strong>scanSpinLeft</strong> or <strong>scanSpinRight</strong> is on; otherwise the static <strong>scanAngle</strong> slider is used.<br/><br/>

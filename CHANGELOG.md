@@ -1,29 +1,35 @@
 # Changelog
 
-## Pass 40W — candidate
+## Pass 41A — Playback Fidelity / 1080p Classic
+
+### Added
+- `PROCESS`: AUTO / 720P / 1080P.
+- `SOURCE FIT`: STRETCH / FIT / FILL / 1:1.
+- `HISTORY`: explicit decoded-frame history depth with live frame/MiB readout.
+- Source/process/container/fit status pill.
+- rVFC mediaTime, presentedFrames, callback-gap, and processingDuration telemetry.
+- Browser dropped/total video-frame telemetry in the profiler.
+- Playback-resolution/source-fit/history deterministic simulation.
 
 ### Fixed
-- Fixed the Scan + Luma + Corrupt CONTINUOUS layering bug where sub-1x Corrupt Speed removed Corrupt from most render frames.
-- Removed Random/Cluster Speed from CONTINUOUS layer-presence gating.
-- Eliminated the isolated "one Corrupt frame" behavior triggered by a speed change in CONTINUOUS mode.
-- Added a speed-scaled decoded-frame source serial so historical AGE choice slows independently of layer presence.
+- Classic processing can no longer accidentally scale to 4K/5K/8K simply because the app window is large.
+- Fixed-resolution 720P/1080P processing no longer follows UI-window resize.
+- Removed the unsafe unconditional four-frame minimum from FrameRing capacity enforcement.
+- HISTORY no longer changes mirror JPEG quality or mirror FPS.
+- Scrub release now performs an exact seek after responsive keyframe-oriented dragging.
+- Source aspect distortion is now optional instead of unavoidable.
 
-### Behavior clarification
-- `CONTINUOUS` now means Corrupt remains in the composite every render.
-- `RANDOM SPEED` / `CLUSTER SPEED` now mean evolution speed.
-- At 0x, patch/cluster geometry and historical delay choice lock while delayed video remains live inside the patches.
-- `STROBE` / `MULTIGRAB` remain the explicit temporal hold/update modes.
+### Compatibility
+- STRETCH remains the default source mapping.
+- AUTO remains the default processing mode for old presets/current behavior.
+- Hidden `quality` remains a working legacy preset/MIDI/OSC alias to HISTORY.
+- Existing File -> Blob URL -> p5/HTMLVideoElement decode architecture is preserved.
 
-### Preserved
-- Pass 40V Luma TARGET and readback/cache repair.
-- Pass 40U Scan FIELD/panel collage design.
-- Scan SPEED and spatial controls.
-- Flow exact implementation.
-- merged Feedback/Persistence behavior.
-- pipeline-runtime contract.
-- native Tauri/decoder/output tree.
-
-### Performance containment
-- No new framebuffer.
-- No new `getImageData()` / `putImageData()` path.
-- No new FrameRing storage.
+### Protected
+- Pass 40W Corrupt/Scan/Luma handoff behavior.
+- Pass 40U Scan FIELD/panel collage geometry.
+- Feedback/Persistence.
+- Flow.
+- pipeline runtime.
+- capability instrumentation.
+- all 211 native `src-tauri/**` files.

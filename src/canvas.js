@@ -162,6 +162,13 @@ function _retireCurrentSource({ revokeBlob = true } = {}) {
   _wasPlaying = false;
   _seekPending = false;
   _rvfcOwnsGCur = false;
+  _resetPlaybackFrameTelemetry();
+  _playbackTelemetry.sourceName = '';
+  _playbackTelemetry.sourceMime = '';
+  _playbackTelemetry.sourceExt = '';
+  _playbackTelemetry.sourceBytes = 0;
+  _playbackTelemetry.sourceWidth = 0;
+  _playbackTelemetry.sourceHeight = 0;
   _resetGlitchStrobeGate('source-retired');
   _resetFeedbackStrobeGate('source-retired');
   window.resetPipelineLumaKeyState?.();
@@ -213,6 +220,71 @@ let canvas, _mainCanvasEl = null, _mainCtx = null;
 let playing = false;
 let _wasPlaying  = false; // whether video was playing when a scrub started
 let _seekPending = false; // whether a seek is still in flight when drag ends
+
+// HUFF Classic is intentionally a 1080p-class instrument. Sources may decode at
+// higher resolution, but the processing canvas is capped to ~2.07 MP and a
+// 1920-pixel long edge. HUFF HD owns 4K+ processing.
+const CLASSIC_MAX_LONG_EDGE = 1920;
+const CLASSIC_MAX_PIXELS = 1920 * 1080;
+const FRAME_RING_BUDGET_BYTES = 192 * 1024 * 1024;
+const HISTORY_MAX_FRAMES = 120;
+window.HUFF_CLASSIC_PROCESS_LIMIT = Object.freeze({
+  maxLongEdge: CLASSIC_MAX_LONG_EDGE,
+  maxPixels: CLASSIC_MAX_PIXELS,
+  label: '1080p-class',
+});
+
+function _classicProcessDimensions(rawWidth, rawHeight, mode = 'auto') {
+  if (mode === '1080p') return { width:1920, height:1080, scale:1, capped:false, mode };
+  if (mode === '720p') return { width:1280, height:720, scale:1, capped:false, mode };
+  const w = Math.max(1, Number(rawWidth) || 1);
+  const h = Math.max(1, Number(rawHeight) || 1);
+  const longScale = CLASSIC_MAX_LONG_EDGE / Math.max(w, h);
+  const pixelScale = Math.sqrt(CLASSIC_MAX_PIXELS / (w * h));
+  const scale = Math.min(1, longScale, pixelScale);
+  // Even dimensions are friendlier to video/output paths while retaining the
+  // window aspect ratio. Never upscale a smaller Classic window in AUTO.
+  const outW = Math.max(2, Math.floor((w * scale) / 2) * 2);
+  const outH = Math.max(2, Math.floor((h * scale) / 2) * 2);
+  return { width: outW, height: outH, scale, capped: scale < 0.999999, mode:'auto' };
+}
+
+function _selectedProcessResolutionMode() {
+  return String(renderState.processResolution || els.processResolution?.value || document.getElementById('processResolution')?.value || 'auto');
+}
+
+const _playbackTelemetry = Object.seal({
+  sourceName: '', sourceMime: '', sourceExt: '', sourceBytes: 0,
+  sourceWidth: 0, sourceHeight: 0,
+  processWidth: 0, processHeight: 0,
+  sourceFit: 'stretch',
+  rvfcSupported: false,
+  callbackCount: 0,
+  presentedFrames: 0,
+  missedPresentedFrames: 0,
+  lastPresentedFrames: 0,
+  mediaTime: 0,
+  expectedDisplayTime: 0,
+  processingDurationMs: 0,
+  processingDurationMsTotal: 0,
+  processingDurationSamples: 0,
+  processingDurationMaxMs: 0,
+});
+window.HUFF_PLAYBACK_TELEMETRY = _playbackTelemetry;
+
+function _resetPlaybackFrameTelemetry() {
+  _playbackTelemetry.rvfcSupported = false;
+  _playbackTelemetry.callbackCount = 0;
+  _playbackTelemetry.presentedFrames = 0;
+  _playbackTelemetry.missedPresentedFrames = 0;
+  _playbackTelemetry.lastPresentedFrames = 0;
+  _playbackTelemetry.mediaTime = 0;
+  _playbackTelemetry.expectedDisplayTime = 0;
+  _playbackTelemetry.processingDurationMs = 0;
+  _playbackTelemetry.processingDurationMsTotal = 0;
+  _playbackTelemetry.processingDurationSamples = 0;
+  _playbackTelemetry.processingDurationMaxMs = 0;
+}
 
 const els = {};
 
@@ -316,7 +388,7 @@ function _resetScanSpatialMotion() {
 
 class FrameRing {
   constructor(cap) {
-    this._cap  = Math.max(4, cap);
+    this._cap  = Math.max(1, cap);
     this._buf  = new Array(this._cap).fill(null);
     this._head = 0;
     this._size = 0;
@@ -410,7 +482,7 @@ class FrameRing {
   }
 
   resize(newCap) {
-    newCap = Math.max(4, newCap);
+    newCap = Math.max(1, newCap);
     if (newCap === this._cap) return;
 
     const keep   = Math.min(this._size, newCap);
@@ -523,7 +595,7 @@ function toggleUI() {
 // loadPresetFromFile(f)  — load snapshot from a File object
 
 const PRESET_IDS = [
-  'quality','depth','corrupt','block','glitchSpeed','glitchSpeedFine','glitchSpeedMul',
+  'quality','historyFrames','processResolution','sourceFit','depth','corrupt','block','glitchSpeed','glitchSpeedFine','glitchSpeedMul',
   'glitchSize','glitchSmear','glitchBaseX','glitchBaseY','glitchBaseZ','corruptMoveX','corruptMoveY','corruptMoveZ',
   'glitchAlpha','glitchJitter','glitchSmearAngle','glitchStrobeEvery',
   'corruptUpdateMode','corruptHoldFrames','corruptLiveFrames','corruptSpeed',
@@ -582,6 +654,15 @@ function applyPreset(data) {
   // happens to be active when the preset is recalled. Unknown imported route
   // IDs also recover to CLASSIC before any control events are dispatched.
   const sourceData = { ...data };
+  // Pass 41A splits the misleading QUALITY control into explicit decoded-frame
+  // HISTORY while keeping `quality` as a hidden compatibility alias. Legacy
+  // presets retain the old target-frame intent before the memory clamp.
+  if (!('historyFrames' in sourceData)) {
+    const legacyQuality = Math.max(0, Number(sourceData.quality ?? 1) || 0);
+    sourceData.historyFrames = String(Math.max(4, Math.min(HISTORY_MAX_FRAMES, Math.round(120 * legacyQuality))));
+  }
+  if (!('processResolution' in sourceData)) sourceData.processResolution = 'auto';
+  if (!('sourceFit' in sourceData)) sourceData.sourceFit = 'stretch';
   const validRecipeIds = new Set(['classic', 'crisp-finish']);
   if (!validRecipeIds.has(String(sourceData.pipelineRecipe || ''))) {
     sourceData.pipelineRecipe = 'classic';
@@ -844,7 +925,8 @@ function cloakVideo(p5Vid) {
 function blitVideoInto(target) {
   if (!target || !videoEl) return;
   const source = videoEl.elt ?? videoEl;
-  try { _copyFullFrame(target.drawingContext, source, target.width, target.height); } catch {}
+  const fit = renderState.sourceFit || els.sourceFit?.value || 'stretch';
+  try { _copySourceFrame(target.drawingContext, source, target.width, target.height, fit); } catch {}
 }
 
 let __camPrimed = false;
@@ -877,9 +959,9 @@ async function primeCameraPermissionOnce() {
 let _rafPumpLast = 0;
 let _rvfcOwnsGCur = false;
 
-// Replace an entire 2D canvas in one operation. Using the `copy` composite mode
-// avoids a separate full-surface clear before drawImage(), which otherwise adds
-// another memory-bandwidth pass at the render resolution.
+// Replace an entire 2D canvas in one operation. STRETCH preserves the exact
+// historical Classic fast path. FIT/FILL/1:1 are explicit fidelity options and
+// therefore clear the uncovered destination before drawing.
 function _copyFullFrame(ctx, source, width, height) {
   if (!ctx || !source || width <= 0 || height <= 0) return false;
   const prevOp    = ctx.globalCompositeOperation;
@@ -896,6 +978,50 @@ function _copyFullFrame(ctx, source, width, height) {
     }
     return true;
   } finally {
+    ctx.globalCompositeOperation = prevOp || 'source-over';
+    ctx.globalAlpha = prevAlpha;
+  }
+}
+
+function _copySourceFrame(ctx, source, width, height, fitMode = 'stretch') {
+  if (!ctx || !source || width <= 0 || height <= 0) return false;
+  const sw = Number(source.videoWidth || source.width || 0);
+  const sh = Number(source.videoHeight || source.height || 0);
+  if (!(sw > 0 && sh > 0)) return false;
+  const mode = String(fitMode || 'stretch');
+  if (mode === 'stretch') return _copyFullFrame(ctx, source, width, height);
+
+  const prevOp = ctx.globalCompositeOperation;
+  const prevAlpha = ctx.globalAlpha;
+  try {
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'copy';
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, width, height);
+    ctx.globalCompositeOperation = 'source-over';
+
+    if (mode === 'fit') {
+      const scale = Math.min(width / sw, height / sh);
+      const dw = sw * scale, dh = sh * scale;
+      ctx.drawImage(source, (width - dw) * 0.5, (height - dh) * 0.5, dw, dh);
+    } else if (mode === 'fill') {
+      const scale = Math.max(width / sw, height / sh);
+      const cropW = width / scale, cropH = height / scale;
+      const sx = (sw - cropW) * 0.5, sy = (sh - cropH) * 0.5;
+      ctx.drawImage(source, sx, sy, cropW, cropH, 0, 0, width, height);
+    } else if (mode === 'one-to-one') {
+      const srcW = Math.min(sw, width), srcH = Math.min(sh, height);
+      const sx = Math.max(0, (sw - srcW) * 0.5), sy = Math.max(0, (sh - srcH) * 0.5);
+      const dx = Math.max(0, (width - srcW) * 0.5), dy = Math.max(0, (height - srcH) * 0.5);
+      ctx.drawImage(source, sx, sy, srcW, srcH, dx, dy, srcW, srcH);
+    } else {
+      return _copyFullFrame(ctx, source, width, height);
+    }
+    return true;
+  } finally {
+    ctx.restore();
     ctx.globalCompositeOperation = prevOp || 'source-over';
     ctx.globalAlpha = prevAlpha;
   }
@@ -971,31 +1097,34 @@ function _syncGCur() {
   // _syncGCur resumes automatically on the next draw() call after seeking completes.
   if (videoEl.elt.seeking) return;
   try {
-    _copyFullFrame(gCur.drawingContext, videoEl.elt, gCur.width, gCur.height);
+    _copySourceFrame(gCur.drawingContext, videoEl.elt, gCur.width, gCur.height, renderState.sourceFit || 'stretch');
   } catch(e) {}
 }
 
 let _ringCapWidth = 0;
 let _ringCapHeight = 0;
-let _ringCapQuality = NaN;
+let _ringRequestedFrames = NaN;
 
-function _ensureFrameRingCapacity(width, height, quality) {
-  if (width === _ringCapWidth && height === _ringCapHeight && quality === _ringCapQuality) return;
+function _historyMemoryCapacity(width, height) {
+  const bpf = Math.max(1, width * height * 4);
+  return Math.max(1, Math.min(HISTORY_MAX_FRAMES, Math.floor(FRAME_RING_BUDGET_BYTES / bpf)));
+}
+
+function _ensureFrameRingCapacity(width, height, requestedFrames) {
+  const requested = Math.max(1, Math.min(HISTORY_MAX_FRAMES, Math.trunc(Number(requestedFrames) || HISTORY_MAX_FRAMES)));
+  if (width === _ringCapWidth && height === _ringCapHeight && requested === _ringRequestedFrames) return;
   _ringCapWidth = width;
   _ringCapHeight = height;
-  _ringCapQuality = quality;
-
-  const bpf = width * height * 4;
-  let cap = Math.max(4, Math.round(60 * (quality * 2)));
-  cap = Math.min(cap, Math.max(4, Math.floor(192 * 1024 * 1024 / bpf)));
+  _ringRequestedFrames = requested;
+  const cap = Math.max(1, Math.min(requested, _historyMemoryCapacity(width, height)));
   frameRing.resize(cap);
 }
 
 function _pushToRing() {
   if (!gCur) return false;
   try {
-    const quality = renderState.quality ?? 1;
-    _ensureFrameRingCapacity(gCur.width, gCur.height, quality);
+    const requestedFrames = renderState.historyFrames ?? HISTORY_MAX_FRAMES;
+    _ensureFrameRingCapacity(gCur.width, gCur.height, requestedFrames);
     const src = gCur.elt ?? gCur.drawingContext?.canvas;
     return frameRing.pushFrom(src, gCur.width, gCur.height);
   } catch(e) {
@@ -1017,11 +1146,30 @@ function pumpVideoFrames() {
   _rvfcOwnsGCur = typeof v.requestVideoFrameCallback === 'function';
 
   if (_rvfcOwnsGCur) {
-    const onFrame = () => {
+    _playbackTelemetry.rvfcSupported = true;
+    const onFrame = (_now, metadata = {}) => {
       if (session !== _pumpSession) return; // stale chain — stop
+      _playbackTelemetry.callbackCount++;
+      const presented = Number(metadata.presentedFrames) || 0;
+      if (presented > 0) {
+        if (_playbackTelemetry.lastPresentedFrames > 0 && presented > _playbackTelemetry.lastPresentedFrames + 1) {
+          _playbackTelemetry.missedPresentedFrames += presented - _playbackTelemetry.lastPresentedFrames - 1;
+        }
+        _playbackTelemetry.presentedFrames = presented;
+        _playbackTelemetry.lastPresentedFrames = presented;
+      }
+      _playbackTelemetry.mediaTime = Number(metadata.mediaTime) || 0;
+      _playbackTelemetry.expectedDisplayTime = Number(metadata.expectedDisplayTime) || 0;
+      const procMs = Math.max(0, (Number(metadata.processingDuration) || 0) * 1000);
+      _playbackTelemetry.processingDurationMs = procMs;
+      if (procMs > 0) {
+        _playbackTelemetry.processingDurationMsTotal += procMs;
+        _playbackTelemetry.processingDurationSamples++;
+        _playbackTelemetry.processingDurationMaxMs = Math.max(_playbackTelemetry.processingDurationMaxMs, procMs);
+      }
       if (playing && gCur) {
         try {
-          if (_copyFullFrame(gCur.drawingContext, v, gCur.width, gCur.height)) {
+          if (_copySourceFrame(gCur.drawingContext, v, gCur.width, gCur.height, renderState.sourceFit || 'stretch')) {
             _vfc++;
             _profileCount('decoded');
             if (_pushToRing()) _profileCount('ringCaptured');
@@ -1032,6 +1180,7 @@ function pumpVideoFrames() {
     };
     v.requestVideoFrameCallback(onFrame);
   } else {
+    _playbackTelemetry.rvfcSupported = false;
     const tick = (ts) => {
       if (session !== _pumpSession) return; // stale chain — stop
       if (ts - _rafPumpLast >= (1000 / 60)) {
@@ -1076,7 +1225,8 @@ function setup() {
   // Set density before allocation so Retina systems never create a temporary
   // device-pixel-ratio backing store only to resize it immediately afterward.
   pixelDensity(1);
-  canvas = createCanvas(windowWidth, windowHeight);
+  const processSize = _classicProcessDimensions(windowWidth, windowHeight, document.getElementById('processResolution')?.value || 'auto');
+  canvas = createCanvas(processSize.width, processSize.height);
   try { canvas.hide(); } catch {}
   _mainCanvasEl = canvas?.elt ?? document.querySelector('canvas');
   _mainCtx = _mainCanvasEl?.getContext('2d', { alpha:true, desynchronized:true }) ?? null;
@@ -1101,28 +1251,47 @@ function allocBuffers() {
   _capabilityInstrumentation?.setCanvas(width, height);
 }
 
+function _commitProcessResize(nextWidth, nextHeight, reason = 'resize') {
+  const w = Math.max(2, Math.trunc(nextWidth) || 2);
+  const h = Math.max(2, Math.trunc(nextHeight) || 2);
+  if (width === w && height === h) {
+    updateDim();
+    return false;
+  }
+  resizeCanvas(w, h, true);
+  _capabilityInstrumentation?.count('resizeCommits');
+  _mainCanvasEl = canvas?.elt ?? _mainCanvasEl;
+  _mainCtx = _mainCanvasEl?.getContext('2d', { alpha:true, desynchronized:true }) ?? _mainCtx;
+  allocBuffers();
+  [gBuf, gScratch].forEach(_clearGraphics);
+  frameRing.clear(true);
+  _resetGlitchStrobeGate(reason);
+  _resetFeedbackStrobeGate(reason);
+  window.resetPipelineLumaKeyState?.();
+  _updateLumaStencilStatus?.('EMPTY');
+  seededOnce = false;
+  _bypassSyncedVfc = -1;
+  _renderWasBypassed = true;
+  if (typeof resetClusterPhysics === 'function') resetClusterPhysics();
+  if (videoEl?.elt && gCur) {
+    try { _copySourceFrame(gCur.drawingContext, videoEl.elt, gCur.width, gCur.height, renderState.sourceFit || 'stretch'); } catch {}
+  }
+  updateDim();
+  return true;
+}
+
 let _resizeRaf = 0;
 function windowResized() {
   _capabilityInstrumentation?.count('resizeRequests');
+  if (_selectedProcessResolutionMode() !== 'auto') {
+    updateDim();
+    return;
+  }
   if (_resizeRaf) cancelAnimationFrame(_resizeRaf);
   _resizeRaf = requestAnimationFrame(() => {
     _resizeRaf = 0;
-    resizeCanvas(windowWidth, windowHeight, true);
-    _capabilityInstrumentation?.count('resizeCommits');
-    _mainCanvasEl = canvas?.elt ?? _mainCanvasEl;
-    _mainCtx = _mainCanvasEl?.getContext('2d', { alpha:true, desynchronized:true }) ?? _mainCtx;
-    allocBuffers();
-    [gBuf, gScratch].forEach(_clearGraphics);
-    frameRing.clear(true);
-    _resetGlitchStrobeGate('resize');
-    _resetFeedbackStrobeGate('resize');
-    window.resetPipelineLumaKeyState?.();
-    _updateLumaStencilStatus?.('EMPTY');
-    seededOnce = false;
-    _bypassSyncedVfc = -1;
-    _renderWasBypassed = true;
-    if (typeof resetClusterPhysics === 'function') resetClusterPhysics();
-    updateDim();
+    const processSize = _classicProcessDimensions(windowWidth, windowHeight, 'auto');
+    _commitProcessResize(processSize.width, processSize.height, 'resize');
   });
 }
 window.windowResized = windowResized;
@@ -1155,8 +1324,8 @@ function refreshGlitch() {
 function hookUI() {
   [
     'file','playBtn','pauseBtn','refreshBtn','resetBtn','clearBufBtn',
-    'camStartBtn','camStopBtn','camRefreshBtn','cams','corruptOn',
-    'quality','qualityVal','depth','depthVal','corrupt','corruptVal','block','blockVal',
+    'camStartBtn','camStopBtn','camRefreshBtn','cams','corruptOn','sourceInfo',
+    'quality','historyFrames','historyFramesVal','processResolution','sourceFit','depth','depthVal','corrupt','corruptVal','block','blockVal',
     'glitchSpeed','glitchSpeedVal','glitchSpeedFine','glitchSpeedFineVal','corruptRate','corruptRateVal','corruptSpeed','corruptSpeedVal',
     'glitchSize','glitchSizeVal','glitchSmear','glitchSmearVal',
     'glitchBaseX','glitchBaseXVal','glitchBaseY','glitchBaseYVal','glitchBaseZ','glitchBaseZVal',
@@ -1337,18 +1506,35 @@ function hookTransport() {
     });
 
     const endDrag = () => {
-      seekBar._dragging    = false;
+      const v = videoEl?.elt;
+      const exactTarget = (v && !isNaN(v.duration))
+        ? Math.max(0, Math.min(v.duration, seekBar._seekPending ?? (seekBar.value / 1000) * v.duration))
+        : null;
+      seekBar._dragging = false;
+      if (_seekFrame) {
+        cancelAnimationFrame(_seekFrame);
+        _seekFrame = null;
+      }
       seekBar._seekPending = null;
-      // If the seeked event already fired before mouseup, resume now.
-      // Otherwise _seekPending flag lets the seeked handler resume instead.
+
+      // Dragging uses fastSeek() for responsiveness. On release, finish with an
+      // exact currentTime seek so transport precision is not permanently tied
+      // to the nearest keyframe.
+      if (v && exactTarget != null && Math.abs(v.currentTime - exactTarget) > 0.001) {
+        _seekPending = true;
+        try { v.currentTime = exactTarget; } catch { _seekPending = false; }
+      } else {
+        _seekPending = false;
+      }
+
       if (!_seekPending && _wasPlaying) {
-        const v = videoEl?.elt;
         if (v) v.play().catch(() => {});
         _wasPlaying = false;
       }
     };
     seekBar.addEventListener('mouseup',  endDrag);
     seekBar.addEventListener('touchend', endDrag);
+    seekBar.addEventListener('touchcancel', endDrag);
   }
 }
 
@@ -1491,7 +1677,7 @@ function _applyFeedbackMotionRange() {
 
 function hookSliders() {
   const sliderIds = [
-    'quality','depth','corrupt','block','glitchSpeed','glitchSpeedFine','glitchSpeedMul','corruptSpeed',
+    'historyFrames','depth','corrupt','block','glitchSpeed','glitchSpeedFine','glitchSpeedMul','corruptSpeed',
     'glitchSize','glitchSmear','glitchBaseX','glitchBaseY','glitchBaseZ','corruptMoveX','corruptMoveY','corruptMoveZ','glitchStrobeEvery',
     'corruptHoldFrames','corruptLiveFrames','corruptMaskThreshold',
     'feedback','persistence','fbX','fbY','fbZ','fbTheta','feedbackStrobeEvery','feedbackRestore',
@@ -1509,6 +1695,55 @@ function hookSliders() {
 
   sliderIds.forEach(id => {
     els[id]?.addEventListener('input', () => { updateLabels(); snapshotForUndo(); });
+  });
+
+  // HISTORY is the public control. The legacy hidden `quality` ID remains for
+  // old MIDI/OSC maps and presets but no longer tunes mirror JPEG/FPS.
+  const syncHistoryFromLegacyQuality = () => {
+    if (!els.quality || !els.historyFrames) return;
+    const q = Math.max(0, Number(els.quality.value) || 0);
+    const requested = Math.max(4, Math.min(HISTORY_MAX_FRAMES, Math.round(120 * q)));
+    els.historyFrames.value = String(Math.min(requested, Number(els.historyFrames.max) || requested));
+    _syncRenderControl('historyFrames');
+    updateLabels();
+  };
+  const syncLegacyQualityFromHistory = () => {
+    if (!els.quality || !els.historyFrames) return;
+    els.quality.value = String(Math.max(0, Math.min(3, (Number(els.historyFrames.value) || 4) / 120)));
+    _syncRenderControl('quality');
+  };
+  els.quality?.addEventListener('input', syncHistoryFromLegacyQuality);
+  els.quality?.addEventListener('change', syncHistoryFromLegacyQuality);
+  els.historyFrames?.addEventListener('input', syncLegacyQualityFromHistory);
+  els.historyFrames?.addEventListener('change', syncLegacyQualityFromHistory);
+
+  els.processResolution?.addEventListener('change', () => {
+    _syncRenderControl('processResolution');
+    const mode = _selectedProcessResolutionMode();
+    const processSize = _classicProcessDimensions(windowWidth, windowHeight, mode);
+    if (_commitProcessResize(processSize.width, processSize.height, 'process-resolution')) {
+      showToast(`PROCESS ${processSize.width}×${processSize.height}`, false);
+    }
+    snapshotForUndo();
+  });
+
+  els.sourceFit?.addEventListener('change', () => {
+    _syncRenderControl('sourceFit');
+    _playbackTelemetry.sourceFit = String(els.sourceFit.value || 'stretch');
+    // Repaint the latest decoded source immediately so FIT/FILL/1:1 changes do
+    // not wait for the next decoded frame when playback is paused.
+    if (videoEl?.elt && gCur) {
+      try {
+        if (_copySourceFrame(gCur.drawingContext, videoEl.elt, gCur.width, gCur.height, _playbackTelemetry.sourceFit)) {
+          _vfc++;
+          _pushToRing();
+          seededOnce = false;
+          _bypassSyncedVfc = -1;
+        }
+      } catch {}
+    }
+    _updateSourceInfoStatus();
+    snapshotForUndo();
   });
 
   els.corruptRate?.addEventListener('input', () => {
@@ -1776,8 +2011,40 @@ function hookKeyboard() {
 
 // ─── label / dim helpers ──────────────────────────────────────────────────────
 
+function _updateHistoryControlBounds() {
+  const el = els.historyFrames;
+  if (!el) return;
+  const maxFrames = _historyMemoryCapacity(Math.max(1, width), Math.max(1, height));
+  el.max = String(maxFrames);
+  if (Number(el.value) > maxFrames) el.value = String(maxFrames);
+  if (Number(el.value) < 1) el.value = String(Math.min(maxFrames, 4));
+  _syncRenderControl('historyFrames');
+  const actual = Math.min(Math.max(1, Math.trunc(Number(el.value) || maxFrames)), maxFrames);
+  const mib = actual * width * height * 4 / 1048576;
+  if (els.historyFramesVal) els.historyFramesVal.textContent = `${actual} fr · ${mib.toFixed(0)} MiB`;
+}
+
+function _updateSourceInfoStatus() {
+  _playbackTelemetry.processWidth = width || 0;
+  _playbackTelemetry.processHeight = height || 0;
+  _playbackTelemetry.sourceFit = String(renderState.sourceFit || els.sourceFit?.value || 'stretch');
+  const el = els.sourceInfo;
+  if (!el) return;
+  const sw = _playbackTelemetry.sourceWidth || videoEl?.elt?.videoWidth || 0;
+  const sh = _playbackTelemetry.sourceHeight || videoEl?.elt?.videoHeight || 0;
+  const ext = (_playbackTelemetry.sourceExt || '').toUpperCase();
+  const src = sw && sh ? `${sw}×${sh}` : '—';
+  const proc = `${width || 0}×${height || 0}`;
+  const capped = sw > 0 && sh > 0 && (sw > width || sh > height) ? ' ↓' : ' →';
+  const processMode = _selectedProcessResolutionMode().toUpperCase();
+  el.textContent = `SRC ${src}${capped}${proc}${ext ? ` · ${ext}` : ''} · ${processMode} · ${_playbackTelemetry.sourceFit.toUpperCase()}`;
+  el.title = `Source ${src} → Classic processing ${proc} (1080p-class maximum). Process mode: ${_selectedProcessResolutionMode()}. Source fit: ${_playbackTelemetry.sourceFit}.`;
+}
+
 function updateDim() {
   if (els.dim) els.dim.textContent = `${width}×${height}`;
+  _updateHistoryControlBounds();
+  _updateSourceInfoStatus();
 }
 
 function _syncCorruptContextUI() {
@@ -1838,7 +2105,7 @@ function updateLabels() {
   const pct = v => `${Math.round((+v) * 100)}%`;
   const set = (el, valEl, fmt) => { if (el && valEl) valEl.textContent = fmt(el.value); };
 
-  set(els.quality,          els.qualityVal,          f2);
+  _updateHistoryControlBounds();
   set(els.depth,            els.depthVal,            pct);
   set(els.corrupt,          els.corruptVal,          v => `${(+v).toFixed(2)}×`);
   set(els.corruptSpeed,     els.corruptSpeedVal,     v => `${(+v).toFixed(2)}×`);
@@ -1964,6 +2231,18 @@ function onFile(ev) {
   _capabilityInstrumentation?.setSource('file-pending');
   const generation = _retireCurrentSource({ revokeBlob: true });
   enableTransport(false);
+  const extMatch = String(file.name || '').toLowerCase().match(/\.([a-z0-9]+)$/);
+  _playbackTelemetry.sourceName = String(file.name || '');
+  _playbackTelemetry.sourceMime = String(file.type || '');
+  _playbackTelemetry.sourceExt = extMatch ? extMatch[1] : '';
+  _playbackTelemetry.sourceBytes = Math.max(0, Number(file.size) || 0);
+  _playbackTelemetry.sourceFit = String(renderState.sourceFit || els.sourceFit?.value || 'stretch');
+  _updateSourceInfoStatus();
+
+  const knownContainers = new Set(['mp4','m4v','mov','webm']);
+  if (_playbackTelemetry.sourceExt && !knownContainers.has(_playbackTelemetry.sourceExt)) {
+    showToast(`.${_playbackTelemetry.sourceExt.toUpperCase()} is not in the Classic tested container set; decode depends on the system WebView`, false);
+  }
 
   // seedOnLoad: randomize seed for each new file so visuals feel fresh
   if (els.seedOnLoad?.checked && els.seed) {
@@ -2008,6 +2287,15 @@ function onFile(ev) {
     if (!sourceIsCurrent()) return;
     _capabilityInstrumentation?.count('sourceReady');
     _capabilityInstrumentation?.setSource('file', v.videoWidth, v.videoHeight);
+    _playbackTelemetry.sourceWidth = Math.max(0, Number(v.videoWidth) || 0);
+    _playbackTelemetry.sourceHeight = Math.max(0, Number(v.videoHeight) || 0);
+    _playbackTelemetry.processWidth = width;
+    _playbackTelemetry.processHeight = height;
+    _playbackTelemetry.rvfcSupported = typeof v.requestVideoFrameCallback === 'function';
+    _updateSourceInfoStatus();
+    if (_playbackTelemetry.sourceWidth > width || _playbackTelemetry.sourceHeight > height) {
+      showToast(`Source ${_playbackTelemetry.sourceWidth}×${_playbackTelemetry.sourceHeight} → Classic ${width}×${height} processing`, false);
+    }
 
     // #8: apply playback rate from UI
     const rateSelect = _$('playbackRate');
@@ -2061,7 +2349,8 @@ function onFile(ev) {
     _clearSourceGestureUnlock();
     enableTransport(true);
     const code = v.error?.code ?? '?';
-    showToast(`Video decode error (code ${code}) — try a different file`, true);
+    const kind = _playbackTelemetry.sourceExt ? `.${_playbackTelemetry.sourceExt.toUpperCase()}` : (_playbackTelemetry.sourceMime || 'media');
+    showToast(`Video decode error (code ${code}) for ${kind}. Classic recommends H.264/AAC MP4.`, true);
     console.error('[huff] video error', v.error);
   }, { once:true });
 
@@ -2908,6 +3197,11 @@ function startCamera(deviceId) {
   if (replacingSource) _capabilityInstrumentation?.count('sourceReplacements');
   _capabilityInstrumentation?.setSource('camera-pending');
   const generation = _retireCurrentSource({ revokeBlob: true });
+  _playbackTelemetry.sourceName = 'Camera';
+  _playbackTelemetry.sourceMime = 'video/camera';
+  _playbackTelemetry.sourceExt = 'CAM';
+  _playbackTelemetry.sourceFit = String(renderState.sourceFit || els.sourceFit?.value || 'stretch');
+  _updateSourceInfoStatus();
   try { enableTransport(false); } catch {}
 
   const video = deviceId?.length
@@ -2935,6 +3229,12 @@ function startCamera(deviceId) {
         try {
           _capabilityInstrumentation?.count('sourceReady');
           _capabilityInstrumentation?.setSource('camera', v.videoWidth, v.videoHeight);
+          _playbackTelemetry.sourceWidth = Math.max(0, Number(v.videoWidth) || 0);
+          _playbackTelemetry.sourceHeight = Math.max(0, Number(v.videoHeight) || 0);
+          _playbackTelemetry.processWidth = width;
+          _playbackTelemetry.processHeight = height;
+          _playbackTelemetry.rvfcSupported = typeof v.requestVideoFrameCallback === 'function';
+          _updateSourceInfoStatus();
           playing = true;
           v.play().catch(() => {});
           connectVideoAudio(v);
@@ -3178,26 +3478,14 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
   }
   ensureWS();
 
-  // The mirror is an operator preview, not the canonical render clock. Cache
-  // its tuning values on control events rather than parsing the DOM and doing
-  // quality/FPS math on every animation-frame pump.
+  // The mirror is an operator preview, not the canonical render clock. Pass 41A
+  // fully decouples preview transport from temporal-history depth: changing
+  // HISTORY cannot lower JPEG quality or alter preview cadence.
   const STREAM_FPS_CAP = 30;
-  let _streamJpegQ = 0.97;
-  let _streamPeriod = 1000 / STREAM_FPS_CAP;
-  function refreshStreamTuning(rawQuality) {
-    const q = Number.isFinite(rawQuality) ? rawQuality : 1;
-    _streamJpegQ = Math.max(0.3, Math.min(0.97, 0.5 + q * 0.47));
-    const fps = Math.max(10, Math.min(STREAM_FPS_CAP, Math.round(15 + q * 45)));
-    _streamPeriod = 1000 / fps;
-  }
-  refreshStreamTuning(renderState.quality ?? Number(_$('quality')?.value ?? 1));
-  const updateStreamTuning = event => {
-    if (event.target?.id === 'quality') refreshStreamTuning(Number(event.target.value));
-  };
-  document.addEventListener('input', updateStreamTuning);
-  document.addEventListener('change', updateStreamTuning);
-  function streamJpegQ() { return _streamJpegQ; }
-  function targetPeriod() { return _streamPeriod; }
+  const STREAM_JPEG_Q = 0.97;
+  const STREAM_PERIOD = 1000 / STREAM_FPS_CAP;
+  function streamJpegQ() { return STREAM_JPEG_Q; }
+  function targetPeriod() { return STREAM_PERIOD; }
 
   // Do not enqueue another encoded frame while the socket is backed up.
   const WS_MAX_BUFFERED = 1 << 19; // ~512KB
@@ -3725,6 +4013,18 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
       const heapMiB = capabilityNow.heapUsedBytes > 0 ? capabilityNow.heapUsedBytes / 1048576 : 0;
       const decodeFps = decodedDelta * 1000 / dt;
       const ringFps = ringDelta * 1000 / dt;
+      const sourceW = _playbackTelemetry.sourceWidth || capabilityNow.lastSourceWidth || 0;
+      const sourceH = _playbackTelemetry.sourceHeight || capabilityNow.lastSourceHeight || 0;
+      const scaleX = sourceW > 0 ? width / sourceW : 0;
+      const scaleY = sourceH > 0 ? height / sourceH : 0;
+      const decodeProcAvg = _playbackTelemetry.processingDurationSamples > 0
+        ? _playbackTelemetry.processingDurationMsTotal / _playbackTelemetry.processingDurationSamples : 0;
+      let droppedVideoFrames = 0, totalVideoFrames = 0;
+      try {
+        const quality = videoEl?.elt?.getVideoPlaybackQuality?.();
+        droppedVideoFrames = Math.max(0, Number(quality?.droppedVideoFrames) || 0);
+        totalVideoFrames = Math.max(0, Number(quality?.totalVideoFrames) || 0);
+      } catch {}
       const rows = NAMES.map(function (n) { return [n, acc[n] / f]; })
                         .filter(function (r) { return r[1] > 0.005; })
                         .sort(function (a, b) { return b[1] - a[1]; });
@@ -3744,7 +4044,16 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
         'src sync   ' + capabilitySourceAvg.toFixed(2).padStart(6) + ' ms\n' +
         'pipeline   ' + capabilityPipelineAvg.toFixed(2).padStart(6) + ' ms\n' +
         'paths      ' + `${capabilityNow.renderWaitingSamples}/${capabilityNow.renderBypassSamples}/${capabilityNow.renderActiveSamples}`.padStart(11) + ' wait/bypass/active\n' +
-        'source     ' + `${capabilityNow.lastSourceKind || 'none'} ${capabilityNow.lastSourceWidth || 0}×${capabilityNow.lastSourceHeight || 0}`.padStart(18) + '\n' +
+        'source     ' + `${capabilityNow.lastSourceKind || 'none'} ${sourceW}×${sourceH}`.padStart(18) + '\n' +
+        'process    ' + `${width}×${height}`.padStart(18) + ' Classic max\n' +
+        'src fit    ' + String(_playbackTelemetry.sourceFit || 'stretch').padStart(18) + '\n' +
+        (sourceW > 0 && sourceH > 0 ? 'src scale  ' + `${scaleX.toFixed(3)}×/${scaleY.toFixed(3)}×`.padStart(18) + ' x/y\n' : '') +
+        'rvfc       ' + String(_playbackTelemetry.rvfcSupported ? 'yes' : 'fallback').padStart(18) + '\n' +
+        'presented  ' + String(_playbackTelemetry.presentedFrames || 0).padStart(18) + '\n' +
+        'rvfc gaps  ' + String(_playbackTelemetry.missedPresentedFrames || 0).padStart(18) + '\n' +
+        'video drop ' + `${droppedVideoFrames}/${totalVideoFrames}`.padStart(18) + ' dropped/total\n' +
+        'dec proc   ' + decodeProcAvg.toFixed(2).padStart(6) + ' ms avg / ' + _playbackTelemetry.processingDurationMaxMs.toFixed(2) + ' max\n' +
+        'media time ' + (_playbackTelemetry.mediaTime || 0).toFixed(3).padStart(18) + ' s\n' +
         'src life   ' + `${capabilityNow.sourceReplacements}/${capabilityNow.sourceReady}/${capabilityNow.sourceErrors}`.padStart(11) + ' replace/ready/error\n' +
         'resize     ' + `${capabilityNow.resizeRequests}/${capabilityNow.resizeCommits}`.padStart(6) + ' request/commit\n' +
         'buffers    ' + `${capabilityNow.bufferAllocationPasses}/${capabilityNow.bufferDimensionChanges}`.padStart(6) + ' alloc/resize\n' +

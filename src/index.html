@@ -1024,7 +1024,7 @@
         <div class="topbar">
             <span class="topbar-title">huff</span>
             <div class="topbar-sep"></div>
-            <input id="file" type="file" accept="video/mp4,video/quicktime,video/mov,video/*">
+            <input id="file" type="file" accept=".mp4,.m4v,.mov,.webm,video/mp4,video/quicktime,video/webm,video/*" title="HUFF Classic recommends H.264/AAC MP4. MOV/WebM and other codecs depend on the operating-system WebView decoder.">
             <button id="playBtn"  disabled>▶ Play</button>
             <button id="pauseBtn" disabled>⏸ Pause</button>
             <div class="ctrl" style="border:none;background:none;padding:0 2px">
@@ -1071,6 +1071,7 @@
             <span style="font-family:'VT323',monospace;font-size:11px;color:var(--ui-text);opacity:.7;flex-shrink:0;letter-spacing:.06em">POS</span>
             <input id="seekBar" type="range" min="0" max="1000" step="1" value="0">
             <span id="timeDisplay">0:00 / 0:00</span>
+            <span class="pill" id="sourceInfo" title="Decoded source → HUFF Classic processing resolution">SRC —</span>
         </div>
 
         <!-- hidden preset file input -->
@@ -1132,10 +1133,29 @@
                     <div class="ctrl"><label>SEED ON LOAD</label><input id="seedOnLoad" type="checkbox" checked></div>
                     <div class="ctrl"><label>SEED</label><input id="seed" type="number" value="912831" step="1"></div>
                     <div class="ctrl">
-                        <label>QUALITY</label>
-                        <input id="quality" type="range" min="0" max="3.00" step="0.05" value="1.00">
-                        <span class="val" id="qualityVal">1.00</span>
+                        <label>HISTORY</label>
+                        <input id="historyFrames" type="range" min="4" max="120" step="1" value="120" title="Requested decoded history frames. HUFF clamps this to the 192 MiB FrameRing budget at the current processing resolution.">
+                        <span class="val" id="historyFramesVal">—</span>
                     </div>
+                    <div class="ctrl">
+                        <label>PROCESS</label>
+                        <select id="processResolution" title="HUFF Classic processing resolution. 1080P is the maximum-fidelity Classic path; AUTO follows the window but never exceeds the 1080p-class cap.">
+                            <option value="auto" selected>AUTO</option>
+                            <option value="720p">720P</option>
+                            <option value="1080p">1080P</option>
+                        </select>
+                    </div>
+                    <div class="ctrl">
+                        <label>SOURCE FIT</label>
+                        <select id="sourceFit" title="How decoded video is mapped into the HUFF processing canvas. STRETCH preserves legacy Classic behavior.">
+                            <option value="stretch" selected>STRETCH</option>
+                            <option value="fit">FIT</option>
+                            <option value="fill">FILL</option>
+                            <option value="one-to-one">1:1</option>
+                        </select>
+                    </div>
+                    <!-- Legacy compatibility alias. Old presets/MIDI/OSC maps may still target `quality`; it now mirrors HISTORY only and no longer changes preview encoding. -->
+                    <input id="quality" type="range" min="0" max="3.00" step="0.05" value="1.00" style="display:none" aria-hidden="true" tabindex="-1">
                 </div>
             </div>
             </div>

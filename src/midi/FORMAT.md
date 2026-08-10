@@ -50,7 +50,8 @@ Use for `refreshBtn`, `resetMotionBtn`, etc.
 | ID | Label | Min | Max |
 |----|-------|-----|-----|
 | `baseMix` | BASE MIX | 0 | 1 |
-| `quality` | QUALITY | 0 | 3 |
+| `historyFrames` | HISTORY | 4 | dynamic ≤120 |
+| `quality` | Legacy HISTORY alias (hidden) | 0 | 3 |
 | `feedback` | FEEDBACK | 0 | 3 |
 | `persistence` | PERSISTENCE | 0 | 10 |
 | `feedbackStrobeEvery` | Feedback strobe interval | 1 | 30 |
@@ -183,3 +184,6 @@ Pass 39R note: `feedbackStrobe` is a boolean control. The original `feedback`, `
 
 
 Pass 39M note: Feedback keeps the original `feedback`, `persistence`, `fbX`, `fbY`, `fbZ`, and `fbTheta` IDs. `feedbackEnabled`, `feedbackStrobe`, `feedbackStrobeEvery`, `feedbackRestore`, and `feedbackMotionRange` are additive. `clusterMasterSpeed` (0..4) is the independent CLUSTER-mode time scale; `corruptSpeed` (0..4) is the RANDOM-mode time scale. Pass 40W note: in CONTINUOUS mode the Corrupt layer stays composited every render so Scan/Luma overlap has stable layer order. RANDOM/CLUSTER SPEED controls spatial evolution and historical-age selection; at 0x placement/age choice lock while delayed video remains live inside the patches. Use STROBE/MULTIGRAB for explicit temporal holds.
+
+
+> **Pass 41A playback note:** `historyFrames` is the public decoded-history control and is clamped to a strict 192 MiB FrameRing budget. At 1080p the maximum is 24 RGBA snapshots. Legacy `quality` mappings remain valid as a hidden alias but no longer change mirror preview JPEG quality/FPS. `processResolution` (`auto`, `720p`, `1080p`) and `sourceFit` (`stretch`, `fit`, `fill`, `one-to-one`) are select controls rather than numeric ranges.

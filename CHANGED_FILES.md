@@ -1,9 +1,18 @@
-# Changed Files — Pass 40W
+# Changed Files — Pass 41A
 
 ## Runtime
-- `src/canvas.js` — separates CONTINUOUS Corrupt layer presence from Random/Cluster evolution speed; adds decoded-frame source-age clock.
-- `src/effects.js` — historical AGE selection now hashes the speed-scaled Corrupt source serial instead of live `_vfc` directly.
-- `src/index.html` — clarifies Random/Cluster Speed and CONTINUOUS vs STROBE/MULTIGRAB semantics.
+- `src/index.html`
+  - adds PROCESS, SOURCE FIT, HISTORY, source-status UI;
+  - keeps hidden `quality` compatibility alias;
+  - clarifies common media-container picker hints.
+- `src/canvas.js`
+  - 1080p-class processing ceiling and fixed 720P/1080P modes;
+  - source FIT/FILL/STRETCH/1:1 blit path;
+  - strict FrameRing byte-budget/history control;
+  - mirror/history decoupling;
+  - rVFC and browser dropped-frame diagnostics;
+  - exact seek-on-release;
+  - legacy QUALITY/HISTORY synchronization.
 
 ## Compatibility/reference docs
 - `src/midi/FORMAT.md`
@@ -11,14 +20,15 @@
 - `docs/docs/parameter-reference.html`
 - `docs-v1/docs/parameter-reference.html`
 
-## Validation
+## Validation / simulation
 - `package.json`
-- `scripts/validate-pass40w.mjs`
-- `scripts/simulate-pass40w-layer-handoff.mjs`
+- `scripts/validate-pass41a.mjs`
+- `scripts/simulate-pass41a-playback.mjs`
+- `baseline/pass40w-protected.sha256`
 
 ## Pass documentation
-- `HUFF_CLASSIC_OPTIMIZATION_PASS_40W.txt`
-- `CORRUPT_SCAN_LAYER_PRESENCE_AUDIT.md`
+- `HUFF_CLASSIC_OPTIMIZATION_PASS_41A.txt`
+- `PLAYBACK_FIDELITY_AUDIT.md`
 - `DOCUMENTATION_INDEX.md`
 - `PASS_NOTES.md`
 - `CHANGELOG.md`
@@ -29,6 +39,8 @@
 - `OPTIMIZATION_ROADMAP.md`
 - `GIT_COMMIT_MESSAGE.md`
 
-## Integrity manifests
-- `baseline/pass40w-src.sha256`
-- `baseline/pass40w-src-tauri.sha256`
+## Explicitly unchanged runtime files
+- `src/effects.js`
+- `src/pipeline-runtime.js`
+- `src/capability-instrumentation.js`
+- `src-tauri/**`

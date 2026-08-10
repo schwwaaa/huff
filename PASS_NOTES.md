@@ -1,20 +1,21 @@
 # Pass Notes
 
-## Pass 40W — Corrupt / Scan layer-presence repair candidate
+## Pass 41A — Playback Fidelity / 1080p Classic boundary
 
-Pass 40V correctly separated Luma targets/readback caches, but runtime testing
-exposed a second issue: CONTINUOUS Corrupt below 1x was being removed from most
-render frames by its speed gate. Scan continued repainting the shared persistent
-composite, so slowing Corrupt produced intermittent layer presence rather than a
-slow, stable composition. A speed edit could force one isolated Corrupt frame,
-which looked like a frame glitch even while FPS stayed healthy.
+Pass 41A follows the decision that HUFF Classic may top out at **1920×1080** while
+HUFF HD owns 4K+ processing. The pass repairs media-path ambiguity rather than
+replacing the proven WebView decoder architecture.
 
-Pass 40W separates **layer presence** from **evolution**:
+Key changes:
+- explicit `AUTO / 720P / 1080P` processing resolution;
+- explicit `STRETCH / FIT / FILL / 1:1` source mapping;
+- public `HISTORY` control instead of misleading `QUALITY`;
+- strict 192 MiB FrameRing ceiling with the unsafe four-frame floor removed;
+- mirror preview fully decoupled from temporal history;
+- requestVideoFrameCallback / dropped-frame playback diagnostics;
+- fast seek while dragging + exact seek on release;
+- clearer MP4/MOV/WebM container messaging.
 
-- CONTINUOUS Corrupt is composited every render;
-- Random/Cluster Speed controls geometry/motion/age-choice evolution;
-- 0x locks geometry and historical delay choice while delayed video remains live;
-- STROBE/MULTIGRAB remain the explicit temporal update policies.
-
-No new full-resolution buffer or pixel readback is introduced. Pass 40V's Luma
-TARGET/cache architecture and the successful Scan FIELD design remain intact.
+Pass 40W front-stage behavior is protected exactly outside `src/canvas.js` and the
+source-control UI. No decoder backend, Flow, Luma, Scan FIELD, Corrupt, Feedback,
+or native output architecture is redesigned here.

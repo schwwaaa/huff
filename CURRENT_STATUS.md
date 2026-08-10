@@ -1,31 +1,40 @@
 # Current Status
 
-## User-confirmed direction
+## Product boundary
 
-Scan FIELD itself is successful and should be preserved. Pass 40V improved Luma
-routing/readback behavior but exposed a separate layer-presence bug when Scan,
-Luma and slowed Corrupt were combined.
+HUFF Classic is now intentionally **1080p-class maximum**. HUFF HD remains the paid 4K+ path.
 
 ## Current candidate
 
-**Pass 40W — CONTINUOUS Corrupt / Scan layer-presence repair.**
+**Pass 41A — Playback Fidelity / 1080p Classic boundary.**
 
-Not accepted until runtime testing confirms:
-- Scan FIELD retains its successful visual character;
-- Luma TARGET=SCAN remains responsive;
-- enabling Corrupt no longer makes a slowed CONTINUOUS composite flash one bad frame;
-- Random/Cluster Speed produce visibly slow evolution while fixed SCAN TOP or CORRUPT TOP remains stable;
-- application FPS remains acceptable under the extra CONTINUOUS Corrupt draw cadence below 1x.
+Built directly on Pass 40W. Pass 40W's Scan/Luma/Corrupt behavior remains protected while the playback/source/history layer is cleaned up.
+
+## New playback contract
+
+- PROCESS: AUTO / 720P / 1080P.
+- 1080P = maximum-fidelity Classic processing path.
+- SOURCE FIT: STRETCH / FIT / FILL / 1:1.
+- HISTORY replaces misleading public QUALITY.
+- FrameRing is strictly capped at 192 MiB.
+- 1080P history maximum is 24 full RGBA snapshots.
+- Mirror preview is independent from HISTORY.
+- rVFC / browser dropped-frame diagnostics are visible in the profiler.
+- scrub = fast while dragging, exact on release.
+
+## Recommended portable source
+
+H.264/AAC MP4 remains the recommended Classic source. MOV/WebM/other codecs are still delegated to the operating-system WebView and must be tested per platform.
 
 ## Protected
-- Pass 40V Luma target/cache architecture;
-- Pass 40U Scan FIELD geometry;
+
+- Pass 40W Corrupt / Scan / Luma handoff behavior;
+- Scan FIELD / panel collage;
+- Feedback/Persistence;
 - frozen Flow;
-- merged Feedback/Persistence;
 - pipeline runtime;
-- decoder/output/native Tauri tree.
+- native Tauri outputs/runtime.
 
-## Explicit boundary
+## Acceptance status
 
-Pass 40W fixes `CONTINUOUS`. STROBE/MULTIGRAB keep their explicit decoded-frame
-update gates and require separate runtime evaluation when layered with Scan.
+Not accepted until runtime confirms existing visuals remain intact and the PROCESS / SOURCE FIT / HISTORY / seek behavior works as documented.

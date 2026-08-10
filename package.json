@@ -54,7 +54,9 @@
     "validate:pass40v": "node scripts/validate-pass40v.mjs",
     "simulate:pass40v": "node scripts/simulate-pass40v-luma-handoff.mjs",
     "validate:pass40w": "node scripts/validate-pass40w.mjs",
-    "simulate:pass40w": "node scripts/simulate-pass40w-layer-handoff.mjs"
+    "simulate:pass40w": "node scripts/simulate-pass40w-layer-handoff.mjs",
+    "validate:pass41a": "node scripts/validate-pass41a.mjs",
+    "simulate:pass41a": "node scripts/simulate-pass41a-playback.mjs"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^1.6.3"
