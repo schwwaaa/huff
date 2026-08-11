@@ -1628,10 +1628,15 @@ const _solBMap = new Uint8ClampedArray(256);
 const _solRPacked = new Uint32Array(256);
 const _solGPacked = new Uint32Array(256);
 const _solBPacked = new Uint32Array(256);
+const _solLumaMap = new Float32Array(256);
 let _solMapAmount = NaN;
 let _solMapR = NaN;
 let _solMapG = NaN;
 let _solMapB = NaN;
+let _solLumaLevel = NaN;
+let _solLumaSoft = NaN;
+let _solLumaInvert = null;
+let _solLumaAmount = NaN;
 let _solOutputW = 0;
 let _solOutputH = 0;
 
@@ -1687,6 +1692,94 @@ function _refreshSolarizeMaps(amount, solR, solG, solB) {
     _solRPacked[i] = _solRMap[i];
     _solGPacked[i] = _solGMap[i] << 8;
     _solBPacked[i] = _solBMap[i] << 16;
+  }
+}
+
+function _refreshSolarizeLumaMap(levelPct, softPct, invert, amount) {
+  if (
+    levelPct === _solLumaLevel &&
+    softPct === _solLumaSoft &&
+    invert === _solLumaInvert &&
+    amount === _solLumaAmount
+  ) return;
+
+  _solLumaLevel = levelPct;
+  _solLumaSoft = softPct;
+  _solLumaInvert = invert;
+  _solLumaAmount = amount;
+
+  const level = Math.max(0, Math.min(100, Number(levelPct) || 0));
+  const soft = Math.max(0, Math.min(1, (Number(softPct) || 0) / 100));
+  const wet = Math.max(0, Math.min(1, Number(amount) || 0));
+
+  // Magic DaVE documents Solarise as a special luminance bit reduction:
+  // high LEVEL values become coarser, 99% is represented here as two luma
+  // levels, and 100% removes luma entirely. The manual does not publish the
+  // original hardware transfer law, so 1..99 maps exponentially from 256 to 2
+  // levels to keep the control useful across its full travel.
+  let levels = 256;
+  if (level >= 100) levels = 0;
+  else if (level > 0) {
+    const t = Math.min(1, level / 99);
+    levels = Math.max(2, Math.round(Math.pow(2, 8 - 7 * t)));
+  }
+
+  for (let i = 0; i < 256; i++) {
+    const sourceLuma = i;
+    const workingLuma = invert ? (255 - sourceLuma) : sourceLuma;
+    let quantizedLuma = workingLuma;
+    if (levels === 0) {
+      quantizedLuma = 0;
+    } else if (levels < 256) {
+      const steps = levels - 1;
+      quantizedLuma = Math.round((workingLuma / 255) * steps) * (255 / steps);
+    }
+    // SOFT 0 = hard contours. SOFT 100 = the unquantized luminance signal
+    // (or its inverted counterpart when INVERT is active).
+    const softenedLuma = quantizedLuma + (workingLuma - quantizedLuma) * soft;
+    _solLumaMap[i] = sourceLuma + (softenedLuma - sourceLuma) * wet;
+  }
+}
+
+function _clampSolarizeByte(value) {
+  return value <= 0 ? 0 : value >= 255 ? 255 : Math.round(value);
+}
+
+function _solarizeLumaPixelsBytes(pix) {
+  for (let i = 0; i < pix.length; i += 4) {
+    const r = pix[i], g = pix[i + 1], b = pix[i + 2];
+    const lum = _lumaR[r] + _lumaG[g] + _lumaB[b];
+    const li = lum <= 0 ? 0 : lum >= 255 ? 255 : Math.round(lum);
+    const delta = _solLumaMap[li] - lum;
+    pix[i]     = _clampSolarizeByte(r + delta);
+    pix[i + 1] = _clampSolarizeByte(g + delta);
+    pix[i + 2] = _clampSolarizeByte(b + delta);
+  }
+}
+
+function _solarizeLumaPixelsWords(pix) {
+  const words = new Uint32Array(
+    pix.buffer,
+    pix.byteOffset,
+    pix.byteLength >>> 2
+  );
+  for (let i = 0; i < words.length; i++) {
+    const packed = words[i];
+    const r = packed & 0xff;
+    const g = (packed >>> 8) & 0xff;
+    const b = (packed >>> 16) & 0xff;
+    const lum = _lumaR[r] + _lumaG[g] + _lumaB[b];
+    const li = lum <= 0 ? 0 : lum >= 255 ? 255 : Math.round(lum);
+    const delta = _solLumaMap[li] - lum;
+    const rr = _clampSolarizeByte(r + delta);
+    const gg = _clampSolarizeByte(g + delta);
+    const bb = _clampSolarizeByte(b + delta);
+    words[i] = (
+      (packed & 0xff000000) |
+      rr |
+      (gg << 8) |
+      (bb << 16)
+    ) >>> 0;
   }
 }
 
@@ -1771,12 +1864,22 @@ let _solPrevTs   = 0;
 let _solFrameEMA = 16.7;   // smoothed frame period, ms
 let _solPhase    = 0;
 let _solHasCache = false;
+let _solLastMode = 'threshold';
 
-function applySolarize(buf, thresh = 0.5, amount = 1.0, solR = 1.0, solG = 1.0, solB = 1.0) {
-  // Keep the function safe when called outside the main dispatcher. These
-  // states are exact identities and must not trigger a synchronous readback.
-  if (thresh >= 1) return;
-  if (amount === 0 && solR === 1 && solG === 1 && solB === 1) return;
+function applySolarize(buf, thresh = 0.5, amount = 1.0, solR = 1.0, solG = 1.0, solB = 1.0, mode = 'threshold', level = 75, soft = 0, invert = false) {
+  // Keep the function safe when called outside the main dispatcher. The
+  // original THRESHOLD identity checks remain exact; LUMA QUANTIZE adds its own
+  // neutral conditions without changing the established Classic path.
+  const lumaQuantize = String(mode || 'threshold') === 'luma-quantize';
+  if (!lumaQuantize) {
+    if (thresh >= 1) return;
+    if (amount === 0 && solR === 1 && solG === 1 && solB === 1) return;
+  } else {
+    const levelPct = Math.max(0, Math.min(100, Number(level) || 0));
+    const softPct = Math.max(0, Math.min(100, Number(soft) || 0));
+    if (amount === 0) return;
+    if (!invert && (levelPct <= 0 || softPct >= 100)) return;
+  }
   const BW = buf.width, BH = buf.height;
   const MAX_W = 640;
   const scale = BW > MAX_W ? MAX_W / BW : 1;
@@ -1812,7 +1915,16 @@ function applySolarize(buf, thresh = 0.5, amount = 1.0, solR = 1.0, solG = 1.0, 
   if (_solFrameEMA > 30)      stride = 3;
   else if (_solFrameEMA > 20) stride = 2;
 
-  const doProcess = (stride === 1) || (_solPhase % stride === 0) || !_solHasCache;
+  const activeMode = lumaQuantize ? 'luma-quantize' : 'threshold';
+  const modeChanged = activeMode !== _solLastMode;
+  const lumaParamsChanged = lumaQuantize && (
+    level !== _solLumaLevel ||
+    soft !== _solLumaSoft ||
+    !!invert !== _solLumaInvert ||
+    amount !== _solLumaAmount
+  );
+  if (modeChanged) _solLastMode = activeMode;
+  const doProcess = (stride === 1) || (_solPhase % stride === 0) || !_solHasCache || modeChanged || lumaParamsChanged;
   _solPhase++;
   const profile = window.__huffProfilerActive === true;
 
@@ -1827,11 +1939,17 @@ function applySolarize(buf, thresh = 0.5, amount = 1.0, solR = 1.0, solG = 1.0, 
     }
 
     const pix = imgData.data;
-    const t = thresh * 255;
-    _refreshSolarizeMaps(amount, solR, solG, solB);
     phaseStart = profile ? performance.now() : 0;
-    if (_solLittleEndian) _solarizePixelsWords(pix, t);
-    else _solarizePixelsBytes(pix, t);
+    if (lumaQuantize) {
+      _refreshSolarizeLumaMap(level, soft, !!invert, amount);
+      if (_solLittleEndian) _solarizeLumaPixelsWords(pix);
+      else _solarizeLumaPixelsBytes(pix);
+    } else {
+      const t = thresh * 255;
+      _refreshSolarizeMaps(amount, solR, solG, solB);
+      if (_solLittleEndian) _solarizePixelsWords(pix, t);
+      else _solarizePixelsBytes(pix, t);
+    }
     if (profile) {
       _solProfileAdd('transformMs', performance.now() - phaseStart);
       _solProfileAdd('transformSamples');

@@ -1,67 +1,95 @@
-# Validation Report — Pass 41A
+# Validation Report — HUFF Classic Pass 42
 
-## Dedicated validation
+## Baseline
 
-- `npm run validate:pass41a` — **286 checks PASS**.
-- `npm run simulate:pass41a` — **PASS**.
+- Source: accepted `huff-08102026.zip` / Pass 41A.
+- Product: HUFF Classic only (Tauri v1 + p5.js / Canvas2D).
+- Runtime acceptance of Pass 41A was already confirmed on the development machine before this pass.
 
-The simulation verifies:
-- 3840×2160 AUTO -> 1920×1080;
-- 2560×1440 AUTO -> 1920×1080;
-- ultrawide/portrait AUTO dimensions remain within the 1080p-class pixel/long-edge ceiling;
-- explicit 720P and 1080P modes;
-- 1080P history ceiling = 24 full RGBA frames under 192 MiB;
-- 720P history ceiling = 54 frames;
-- STRETCH/FIT/FILL/1:1 rectangle/crop geometry for a 4:3 source.
+## Pass 42 deterministic validator
 
-## Protected-baseline validation
+Command:
 
-`baseline/pass40w-protected.sha256` contains **214 exact protected files**:
-- `src/effects.js`;
-- `src/pipeline-runtime.js`;
-- `src/capability-instrumentation.js`;
-- all 211 `src-tauri/**` files.
+```bash
+npm run validate:pass42
+```
 
-All match Pass 40W exactly.
+Result:
 
-## Inherited validators
+```text
+PASS 42 validation: 196,893 checks PASS
+196,608 LUMA QUANTIZE pixels byte/word compared
+```
 
-PASS:
-- Pass 9 — 1,728 Flow cases / 4,385,502 exact comparisons;
-- Pass 10 — 2,400 Scanline cases / 28,342 exact comparisons;
-- Pass 13S — 27 checks;
-- Pass 14 — 31,497 checks;
-- Pass 15 — 38 checks;
-- Pass 16 — 644 checks / 8,391,032 exact pixel comparisons;
-- Pass 16S — 22 checks;
-- Pass 19 — 56 checks;
-- Pass 20 — 27 checks / 2,500,000 exact arithmetic comparisons;
-- Pass 21 — 32 checks / 5,000 Flow cases / 4,417,878 exact comparisons;
-- Pass 22 — 12,000 Scanline cases / 760,519 bands / 3,802,595 exact comparisons;
-- Pass 40W — 204 checks.
+The validator checks:
 
-## Static syntax / data validation
+- new UI IDs and compatibility defaults;
+- old-preset migration to MODE=THRESHOLD;
+- mode-aware activity/no-op behavior;
+- exact SHA-256 identity of the four accepted THRESHOLD Solarize helper functions from Pass 41A;
+- LUMA QUANTIZE LEVEL/SOFT/INVERT structure;
+- LEVEL 99 = two grayscale luma levels;
+- LEVEL 100 = grayscale luma removal;
+- SOFT 100 no-invert restoration;
+- AMOUNT 0 no-op;
+- INVERT grayscale reversal;
+- alpha preservation;
+- exact byte-loop / Uint32-loop parity for 196,608 generated pixels;
+- one runtime Solarize `getImageData()` and one `putImageData()` only;
+- no second Solarize canvas or new p5 full-resolution surface;
+- 640px scratch ceiling and adaptive stride retained;
+- exact SHA-256 identity of 220 protected Pass 41A/native files, including pipeline runtime, capability instrumentation, factory presets, and the native Tauri tree (excluding pre-existing `.DS_Store`).
 
-- JavaScript-family syntax — **60 files PASS**;
-- inline HTML scripts — **32 scripts PASS**;
-- JSON — **33 files PASS**;
-- TOML — **1 file PASS**;
-- shell syntax — **8 scripts PASS**.
+## Inherited Solarize regression validator
 
-## Release preflight
+Command:
 
-`npm run release:preflight`:
-- **38 passed**
-- **0 warnings**
-- **0 blockers**
+```bash
+npm run validate:pass16
+```
 
-## Runtime claims deliberately not made
+Result:
 
-Static validation cannot prove:
-- exact codec support on every OS/WebView;
-- hardware decode use;
-- 1080p60 performance with every effect combination;
-- whether a specific MOV/WebM codec will decode;
-- visual quality of FIT/FILL/1:1 on the user's footage.
+```text
+Pass 16 validation passed: 644 checks, 8,391,032 exact pixel comparisons
+```
 
-Those remain runtime acceptance tests.
+This independently reconfirms the packed/byte THRESHOLD Solarize behavior and the Pass 16 readback/presentation optimization boundary after the Pass 42 augmentation.
+
+## Playback-boundary simulation
+
+Command:
+
+```bash
+npm run simulate:pass41a
+```
+
+Result: **PASS**. The accepted 1080p-class processing ceiling, source-fit calculations, and history-capacity model remain intact.
+
+## Syntax / data checks
+
+- 61 JavaScript/MJS/CJS files: `node --check` PASS.
+- 33 JSON files: parse PASS.
+- 8 shell scripts: `bash -n` PASS.
+
+## Static release preflight
+
+Command:
+
+```bash
+npm run release:preflight
+```
+
+Result: **38 passed, 0 warnings, 0 blockers.** The preflight confirms the Tauri v1 release/version configuration, macOS/Syphon assets, Windows/Spout assets, Linux platform configuration, Node/npm availability, and pinned Tauri CLI metadata.
+
+## Native compile status
+
+Cargo/Rust are not installed in this execution environment, so a Tauri native compile was not performed here. Pass 42 does not modify `src-tauri/**`; the protected manifest confirms those native files are byte-identical to the accepted Pass 41A archive.
+
+## Historical Pass 41A validator note
+
+`validate:pass41a` intentionally freezes `src/effects.js` to the Pass 40W hash because Pass 41A was a playback-only change. Pass 42 legitimately modifies the Solarize section of `src/effects.js`, so that historical exact-file validator is no longer the acceptance validator for the current tree. Pass 42 replaces that condition with function-level SHA checks for the original THRESHOLD implementation plus broader protected-file hashing.
+
+## Remaining runtime gate
+
+Static validation cannot certify Canvas2D/WebView appearance or frame pacing. Runtime-test the checklist in `TESTING_CHECKLIST.md` before committing Pass 42 as the next authoritative HUFF Classic baseline.

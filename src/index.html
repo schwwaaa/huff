@@ -1866,10 +1866,28 @@
                 <div class="group-row">
                     <div class="ctrl"><label>ON</label><input id="solarizeOn" type="checkbox"></div>
                     <div class="ctrl">
+                        <label>MODE</label>
+                        <select id="solarizeMode" title="THRESHOLD preserves the existing HUFF Classic Solarize exactly. LUMA QUANTIZE adds Magic DaVE-inspired luminance quantisation while retaining source chroma.">
+                            <option value="threshold" selected>THRESHOLD</option>
+                            <option value="luma-quantize">LUMA QUANTIZE</option>
+                        </select>
+                    </div>
+                    <div class="ctrl">
                         <label>THRESH</label>
                         <input id="solarizeThresh" type="range" min="0" max="1" step="0.01" value="0.5">
                         <span class="val" id="solarizeThreshVal">0.50</span>
                     </div>
+                    <div class="ctrl">
+                        <label>LEVEL</label>
+                        <input id="solarizeLevel" type="range" min="0" max="100" step="1" value="75" title="LUMA QUANTIZE only. Higher values reduce luminance to fewer, coarser levels. 99% produces two luma levels; 100% removes the luma component.">
+                        <span class="val" id="solarizeLevelVal">75%</span>
+                    </div>
+                    <div class="ctrl">
+                        <label>SOFT</label>
+                        <input id="solarizeSoft" type="range" min="0" max="100" step="1" value="0" title="LUMA QUANTIZE only. 0% gives hard contour steps; higher values soften the transitions toward the unquantized luminance signal.">
+                        <span class="val" id="solarizeSoftVal">0%</span>
+                    </div>
+                    <div class="ctrl"><label>INVERT</label><input id="solarizeInvert" type="checkbox" title="LUMA QUANTIZE only. Inverts the luminance component while retaining chroma."></div>
                     <div class="ctrl">
                         <label>AMOUNT</label>
                         <input id="solarizeAmt" type="range" min="0" max="1" step="0.01" value="1.0">

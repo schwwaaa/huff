@@ -1,34 +1,37 @@
-# Changed Files — Pass 41A
+# Changed Files — Pass 42
 
 ## Runtime
 - `src/index.html`
-  - adds PROCESS, SOURCE FIT, HISTORY, source-status UI;
-  - keeps hidden `quality` compatibility alias;
-  - clarifies common media-container picker hints.
+  - adds Solarize MODE, LEVEL, SOFT and INVERT controls;
+  - THRESHOLD remains selected by default;
+  - irrelevant controls are disabled per mode for legibility.
 - `src/canvas.js`
-  - 1080p-class processing ceiling and fixed 720P/1080P modes;
-  - source FIT/FILL/STRETCH/1:1 blit path;
-  - strict FrameRing byte-budget/history control;
-  - mirror/history decoupling;
-  - rVFC and browser dropped-frame diagnostics;
-  - exact seek-on-release;
-  - legacy QUALITY/HISTORY synchronization.
+  - adds new Solarize fields to render state, presets and undo;
+  - migrates old presets explicitly to THRESHOLD;
+  - adds mode-aware no-op detection;
+  - dispatches the selected Solarize algorithm.
+- `src/effects.js`
+  - retains the existing THRESHOLD implementation;
+  - adds bounded LUMA QUANTIZE lookup/transform inside the same Solarize readback pass;
+  - preserves alpha and chroma channel differences before gamut clipping.
 
-## Compatibility/reference docs
+## Control / public reference docs
 - `src/midi/FORMAT.md`
 - `src/osc/FORMAT.md`
+- `README.md`
 - `docs/docs/parameter-reference.html`
 - `docs-v1/docs/parameter-reference.html`
+- `docs/docs/interface.html`
+- `docs-v1/docs/interface.html`
 
-## Validation / simulation
+## Validation
 - `package.json`
-- `scripts/validate-pass41a.mjs`
-- `scripts/simulate-pass41a-playback.mjs`
-- `baseline/pass40w-protected.sha256`
+- `scripts/validate-pass42.mjs`
+- `baseline/pass41a-pass42-protected.sha256`
 
 ## Pass documentation
-- `HUFF_CLASSIC_OPTIMIZATION_PASS_41A.txt`
-- `PLAYBACK_FIDELITY_AUDIT.md`
+- `HUFF_CLASSIC_EFFECT_AUGMENTATION_PASS_42.txt`
+- `SOLARIZE_LUMA_QUANTIZE_AUDIT.md`
 - `DOCUMENTATION_INDEX.md`
 - `PASS_NOTES.md`
 - `CHANGELOG.md`
@@ -39,8 +42,10 @@
 - `OPTIMIZATION_ROADMAP.md`
 - `GIT_COMMIT_MESSAGE.md`
 
-## Explicitly unchanged runtime files
-- `src/effects.js`
+## Explicitly unchanged / protected runtime
 - `src/pipeline-runtime.js`
 - `src/capability-instrumentation.js`
+- `src/presets/*.json`
 - `src-tauri/**`
+- Flow implementation and controls
+- Feedback / Corrupt / Scan / Luma algorithms

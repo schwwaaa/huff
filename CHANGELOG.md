@@ -1,5 +1,27 @@
 # Changelog
 
+## Pass 42 — Solarize Luma Quantize
+
+### Added
+- Solarize MODE selector: THRESHOLD / LUMA QUANTIZE.
+- DaVE-inspired LUMA QUANTIZE controls: LEVEL, SOFT, INVERT.
+- Chroma-preserving luminance-delta pixel transform in the existing Solarize scratch pass.
+- Pass 42 structural and deterministic pixel validator.
+
+### Compatibility
+- THRESHOLD remains the default and retains the accepted Pass 41A algorithm.
+- Old presets migrate explicitly to THRESHOLD.
+- Factory presets are unchanged.
+- AMOUNT remains the stable shared Solarize strength control.
+
+### Performance boundary
+- No new getImageData()/putImageData() pair.
+- No new full-resolution surface.
+- Existing 640px scratch and adaptive Solarize load guard are reused.
+
+### Protected
+- Flow, Feedback/Persistence, Corrupt, Scan, Luma Key, playback/source/history, pipeline runtime, capability instrumentation, native Tauri runtime.
+
 ## Pass 41A — Playback Fidelity / 1080p Classic
 
 ### Added

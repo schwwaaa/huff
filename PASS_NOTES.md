@@ -1,5 +1,14 @@
 # Pass Notes
 
+## Pass 42 — Solarize Luma Quantize
+
+- Built from accepted Pass 41A.
+- Existing Solarize is retained as MODE = THRESHOLD and remains the default.
+- Added MODE = LUMA QUANTIZE with LEVEL / SOFT / INVERT.
+- New algorithm shares the existing bounded Solarize readback/scratch path.
+- Flow remains frozen/protected.
+- Runtime acceptance pending.
+
 ## Pass 41A — Playback Fidelity / 1080p Classic boundary
 
 Pass 41A follows the decision that HUFF Classic may top out at **1920×1080** while

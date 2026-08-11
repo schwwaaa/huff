@@ -275,13 +275,18 @@ body {
 <hr/>
 
 <h2>Solarize Group</h2>
+<p><strong>THRESHOLD</strong> preserves the accepted HUFF Classic Solarize. <strong>LUMA QUANTIZE</strong> adds a Magic DaVE-inspired luminance quantiser using the same bounded Solarize scratch/readback path.</p>
 <div class="table-responsive"><table class="win-table">
   <thead><tr><th>Control</th><th>Range</th><th>Description</th></tr></thead>
   <tbody>
     <tr><td>ON</td><td>toggle</td><td>Enable/disable.</td></tr>
-    <tr><td>THRESH</td><td>0–1</td><td>Luminance threshold. Pixels above this are inverted.</td></tr>
-    <tr><td>AMOUNT</td><td>0–1</td><td>Inversion strength.</td></tr>
-    <tr><td>SOL R / G / B</td><td>0–2</td><td>Per-channel multiplier applied after inversion. &gt; 1 over-exposes that channel.</td></tr>
+    <tr><td>MODE</td><td>THRESHOLD / LUMA QUANTIZE</td><td>Select the original or new Solarize algorithm.</td></tr>
+    <tr><td>THRESH</td><td>0–1</td><td>THRESHOLD only. Original luminance threshold.</td></tr>
+    <tr><td>LEVEL</td><td>0–100%</td><td>LUMA QUANTIZE only. Higher = coarser luminance contouring; 99% = two levels, 100% = luminance removed.</td></tr>
+    <tr><td>SOFT</td><td>0–100%</td><td>LUMA QUANTIZE only. Softens the step transitions.</td></tr>
+    <tr><td>INVERT</td><td>toggle</td><td>LUMA QUANTIZE only. Reverses luminance while retaining chroma.</td></tr>
+    <tr><td>AMOUNT</td><td>0–1</td><td>Shared wet/dry strength.</td></tr>
+    <tr><td>SOL R / G / B</td><td>0–2</td><td>THRESHOLD only. Existing per-channel tint multipliers.</td></tr>
   </tbody>
 </table></div>
 <hr/>

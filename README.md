@@ -367,14 +367,20 @@ When enabled, tile placement is biased toward radial clusters rather than unifor
 
 ### Solarize Group
 
-Per-pixel luminance-threshold colour inversion. Pixels above the threshold have their channel values inverted by the amount, with independent RGB scaling.
+Solarize now has two deliberately separate algorithms. **THRESHOLD** is the accepted HUFF Classic behavior and remains the compatibility default. **LUMA QUANTIZE** is a Magic DaVE-inspired luminance-quantisation mode that preserves the source chroma structure while reducing the number of luminance levels.
 
 | Control | Range | Description |
 |---------|-------|-------------|
-| **ON** | toggle | Enable/disable solarize. |
-| **THRESH** | 0–1 | Luminance threshold. Pixels with luma above this are inverted. |
-| **AMOUNT** | 0–1 | Inversion strength. 0 = no effect, 1 = full inversion. |
-| **SOL R / G / B** | 0–2 | Per-channel multiplier applied after inversion. Use to tint the solarised regions. Values > 1 over-expose that channel. |
+| **ON** | toggle | Enable/disable Solarize. |
+| **MODE** | THRESHOLD / LUMA QUANTIZE | THRESHOLD preserves the existing Classic algorithm exactly. LUMA QUANTIZE enables the new luminance-contour mode. |
+| **THRESH** | 0–1 | THRESHOLD only. Luminance threshold; pixels above it use the established HUFF inversion/tint path. |
+| **LEVEL** | 0–100% | LUMA QUANTIZE only. Higher values produce fewer/coarser luminance levels. 99% reaches two levels; 100% removes the luminance component. |
+| **SOFT** | 0–100% | LUMA QUANTIZE only. 0% = hard contour steps; 100% restores unquantized luminance while keeping INVERT independently available. |
+| **INVERT** | toggle | LUMA QUANTIZE only. Reverses the luminance component while retaining chroma. |
+| **AMOUNT** | 0–1 | Shared wet/dry strength. THRESHOLD retains its exact historical meaning; LUMA QUANTIZE blends the processed luminance back toward the source. |
+| **SOL R / G / B** | 0–2 | THRESHOLD only. Existing per-channel multiplier applied after inversion. |
+
+The Magic DaVE manual defines the behavior qualitatively but does not publish its original hardware transfer law. HUFF Classic therefore maps LEVEL 1–99 exponentially from 256 luminance levels toward 2, with the documented 100% endpoint treated as luminance removal. The implementation reuses the existing bounded 640px Solarize scratch/readback and does not add another full-resolution buffer or synchronous readback.
 
 ### Flow Warp Group
 
@@ -678,6 +684,8 @@ Complete list of all mappable parameter IDs, ranges, and descriptions for use in
 | `cluSpeed` | Clu Speed | 0 | 15 |
 | `cluInertia` | Clu Inertia | 0.01 | 0.99 |
 | `solarizeThresh` | Sol Thresh | 0 | 1 |
+| `solarizeLevel` | Sol Level | 0 | 100 |
+| `solarizeSoft` | Sol Soft | 0 | 100 |
 | `solarizeAmt` | Sol Amount | 0 | 1 |
 | `solarizeR` | Sol R | 0 | 2 |
 | `solarizeG` | Sol G | 0 | 2 |
@@ -699,6 +707,7 @@ Complete list of all mappable parameter IDs, ranges, and descriptions for use in
 | `scanRandSize` | Rand Band Size |
 | `clusterTiles` | Cluster Tiles On |
 | `solarizeOn` | Solarize On |
+| `solarizeInvert` | Solarize Luma Invert |
 | `flowOn` | Flow Warp On |
 | `trailOn` | Trails On |
 

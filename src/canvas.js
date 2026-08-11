@@ -606,7 +606,7 @@ const PRESET_IDS = [
   'flowOn','flowStrength','flowScale','flowPulse','flowImpl','flowSpeed','flowTurb','flowSwirl','flowSpread',
   'baseOn','baseMix','seedOnLoad',
   'symOn','symMode','symPos',
-  'solarizeOn','solarizeThresh','solarizeAmt','solarizeR','solarizeG','solarizeB',
+  'solarizeOn','solarizeMode','solarizeThresh','solarizeLevel','solarizeSoft','solarizeInvert','solarizeAmt','solarizeR','solarizeG','solarizeB',
   'scanAlpha','scanShift','scanDrift','scanSpeed','scanGap','scanSkew',
   'scanAngle','scanFocus','scanRoll',
   'scanSpinLeft','scanSpinRight','scanSpinSpeed',
@@ -663,6 +663,13 @@ function applyPreset(data) {
   }
   if (!('processResolution' in sourceData)) sourceData.processResolution = 'auto';
   if (!('sourceFit' in sourceData)) sourceData.sourceFit = 'stretch';
+  // Pass 42 extends Solarize without changing the accepted Classic algorithm.
+  // Old presets always restore the exact THRESHOLD path; the DaVE-inspired
+  // LUMA QUANTIZE controls are additive and receive useful neutral-safe defaults.
+  if (!('solarizeMode' in sourceData)) sourceData.solarizeMode = 'threshold';
+  if (!('solarizeLevel' in sourceData)) sourceData.solarizeLevel = '75';
+  if (!('solarizeSoft' in sourceData)) sourceData.solarizeSoft = '0';
+  if (!('solarizeInvert' in sourceData)) sourceData.solarizeInvert = false;
   const validRecipeIds = new Set(['classic', 'crisp-finish']);
   if (!validRecipeIds.has(String(sourceData.pipelineRecipe || ''))) {
     sourceData.pipelineRecipe = 'classic';
@@ -1348,7 +1355,7 @@ function hookUI() {
     'flowSpeed','flowSpeedVal','flowTurb','flowTurbVal','flowSwirl','flowSwirlVal','flowSpread','flowSpreadVal',
     'baseOn','baseMix','baseMixVal','seedOnLoad',
     'symOn','symMode','symPos','symPosVal',
-    'solarizeOn','solarizeThresh','solarizeThreshVal','solarizeAmt','solarizeAmtVal',
+    'solarizeOn','solarizeMode','solarizeThresh','solarizeThreshVal','solarizeLevel','solarizeLevelVal','solarizeSoft','solarizeSoftVal','solarizeInvert','solarizeAmt','solarizeAmtVal',
     'solarizeR','solarizeRVal','solarizeG','solarizeGVal','solarizeB','solarizeBVal',
     'scanAlpha','scanAlphaVal','scanShift','scanShiftVal','scanDrift','scanDriftVal',
     'scanSpeed','scanSpeedVal','scanGap','scanGapVal','scanSkew','scanSkewVal',
@@ -1688,7 +1695,7 @@ function hookSliders() {
     'glitchAlpha','glitchJitter','glitchSmearAngle',
     'flowStrength','flowScale','flowPulse','flowImpl','flowSpeed','flowTurb','flowSwirl','flowSpread','baseMix','symPos',
     'depthScatter','corruptDrift',
-    'solarizeThresh','solarizeAmt','solarizeR','solarizeG','solarizeB',
+    'solarizeThresh','solarizeLevel','solarizeSoft','solarizeAmt','solarizeR','solarizeG','solarizeB',
     'cluSpeedVar','cluPulse','cluBreathe',
     'lumaKeyMix','lumaKeyAB','lumaKeyGain','lumaKeyCleanup','lumaKeyDensity','globalMixAmt','scanAngle','scanSpinSpeed','layerPulseSpeed',
   ];
@@ -1814,8 +1821,24 @@ function hookSliders() {
   });
   syncLayerPriorityUI();
 
+  const syncSolarizeModeUI = () => {
+    const lumaMode = String(els.solarizeMode?.value || 'threshold') === 'luma-quantize';
+    if (els.solarizeThresh) els.solarizeThresh.disabled = lumaMode;
+    if (els.solarizeR) els.solarizeR.disabled = lumaMode;
+    if (els.solarizeG) els.solarizeG.disabled = lumaMode;
+    if (els.solarizeB) els.solarizeB.disabled = lumaMode;
+    if (els.solarizeLevel) els.solarizeLevel.disabled = !lumaMode;
+    if (els.solarizeSoft) els.solarizeSoft.disabled = !lumaMode;
+    if (els.solarizeInvert) els.solarizeInvert.disabled = !lumaMode;
+  };
+  els.solarizeMode?.addEventListener('change', () => {
+    syncSolarizeModeUI();
+    updateLabels();
+  });
+  syncSolarizeModeUI();
+
   // Checkboxes and selects also get snapshotted for undo
-  ['corruptOn','corruptUpdateMode','corruptDistribution','clusterTiles','corruptMaskMode','corruptMaskSide','clusters','feedbackEnabled','feedbackMotionRange','feedbackStrobe','flowOn','baseOn','symOn','solarizeOn',
+  ['corruptOn','corruptUpdateMode','corruptDistribution','clusterTiles','corruptMaskMode','corruptMaskSide','clusters','feedbackEnabled','feedbackMotionRange','feedbackStrobe','flowOn','baseOn','symOn','solarizeOn','solarizeMode','solarizeInvert',
    'cluBounds','pipelineRecipe','layerPriority','seedOnLoad','bgMode','symMode',
    'lumaKeyOn','lumaKeyTarget','lumaKeyInvert','lumaKeySource','lumaKeyFade','globalMixOn','globalMixBlend','globalMixPos','scanSpinLeft','scanSpinRight','scanPanelLayout'].forEach(id => {
     _$(id)?.addEventListener('change', snapshotForUndo);
@@ -2187,6 +2210,8 @@ function updateLabels() {
   set(els.corruptDrift,     els.corruptDriftVal,     pct);
   set(els.symPos,           els.symPosVal,           f2);
   set(els.solarizeThresh,   els.solarizeThreshVal,   f2);
+  set(els.solarizeLevel,    els.solarizeLevelVal,    v => `${Math.round(+v || 0)}%`);
+  set(els.solarizeSoft,     els.solarizeSoftVal,     v => `${Math.round(+v || 0)}%`);
   set(els.solarizeAmt,      els.solarizeAmtVal,      f2);
   set(els.solarizeR,        els.solarizeRVal,        f2);
   set(els.solarizeG,        els.solarizeGVal,        f2);
@@ -2652,6 +2677,20 @@ function _symmetryHasVisibleEffect(state) {
 function _solarizeHasVisibleEffect(state) {
   if (!state.solarizeOn) return false;
 
+  const mode = String(state.solarizeMode || 'threshold');
+  if (mode === 'luma-quantize') {
+    // AMOUNT remains the shared wet/dry strength for both Solarize modes.
+    if (state.solarizeAmt === 0) return false;
+    const level = Math.max(0, Math.min(100, Number(state.solarizeLevel) || 0));
+    const soft = Math.max(0, Math.min(100, Number(state.solarizeSoft) || 0));
+    const invert = !!state.solarizeInvert;
+    // LEVEL 0 is normal luminance; SOFT 100 restores unquantized luminance.
+    // INVERT remains independently visible in either case.
+    if (!invert && (level <= 0 || soft >= 100)) return false;
+    return true;
+  }
+
+  // THRESHOLD is the exact accepted HUFF Classic Solarize path.
   // Threshold 1 maps to 255 and the effect uses a strict `lum > threshold`
   // comparison, so no possible pixel is modified.
   if (state.solarizeThresh >= 1) return false;
@@ -2904,7 +2943,8 @@ function _runSolarizeStage(frame) {
   if (activity.solarize) {
     const s = frame.state;
     applySolarize(gBuf, s.solarizeThresh, s.solarizeAmt,
-      s.solarizeR, s.solarizeG, s.solarizeB);
+      s.solarizeR, s.solarizeG, s.solarizeB,
+      s.solarizeMode || 'threshold', s.solarizeLevel, s.solarizeSoft, s.solarizeInvert);
   }
 }
 

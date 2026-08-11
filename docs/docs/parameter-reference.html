@@ -259,7 +259,9 @@ body {
     <tr><td>clusterCount</td><td>Scan Bands</td><td>1</td><td>50</td><td>Displaces current frame — no ring sampling</td></tr>
     <tr><td>clusterRadius</td><td>Band Size</td><td>1</td><td>120</td><td></td></tr>
     <tr><td>globalMixAmt</td><td>Global Mix Amount</td><td>0</td><td>1</td><td>Opacity of base video in the blend</td></tr>
-    <tr><td>solarizeThresh</td><td>Sol Thresh</td><td>0</td><td>1</td><td></td></tr>
+    <tr><td>solarizeThresh</td><td>Sol Thresh</td><td>0</td><td>1</td><td>THRESHOLD mode only.</td></tr>
+    <tr><td>solarizeLevel</td><td>Sol Level</td><td>0</td><td>100</td><td>LUMA QUANTIZE coarseness; 99 = two luma levels, 100 = luma removed.</td></tr>
+    <tr><td>solarizeSoft</td><td>Sol Soft</td><td>0</td><td>100</td><td>LUMA QUANTIZE transition softness.</td></tr>
     <tr><td>solarizeAmt</td><td>Sol Amount</td><td>0</td><td>1</td><td></td></tr>
     <tr><td>solarizeR</td><td>Sol R</td><td>0</td><td>2</td><td></td></tr>
     <tr><td>solarizeG</td><td>Sol G</td><td>0</td><td>2</td><td></td></tr>
@@ -294,6 +296,7 @@ body {
     <tr><td>lumaKeyInvert</td><td>Luma Key Invert</td></tr>
     <tr><td>globalMixOn</td><td>Global Mix On</td></tr>
     <tr><td>solarizeOn</td><td>Solarize On</td></tr>
+    <tr><td>solarizeInvert</td><td>Solarize Luma Invert</td></tr>
     <tr><td>flowOn</td><td>Flow Warp On</td></tr>
     <tr><td>trailOn</td><td>Trails On</td></tr>
     <tr><td>loopToggle</td><td>Loop Video</td></tr>
@@ -316,6 +319,7 @@ body {
     <tr><td>lumaKeyTarget</td><td>Luma Key Target</td><td>composite, corrupt, scan</td><td>COMPOSITE = legacy clean-key overlay; CORRUPT = key Corrupt patches; SCAN = key Scan panels/FIELD objects. Legacy presets default to composite.</td></tr>
     <tr><td>lumaKeySource</td><td>Luma Key Source</td><td>clean, stencil</td></tr>
     <tr><td>lumaKeyFade</td><td>Luma Fade Mode</td><td>xfade, add</td><td>add is presented as SOFT ADD and uses bounded Screen compositing rather than Canvas lighter.</td></tr>
+    <tr><td>solarizeMode</td><td>Solarize Mode</td><td>threshold, luma-quantize</td></tr>
     <tr><td>symMode</td><td>Symmetry Mode</td><td>v, h, hv</td></tr>
     <tr><td>bgMode</td><td>Background</td><td>black, white, green, blue</td></tr>
   </tbody>

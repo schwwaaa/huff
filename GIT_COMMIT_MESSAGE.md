@@ -2,9 +2,9 @@
 
 ```bash
 git add . && git commit \
-  -m "fix: define HUFF Classic playback fidelity boundary" \
-  -m "Cap Classic processing to a 1080p-class maximum and add explicit AUTO, 720P and 1080P processing modes so fixed-resolution effects/history/output are no longer silently driven by a large UI window; keep AUTO as the compatibility default and reserve 4K+ processing for HUFF HD." \
-  -m "Add STRETCH/FIT/FILL/1:1 source mapping, replace the misleading public QUALITY control with memory-budgeted HISTORY while retaining the old quality ID as a hidden preset/MIDI/OSC alias, and enforce the FrameRing 192 MiB ceiling without an unsafe minimum-frame override." \
-  -m "Decouple mirror preview fidelity from temporal history, retain fastSeek while dragging but land on an exact currentTime seek at release, and expose requestVideoFrameCallback plus browser dropped-frame/source/process telemetry in the profiler." \
-  -m "Preserve Pass 40W Corrupt/Scan/Luma behavior, Scan FIELD, Feedback, Flow, pipeline runtime and the full native Tauri tree; add Pass 41A simulation, validation, compatibility docs and playback-fidelity audit."
+  -m "feat: add Classic Solarize luma quantize mode" \
+  -m "Extend HUFF Classic Solarize with a second LUMA QUANTIZE mode inspired by the documented Magic DaVE Solarise model while preserving the accepted THRESHOLD algorithm as the default compatibility path." \
+  -m "Add LEVEL, SOFT and INVERT controls, use AMOUNT as shared wet/dry strength, preserve chroma via a luminance-delta transform, and map LEVEL 1-99 from fine quantisation toward two luma levels with 100 reserved for luma removal." \
+  -m "Reuse the existing bounded 640px Solarize scratch, single getImageData/putImageData cycle and adaptive load guard; add no full-resolution buffer or second synchronous readback." \
+  -m "Migrate old presets to THRESHOLD, leave factory presets and Flow untouched, preserve Pass 41A playback plus Corrupt/Scan/Luma/Feedback/pipeline/native boundaries, and add Pass 42 validation and documentation."
 ```

@@ -250,7 +250,9 @@ body {
     <tr><td>scanAlpha</td><td>Scan Opacity</td><td>0</td><td>1</td><td></td></tr>
     <tr><td>clusterCount</td><td>Scan Bands</td><td>0</td><td>50</td><td>Displaces current frame — no ring sampling</td></tr>
     <tr><td>clusterRadius</td><td>Band Height</td><td>0</td><td>120</td><td></td></tr>
-    <tr><td>solarizeThresh</td><td>Sol Thresh</td><td>0</td><td>1</td><td></td></tr>
+    <tr><td>solarizeThresh</td><td>Sol Thresh</td><td>0</td><td>1</td><td>THRESHOLD mode only.</td></tr>
+    <tr><td>solarizeLevel</td><td>Sol Level</td><td>0</td><td>100</td><td>LUMA QUANTIZE coarseness; 99 = two luma levels, 100 = luma removed.</td></tr>
+    <tr><td>solarizeSoft</td><td>Sol Soft</td><td>0</td><td>100</td><td>LUMA QUANTIZE transition softness.</td></tr>
     <tr><td>solarizeAmt</td><td>Sol Amount</td><td>0</td><td>1</td><td></td></tr>
     <tr><td>solarizeR</td><td>Sol R</td><td>0</td><td>2</td><td></td></tr>
     <tr><td>solarizeG</td><td>Sol G</td><td>0</td><td>2</td><td></td></tr>
@@ -280,6 +282,7 @@ body {
     <tr><td>clusterTiles</td><td>Clusters On</td></tr>
     <tr><td>feedbackEnabled</td><td>Feedback Transform Enable</td></tr>
     <tr><td>solarizeOn</td><td>Solarize On</td></tr>
+    <tr><td>solarizeInvert</td><td>Solarize Luma Invert</td></tr>
     <tr><td>flowOn</td><td>Flow Warp On</td></tr>
     <tr><td>trailOn</td><td>Trails On</td></tr>
     <tr><td>loopToggle</td><td>Loop Video</td></tr>
@@ -301,6 +304,7 @@ body {
     <tr><td>cluBounds</td><td>Corrupt Group Edge</td><td>bounce, wrap</td></tr>
     <tr><td>keyMode</td><td>Global Key Mode</td><td>off, luma, blend</td></tr>
     <tr><td>keyBlend</td><td>Global Key Blend</td><td>screen, multiply, overlay, difference, hard-light, lighter</td></tr>
+    <tr><td>solarizeMode</td><td>Solarize Mode</td><td>threshold, luma-quantize</td></tr>
     <tr><td>symMode</td><td>Symmetry Mode</td><td>v, h, hv</td></tr>
     <tr><td>bgMode</td><td>Background</td><td>black, white, green, blue</td></tr>
   </tbody>

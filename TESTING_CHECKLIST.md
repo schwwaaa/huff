@@ -1,3 +1,19 @@
+# Pass 42 Runtime Checklist — Solarize Luma Quantize
+
+1. Confirm baseline launch/playback still matches accepted Pass 41A with Solarize OFF.
+2. Solarize ON + MODE THRESHOLD: compare known material/preset against Pass 41A; THRESH/AMOUNT/SOL R/G/B must be unchanged.
+3. Switch MODE to LUMA QUANTIZE. LEVEL 75 / SOFT 0 should visibly contour luminance immediately.
+4. Sweep LEVEL: 0, 25, 50, 75, 90, 99, 100. Confirm increasing coarseness; 99 should be two-level luma; 100 should remove brightness structure while retaining chroma residual.
+5. Sweep SOFT 0→100 at LEVEL 90. Contours should progressively dissolve toward unquantized luma.
+6. Toggle INVERT at multiple LEVEL/SOFT settings. Dark/light structure should reverse without a deliberate hue rotation.
+7. Sweep AMOUNT 0→1. 0 must be a true no-op.
+8. Combine LUMA QUANTIZE with Feedback, Corrupt, Scanlines, Luma Key and Flow. Flow itself must remain unchanged.
+9. Open profiler (`). Compare sol read/xform/upload/present/cache with THRESHOLD at the same source/process resolution.
+10. Test preset save/load. An old Pass 41A preset must reopen in THRESHOLD; a new Pass 42 preset must restore mode/level/soft/invert.
+11. Verify Syphon/Spout/mirror output if available.
+
+---
+
 # Testing Checklist — Pass 41A
 
 ## 1. Existing visual regression first

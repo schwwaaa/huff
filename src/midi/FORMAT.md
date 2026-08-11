@@ -118,6 +118,8 @@ Use for `refreshBtn`, `resetMotionBtn`, etc.
 | `cluSpeed` | ORGANIC SPEED | 0 | 10 |
 | `cluInertia` | MOMENTUM | 0.01 | 0.99 |
 | `solarizeThresh` | THRESH | 0 | 1 |
+| `solarizeLevel` | LEVEL | 0 | 100 |
+| `solarizeSoft` | SOFT | 0 | 100 |
 | `solarizeAmt` | AMOUNT | 0 | 1 |
 | `solarizeR` | SOL R | 0 | 2 |
 | `solarizeG` | SOL G | 0 | 2 |
@@ -140,6 +142,7 @@ Use for `refreshBtn`, `resetMotionBtn`, etc.
 | `scanRandSize` | RAND SIZE |
 | `clusterTiles` | CLUSTERS ON (Corrupt) |
 | `solarizeOn` | ON (Solarize) |
+| `solarizeInvert` | INVERT (Luma Quantize) |
 | `flowOn` | ON (Flow) |
 | `trailOn` | ON (Trails) |
 

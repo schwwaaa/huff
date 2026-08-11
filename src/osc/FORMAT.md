@@ -135,7 +135,9 @@ Use for huff's action buttons: `refreshBtn` (reseed) and `resetMotionBtn` (reset
 | `cluInertia` | 0.01 | 0.99 | Corrupt group momentum |
 | `cluDrift` | 0 | 5 | Corrupt group wander |
 | `symPos` | 0 | 1 | Symmetry axis position |
-| `solarizeThresh` | 0 | 1 | Solarize threshold |
+| `solarizeThresh` | 0 | 1 | Solarize threshold (THRESHOLD mode) |
+| `solarizeLevel` | 0 | 100 | Luma Quantize level |
+| `solarizeSoft` | 0 | 100 | Luma Quantize transition softness |
 | `trailDepth` | 0 | 1 | Trail depth |
 | `historyFrames` | 4 | dynamic ≤120 | Decoded history frames, memory-budgeted |
 | `quality` | 0 | 3 | Legacy hidden HISTORY alias |
@@ -143,6 +145,12 @@ Use for huff's action buttons: `refreshBtn` (reseed) and `resetMotionBtn` (reset
 > **Pass 38 Corrupt note:** HUFF presents **FIELD RATE** for the legacy `speed × fine × mult²` field contract, **RANDOM SPEED** (`corruptSpeed`) for RANDOM-mode evolution, and **CLUSTER SPEED** (`clusterMasterSpeed`) for CLUSTER-mode evolution. Existing OSC mappings to the legacy speed IDs remain valid.
 
 > **Pass 40W layering note:** in CONTINUOUS mode Corrupt remains composited every render. RANDOM/CLUSTER SPEED now scales evolution and historical-age choice rather than removing the Corrupt layer between slow updates. At 0× the patch organization and chosen delay lock while delayed video remains live inside the patches. STROBE/MULTIGRAB remain the explicit temporal hold policies.
+
+### Selects
+
+| ID | Values |
+|----|--------|
+| `solarizeMode` | `threshold`, `luma-quantize` |
 
 ### Toggles (checked = ON)
 
@@ -154,6 +162,7 @@ Use for huff's action buttons: `refreshBtn` (reseed) and `resetMotionBtn` (reset
 | `flowOn` | Flow warp |
 | `symOn` | Symmetry |
 | `solarizeOn` | Solarize |
+| `solarizeInvert` | Solarize Luma Invert |
 | `trailOn` | Trails |
 | `baseOn` | Base video |
 | `seedOnLoad` | Seed on load |
