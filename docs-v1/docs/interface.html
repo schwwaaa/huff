@@ -276,6 +276,7 @@ body {
 
 <h2>Solarize Group</h2>
 <p><strong>THRESHOLD</strong> preserves the accepted HUFF Classic Solarize. <strong>LUMA QUANTIZE</strong> adds a Magic DaVE-inspired luminance quantiser using the same bounded Solarize scratch/readback path.</p>
+<p><strong>Pass 44 UI:</strong> inactive mode-specific controls are hidden. THRESHOLD shows THRESH + SOL R/G/B; LUMA QUANTIZE shows LEVEL + SOFT + INVERT. ON, MODE, AMOUNT and FLUIDITY remain visible in both modes.</p>
 <div class="table-responsive"><table class="win-table">
   <thead><tr><th>Control</th><th>Range</th><th>Description</th></tr></thead>
   <tbody>
@@ -285,6 +286,7 @@ body {
     <tr><td>LEVEL</td><td>0–100%</td><td>LUMA QUANTIZE only. Higher = coarser luminance contouring; 99% = two levels, 100% = luminance removed.</td></tr>
     <tr><td>SOFT</td><td>0–100%</td><td>LUMA QUANTIZE only. Softens the step transitions.</td></tr>
     <tr><td>INVERT</td><td>toggle</td><td>LUMA QUANTIZE only. Reverses luminance while retaining chroma.</td></tr>
+    <tr><td>FLUIDITY</td><td>0–100%</td><td>Solarize-local temporal slew. 100% = instantaneous Pass 42 behavior; lower values make Solarize evolve more slowly without changing playback speed or adding a new frame-skip gate.</td></tr>
     <tr><td>AMOUNT</td><td>0–1</td><td>Shared wet/dry strength.</td></tr>
     <tr><td>SOL R / G / B</td><td>0–2</td><td>THRESHOLD only. Existing per-channel tint multipliers.</td></tr>
   </tbody>

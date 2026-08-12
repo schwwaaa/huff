@@ -138,6 +138,7 @@ Use for huff's action buttons: `refreshBtn` (reseed) and `resetMotionBtn` (reset
 | `solarizeThresh` | 0 | 1 | Solarize threshold (THRESHOLD mode) |
 | `solarizeLevel` | 0 | 100 | Luma Quantize level |
 | `solarizeSoft` | 0 | 100 | Luma Quantize transition softness |
+| `solarizeFluidity` | 0 | 100 | Solarize temporal response; 100 is instantaneous |
 | `trailDepth` | 0 | 1 | Trail depth |
 | `historyFrames` | 4 | dynamic ≤120 | Decoded history frames, memory-budgeted |
 | `quality` | 0 | 3 | Legacy hidden HISTORY alias |

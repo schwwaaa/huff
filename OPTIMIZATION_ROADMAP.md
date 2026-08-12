@@ -1,19 +1,18 @@
-# HUFF Classic Development Roadmap
+# HUFF Classic Optimization Roadmap
 
-1. Pass 41A — **accepted** playback fidelity / 1080p Classic boundary.
-2. Symmetry review — **parked**; current binary/mode behavior remains unchanged.
-3. Existing Solarize THRESHOLD — **accepted and protected**.
-4. Pass 42 — **current candidate:** add Magic DaVE-inspired LUMA QUANTIZE as a second Solarize mode.
-5. Runtime-test Pass 42 with:
-   - clean source + LUMA QUANTIZE at LEVEL 0 / 50 / 90 / 99 / 100;
-   - SOFT sweep 0 → 100;
-   - INVERT on/off;
-   - AMOUNT 0 → 1;
-   - THRESHOLD mode against the accepted Pass 41A visual reference;
-   - LUMA QUANTIZE combined with Feedback, Corrupt, Scanlines, Luma Key, and frozen Flow;
-   - profiler visible to compare Solarize read/xform/upload/present behavior.
-6. If accepted, freeze Pass 42 and consider the separate chroma-oriented Posterize effect.
-7. Overall interaction/redundancy audit.
-8. Classic release-hardening, endurance, and cross-platform codec/package verification.
+1. Pass 41A playback fidelity / 1080p Classic boundary — **accepted**.
+2. Symmetry expansion — **parked**.
+3. Pass 42 LUMA QUANTIZE — **strong positive runtime response / protected**.
+4. Pass 43 FLUIDITY — **strong positive runtime response / protected**.
+5. Pass 44 active-parameter UI — **retained**.
+6. Passes 45–46 Solarize GPU optimization and stage timing — **material improvement / protected**.
+7. Luma isolation — Pass 46 target-machine result showed LIVE/COMPOSITE Luma alone at approximately 52 FPS.
+8. Pass 47 self-calibrating LIVE Luma GPU handoff + scratch budget repair — **current candidate**.
+9. After Luma is accepted, continue one-effect-at-a-time runtime analysis before adding another creative effect.
 
-Do not modify Flow unless it is explicitly reopened. Do not introduce wgpu/native-renderer work into HUFF Classic.
+## Pass 47 acceptance
+
+The immediate gate is the isolated Luma comparison, not a full heavy patch.
+Confirm first that Luma itself recovers useful headroom. Then reintroduce Solarize,
+Global Mix, Feedback/Persistence and the other stages one at a time so future
+optimization decisions are grounded in measured stage cost.

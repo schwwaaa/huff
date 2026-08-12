@@ -1,3 +1,4 @@
+> **Pass 47 candidate:** LIVE/COMPOSITE Luma now attempts a self-calibrating bounded WebGL 1 keyed-patch path before the accepted CPU fallback. The path is enabled only when the actual WebGL-to-Canvas2D alpha handoff matches the established key composite, and Luma scratch sizing is now bounded for portrait as well as landscape sources. See `LUMA_LIVE_GPU_ACCELERATION_AUDIT.md`.
 
 
 
@@ -378,9 +379,10 @@ Solarize now has two deliberately separate algorithms. **THRESHOLD** is the acce
 | **SOFT** | 0–100% | LUMA QUANTIZE only. 0% = hard contour steps; 100% restores unquantized luminance while keeping INVERT independently available. |
 | **INVERT** | toggle | LUMA QUANTIZE only. Reverses the luminance component while retaining chroma. |
 | **AMOUNT** | 0–1 | Shared wet/dry strength. THRESHOLD retains its exact historical meaning; LUMA QUANTIZE blends the processed luminance back toward the source. |
+| **FLUIDITY** | 0–100% | Solarize-local temporal response. 100% is exact Pass 42 instantaneous behavior; lower values continuously slew toward the current Solarize result for increasingly viscous motion. It does not alter source playback speed or add a new frame-skip/sample-hold gate. |
 | **SOL R / G / B** | 0–2 | THRESHOLD only. Existing per-channel multiplier applied after inversion. |
 
-The Magic DaVE manual defines the behavior qualitatively but does not publish its original hardware transfer law. HUFF Classic therefore maps LEVEL 1–99 exponentially from 256 luminance levels toward 2, with the documented 100% endpoint treated as luminance removal. The implementation reuses the existing bounded 640px Solarize scratch/readback and does not add another full-resolution buffer or synchronous readback.
+The Magic DaVE manual defines the behavior qualitatively but does not publish its original hardware transfer law. HUFF Classic therefore maps LEVEL 1–99 exponentially from 256 luminance levels toward 2, with the documented 100% endpoint treated as luminance removal. The implementation reuses the existing bounded 640px Solarize scratch/readback and does not add another full-resolution buffer or synchronous readback. Pass 43 adds one optional 640px-class Solarize history canvas only when FLUIDITY is below 100%; it continuously blends toward the live Solarize result with a time-normalized coefficient. Pass 44 removes the older adaptive every-N-render Solarize cache reuse: Solarize now processes every render call and performance work is recovered through Luma patch reuse and safe Global Mix fusion instead.
 
 ### Flow Warp Group
 
@@ -786,7 +788,7 @@ huff/
 - **Solarize** downsamples to a 640px-wide scratch canvas before the pixel pass. The processed scratch is presented directly back into the active buffer, avoiding a second full-resolution Solarize cache canvas and one full-resolution copy on processed frames. Little-endian targets use a packed Uint32 pixel loop with an exact byte-loop fallback.
 - **Flow warp** renders in tiles rather than per-pixel — the tile size is set by the SCALE parameter. Static tile geometry, normalized coordinates, radial vectors, and swirl angles are cached until render size or SCALE changes. Larger tiles = faster but coarser warp.
 - **Hot-path math** uses direct arithmetic for unit-range remapping in Glitch, Scanlines, and persistence decay. This avoids p5 `map()` parameter validation inside per-band and per-tile loops while preserving the exact formulas.
-- **QUALITY slider** controls temporal-ring depth. Solarize uses a separate adaptive load guard that reuses its cached processed scratch only when sustained frame time exceeds the healthy range.
+- **QUALITY slider** controls temporal-ring depth. Solarize does not use temporal frame skipping for load shedding in Pass 44; it processes every render call at its existing bounded scratch size.
 - **Feedback** uses `drawingContext.drawImage` directly rather than `p5.get()`, eliminating one full-canvas copy per frame.
 - **Full-resolution surfaces** are limited to `gCur`, `gBuf`, and one shared `gScratch` ping-pong target. Feedback, Flow Warp, and Symmetry reuse `gScratch` instead of retaining separate full-size buffers.
 - **Resize behavior** resizes existing p5 Graphics objects in place and reuses Solarize/Luma scratch canvases, avoiding a temporary old-plus-new buffer set during window resizing.
@@ -946,3 +948,8 @@ This build reduces Flow Warp CPU preparation without changing its tile draws or 
 ## HUFF Classic Optimization Pass 22
 
 This build reduces Scanline preparation and Canvas2D state overhead without changing band count or visual formulas. Neutral/active DRIFT and SHIFT/SKEW variants are selected before the band loop, stable phase/focus terms are prepared once, and neutral shift states write direct full-cross rectangles. At an exact horizontal angle, HUFF skips the legacy identity transform stack and restores only `globalAlpha`; every nonzero angle retains the established transformed path. The profiler now reports Scanline geometry/preparation reuse and direct/transformed dispatch. Decoder ownership, independent clocks, temporal history, mirror, Syphon, Spout, and native packaging remain unchanged.
+
+
+## HUFF Classic Pass 45 — Solarize Quantize Acceleration
+
+Pass 45 addresses the remaining Luma + Solarize LUMA QUANTIZE contention without changing playback cadence. Quantize can run in a bounded <=640px WebGL 1 fragment pass while the rest of HUFF Classic remains the existing Tauri v1 + p5.js / Canvas2D application. LIVE / COMPOSITE Luma stays on the parity-proven CPU path but combines luma capture and keyed-alpha construction into one traversal on new source frames. A GPU Luma prototype was tested and rejected after it failed final-composite parity. THRESHOLD Solarize, FLUIDITY, Feedback/Persistence, frozen Flow, presets and the native runtime remain protected.

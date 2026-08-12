@@ -1,17 +1,33 @@
-# Documentation Index — Pass 42
+# Documentation Index — Pass 47
 
-- `HUFF_CLASSIC_EFFECT_AUGMENTATION_PASS_42.txt` — Pass 42 implementation summary and compatibility boundary.
-- `SOLARIZE_LUMA_QUANTIZE_AUDIT.md` — Magic DaVE-derived behavior, HUFF mapping, performance boundary, and runtime acceptance criteria.
-- `scripts/validate-pass42.mjs` — structural/pixel-equivalence validator for the Pass 42 Solarize augmentation.
+## Current pass
 
-Start here:
-- `CURRENT_STATUS.md` — accepted Pass 41A baseline plus current Pass 42 candidate.
-- `HUFF_CLASSIC_EFFECT_AUGMENTATION_PASS_42.txt` — concise implementation and compatibility summary.
-- `SOLARIZE_LUMA_QUANTIZE_AUDIT.md` — effect semantics, implementation mapping, performance boundary, acceptance/rejection criteria.
-- `scripts/validate-pass42.mjs` — deterministic structural and pixel-path validation.
-- `TESTING_CHECKLIST.md` — runtime acceptance sequence.
-- `VALIDATION_REPORT.md` — static validation results and remaining runtime gate.
-- `CHANGED_FILES.md` — exact Pass 42 change surface.
-- `GIT_COMMIT_MESSAGE.md` — ready commit command after runtime acceptance.
+- `HUFF_CLASSIC_EFFECT_AUGMENTATION_PASS_47.txt` — scope, architecture and runtime gate.
+- `LUMA_LIVE_GPU_ACCELERATION_AUDIT.md` — root cause, parity strategy, CPU fallback and scratch budget.
+- `scripts/validate-pass47.mjs` — Pass 47 structural/deterministic validator.
+- `baseline/pass46-pass47-protected.sha256` — protected native/runtime/config/preset boundary.
+- `TESTING_CHECKLIST.md` — target-machine runtime acceptance procedure.
+- `VALIDATION_REPORT.md` — validation results and environment limitations.
+- `CHANGED_FILES.md` — Pass 47 change surface.
+- `GIT_COMMIT_MESSAGE.md` — ready-to-use commit message.
 
-Historical Pass 41A playback documentation and cumulative Pass 40W / Scan / Corrupt / Luma audits remain in the archive unchanged for context.
+## Solarize / performance lineage
+
+- `HUFF_CLASSIC_EFFECT_AUGMENTATION_PASS_46.txt`
+- `SOLARIZE_THRESHOLD_GPU_ACCELERATION_AUDIT.md`
+- `HUFF_CLASSIC_EFFECT_AUGMENTATION_PASS_45.txt`
+- `SOLARIZE_QUANTIZE_GPU_ACCELERATION_AUDIT.md`
+- `HUFF_CLASSIC_EFFECT_AUGMENTATION_PASS_44.txt`
+- `SOLARIZE_LUMA_GLOBAL_MIX_PERFORMANCE_AUDIT.md`
+- `HUFF_CLASSIC_EFFECT_AUGMENTATION_PASS_43.txt`
+- `SOLARIZE_FLUIDITY_AUDIT.md`
+- `HUFF_CLASSIC_EFFECT_AUGMENTATION_PASS_42.txt`
+- `SOLARIZE_LUMA_QUANTIZE_AUDIT.md`
+
+## Cumulative project docs
+
+- `CURRENT_STATUS.md`
+- `PASS_NOTES.md`
+- `CHANGELOG.md`
+- `OPTIMIZATION_ROADMAP.md`
+- `README.md`

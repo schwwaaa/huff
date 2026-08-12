@@ -1,51 +1,33 @@
-# Changed Files — Pass 42
+# HUFF Classic Pass 47 — Changed Files
 
 ## Runtime
-- `src/index.html`
-  - adds Solarize MODE, LEVEL, SOFT and INVERT controls;
-  - THRESHOLD remains selected by default;
-  - irrelevant controls are disabled per mode for legibility.
-- `src/canvas.js`
-  - adds new Solarize fields to render state, presets and undo;
-  - migrates old presets explicitly to THRESHOLD;
-  - adds mode-aware no-op detection;
-  - dispatches the selected Solarize algorithm.
-- `src/effects.js`
-  - retains the existing THRESHOLD implementation;
-  - adds bounded LUMA QUANTIZE lookup/transform inside the same Solarize readback pass;
-  - preserves alpha and chroma channel differences before gamut clipping.
 
-## Control / public reference docs
-- `src/midi/FORMAT.md`
-- `src/osc/FORMAT.md`
-- `README.md`
-- `docs/docs/parameter-reference.html`
-- `docs-v1/docs/parameter-reference.html`
-- `docs/docs/interface.html`
-- `docs-v1/docs/interface.html`
+- `src/effects.js`
+  - self-calibrating bounded WebGL1 LIVE/COMPOSITE Luma accelerator;
+  - lazy alternate alpha-context probe;
+  - bounded GPU keyed-patch cache;
+  - final 256-entry CPU key LUT;
+  - long-edge + pixel-budget Luma workspace sizing.
+- `src/canvas.js`
+  - profiler telemetry for GPU Luma calibration/path and patch caching.
 
 ## Validation
-- `package.json`
-- `scripts/validate-pass42.mjs`
-- `baseline/pass41a-pass42-protected.sha256`
 
-## Pass documentation
-- `HUFF_CLASSIC_EFFECT_AUGMENTATION_PASS_42.txt`
-- `SOLARIZE_LUMA_QUANTIZE_AUDIT.md`
-- `DOCUMENTATION_INDEX.md`
+- `scripts/validate-pass47.mjs`
+- `package.json` (`validate:pass47`)
+- `baseline/pass46-pass47-protected.sha256`
+
+## Documentation
+
+- `HUFF_CLASSIC_EFFECT_AUGMENTATION_PASS_47.txt`
+- `LUMA_LIVE_GPU_ACCELERATION_AUDIT.md`
+- `CURRENT_STATUS.md`
 - `PASS_NOTES.md`
 - `CHANGELOG.md`
 - `CHANGED_FILES.md`
-- `TESTING_CHECKLIST.md`
 - `VALIDATION_REPORT.md`
-- `CURRENT_STATUS.md`
+- `TESTING_CHECKLIST.md`
 - `OPTIMIZATION_ROADMAP.md`
+- `DOCUMENTATION_INDEX.md`
+- `README.md`
 - `GIT_COMMIT_MESSAGE.md`
-
-## Explicitly unchanged / protected runtime
-- `src/pipeline-runtime.js`
-- `src/capability-instrumentation.js`
-- `src/presets/*.json`
-- `src-tauri/**`
-- Flow implementation and controls
-- Feedback / Corrupt / Scan / Luma algorithms

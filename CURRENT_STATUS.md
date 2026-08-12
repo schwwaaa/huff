@@ -1,40 +1,36 @@
-# Current Status
+# HUFF Classic — Current Status
 
-## Product boundary
+## Authoritative lineage
 
-HUFF Classic remains the legacy **Tauri v1 + p5.js / Canvas2D** instrument and is intentionally **1080p-class maximum**. HUFF HD remains the separate native/wgpu 4K+ path.
-
-## Accepted baseline
-
-**Pass 41A — Playback Fidelity / 1080p Classic boundary** is runtime-tested and accepted on the development machine.
+- Pass 41A (`huff-08102026.zip`) remains the runtime-accepted Classic foundation.
+- Pass 42 Luma Quantize and Pass 43 Fluidity received strong positive runtime feedback and remain protected.
+- Pass 44 mode-specific Solarize UI remains retained.
+- Passes 45–46 accelerated Solarize GPU paths and added serial timing.
+- Target-machine isolation then showed LIVE/COMPOSITE Luma alone at roughly 52 FPS.
 
 ## Current candidate
 
-**Pass 42 — Solarize Luma Quantize augmentation.**
+**Pass 47 — LIVE Luma GPU Handoff + Aspect-Safe Scratch Budget.**
 
-Pass 42 is built directly on the accepted Pass 41A tree. It adds one new Solarize algorithm without changing the established THRESHOLD Solarize, Flow, Feedback, Scan, Corrupt, Luma Key, pipeline recipes, decode path, or native Tauri runtime.
+Pass 47 gives LIVE/COMPOSITE Luma a self-calibrating bounded WebGL1 path before
+the accepted CPU fallback. The accelerator is enabled only after a one-time
+WebGL->Canvas2D alpha parity probe passes for X-FADE and SOFT ADD. Successful
+GPU frames avoid Luma's normal `getImageData()` / JS pixel transform /
+`putImageData()` path. The CPU fallback also gains a final 256-entry key LUT.
 
-## Solarize contract
+Luma workspace sizing is now constrained by long edge and pixel budget, so
+portrait sources cannot silently create much larger key workspaces.
 
-- MODE defaults to **THRESHOLD** for complete preset/session compatibility.
-- THRESHOLD keeps the existing THRESH / AMOUNT / SOL R/G/B implementation.
-- **LUMA QUANTIZE** adds LEVEL / SOFT / INVERT and shares AMOUNT as wet/dry strength.
-- LEVEL 1–99 maps from fine to coarse luma quantisation; 99% produces two luma levels.
-- LEVEL 100 removes the luminance component, leaving the chroma residual subject to RGB gamut clipping.
-- SOFT 0 gives hard contours; SOFT 100 restores unquantized luminance (INVERT remains independently active).
-- No second readback or full-resolution buffer was added. Both Solarize modes share the existing max-640px scratch, adaptive load guard, one getImageData(), one putImageData(), and one presentation copy.
+## Protected behavior
 
-## Protected
+Luma controls/matte polarity, Solarize THRESHOLD/LUMA QUANTIZE/FLUIDITY,
+Feedback/Persistence, frozen Flow, factory presets, serial recipe ordering and
+native Tauri/Syphon/Spout runtime remain protected. No frame skipping or playback
+cadence changes are introduced.
 
-- accepted Pass 41A playback/source/history behavior;
-- Pass 40W Corrupt / Scan / Luma handoff;
-- Scan FIELD / panel collage;
-- Feedback / Persistence;
-- frozen Flow;
-- pipeline runtime and recipes;
-- capability instrumentation;
-- native Tauri outputs/runtime.
+## Gate
 
-## Acceptance status
-
-Static validation complete. Runtime visual/performance acceptance on the development machine is still required before Pass 42 becomes the new authoritative Classic baseline.
+Recreate the isolated Luma test that was ~52 FPS. On an accelerated path the
+profiler should show `gpu luma` advancing, `gpu lu fall` at zero, and no ongoing
+`luma read/xform/upload` samples. If the parity probe rejects acceleration,
+record `gpu lu cal`; CPU fallback is intentional rather than a visual compromise.

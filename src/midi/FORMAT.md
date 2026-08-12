@@ -121,6 +121,7 @@ Use for `refreshBtn`, `resetMotionBtn`, etc.
 | `solarizeLevel` | LEVEL | 0 | 100 |
 | `solarizeSoft` | SOFT | 0 | 100 |
 | `solarizeAmt` | AMOUNT | 0 | 1 |
+| `solarizeFluidity` | FLUIDITY | 0 | 100 |
 | `solarizeR` | SOL R | 0 | 2 |
 | `solarizeG` | SOL G | 0 | 2 |
 | `solarizeB` | SOL B | 0 | 2 |

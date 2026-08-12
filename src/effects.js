@@ -11,6 +11,10 @@
 //  - Cluster physics centers use p5 seeded random() for reproducibility.
 //  - Symmetry uses native Canvas2D clipping/transforms instead of p5 wrappers.
 //  - Solarize and luma-key scratch canvases resize in place.
+//  - Pass 45 uses a bounded WebGL1 colour accelerator for LUMA QUANTIZE Solarize when available, with exact CPU fallback.
+//  - Pass 46 extends that same bounded accelerator to legacy THRESHOLD Solarize.
+//  - Pass 47 adds a self-calibrating bounded WebGL1 LIVE/COMPOSITE Luma patch path,
+//    a parity-safe CPU fallback LUT, and aspect/pixel-budgeted Luma workspaces.
 //  - Scanline placement reuses typed band buffers, cached angle geometry, and
 //    cached per-band noise seeds; identical static states reuse prepared bands.
 //  - Glitch tile placement reuses typed target/grid buffers and persistent
@@ -71,6 +75,649 @@ for (let i = 0; i < 256; i++) {
   _lumaG[i] = 0.587 * i;
   _lumaB[i] = 0.114 * i;
 }
+
+
+// ─── Pass 45 Classic bounded GPU colour accelerator ─────────────────────────
+// HUFF Classic remains the Tauri v1 + p5.js / Canvas2D application. This is a
+// deliberately narrow WebGL 1 accelerator used only for Solarize colour work,
+// the bounded colour operation that still forced a synchronous Canvas2D CPU
+// readback on every render. Pipeline Luma Key deliberately remains on its
+// parity-proven CPU path; a WebGL luma prototype was rejected because browser
+// compositing tests showed materially different alpha/RGB results.
+// It is NOT wgpu, does not replace the Classic renderer, and never owns the
+// full-resolution instrument framebuffer. Input is first staged at the same
+// <=640px working size used by the accepted CPU paths, then the result is drawn
+// back into the existing Canvas2D pipeline. If WebGL cannot initialize, the
+// exact Pass 44 CPU implementations remain the automatic fallback.
+let _classicGpuStageCanvas = null, _classicGpuStageCtx = null;
+let _classicGpu = null;
+let _classicGpuTried = false;
+let _classicGpuLumaAlt = null;
+let _classicGpuLumaAltTried = false;
+const _classicGpuTelemetry = window.__huffClassicGpuTelemetry || {
+  supported: null,
+  initAttempts: 0,
+  initFailures: 0,
+  contextLosses: 0,
+  solarFrames: 0,
+  solarQuantizeFrames: 0,
+  solarThresholdFrames: 0,
+  lumaFrames: 0,
+  lumaFallbacks: 0,
+  lumaCalibrationRuns: 0,
+  lumaCalibrationMode: -1,
+  lumaCalibrationContext: 'none',
+  lumaCalibrationMaxDiff: 255,
+  lumaCalibrationMeanDiff: 255,
+  fallbacks: 0,
+};
+window.__huffClassicGpuTelemetry = _classicGpuTelemetry;
+if (typeof window.HUFF_CLASSIC_FORCE_CPU_COLOR !== 'boolean') {
+  window.HUFF_CLASSIC_FORCE_CPU_COLOR = false;
+}
+
+function _compileClassicGpuShader(gl, type, source) {
+  const shader = gl.createShader(type);
+  gl.shaderSource(shader, source);
+  gl.compileShader(shader);
+  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+    const info = gl.getShaderInfoLog(shader) || 'unknown shader compile error';
+    gl.deleteShader(shader);
+    throw new Error(info);
+  }
+  return shader;
+}
+
+function _linkClassicGpuProgram(gl, vertexSource, fragmentSource, uniformNames) {
+  const vertex = _compileClassicGpuShader(gl, gl.VERTEX_SHADER, vertexSource);
+  const fragment = _compileClassicGpuShader(gl, gl.FRAGMENT_SHADER, fragmentSource);
+  const program = gl.createProgram();
+  gl.attachShader(program, vertex);
+  gl.attachShader(program, fragment);
+  gl.linkProgram(program);
+  gl.deleteShader(vertex);
+  gl.deleteShader(fragment);
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    const info = gl.getProgramInfoLog(program) || 'unknown program link error';
+    gl.deleteProgram(program);
+    throw new Error(info);
+  }
+  const uniforms = Object.create(null);
+  for (const name of uniformNames) uniforms[name] = gl.getUniformLocation(program, name);
+  return { program, uniforms, position: gl.getAttribLocation(program, 'aPosition') };
+}
+
+function _initClassicGpu() {
+  if (_classicGpuTried) return _classicGpu;
+  _classicGpuTried = true;
+  _classicGpuTelemetry.initAttempts++;
+  try {
+    const canvas = document.createElement('canvas');
+    const gl = canvas.getContext('webgl', {
+      alpha: true,
+      antialias: false,
+      depth: false,
+      stencil: false,
+      premultipliedAlpha: true,
+      preserveDrawingBuffer: false,
+      desynchronized: true,
+      powerPreference: 'high-performance',
+    }) || canvas.getContext('experimental-webgl', {
+      alpha: true,
+      antialias: false,
+      depth: false,
+      stencil: false,
+      premultipliedAlpha: true,
+      preserveDrawingBuffer: false,
+    });
+    if (!gl) throw new Error('WebGL unavailable');
+
+    const vertexSource = `
+      attribute vec2 aPosition;
+      varying vec2 vUv;
+      void main() {
+        vUv = (aPosition + 1.0) * 0.5;
+        gl_Position = vec4(aPosition, 0.0, 1.0);
+      }
+    `;
+    const solarFragment = `
+      precision highp float;
+      varying vec2 vUv;
+      uniform sampler2D uSource;
+      uniform float uSteps;
+      uniform float uRemoveLuma;
+      uniform float uSoft;
+      uniform float uInvert;
+      uniform float uAmount;
+      void main() {
+        vec4 src = texture2D(uSource, vUv);
+        float lum = dot(src.rgb, vec3(0.299, 0.587, 0.114)) * 255.0;
+        float li = floor(clamp(lum, 0.0, 255.0) + 0.5);
+        float working = mix(li, 255.0 - li, uInvert);
+        float quantized = working;
+        if (uRemoveLuma > 0.5) {
+          quantized = 0.0;
+        } else if (uSteps > 0.5 && uSteps < 255.5) {
+          quantized = floor((working / 255.0) * uSteps + 0.5) * (255.0 / uSteps);
+        }
+        float softened = mix(quantized, working, uSoft);
+        float target = mix(li, softened, uAmount);
+        float delta = (target - lum) / 255.0;
+        gl_FragColor = vec4(clamp(src.rgb + vec3(delta), 0.0, 1.0), src.a);
+      }
+    `;
+
+    const solar = _linkClassicGpuProgram(gl, vertexSource, solarFragment,
+      ['uSource','uSteps','uRemoveLuma','uSoft','uInvert','uAmount']);
+    const solarThresholdFragment = `
+      precision highp float;
+      varying vec2 vUv;
+      uniform sampler2D uSource;
+      uniform float uThreshold;
+      uniform float uAmount;
+      uniform vec3 uScale;
+      void main() {
+        vec4 src = texture2D(uSource, vUv);
+        // Reconstruct the exact byte-domain values used by ImageData. The
+        // accepted Classic THRESHOLD path compares byte luma strictly greater
+        // than THRESH*255, then applies the existing inversion/channel maps.
+        vec3 rgb = floor(clamp(src.rgb, 0.0, 1.0) * 255.0 + 0.5);
+        float lum = dot(rgb, vec3(0.299, 0.587, 0.114));
+        if (lum > uThreshold) {
+          vec3 inverted = rgb + (vec3(255.0) - 2.0 * rgb) * uAmount;
+          rgb = floor(clamp(inverted * uScale, 0.0, 255.0) + 0.5);
+        }
+        gl_FragColor = vec4(rgb / 255.0, src.a);
+      }
+    `;
+
+    const solarThreshold = _linkClassicGpuProgram(gl, vertexSource, solarThresholdFragment,
+      ['uSource','uThreshold','uAmount','uScale']);
+
+    // Pass 47 LIVE/COMPOSITE Luma patch. The shader reproduces the established
+    // byte-domain matte math, including Clip/Gain, Invert and INDIGO-inspired
+    // Cleanup/Density shaping. uAlphaMode is selected by a one-time runtime
+    // parity calibration through the actual WebGL -> Canvas2D handoff.
+    const lumaPatchFragment = `
+      precision highp float;
+      varying vec2 vUv;
+      uniform sampler2D uSource;
+      uniform float uThreshold;
+      uniform float uGain;
+      uniform float uInvert;
+      uniform float uBlackPoint;
+      uniform float uWhitePoint;
+      uniform float uAlphaMode;
+      void main() {
+        vec4 src = texture2D(uSource, vUv);
+        vec3 rgbBytes = floor(clamp(src.rgb, 0.0, 1.0) * 255.0 + 0.5);
+        float baseAlphaByte = floor(clamp(src.a, 0.0, 1.0) * 255.0 + 0.5);
+        float lumaByte = floor(dot(rgbBytes, vec3(0.299, 0.587, 0.114)) + 0.5);
+        float roll = clamp(((lumaByte - uThreshold) * uGain) / 64.0, 0.0, 1.0);
+        float maskAlphaByte = floor((mix(1.0 - roll, roll, uInvert) * 255.0) + 0.5);
+        float shaped = maskAlphaByte / 255.0;
+        if (uBlackPoint > 0.0) {
+          shaped = shaped <= uBlackPoint ? 0.0 : (shaped - uBlackPoint) / (1.0 - uBlackPoint);
+        }
+        if (uWhitePoint < 1.0) {
+          shaped = shaped >= uWhitePoint ? 1.0 : shaped / uWhitePoint;
+        }
+        maskAlphaByte = floor(clamp(shaped, 0.0, 1.0) * 255.0 + 0.5);
+        float outAlphaByte = floor((maskAlphaByte * baseAlphaByte + 127.0) / 255.0);
+        float outAlpha = outAlphaByte / 255.0;
+        vec3 outRgb = src.rgb;
+        if (uAlphaMode > 0.5 && uAlphaMode < 1.5) {
+          outRgb *= outAlpha;
+        } else if (uAlphaMode >= 1.5) {
+          outRgb = outAlpha > (0.5 / 255.0) ? clamp(outRgb / outAlpha, 0.0, 1.0) : vec3(0.0);
+        }
+        gl_FragColor = vec4(outRgb, outAlpha);
+      }
+    `;
+    const lumaPatch = _linkClassicGpuProgram(gl, vertexSource, lumaPatchFragment,
+      ['uSource','uThreshold','uGain','uInvert','uBlackPoint','uWhitePoint','uAlphaMode']);
+
+    const buffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+      -1, -1,  1, -1, -1,  1,
+      -1,  1,  1, -1,  1,  1,
+    ]), gl.STATIC_DRAW);
+
+    const texture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+    gl.disable(gl.BLEND);
+    gl.disable(gl.DEPTH_TEST);
+    gl.disable(gl.DITHER);
+
+    canvas.addEventListener('webglcontextlost', event => {
+      event.preventDefault();
+      _classicGpuTelemetry.contextLosses++;
+      _classicGpuTelemetry.supported = false;
+      _classicGpu = null;
+    }, false);
+
+    _classicGpu = { canvas, gl, buffer, texture, solar, solarThreshold, lumaPatch, lumaAlphaMode:null, lumaContextMode:'premultiplied', width:0, height:0, texWidth:0, texHeight:0 };
+    _classicGpuTelemetry.supported = true;
+    return _classicGpu;
+  } catch (err) {
+    console.warn('[huff] Classic bounded GPU colour accelerator unavailable; using CPU fallback', err);
+    _classicGpuTelemetry.supported = false;
+    _classicGpuTelemetry.initFailures++;
+    _classicGpu = null;
+    return null;
+  }
+}
+
+function _ensureClassicGpuStage(width, height) {
+  if (!_classicGpuStageCanvas) {
+    _classicGpuStageCanvas = document.createElement('canvas');
+    _classicGpuStageCtx = _classicGpuStageCanvas.getContext('2d', {
+      alpha: true,
+      desynchronized: true,
+    });
+  }
+  if (_classicGpuStageCanvas.width !== width || _classicGpuStageCanvas.height !== height) {
+    _classicGpuStageCanvas.width = width;
+    _classicGpuStageCanvas.height = height;
+  }
+  return _classicGpuStageCtx ? _classicGpuStageCanvas : null;
+}
+
+function _uploadClassicGpuSource(gpu, sourceCanvas, width, height) {
+  const { gl } = gpu;
+  if (gpu.width !== width || gpu.height !== height) {
+    gpu.canvas.width = width;
+    gpu.canvas.height = height;
+    gpu.width = width;
+    gpu.height = height;
+  }
+  gl.viewport(0, 0, width, height);
+  gl.bindBuffer(gl.ARRAY_BUFFER, gpu.buffer);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, gpu.texture);
+  if (gpu.texWidth !== width || gpu.texHeight !== height) {
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, sourceCanvas);
+    gpu.texWidth = width;
+    gpu.texHeight = height;
+  } else {
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, sourceCanvas);
+  }
+}
+
+function _bindClassicGpuProgram(gpu, entry) {
+  const { gl } = gpu;
+  gl.useProgram(entry.program);
+  gl.enableVertexAttribArray(entry.position);
+  gl.vertexAttribPointer(entry.position, 2, gl.FLOAT, false, 0, 0);
+  gl.uniform1i(entry.uniforms.uSource, 0);
+}
+
+function _runClassicGpuSolarize(sourceCanvas, width, height, uniforms) {
+  // Shared upload helper performs steady-state gl.texSubImage2D reuse.
+  if (window.HUFF_CLASSIC_FORCE_CPU_COLOR === true) return null;
+  const gpu = _initClassicGpu();
+  if (!gpu || !sourceCanvas || width <= 0 || height <= 0) {
+    _classicGpuTelemetry.fallbacks++;
+    return null;
+  }
+  const { gl } = gpu;
+  try {
+    _uploadClassicGpuSource(gpu, sourceCanvas, width, height);
+    const entry = gpu.solar;
+    _bindClassicGpuProgram(gpu, entry);
+    gl.uniform1f(entry.uniforms.uSteps, uniforms.steps);
+    gl.uniform1f(entry.uniforms.uRemoveLuma, uniforms.removeLuma ? 1 : 0);
+    gl.uniform1f(entry.uniforms.uSoft, uniforms.soft);
+    gl.uniform1f(entry.uniforms.uInvert, uniforms.invert ? 1 : 0);
+    gl.uniform1f(entry.uniforms.uAmount, uniforms.amount);
+    _classicGpuTelemetry.solarFrames++;
+    _classicGpuTelemetry.solarQuantizeFrames++;
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+    // Do not force an explicit GPU synchronization call here. drawImage() of
+    // this canvas below is the consumer and supplies the required ordering.
+    return gpu.canvas;
+  } catch (err) {
+    console.warn('[huff] Classic bounded Solarize GPU stage failed; using CPU fallback', err);
+    _classicGpuTelemetry.fallbacks++;
+    return null;
+  }
+}
+
+function _runClassicGpuThresholdSolarize(sourceCanvas, width, height, uniforms) {
+  if (window.HUFF_CLASSIC_FORCE_CPU_COLOR === true) return null;
+  const gpu = _initClassicGpu();
+  if (!gpu || !sourceCanvas || width <= 0 || height <= 0) {
+    _classicGpuTelemetry.fallbacks++;
+    return null;
+  }
+  const { gl } = gpu;
+  try {
+    _uploadClassicGpuSource(gpu, sourceCanvas, width, height);
+    const entry = gpu.solarThreshold;
+    _bindClassicGpuProgram(gpu, entry);
+    gl.uniform1f(entry.uniforms.uThreshold, uniforms.threshold);
+    gl.uniform1f(entry.uniforms.uAmount, uniforms.amount);
+    gl.uniform3f(entry.uniforms.uScale, uniforms.solR, uniforms.solG, uniforms.solB);
+    _classicGpuTelemetry.solarFrames++;
+    _classicGpuTelemetry.solarThresholdFrames++;
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+    return gpu.canvas;
+  } catch (err) {
+    console.warn('[huff] Classic bounded THRESHOLD Solarize GPU stage failed; using CPU fallback', err);
+    _classicGpuTelemetry.fallbacks++;
+    return null;
+  }
+}
+
+function _initClassicGpuLumaAlt() {
+  if (_classicGpuLumaAltTried) return _classicGpuLumaAlt;
+  _classicGpuLumaAltTried = true;
+  try {
+    const canvas = document.createElement('canvas');
+    const gl = canvas.getContext('webgl', {
+      alpha:true, antialias:false, depth:false, stencil:false,
+      premultipliedAlpha:false, preserveDrawingBuffer:false,
+      desynchronized:true, powerPreference:'high-performance',
+    }) || canvas.getContext('experimental-webgl', {
+      alpha:true, antialias:false, depth:false, stencil:false,
+      premultipliedAlpha:false, preserveDrawingBuffer:false,
+    });
+    if (!gl) return null;
+    const vertexSource = `
+      attribute vec2 aPosition;
+      varying vec2 vUv;
+      void main() { vUv=(aPosition+1.0)*0.5; gl_Position=vec4(aPosition,0.0,1.0); }
+    `;
+    const fragmentSource = `
+      precision highp float;
+      varying vec2 vUv;
+      uniform sampler2D uSource;
+      uniform float uThreshold;
+      uniform float uGain;
+      uniform float uInvert;
+      uniform float uBlackPoint;
+      uniform float uWhitePoint;
+      uniform float uAlphaMode;
+      void main() {
+        vec4 src=texture2D(uSource,vUv);
+        vec3 rgbBytes=floor(clamp(src.rgb,0.0,1.0)*255.0+0.5);
+        float baseAlphaByte=floor(clamp(src.a,0.0,1.0)*255.0+0.5);
+        float lumaByte=floor(dot(rgbBytes,vec3(0.299,0.587,0.114))+0.5);
+        float roll=clamp(((lumaByte-uThreshold)*uGain)/64.0,0.0,1.0);
+        float maskAlphaByte=floor((mix(1.0-roll,roll,uInvert)*255.0)+0.5);
+        float shaped=maskAlphaByte/255.0;
+        if(uBlackPoint>0.0) shaped=shaped<=uBlackPoint?0.0:(shaped-uBlackPoint)/(1.0-uBlackPoint);
+        if(uWhitePoint<1.0) shaped=shaped>=uWhitePoint?1.0:shaped/uWhitePoint;
+        maskAlphaByte=floor(clamp(shaped,0.0,1.0)*255.0+0.5);
+        float outAlphaByte=floor((maskAlphaByte*baseAlphaByte+127.0)/255.0);
+        float outAlpha=outAlphaByte/255.0;
+        vec3 outRgb=src.rgb;
+        if(uAlphaMode>0.5&&uAlphaMode<1.5) outRgb*=outAlpha;
+        else if(uAlphaMode>=1.5) outRgb=outAlpha>(0.5/255.0)?clamp(outRgb/outAlpha,0.0,1.0):vec3(0.0);
+        gl_FragColor=vec4(outRgb,outAlpha);
+      }
+    `;
+    const lumaPatch=_linkClassicGpuProgram(gl,vertexSource,fragmentSource,
+      ['uSource','uThreshold','uGain','uInvert','uBlackPoint','uWhitePoint','uAlphaMode']);
+    const buffer=gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER,buffer);
+    gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,-1,1,1,-1,1,1]),gl.STATIC_DRAW);
+    const texture=gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D,texture);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL,false);
+    gl.disable(gl.BLEND); gl.disable(gl.DEPTH_TEST); gl.disable(gl.DITHER);
+    canvas.addEventListener('webglcontextlost',event=>{
+      event.preventDefault(); _classicGpuTelemetry.contextLosses++;
+      _classicGpuLumaAlt=null;
+    },false);
+    _classicGpuLumaAlt={canvas,gl,buffer,texture,lumaPatch,lumaAlphaMode:null,lumaContextMode:'unpremultiplied',width:0,height:0,texWidth:0,texHeight:0};
+    return _classicGpuLumaAlt;
+  } catch(err) {
+    console.warn('[huff] alternate Classic Luma WebGL context unavailable',err);
+    _classicGpuLumaAlt=null; return null;
+  }
+}
+
+function _classicGpuLumaShapePoints(cleanup, density) {
+  const safeCleanup = Math.max(0, Math.min(1, Number(cleanup) || 0));
+  const safeDensity = Math.max(0, Math.min(1, Number(density) || 0));
+  return {
+    blackPoint: Math.max(0, Math.min(0.45, safeCleanup * 0.45)),
+    whitePoint: Math.max(0.55, Math.min(1, 1 - safeDensity * 0.45)),
+  };
+}
+
+function _runClassicGpuLumaPatchRaw(gpu, sourceCanvas, width, height, uniforms, alphaMode) {
+  const { gl } = gpu;
+  _uploadClassicGpuSource(gpu, sourceCanvas, width, height);
+  const entry = gpu.lumaPatch;
+  _bindClassicGpuProgram(gpu, entry);
+  gl.uniform1f(entry.uniforms.uThreshold, uniforms.threshold);
+  gl.uniform1f(entry.uniforms.uGain, uniforms.gain);
+  gl.uniform1f(entry.uniforms.uInvert, uniforms.invert ? 1 : 0);
+  gl.uniform1f(entry.uniforms.uBlackPoint, uniforms.blackPoint);
+  gl.uniform1f(entry.uniforms.uWhitePoint, uniforms.whitePoint);
+  gl.uniform1f(entry.uniforms.uAlphaMode, alphaMode);
+  gl.drawArrays(gl.TRIANGLES, 0, 6);
+  return gpu.canvas;
+}
+
+function _classicGpuLumaReferencePatch(sourceCanvas, width, height, uniforms) {
+  const sourceCtx = sourceCanvas.getContext('2d', { willReadFrequently: true });
+  if (!sourceCtx) return null;
+  const data = sourceCtx.getImageData(0, 0, width, height);
+  const bytes = data.data;
+  for (let i = 0; i < bytes.length; i += 4) {
+    const r = bytes[i], g = bytes[i + 1], b = bytes[i + 2], baseAlpha = bytes[i + 3];
+    const luma = Math.floor(0.299 * r + 0.587 * g + 0.114 * b + 0.5);
+    const roll = Math.max(0, Math.min(1, ((luma - uniforms.threshold) * uniforms.gain) / 64));
+    let maskAlpha = Math.floor((uniforms.invert ? roll : (1 - roll)) * 255 + 0.5);
+    let shaped = maskAlpha / 255;
+    if (uniforms.blackPoint > 0) {
+      shaped = shaped <= uniforms.blackPoint ? 0 : (shaped - uniforms.blackPoint) / (1 - uniforms.blackPoint);
+    }
+    if (uniforms.whitePoint < 1) {
+      shaped = shaped >= uniforms.whitePoint ? 1 : shaped / uniforms.whitePoint;
+    }
+    maskAlpha = Math.max(0, Math.min(255, Math.floor(shaped * 255 + 0.5)));
+    bytes[i + 3] = Math.floor((maskAlpha * baseAlpha + 127) / 255);
+  }
+  const patch = document.createElement('canvas');
+  patch.width = width; patch.height = height;
+  patch.getContext('2d').putImageData(data, 0, 0);
+  return patch;
+}
+
+function _classicGpuLumaCompositeProbe(background, patch, width, height, fadeMode, mix) {
+  const out = document.createElement('canvas');
+  out.width = width; out.height = height;
+  const ctx = out.getContext('2d', { willReadFrequently: true });
+  copyCanvasFrame(ctx, background, width, height);
+  ctx.save();
+  ctx.globalCompositeOperation = fadeMode === 'add' ? 'screen' : 'source-over';
+  ctx.globalAlpha = mix;
+  ctx.drawImage(patch, 0, 0, width, height);
+  ctx.restore();
+  return ctx.getImageData(0, 0, width, height).data;
+}
+
+function _ensureClassicGpuLumaCalibration(gpu) {
+  if (!gpu || gpu.lumaAlphaMode !== null) return gpu?.lumaAlphaMode ?? -1;
+  _classicGpuTelemetry.lumaCalibrationRuns++;
+  try {
+    // Calibration intentionally crosses the WebGL -> Canvas2D boundary once.
+    // It is a startup/runtime capability probe, never a per-frame readback.
+    const width = 4, height = 2;
+    const source = document.createElement('canvas');
+    source.width = width; source.height = height;
+    const sctx = source.getContext('2d');
+    const src = sctx.createImageData(width, height);
+    const sp = [
+      18,42,73,255, 210,174,141,255, 92,92,92,192, 246,18,37,128,
+      4,220,78,255, 128,37,224,224, 250,250,12,96, 57,119,201,255,
+    ];
+    src.data.set(sp); sctx.putImageData(src,0,0);
+    const bg = document.createElement('canvas');
+    bg.width = width; bg.height = height;
+    const bctx = bg.getContext('2d');
+    const bd = bctx.createImageData(width,height);
+    const bp = [
+      34,55,89,255, 7,91,133,255, 180,31,64,255, 21,199,151,255,
+      118,77,35,255, 222,122,17,255, 40,42,44,255, 173,211,239,255,
+    ];
+    bd.data.set(bp); bctx.putImageData(bd,0,0);
+    const points = _classicGpuLumaShapePoints(0.31, 0.42);
+    const uniforms = { threshold:(1 - 0.57) * 255, gain:2.35, invert:true, ...points };
+    const cpuPatch = _classicGpuLumaReferencePatch(source,width,height,uniforms);
+    if (!cpuPatch) throw new Error('CPU Luma calibration patch unavailable');
+    const refs = [
+      _classicGpuLumaCompositeProbe(bg,cpuPatch,width,height,'xfade',0.73),
+      _classicGpuLumaCompositeProbe(bg,cpuPatch,width,height,'add',0.61),
+    ];
+    let bestMode = -1, bestMax = 255, bestMean = 255;
+    for (const mode of [0,1,2]) {
+      const gpuPatch = _runClassicGpuLumaPatchRaw(gpu, source, width, height, uniforms, mode);
+      let diffTotal = 0, diffCount = 0, diffMax = 0;
+      const candidates = [
+        _classicGpuLumaCompositeProbe(bg,gpuPatch,width,height,'xfade',0.73),
+        _classicGpuLumaCompositeProbe(bg,gpuPatch,width,height,'add',0.61),
+      ];
+      for (let c=0;c<refs.length;c++) {
+        const ref=refs[c], got=candidates[c];
+        for (let i=0;i<ref.length;i++) {
+          const d=Math.abs(ref[i]-got[i]);
+          diffTotal += d; diffCount++; if (d>diffMax) diffMax=d;
+        }
+      }
+      const mean = diffCount ? diffTotal/diffCount : 255;
+      if (diffMax < bestMax || (diffMax === bestMax && mean < bestMean)) {
+        bestMode=mode; bestMax=diffMax; bestMean=mean;
+      }
+    }
+    // Up to two byte levels accommodates normal shader/Canvas rounding while
+    // still rejecting the visibly wrong premultiplication conventions seen in
+    // the earlier prototype.
+    gpu.lumaAlphaMode = bestMax <= 2 && bestMean <= 0.75 ? bestMode : -1;
+    _classicGpuTelemetry.lumaCalibrationMode = gpu.lumaAlphaMode;
+    _classicGpuTelemetry.lumaCalibrationContext = gpu.lumaContextMode || 'unknown';
+    _classicGpuTelemetry.lumaCalibrationMaxDiff = bestMax;
+    _classicGpuTelemetry.lumaCalibrationMeanDiff = bestMean;
+    if (gpu.lumaAlphaMode < 0) {
+      console.warn(`[huff] GPU Luma parity probe rejected (${bestMax} max / ${bestMean.toFixed(3)} mean byte diff); CPU fallback retained`);
+    }
+    return gpu.lumaAlphaMode;
+  } catch (err) {
+    console.warn('[huff] GPU Luma parity calibration failed; CPU fallback retained', err);
+    gpu.lumaAlphaMode = -1;
+    _classicGpuTelemetry.lumaCalibrationMode = -1;
+    _classicGpuTelemetry.lumaCalibrationContext = gpu.lumaContextMode || 'unknown';
+    return -1;
+  }
+}
+
+function _runClassicGpuLumaPatch(sourceCanvas, width, height, uniforms) {
+  if (window.HUFF_CLASSIC_FORCE_CPU_COLOR === true) return null;
+  if (!sourceCanvas || width <= 0 || height <= 0) {
+    _classicGpuTelemetry.lumaFallbacks++;
+    return null;
+  }
+  const mainGpu = _initClassicGpu();
+  const tryGpu = gpu => {
+    if (!gpu) return null;
+    const alphaMode = _ensureClassicGpuLumaCalibration(gpu);
+    if (alphaMode < 0) return null;
+    try {
+      const result = _runClassicGpuLumaPatchRaw(gpu, sourceCanvas, width, height, uniforms, alphaMode);
+      _classicGpuTelemetry.lumaFrames++;
+      _classicGpuTelemetry.lumaCalibrationMode = alphaMode;
+      _classicGpuTelemetry.lumaCalibrationContext = gpu.lumaContextMode || 'unknown';
+      return result;
+    } catch (err) {
+      console.warn(`[huff] ${gpu.lumaContextMode || 'Classic'} LIVE Luma GPU stage failed`, err);
+      return null;
+    }
+  };
+  const mainResult = tryGpu(mainGpu);
+  if (mainResult) return mainResult;
+  // Only allocate the alternate premultiplication context if the existing
+  // Solarize context cannot reproduce the established Canvas2D key composite.
+  const altResult = tryGpu(_initClassicGpuLumaAlt());
+  if (altResult) return altResult;
+  _classicGpuTelemetry.lumaFallbacks++;
+  return null;
+}
+
+function _tryClassicGpuSolarize(srcCanvas, width, height, fusedGlobalMix, level, soft, invert, amount, profile) {
+  if (window.HUFF_CLASSIC_FORCE_CPU_COLOR === true) return null;
+  const stage = _ensureClassicGpuStage(width, height);
+  if (!stage || !_classicGpuStageCtx) return null;
+  copyCanvasFrame(_classicGpuStageCtx, srcCanvas, width, height);
+  if (fusedGlobalMix?.source && Number(fusedGlobalMix.amount) > 0) {
+    const prevOp = _classicGpuStageCtx.globalCompositeOperation;
+    const prevAlpha = _classicGpuStageCtx.globalAlpha;
+    try {
+      _classicGpuStageCtx.globalCompositeOperation = fusedGlobalMix.blend || 'screen';
+      _classicGpuStageCtx.globalAlpha = Math.max(0, Math.min(1, Number(fusedGlobalMix.amount) || 0));
+      _classicGpuStageCtx.drawImage(fusedGlobalMix.source, 0, 0, width, height);
+    } finally {
+      _classicGpuStageCtx.globalCompositeOperation = prevOp || 'source-over';
+      _classicGpuStageCtx.globalAlpha = prevAlpha;
+    }
+    if (profile) _solProfileAdd('fusedGlobalMixFrames');
+  }
+  const levelPct = Math.max(0, Math.min(100, Number(level) || 0));
+  let levels = 256;
+  if (levelPct >= 100) levels = 0;
+  else if (levelPct > 0) {
+    const t = Math.min(1, levelPct / 99);
+    levels = Math.max(2, Math.round(Math.pow(2, 8 - 7 * t)));
+  }
+  return _runClassicGpuSolarize(stage, width, height, {
+    steps: levels > 0 ? levels - 1 : 0,
+    removeLuma: levels === 0,
+    soft: Math.max(0, Math.min(1, (Number(soft) || 0) / 100)),
+    invert: !!invert,
+    amount: Math.max(0, Math.min(1, Number(amount) || 0)),
+  });
+}
+
+function _tryClassicGpuThresholdSolarize(srcCanvas, width, height, fusedGlobalMix, thresh, amount, solR, solG, solB, profile) {
+  if (window.HUFF_CLASSIC_FORCE_CPU_COLOR === true) return null;
+  const stage = _ensureClassicGpuStage(width, height);
+  if (!stage || !_classicGpuStageCtx) return null;
+  copyCanvasFrame(_classicGpuStageCtx, srcCanvas, width, height);
+  if (fusedGlobalMix?.source && Number(fusedGlobalMix.amount) > 0) {
+    const prevOp = _classicGpuStageCtx.globalCompositeOperation;
+    const prevAlpha = _classicGpuStageCtx.globalAlpha;
+    try {
+      _classicGpuStageCtx.globalCompositeOperation = fusedGlobalMix.blend || 'screen';
+      _classicGpuStageCtx.globalAlpha = Math.max(0, Math.min(1, Number(fusedGlobalMix.amount) || 0));
+      _classicGpuStageCtx.drawImage(fusedGlobalMix.source, 0, 0, width, height);
+    } finally {
+      _classicGpuStageCtx.globalCompositeOperation = prevOp || 'source-over';
+      _classicGpuStageCtx.globalAlpha = prevAlpha;
+    }
+    if (profile) _solProfileAdd('fusedGlobalMixFrames');
+  }
+  return _runClassicGpuThresholdSolarize(stage, width, height, {
+    threshold: Math.max(0, Math.min(255, (Number(thresh) || 0) * 255)),
+    amount: Math.max(0, Math.min(1, Number(amount) || 0)),
+    solR: Math.max(0, Number(solR) || 0),
+    solG: Math.max(0, Number(solG) || 0),
+    solB: Math.max(0, Number(solB) || 0),
+  });
+}
+
 
 // ─── Cluster physics state ─────────────────────────────────────────────────────
 let _cluPhysics = [];
@@ -1622,6 +2269,9 @@ function applyFlowWarp(src, dst, strength = 6, scale = 80, pulse = 0, implode = 
 // ~4–16x faster on large screens / Windows.
 
 let _solCanvas = null, _solCtx = null;
+let _solFluidCanvas = null, _solFluidCtx = null;
+let _solFluidSeeded = false;
+let _solFluidLastTs = 0;
 const _solRMap = new Uint8ClampedArray(256);
 const _solGMap = new Uint8ClampedArray(256);
 const _solBMap = new Uint8ClampedArray(256);
@@ -1661,6 +2311,7 @@ const _solTelemetry = window.__huffSolarizeTelemetry || {
   presentSamples: 0,
   processedFrames: 0,
   reusedFrames: 0,
+  fusedGlobalMixFrames: 0,
 };
 window.__huffSolarizeTelemetry = _solTelemetry;
 
@@ -1847,26 +2498,101 @@ function _presentSolarizeCache(ctx, width, height) {
   }
 }
 
-// ── Adaptive load guard ───────────────────────────────────────────────────────
-// applySolarize()'s getImageData() forces a synchronous GPU→CPU readback. Because
-// solarize runs late in the pipeline, that readback flushes every preceding
-// effect's GPU work on the main thread before it returns. Under sustained load the
-// stall pushes the frame past budget and starves the <video> element's decode
-// pipeline that feeds Web Audio — the "breaks up, drops, then recovers" symptom.
-//
-// The guard measures the smoothed frame period and, ONLY while overloaded,
-// processes solarize every 2nd/3rd frame, re-presenting the cached processed
-// low-resolution result on skipped frames. At healthy frame rates it processes
-// every frame, so the output is identical to before — the easing only kicks in
-// exactly when the machine is already dropping frames, trading a little solarize
-// update rate for stable audio.
-let _solPrevTs   = 0;
-let _solFrameEMA = 16.7;   // smoothed frame period, ms
-let _solPhase    = 0;
-let _solHasCache = false;
+// Pass 43: Solarize-local temporal slew. This is deliberately NOT a frame-rate
+// gate or sample/hold. The current processed Solarize image remains a live
+// target and is continuously leaked into one bounded low-resolution history
+// canvas. The coefficient is time-normalized to a 60 Hz reference so the
+// perceived viscosity stays approximately stable when render cadence changes.
+function _solarizeFluidBlendAlpha(fluidityPct, dtMs) {
+  const fluidity = Math.max(0, Math.min(100, Number(fluidityPct) || 0));
+  if (fluidity >= 100) return 1;
+
+  // Log interpolation gives useful travel across the whole control: around
+  // 75% is lightly viscous, 25-35% is strongly liquid, and 0-10% evolves very
+  // slowly without becoming a permanent freeze. At 0%, alpha60=0.002.
+  const normalized = fluidity / 100;
+  const alpha60 = Math.exp(Math.log(0.002) * (1 - normalized));
+  const frameScale = Math.max(0.25, Math.min(6, (Number(dtMs) || (1000 / 60)) / (1000 / 60)));
+  return 1 - Math.pow(1 - alpha60, frameScale);
+}
+
+function _updateSolarizeFluidity(fluidityPct, now, width, height, sourceCanvas = _solCanvas) {
+  const fluidity = Math.max(0, Math.min(100, Number(fluidityPct) || 0));
+  if (fluidity >= 100 || !sourceCanvas) {
+    // Keep the compatibility path allocation/draw-free. If FLUIDITY is later
+    // lowered, seed from that frame's current Solarize target instead of stale
+    // history.
+    _solFluidSeeded = false;
+    _solFluidLastTs = now;
+    return sourceCanvas;
+  }
+
+  if (!_solFluidCanvas) {
+    _solFluidCanvas = document.createElement('canvas');
+    _solFluidCtx = _solFluidCanvas.getContext('2d');
+  }
+  if (_solFluidCanvas.width !== width || _solFluidCanvas.height !== height) {
+    _solFluidCanvas.width = width;
+    _solFluidCanvas.height = height;
+    _solFluidSeeded = false;
+  }
+
+  const gapMs = _solFluidLastTs > 0 ? now - _solFluidLastTs : 0;
+  _solFluidLastTs = now;
+  if (!_solFluidSeeded || gapMs > 1500) {
+    copyCanvasFrame(_solFluidCtx, sourceCanvas, width, height);
+    _solFluidSeeded = true;
+    return _solFluidCanvas;
+  }
+
+  const alpha = _solarizeFluidBlendAlpha(fluidity, gapMs);
+  const prevOp = _solFluidCtx.globalCompositeOperation;
+  const prevAlpha = _solFluidCtx.globalAlpha;
+  try {
+    _solFluidCtx.globalCompositeOperation = 'source-over';
+    _solFluidCtx.globalAlpha = alpha;
+    _solFluidCtx.drawImage(sourceCanvas, 0, 0);
+  } finally {
+    _solFluidCtx.globalCompositeOperation = prevOp || 'source-over';
+    _solFluidCtx.globalAlpha = prevAlpha;
+  }
+  return _solFluidCanvas;
+}
+
+function _presentSolarizeFluidCache(ctx, sourceCanvas, width, height) {
+  if (!ctx || !sourceCanvas || width <= 0 || height <= 0) return;
+  const prevOp = ctx.globalCompositeOperation;
+  const prevAlpha = ctx.globalAlpha;
+  const prevSmoothing = ctx.imageSmoothingEnabled;
+  const hasQuality = 'imageSmoothingQuality' in ctx;
+  const prevQuality = hasQuality ? ctx.imageSmoothingQuality : null;
+  try {
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'copy';
+    ctx.imageSmoothingEnabled = true;
+    if (hasQuality) ctx.imageSmoothingQuality = 'low';
+    if (sourceCanvas.width === width && sourceCanvas.height === height) {
+      ctx.drawImage(sourceCanvas, 0, 0);
+    } else {
+      ctx.drawImage(sourceCanvas, 0, 0, width, height);
+    }
+  } finally {
+    ctx.globalCompositeOperation = prevOp || 'source-over';
+    ctx.globalAlpha = prevAlpha;
+    ctx.imageSmoothingEnabled = prevSmoothing;
+    if (hasQuality && prevQuality) ctx.imageSmoothingQuality = prevQuality;
+  }
+}
+
+// ── Pass 44 cadence boundary ────────────────────────────────────────────────
+// Solarize now transforms every render call. The older adaptive 2nd/3rd-frame
+// reuse guard is intentionally removed: overload mitigation must not alter the
+// temporal cadence of the image. Pass 44 instead removes redundant work around
+// Luma/Global Mix and conditionally fuses a safe Global Mix into this already
+// bounded scratch domain.
 let _solLastMode = 'threshold';
 
-function applySolarize(buf, thresh = 0.5, amount = 1.0, solR = 1.0, solG = 1.0, solB = 1.0, mode = 'threshold', level = 75, soft = 0, invert = false) {
+function applySolarize(buf, thresh = 0.5, amount = 1.0, solR = 1.0, solG = 1.0, solB = 1.0, mode = 'threshold', level = 75, soft = 0, invert = false, fluidity = 100, fusedGlobalMix = null) {
   // Keep the function safe when called outside the main dispatcher. The
   // original THRESHOLD identity checks remain exact; LUMA QUANTIZE adds its own
   // neutral conditions without changing the established Classic path.
@@ -1886,6 +2612,47 @@ function applySolarize(buf, thresh = 0.5, amount = 1.0, solR = 1.0, solG = 1.0, 
   const sw = Math.max(1, Math.round(BW * scale));
   const sh = Math.max(1, Math.round(BH * scale));
 
+  // Pass 46 gives both Solarize modes first refusal on the same bounded GPU
+  // path. This happens before the CPU-readback scratch is touched, so a working
+  // accelerator removes willReadFrequently staging, synchronous pixel readback,
+  // JavaScript pixel traversal and putImageData from THRESHOLD as well as the
+  // already-accelerated LUMA QUANTIZE mode.
+  const now = performance.now();
+  const profile = window.__huffProfilerActive === true;
+  const srcCanvas = buf.elt || buf.drawingContext.canvas;
+  if (lumaQuantize) {
+    const gpuResult = _tryClassicGpuSolarize(
+      srcCanvas, sw, sh, fusedGlobalMix, level, soft, !!invert, amount, profile
+    );
+    if (gpuResult) {
+      if (profile) _solProfileAdd('processedFrames');
+      const presentStart = profile ? performance.now() : 0;
+      const fluidCanvas = _updateSolarizeFluidity(fluidity, now, sw, sh, gpuResult);
+      _presentSolarizeFluidCache(buf.drawingContext, fluidCanvas, BW, BH);
+      if (profile) {
+        _solProfileAdd('presentMs', performance.now() - presentStart);
+        _solProfileAdd('presentSamples');
+      }
+      return;
+    }
+  }
+  else {
+    const gpuResult = _tryClassicGpuThresholdSolarize(
+      srcCanvas, sw, sh, fusedGlobalMix, thresh, amount, solR, solG, solB, profile
+    );
+    if (gpuResult) {
+      if (profile) _solProfileAdd('processedFrames');
+      const presentStart = profile ? performance.now() : 0;
+      const fluidCanvas = _updateSolarizeFluidity(fluidity, now, sw, sh, gpuResult);
+      _presentSolarizeFluidCache(buf.drawingContext, fluidCanvas, BW, BH);
+      if (profile) {
+        _solProfileAdd('presentMs', performance.now() - presentStart);
+        _solProfileAdd('presentSamples');
+      }
+      return;
+    }
+  }
+
   if (!_solCanvas) {
     _solCanvas = document.createElement('canvas');
     _solCtx = _solCanvas.getContext('2d', { willReadFrequently:true });
@@ -1895,80 +2662,74 @@ function applySolarize(buf, thresh = 0.5, amount = 1.0, solR = 1.0, solG = 1.0, 
     _solCanvas.height = sh;
     // Setting canvas dimensions resets context state but does not require a new
     // context object. Keeping the same reference avoids an unnecessary lookup.
-    _solHasCache = false;
+    _solFluidSeeded = false;
   }
   if (_solOutputW !== BW || _solOutputH !== BH) {
     _solOutputW = BW;
     _solOutputH = BH;
-    _solHasCache = false;
   }
 
-  // Smoothed frame period (ms). Solarize runs once per frame, so the gap between
-  // calls is the frame period; skipping work shortens it, so the metric self-corrects.
-  const now = performance.now();
-  if (_solPrevTs) _solFrameEMA += ((now - _solPrevTs) - _solFrameEMA) * 0.1;
-  _solPrevTs = now;
-
-  // Processing stride from load:  ≤20ms (≈50fps+) → every frame,
-  // 20–30ms → every 2nd frame, >30ms → every 3rd frame.
-  let stride = 1;
-  if (_solFrameEMA > 30)      stride = 3;
-  else if (_solFrameEMA > 20) stride = 2;
-
+  // Every-frame Solarize processing; Pass 44 no longer changes temporal cadence.
   const activeMode = lumaQuantize ? 'luma-quantize' : 'threshold';
-  const modeChanged = activeMode !== _solLastMode;
-  const lumaParamsChanged = lumaQuantize && (
-    level !== _solLumaLevel ||
-    soft !== _solLumaSoft ||
-    !!invert !== _solLumaInvert ||
-    amount !== _solLumaAmount
-  );
-  if (modeChanged) _solLastMode = activeMode;
-  const doProcess = (stride === 1) || (_solPhase % stride === 0) || !_solHasCache || modeChanged || lumaParamsChanged;
-  _solPhase++;
-  const profile = window.__huffProfilerActive === true;
+  if (activeMode !== _solLastMode) _solLastMode = activeMode;
 
-  if (doProcess) {
-    const srcCanvas = buf.elt || buf.drawingContext.canvas;
-    let phaseStart = profile ? performance.now() : 0;
-    copyCanvasFrame(_solCtx, srcCanvas, sw, sh);
-    const imgData = _solCtx.getImageData(0, 0, sw, sh);
-    if (profile) {
-      _solProfileAdd('readbackMs', performance.now() - phaseStart);
-      _solProfileAdd('readbackSamples');
-    }
+  let phaseStart = profile ? performance.now() : 0;
+  copyCanvasFrame(_solCtx, srcCanvas, sw, sh);
 
-    const pix = imgData.data;
-    phaseStart = profile ? performance.now() : 0;
-    if (lumaQuantize) {
-      _refreshSolarizeLumaMap(level, soft, !!invert, amount);
-      if (_solLittleEndian) _solarizeLumaPixelsWords(pix);
-      else _solarizeLumaPixelsBytes(pix);
-    } else {
-      const t = thresh * 255;
-      _refreshSolarizeMaps(amount, solR, solG, solB);
-      if (_solLittleEndian) _solarizePixelsWords(pix, t);
-      else _solarizePixelsBytes(pix, t);
+  // Safe Global Mix fusion: when the dispatcher has proven no active transform
+  // remains between the selected Global Mix position and Solarize, composite the
+  // clean source here instead of once at full resolution immediately before a
+  // synchronous Solarize readback. The result lives inside Solarize's existing
+  // 640px ceiling and is still processed on every render call.
+  if (fusedGlobalMix?.source && Number(fusedGlobalMix.amount) > 0) {
+    const prevOp = _solCtx.globalCompositeOperation;
+    const prevAlpha = _solCtx.globalAlpha;
+    try {
+      _solCtx.globalCompositeOperation = fusedGlobalMix.blend || 'screen';
+      _solCtx.globalAlpha = Math.max(0, Math.min(1, Number(fusedGlobalMix.amount) || 0));
+      _solCtx.drawImage(fusedGlobalMix.source, 0, 0, sw, sh);
+    } finally {
+      _solCtx.globalCompositeOperation = prevOp || 'source-over';
+      _solCtx.globalAlpha = prevAlpha;
     }
-    if (profile) {
-      _solProfileAdd('transformMs', performance.now() - phaseStart);
-      _solProfileAdd('transformSamples');
-    }
+    if (profile) _solProfileAdd('fusedGlobalMixFrames');
+  }
 
-    phaseStart = profile ? performance.now() : 0;
-    _solCtx.putImageData(imgData, 0, 0);
-    if (profile) {
-      _solProfileAdd('uploadMs', performance.now() - phaseStart);
-      _solProfileAdd('uploadSamples');
-      _solProfileAdd('processedFrames');
-    }
-    _solHasCache = true;
-  } else if (profile) {
-    _solProfileAdd('reusedFrames');
+  const imgData = _solCtx.getImageData(0, 0, sw, sh);
+  if (profile) {
+    _solProfileAdd('readbackMs', performance.now() - phaseStart);
+    _solProfileAdd('readbackSamples');
+  }
+
+  const pix = imgData.data;
+  phaseStart = profile ? performance.now() : 0;
+  if (lumaQuantize) {
+    _refreshSolarizeLumaMap(level, soft, !!invert, amount);
+    if (_solLittleEndian) _solarizeLumaPixelsWords(pix);
+    else _solarizeLumaPixelsBytes(pix);
+  } else {
+    const t = thresh * 255;
+    _refreshSolarizeMaps(amount, solR, solG, solB);
+    if (_solLittleEndian) _solarizePixelsWords(pix, t);
+    else _solarizePixelsBytes(pix, t);
+  }
+  if (profile) {
+    _solProfileAdd('transformMs', performance.now() - phaseStart);
+    _solProfileAdd('transformSamples');
+  }
+
+  phaseStart = profile ? performance.now() : 0;
+  _solCtx.putImageData(imgData, 0, 0);
+  if (profile) {
+    _solProfileAdd('uploadMs', performance.now() - phaseStart);
+    _solProfileAdd('uploadSamples');
+    _solProfileAdd('processedFrames');
   }
 
   const presentStart = profile ? performance.now() : 0;
-  _presentSolarizeCache(buf.drawingContext, BW, BH);
+  const fluidCanvas = _updateSolarizeFluidity(fluidity, now, sw, sh, _solCanvas);
+  if (fluidCanvas === _solCanvas) _presentSolarizeCache(buf.drawingContext, BW, BH);
+  else _presentSolarizeFluidCache(buf.drawingContext, fluidCanvas, BW, BH);
   if (profile) {
     _solProfileAdd('presentMs', performance.now() - presentStart);
     _solProfileAdd('presentSamples');
@@ -2030,10 +2791,23 @@ let _plkCanvas = null, _plkCtx = null;
 let _plkStencilMaskCanvas = null, _plkStencilMaskCtx = null;
 let _plkStencilMaskImageData = null;
 
+// Pass 47 LIVE/COMPOSITE GPU patch cache. The WebGL result is copied into this
+// bounded Canvas2D surface once per decoded source frame / key-shape change so
+// Solarize may safely reuse the shared WebGL accelerator later in the pipeline.
+let _plkGpuPatchCanvas = null, _plkGpuPatchCtx = null;
+let _plkGpuPatchFrame = -1;
+let _plkGpuPatchThresh = NaN;
+let _plkGpuPatchInvert = false;
+let _plkGpuPatchGain = NaN;
+let _plkGpuPatchCleanup = NaN;
+let _plkGpuPatchDensity = NaN;
+
 // LIVE source luminance is independent of key shaping. This separation is the
 // important Pass 40V handoff fix: UI key edits can reuse the current decoded
 // frame's luminance instead of synchronously reading the source canvas again.
 let _plkLiveLuma = null;
+let _plkLiveImageData = null;
+let _plkLiveSourceAlpha = null;
 let _plkLiveLumaFrame = -1;
 let _plkLiveLumaW = 0, _plkLiveLumaH = 0;
 
@@ -2049,6 +2823,12 @@ let _plkObjectLiveLumaW = 0, _plkObjectLiveLumaH = 0;
 // The shaped COMPOSITE RGB patch must still follow live RGB when KEY SRC is
 // STENCIL. Keep its frame identity separate from the stencil/mask cache.
 let _plkPatchFrame = -1;
+let _plkLivePatchFrame = -1;
+let _plkLivePatchThresh = NaN;
+let _plkLivePatchInvert = false;
+let _plkLivePatchGain = NaN;
+let _plkLivePatchCleanup = NaN;
+let _plkLivePatchDensity = NaN;
 
 // Compatibility/cache fields retained under their established names. They now
 // describe the reusable shaped mask/clean patch rather than owning source readback.
@@ -2078,6 +2858,15 @@ let _plkShapeCleanup = NaN;
 let _plkShapeDensity = NaN;
 let _plkShapeIdentity = true;
 
+// Pass 47 collapses Clip/Gain/Invert/Cleanup/Density into one final 256-entry
+// luma->alpha table for CPU fallback and object sampling.
+const _plkFinalKeyLut = new Uint8Array(256);
+let _plkFinalThresh = NaN;
+let _plkFinalInvert = false;
+let _plkFinalGain = NaN;
+let _plkFinalCleanup = NaN;
+let _plkFinalDensity = NaN;
+
 const _plkTelemetry = window.__huffLumaKeyTelemetry || {
   readbackMs: 0,
   readbackSamples: 0,
@@ -2098,6 +2887,12 @@ const _plkTelemetry = window.__huffLumaKeyTelemetry || {
   stencilCaptureSamples: 0,
   stencilCaptures: 0,
   stencilReuses: 0,
+  livePatchFastBuilds: 0,
+  livePatchFastReuses: 0,
+  livePatchMergedBuilds: 0,
+  gpuPatchBuilds: 0,
+  gpuPatchReuses: 0,
+  gpuPatchFallbacks: 0,
 };
 window.__huffLumaKeyTelemetry = _plkTelemetry;
 
@@ -2132,6 +2927,31 @@ function _ensurePipelineShapeLut(cleanup, density) {
   return _plkShapeLut;
 }
 
+function _ensurePipelineFinalKeyLut(thresh, invert, safeGain, cleanup, density) {
+  const safeThresh = Math.max(0, Math.min(1, Number(thresh) || 0));
+  const safeCleanup = Math.max(0, Math.min(1, Number(cleanup) || 0));
+  const safeDensity = Math.max(0, Math.min(1, Number(density) || 0));
+  if (
+    safeThresh === _plkFinalThresh && !!invert === _plkFinalInvert &&
+    safeGain === _plkFinalGain && safeCleanup === _plkFinalCleanup &&
+    safeDensity === _plkFinalDensity
+  ) return _plkFinalKeyLut;
+
+  _plkFinalThresh = safeThresh;
+  _plkFinalInvert = !!invert;
+  _plkFinalGain = safeGain;
+  _plkFinalCleanup = safeCleanup;
+  _plkFinalDensity = safeDensity;
+  const threshold = (1 - safeThresh) * 255;
+  const shapeLut = _ensurePipelineShapeLut(safeCleanup, safeDensity);
+  for (let luma = 0; luma < 256; luma++) {
+    _plkFinalKeyLut[luma] = _pipelineLumaMaskByte(
+      luma, threshold, !!invert, safeGain, shapeLut
+    );
+  }
+  return _plkFinalKeyLut;
+}
+
 function _pipelineLumaMaskByte(luma, threshold, invert, safeGain, shapeLut) {
   const roll = Math.max(0, Math.min(1, ((luma - threshold) * safeGain) / 64));
   // Preserve the accepted Pass 36/40U matte polarity exactly: normal keeps the
@@ -2141,11 +2961,9 @@ function _pipelineLumaMaskByte(luma, threshold, invert, safeGain, shapeLut) {
   return maskAlpha;
 }
 
-function _pipelineLumaMaskFromLuma(lumaPlane, maskBytes, threshold, invert, safeGain, shapeLut) {
-  for (let p = 0, i = 0; p < lumaPlane.length; p++, i += 4) {
-    maskBytes[i + 3] = _pipelineLumaMaskByte(
-      lumaPlane[p], threshold, invert, safeGain, shapeLut
-    );
+function _pipelineLumaMaskFromLuma(lumaPlane, maskBytes, keyLut) {
+  for (let p = 0, i = 3; p < lumaPlane.length; p++, i += 4) {
+    maskBytes[i] = keyLut[lumaPlane[p]];
   }
 }
 
@@ -2160,6 +2978,8 @@ function _invalidatePipelineLumaShapeCache() {
   _plkCacheSource = '';
   _plkPatchValid = false;
   _plkPatchFrame = -1;
+  _plkLivePatchFrame = -1;
+  _plkGpuPatchFrame = -1;
   _plkStencilMaskVersion = -1;
   _plkStencilMaskThresh = NaN;
   _plkStencilMaskInvert = false;
@@ -2178,6 +2998,10 @@ function _invalidatePipelineLumaSourceCache() {
   _plkObjectLiveLumaH = 0;
   _plkPatchValid = false;
   _plkPatchFrame = -1;
+  _plkLiveImageData = null;
+  _plkLiveSourceAlpha = null;
+  _plkLivePatchFrame = -1;
+  _plkGpuPatchFrame = -1;
   _invalidatePipelineLumaShapeCache();
 }
 window.invalidatePipelineLumaSourceCache = _invalidatePipelineLumaSourceCache;
@@ -2222,7 +3046,7 @@ function _ensurePipelineLumaCanvas(sw, sh) {
   _plkStencilVersion++;
 }
 
-function _captureLumaBytesFromImageData(data, target) {
+function _captureLumaBytesFromImageData(data, target, alphaTarget = null) {
   if (_solLittleEndian) {
     const words = new Uint32Array(data.buffer, data.byteOffset, data.byteLength >>> 2);
     for (let i = 0; i < words.length; i++) {
@@ -2232,20 +3056,60 @@ function _captureLumaBytesFromImageData(data, target) {
         _lumaG[(packed >>> 8) & 0xff] +
         _lumaB[(packed >>> 16) & 0xff] + 0.5
       ) | 0;
+      if (alphaTarget) alphaTarget[i] = (packed >>> 24) & 0xff;
     }
     return;
   }
   for (let p = 0, i = 0; i < data.length; p++, i += 4) {
     target[p] = (_lumaR[data[i]] + _lumaG[data[i + 1]] + _lumaB[data[i + 2]] + 0.5) | 0;
+    if (alphaTarget) alphaTarget[p] = data[i + 3];
   }
 }
 
-function _pipelineLumaDimensions() {
+function _captureLiveLumaAndPatchFromImageData(
+  data, lumaTarget, alphaTarget, keyLut
+) {
+  // Pass 45 merged LIVE/COMPOSITE path: calculate the cached luma byte and the
+  // final keyed alpha in one traversal of the readback. Pass 44 performed the
+  // same exact operations in two consecutive loops. RGB bytes are retained
+  // verbatim and original source alpha is cached before replacement.
+  if (_solLittleEndian) {
+    const words = new Uint32Array(data.buffer, data.byteOffset, data.byteLength >>> 2);
+    for (let i = 0; i < words.length; i++) {
+      const packed = words[i];
+      const luma = (
+        _lumaR[packed & 0xff] +
+        _lumaG[(packed >>> 8) & 0xff] +
+        _lumaB[(packed >>> 16) & 0xff] + 0.5
+      ) | 0;
+      const baseAlpha = (packed >>> 24) & 0xff;
+      lumaTarget[i] = luma;
+      alphaTarget[i] = baseAlpha;
+      const maskAlpha = keyLut[luma];
+      const outAlpha = ((maskAlpha * baseAlpha + 127) / 255) | 0;
+      words[i] = ((packed & 0x00ffffff) | (outAlpha << 24)) >>> 0;
+    }
+    return;
+  }
+  for (let p = 0, i = 0; i < data.length; p++, i += 4) {
+    const luma = (_lumaR[data[i]] + _lumaG[data[i + 1]] + _lumaB[data[i + 2]] + 0.5) | 0;
+    const baseAlpha = data[i + 3];
+    lumaTarget[p] = luma;
+    alphaTarget[p] = baseAlpha;
+    const maskAlpha = keyLut[luma];
+    data[i + 3] = ((maskAlpha * baseAlpha + 127) / 255) | 0;
+  }
+}
+
+function _pipelineBoundedDimensions(maxLongEdge, maxPixels) {
   if (!gBuf) return null;
   const W = gBuf.width, H = gBuf.height;
   if (!W || !H) return null;
-  const MAX_W = 640;
-  const scale = W > MAX_W ? MAX_W / W : 1;
+  const longEdge = Math.max(W, H);
+  const area = W * H;
+  const edgeScale = longEdge > maxLongEdge ? maxLongEdge / longEdge : 1;
+  const areaScale = area > maxPixels ? Math.sqrt(maxPixels / area) : 1;
+  const scale = Math.min(1, edgeScale, areaScale);
   return {
     W, H,
     sw: Math.max(1, Math.round(W * scale)),
@@ -2253,7 +3117,13 @@ function _pipelineLumaDimensions() {
   };
 }
 
-function _ensureLivePipelineLuma(sourceFrameSerial, profile = false) {
+function _pipelineLumaDimensions() {
+  // Keep 16:9 at the established 640x360 budget while preventing portrait or
+  // unusually tall sources from silently exceeding 2.3x the pixel workload.
+  return _pipelineBoundedDimensions(640, 640 * 360);
+}
+
+function _ensureLivePipelineLuma(sourceFrameSerial, profile = false, patchParams = null) {
   const dims = _pipelineLumaDimensions();
   if (!dims || !gCur) return null;
   const { sw, sh } = dims;
@@ -2266,7 +3136,7 @@ function _ensureLivePipelineLuma(sourceFrameSerial, profile = false) {
     _plkLiveLumaH === sh
   ) {
     if (profile) _plkProfileAdd('sourceReuses');
-    return { ...dims, luma: _plkLiveLuma, sourceToken: `live:${sourceFrameSerial}` };
+    return { ...dims, luma: _plkLiveLuma, imageData: _plkLiveImageData, sourceToken: `live:${sourceFrameSerial}` };
   }
 
   const gCurEl = gCur.elt ?? gCur.drawingContext?.canvas;
@@ -2276,6 +3146,7 @@ function _ensureLivePipelineLuma(sourceFrameSerial, profile = false) {
     const started = profile ? performance.now() : 0;
     copyCanvasFrame(_plkCtx, gCurEl, sw, sh);
     const sourceData = _plkCtx.getImageData(0, 0, sw, sh);
+    _plkLiveImageData = sourceData;
     if (profile) {
       _plkProfileAdd('readbackMs', performance.now() - started);
       _plkProfileAdd('readbackSamples');
@@ -2284,18 +3155,49 @@ function _ensureLivePipelineLuma(sourceFrameSerial, profile = false) {
     if (!_plkLiveLuma || _plkLiveLuma.length !== sw * sh) {
       _plkLiveLuma = new Uint8Array(sw * sh);
     }
+    if (!_plkLiveSourceAlpha || _plkLiveSourceAlpha.length !== sw * sh) {
+      _plkLiveSourceAlpha = new Uint8Array(sw * sh);
+    }
     const transformStarted = profile ? performance.now() : 0;
-    _captureLumaBytesFromImageData(sourceData.data, _plkLiveLuma);
+    if (patchParams) {
+      const keyLut = _ensurePipelineFinalKeyLut(
+        patchParams.thresh, patchParams.invert, patchParams.gain,
+        patchParams.cleanup, patchParams.density
+      );
+      _captureLiveLumaAndPatchFromImageData(
+        sourceData.data, _plkLiveLuma, _plkLiveSourceAlpha, keyLut
+      );
+    } else {
+      _captureLumaBytesFromImageData(sourceData.data, _plkLiveLuma, _plkLiveSourceAlpha);
+    }
     if (profile) {
       _plkProfileAdd('transformMs', performance.now() - transformStarted);
       _plkProfileAdd('transformSamples');
+    }
+
+    if (patchParams) {
+      const uploadStarted = profile ? performance.now() : 0;
+      _plkCtx.putImageData(sourceData, 0, 0);
+      if (profile) {
+        _plkProfileAdd('uploadMs', performance.now() - uploadStarted);
+        _plkProfileAdd('uploadSamples');
+        _plkProfileAdd('livePatchFastBuilds');
+        _plkProfileAdd('livePatchMergedBuilds');
+      }
+      _plkLivePatchFrame = sourceFrameSerial;
+      _plkLivePatchThresh = patchParams.thresh;
+      _plkLivePatchInvert = patchParams.invert;
+      _plkLivePatchGain = patchParams.gain;
+      _plkLivePatchCleanup = patchParams.cleanup;
+      _plkLivePatchDensity = patchParams.density;
     }
 
     _plkLiveLumaFrame = sourceFrameSerial;
     _plkLiveLumaW = sw;
     _plkLiveLumaH = sh;
     _plkPatchValid = false;
-    return { ...dims, luma: _plkLiveLuma, sourceToken: `live:${sourceFrameSerial}` };
+    if (!patchParams) _plkLivePatchFrame = -1;
+    return { ...dims, luma: _plkLiveLuma, imageData: _plkLiveImageData, sourceToken: `live:${sourceFrameSerial}` };
   } catch (err) {
     console.warn('[huff] live luma source update failed', err);
     _plkLiveLumaFrame = -1;
@@ -2304,19 +3206,9 @@ function _ensureLivePipelineLuma(sourceFrameSerial, profile = false) {
 }
 
 function _pipelineLumaObjectDimensions() {
-  if (!gBuf) return null;
-  const W = gBuf.width, H = gBuf.height;
-  if (!W || !H) return null;
   // Object targeting samples panel/patch eligibility rather than generating a
-  // pixel-perfect matte. 320px is intentionally smaller than COMPOSITE's 640px
-  // workspace to reduce synchronous LIVE-key handoff pressure in Scan FIELD.
-  const MAX_W = 320;
-  const scale = W > MAX_W ? MAX_W / W : 1;
-  return {
-    W, H,
-    sw: Math.max(1, Math.round(W * scale)),
-    sh: Math.max(1, Math.round(H * scale)),
-  };
+  // pixel-perfect matte. Match the same aspect-safe policy at half resolution.
+  return _pipelineBoundedDimensions(320, 320 * 180);
 }
 
 function _ensureLivePipelineLumaObject(sourceFrameSerial, profile = false) {
@@ -2438,8 +3330,9 @@ window.preparePipelineLumaObjectSource = function preparePipelineLumaObjectSourc
     cleanup: safeCleanup,
     density: safeDensity,
     mix: safeMix,
-    threshold: (1 - (Number(thresh) || 0)) * 255,
-    shapeLut: _ensurePipelineShapeLut(safeCleanup, safeDensity),
+    keyLut: _ensurePipelineFinalKeyLut(
+      Number(thresh) || 0, !!invert, safeGain, safeCleanup, safeDensity
+    ),
   };
   return !!planeInfo;
 };
@@ -2483,9 +3376,7 @@ function _samplePreparedPipelineLumaAlpha(prepared, x, y, canvasW, canvasH) {
   const sx = Math.max(0, Math.min(planeInfo.sw - 1, Math.floor((x / Math.max(1, canvasW)) * planeInfo.sw)));
   const sy = Math.max(0, Math.min(planeInfo.sh - 1, Math.floor((y / Math.max(1, canvasH)) * planeInfo.sh)));
   const luma = planeInfo.luma[sy * planeInfo.sw + sx];
-  const maskAlpha = _pipelineLumaMaskByte(
-    luma, prepared.threshold, prepared.invert, prepared.gain, prepared.shapeLut
-  ) / 255;
+  const maskAlpha = prepared.keyLut[luma] / 255;
   if (window.__huffProfilerActive === true) _plkProfileAdd('objectSamples');
   return 1 - prepared.mix * (1 - maskAlpha);
 }
@@ -2597,8 +3488,9 @@ function _ensurePipelineLumaMask(
   planeInfo, thresh, invert, safeGain, safeCleanup, safeDensity, profile
 ) {
   if (!planeInfo?.luma) return false;
-  const threshold = (1 - thresh) * 255;
-  const shapeLut = _ensurePipelineShapeLut(safeCleanup, safeDensity);
+  const keyLut = _ensurePipelineFinalKeyLut(
+    thresh, invert, safeGain, safeCleanup, safeDensity
+  );
   const stencilSource = planeInfo.sourceToken.startsWith('stencil:');
   const sourceVersion = stencilSource ? _plkStencilVersion : _plkLiveLumaFrame;
   const cacheMatches =
@@ -2619,10 +3511,7 @@ function _ensurePipelineLumaMask(
   _pipelineLumaMaskFromLuma(
     planeInfo.luma,
     _plkStencilMaskImageData.data,
-    threshold,
-    invert,
-    safeGain,
-    shapeLut
+    keyLut
   );
   if (profile) {
     _plkProfileAdd('transformMs', performance.now() - transformStarted);
@@ -2658,13 +3547,129 @@ function _ensurePipelineLumaMask(
   return true;
 }
 
-function _drawPipelineLumaPatch(ctx, safeFadeMode, mix, W, H, sw, sh) {
+function _ensureLivePipelineLumaPatch(
+  planeInfo, thresh, invert, safeGain, safeCleanup, safeDensity, sourceFrameSerial, profile
+) {
+  const imageData = planeInfo?.imageData;
+  const lumaPlane = planeInfo?.luma;
+  if (!imageData || !lumaPlane) return false;
+
+  const cacheMatches =
+    _plkLivePatchFrame === sourceFrameSerial &&
+    _plkLivePatchThresh === thresh &&
+    _plkLivePatchInvert === invert &&
+    _plkLivePatchGain === safeGain &&
+    _plkLivePatchCleanup === safeCleanup &&
+    _plkLivePatchDensity === safeDensity;
+  if (cacheMatches) {
+    if (profile) _plkProfileAdd('livePatchFastReuses');
+    return true;
+  }
+
+  const keyLut = _ensurePipelineFinalKeyLut(
+    thresh, invert, safeGain, safeCleanup, safeDensity
+  );
+  const bytes = imageData.data;
+  const sourceAlpha = _plkLiveSourceAlpha;
+  const started = profile ? performance.now() : 0;
+  for (let p = 0, i = 3; p < lumaPlane.length; p++, i += 4) {
+    const maskAlpha = keyLut[lumaPlane[p]];
+    const baseAlpha = sourceAlpha ? sourceAlpha[p] : 255;
+    bytes[i] = ((maskAlpha * baseAlpha + 127) / 255) | 0;
+  }
+  if (profile) {
+    _plkProfileAdd('transformMs', performance.now() - started);
+    _plkProfileAdd('transformSamples');
+  }
+
+  const uploadStarted = profile ? performance.now() : 0;
+  _plkCtx.putImageData(imageData, 0, 0);
+  if (profile) {
+    _plkProfileAdd('uploadMs', performance.now() - uploadStarted);
+    _plkProfileAdd('uploadSamples');
+    _plkProfileAdd('livePatchFastBuilds');
+  }
+  _plkLivePatchFrame = sourceFrameSerial;
+  _plkLivePatchThresh = thresh;
+  _plkLivePatchInvert = invert;
+  _plkLivePatchGain = safeGain;
+  _plkLivePatchCleanup = safeCleanup;
+  _plkLivePatchDensity = safeDensity;
+  return true;
+}
+
+function _ensurePipelineLumaGpuPatchCanvas(sw, sh) {
+  if (!_plkGpuPatchCanvas) {
+    _plkGpuPatchCanvas = document.createElement('canvas');
+    _plkGpuPatchCtx = _plkGpuPatchCanvas.getContext('2d', { alpha:true, desynchronized:true });
+  }
+  if (_plkGpuPatchCanvas.width !== sw || _plkGpuPatchCanvas.height !== sh) {
+    _plkGpuPatchCanvas.width = sw;
+    _plkGpuPatchCanvas.height = sh;
+    _plkGpuPatchFrame = -1;
+  }
+  return _plkGpuPatchCtx ? _plkGpuPatchCanvas : null;
+}
+
+function _ensureLivePipelineLumaGpuPatch(
+  thresh, invert, safeGain, safeCleanup, safeDensity, sourceFrameSerial, profile
+) {
+  const dims = _pipelineLumaDimensions();
+  if (!dims || !gCur) return null;
+  const { sw, sh } = dims;
+  const cacheMatches =
+    _plkGpuPatchFrame === sourceFrameSerial &&
+    _plkGpuPatchThresh === thresh && _plkGpuPatchInvert === !!invert &&
+    _plkGpuPatchGain === safeGain && _plkGpuPatchCleanup === safeCleanup &&
+    _plkGpuPatchDensity === safeDensity &&
+    _plkGpuPatchCanvas?.width === sw && _plkGpuPatchCanvas?.height === sh;
+  if (cacheMatches) {
+    if (profile) _plkProfileAdd('gpuPatchReuses');
+    return { ...dims, canvas:_plkGpuPatchCanvas };
+  }
+
+  const gCurEl = gCur.elt ?? gCur.drawingContext?.canvas;
+  if (!gCurEl) return null;
+  const stage = _ensureClassicGpuStage(sw, sh);
+  const cacheCanvas = _ensurePipelineLumaGpuPatchCanvas(sw, sh);
+  if (!stage || !cacheCanvas || !_classicGpuStageCtx || !_plkGpuPatchCtx) return null;
+  copyCanvasFrame(_classicGpuStageCtx, gCurEl, sw, sh);
+  const points = _classicGpuLumaShapePoints(safeCleanup, safeDensity);
+  const gpuResult = _runClassicGpuLumaPatch(stage, sw, sh, {
+    threshold:(1 - thresh) * 255,
+    gain:safeGain,
+    invert:!!invert,
+    ...points,
+  });
+  if (!gpuResult) {
+    if (profile) _plkProfileAdd('gpuPatchFallbacks');
+    return null;
+  }
+
+  // GPU->Canvas2D copy stays inside the graphics pipeline. There is no
+  // getImageData/readPixels synchronization on the successful LIVE path.
+  copyCanvasFrame(_plkGpuPatchCtx, gpuResult, sw, sh);
+  _plkGpuPatchFrame = sourceFrameSerial;
+  _plkGpuPatchThresh = thresh;
+  _plkGpuPatchInvert = !!invert;
+  _plkGpuPatchGain = safeGain;
+  _plkGpuPatchCleanup = safeCleanup;
+  _plkGpuPatchDensity = safeDensity;
+  if (profile) _plkProfileAdd('gpuPatchBuilds');
+  return { ...dims, canvas:_plkGpuPatchCanvas };
+}
+
+function _drawPipelineLumaCanvas(ctx, canvas, safeFadeMode, mix, W, H, sw, sh) {
   ctx.save();
   ctx.globalCompositeOperation = safeFadeMode === 'add' ? 'screen' : 'source-over';
   ctx.globalAlpha = mix;
-  if (sw === W && sh === H) ctx.drawImage(_plkCanvas, 0, 0);
-  else ctx.drawImage(_plkCanvas, 0, 0, W, H);
+  if (sw === W && sh === H) ctx.drawImage(canvas, 0, 0);
+  else ctx.drawImage(canvas, 0, 0, W, H);
   ctx.restore();
+}
+
+function _drawPipelineLumaPatch(ctx, safeFadeMode, mix, W, H, sw, sh) {
+  _drawPipelineLumaCanvas(ctx, _plkCanvas, safeFadeMode, mix, W, H, sw, sh);
 }
 
 function applyPipelineLumaKey(
@@ -2680,42 +3685,80 @@ function applyPipelineLumaKey(
 ) {
   if (mix <= 0 || !gBuf || !gCur) return;
 
-  const planeInfo = _resolvePipelineLumaPlane(
-    sourceFrameSerial,
-    keySource === 'stencil' ? 'stencil' : 'clean',
-    window.__huffProfilerActive === true
-  );
-  if (!planeInfo) return;
-
-  const { W, H, sw, sh } = planeInfo;
   const safeGain = Math.max(0.25, Math.min(4, Number.isFinite(Number(gain)) ? Number(gain) : 1));
   const safeCleanup = Math.max(0, Math.min(1, Number.isFinite(Number(cleanup)) ? Number(cleanup) : 0));
   const safeDensity = Math.max(0, Math.min(1, Number.isFinite(Number(density)) ? Number(density) : 0));
   const safeFadeMode = fadeMode === 'add' ? 'add' : 'xfade';
   const profile = window.__huffProfilerActive === true;
+  const liveCleanSource = keySource !== 'stencil';
 
-  if (!_ensurePipelineLumaMask(
-    planeInfo, thresh, !!invert, safeGain, safeCleanup, safeDensity, profile
-  )) return;
+  if (liveCleanSource) {
+    const gpuPatch = _ensureLivePipelineLumaGpuPatch(
+      Number(thresh) || 0, !!invert, safeGain, safeCleanup, safeDensity,
+      sourceFrameSerial, profile
+    );
+    if (gpuPatch?.canvas) {
+      const presentStart = profile ? performance.now() : 0;
+      _drawPipelineLumaCanvas(
+        gBuf.drawingContext, gpuPatch.canvas, safeFadeMode, mix,
+        gpuPatch.W, gpuPatch.H, gpuPatch.sw, gpuPatch.sh
+      );
+      if (profile) {
+        _plkProfileAdd('presentMs', performance.now() - presentStart);
+        _plkProfileAdd('presentSamples');
+      }
+      return;
+    }
+  }
 
-  // The clean RGB patch follows every decoded source frame even when KEY SRC is
-  // STENCIL. Parameter edits can reshape cached luminance without another
-  // getImageData(), but they must never freeze the live RGB carried by a stencil.
-  if (!_plkPatchValid || _plkPatchFrame !== sourceFrameSerial) {
-    const gCurEl = gCur.elt ?? gCur.drawingContext?.canvas;
-    if (!gCurEl) return;
-    const presentStarted = profile ? performance.now() : 0;
-    copyCanvasFrame(_plkCtx, gCurEl, sw, sh);
-    _plkCtx.save();
-    _plkCtx.globalAlpha = 1;
-    _plkCtx.globalCompositeOperation = 'destination-in';
-    _plkCtx.drawImage(_plkStencilMaskCanvas, 0, 0, sw, sh);
-    _plkCtx.restore();
-    _plkPatchValid = true;
-    _plkPatchFrame = sourceFrameSerial;
-    if (profile) {
-      _plkProfileAdd('presentMs', performance.now() - presentStarted);
-      _plkProfileAdd('presentSamples');
+  // Automatic parity-safe CPU fallback: the established Pass 45 path remains
+  // intact whenever WebGL is absent, context-lost, or rejected by calibration.
+  const planeInfo = liveCleanSource
+    ? _ensureLivePipelineLuma(sourceFrameSerial, profile, {
+        thresh: Number(thresh) || 0,
+        invert: !!invert,
+        gain: safeGain,
+        cleanup: safeCleanup,
+        density: safeDensity,
+      })
+    : _resolvePipelineLumaPlane(sourceFrameSerial, 'stencil', profile);
+  if (!planeInfo) return;
+
+  const { W, H, sw, sh } = planeInfo;
+
+  const liveCleanFastPath = keySource !== 'stencil' && !!planeInfo.imageData;
+  if (liveCleanFastPath) {
+    // The LIVE COMPOSITE key already paid for one 640px source readback to
+    // extract luminance. Reuse those same RGB bytes and write the shaped matte
+    // directly into their alpha channel. This removes the former second source
+    // copy + separate mask upload + destination-in draw on every decoded frame.
+    if (!_ensureLivePipelineLumaPatch(
+      planeInfo, thresh, !!invert, safeGain, safeCleanup, safeDensity,
+      sourceFrameSerial, profile
+    )) return;
+  } else {
+    if (!_ensurePipelineLumaMask(
+      planeInfo, thresh, !!invert, safeGain, safeCleanup, safeDensity, profile
+    )) return;
+
+    // STENCIL still carries a stored luminance plane but live RGB, so retain the
+    // accepted GPU masking fallback without introducing a new source readback.
+    if (!_plkPatchValid || _plkPatchFrame !== sourceFrameSerial) {
+      const gCurEl = gCur.elt ?? gCur.drawingContext?.canvas;
+      if (!gCurEl) return;
+      const presentStarted = profile ? performance.now() : 0;
+      copyCanvasFrame(_plkCtx, gCurEl, sw, sh);
+      _plkCtx.save();
+      _plkCtx.globalAlpha = 1;
+      _plkCtx.globalCompositeOperation = 'destination-in';
+      _plkCtx.drawImage(_plkStencilMaskCanvas, 0, 0, sw, sh);
+      _plkCtx.restore();
+      _plkPatchValid = true;
+      _plkPatchFrame = sourceFrameSerial;
+      if (profile) {
+        _plkProfileAdd('presentMs', performance.now() - presentStarted);
+        _plkProfileAdd('presentSamples');
+      }
     }
   }
 

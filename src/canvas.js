@@ -606,7 +606,7 @@ const PRESET_IDS = [
   'flowOn','flowStrength','flowScale','flowPulse','flowImpl','flowSpeed','flowTurb','flowSwirl','flowSpread',
   'baseOn','baseMix','seedOnLoad',
   'symOn','symMode','symPos',
-  'solarizeOn','solarizeMode','solarizeThresh','solarizeLevel','solarizeSoft','solarizeInvert','solarizeAmt','solarizeR','solarizeG','solarizeB',
+  'solarizeOn','solarizeMode','solarizeThresh','solarizeLevel','solarizeSoft','solarizeInvert','solarizeAmt','solarizeFluidity','solarizeR','solarizeG','solarizeB',
   'scanAlpha','scanShift','scanDrift','scanSpeed','scanGap','scanSkew',
   'scanAngle','scanFocus','scanRoll',
   'scanSpinLeft','scanSpinRight','scanSpinSpeed',
@@ -670,6 +670,9 @@ function applyPreset(data) {
   if (!('solarizeLevel' in sourceData)) sourceData.solarizeLevel = '75';
   if (!('solarizeSoft' in sourceData)) sourceData.solarizeSoft = '0';
   if (!('solarizeInvert' in sourceData)) sourceData.solarizeInvert = false;
+  // Pass 43 adds Solarize-local temporal slew. 100% is a strict compatibility
+  // bypass, so all older presets retain Pass 42 frame-for-frame behavior.
+  if (!('solarizeFluidity' in sourceData)) sourceData.solarizeFluidity = '100';
   const validRecipeIds = new Set(['classic', 'crisp-finish']);
   if (!validRecipeIds.has(String(sourceData.pipelineRecipe || ''))) {
     sourceData.pipelineRecipe = 'classic';
@@ -1355,7 +1358,7 @@ function hookUI() {
     'flowSpeed','flowSpeedVal','flowTurb','flowTurbVal','flowSwirl','flowSwirlVal','flowSpread','flowSpreadVal',
     'baseOn','baseMix','baseMixVal','seedOnLoad',
     'symOn','symMode','symPos','symPosVal',
-    'solarizeOn','solarizeMode','solarizeThresh','solarizeThreshVal','solarizeLevel','solarizeLevelVal','solarizeSoft','solarizeSoftVal','solarizeInvert','solarizeAmt','solarizeAmtVal',
+    'solarizeOn','solarizeMode','solarizeThresh','solarizeThreshVal','solarizeLevel','solarizeLevelVal','solarizeSoft','solarizeSoftVal','solarizeInvert','solarizeAmt','solarizeAmtVal','solarizeFluidity','solarizeFluidityVal',
     'solarizeR','solarizeRVal','solarizeG','solarizeGVal','solarizeB','solarizeBVal',
     'scanAlpha','scanAlphaVal','scanShift','scanShiftVal','scanDrift','scanDriftVal',
     'scanSpeed','scanSpeedVal','scanGap','scanGapVal','scanSkew','scanSkewVal',
@@ -1695,7 +1698,7 @@ function hookSliders() {
     'glitchAlpha','glitchJitter','glitchSmearAngle',
     'flowStrength','flowScale','flowPulse','flowImpl','flowSpeed','flowTurb','flowSwirl','flowSpread','baseMix','symPos',
     'depthScatter','corruptDrift',
-    'solarizeThresh','solarizeLevel','solarizeSoft','solarizeAmt','solarizeR','solarizeG','solarizeB',
+    'solarizeThresh','solarizeLevel','solarizeSoft','solarizeAmt','solarizeFluidity','solarizeR','solarizeG','solarizeB',
     'cluSpeedVar','cluPulse','cluBreathe',
     'lumaKeyMix','lumaKeyAB','lumaKeyGain','lumaKeyCleanup','lumaKeyDensity','globalMixAmt','scanAngle','scanSpinSpeed','layerPulseSpeed',
   ];
@@ -1830,6 +1833,17 @@ function hookSliders() {
     if (els.solarizeLevel) els.solarizeLevel.disabled = !lumaMode;
     if (els.solarizeSoft) els.solarizeSoft.disabled = !lumaMode;
     if (els.solarizeInvert) els.solarizeInvert.disabled = !lumaMode;
+
+    // Pass 44: show only parameters that actually belong to the selected
+    // Solarize algorithm. Shared controls (ON, MODE, AMOUNT, FLUIDITY) stay
+    // visible; inactive mode-specific controls are hidden rather than merely
+    // greyed out so the performance surface is unambiguous.
+    document.querySelectorAll('.solarize-threshold-only').forEach(el => {
+      el.classList.toggle('solarize-mode-hidden', lumaMode);
+    });
+    document.querySelectorAll('.solarize-luma-only').forEach(el => {
+      el.classList.toggle('solarize-mode-hidden', !lumaMode);
+    });
   };
   els.solarizeMode?.addEventListener('change', () => {
     syncSolarizeModeUI();
@@ -2213,6 +2227,7 @@ function updateLabels() {
   set(els.solarizeLevel,    els.solarizeLevelVal,    v => `${Math.round(+v || 0)}%`);
   set(els.solarizeSoft,     els.solarizeSoftVal,     v => `${Math.round(+v || 0)}%`);
   set(els.solarizeAmt,      els.solarizeAmtVal,      f2);
+  set(els.solarizeFluidity, els.solarizeFluidityVal, v => `${Math.round(+v || 0)}%`);
   set(els.solarizeR,        els.solarizeRVal,        f2);
   set(els.solarizeG,        els.solarizeGVal,        f2);
   set(els.solarizeB,        els.solarizeBVal,        f2);
@@ -2805,7 +2820,28 @@ const _pipelineFrame = Object.seal({
   scanPriority: 1,
   lumaMix: 0,
   gmPos: 'after',
+  deferredGlobalMix: false,
 });
+
+// Pass 46: profiler-only wall-clock timing around the actual serial pipeline
+// stages. Unlike the legacy function wrapper list, these samples are attached
+// where the recipe executes, so they expose the combined cost of each stage
+// (including Canvas2D synchronization) without changing runtime behavior while
+// the profiler is hidden.
+const _pipelineStageTelemetry = window.__huffPipelineStageTelemetry || Object.create(null);
+window.__huffPipelineStageTelemetry = _pipelineStageTelemetry;
+
+function _pipelineStageProfileStart() {
+  return window.__huffProfilerActive === true ? performance.now() : 0;
+}
+
+function _pipelineStageProfileEnd(name, startedAt) {
+  if (!startedAt) return;
+  let rec = _pipelineStageTelemetry[name];
+  if (!rec) rec = _pipelineStageTelemetry[name] = { ms: 0, samples: 0 };
+  rec.ms += performance.now() - startedAt;
+  rec.samples++;
+}
 
 function _runSourceSyncStage() {
   _syncGCur();
@@ -2814,12 +2850,14 @@ function _runSourceSyncStage() {
 function _runPersistentDecayStage(frame) {
   const pers = frame.state.persistence;
   if (pers < 1) {
+    const startedAt = _pipelineStageProfileStart();
     const ctx = gBuf.drawingContext;
     ctx.save();
     ctx.globalCompositeOperation = 'destination-out';
     ctx.fillStyle = `rgba(0,0,0,${(((1 - pers) * (20 - 1)) + 1) / 255})`;
     ctx.fillRect(0, 0, gBuf.width, gBuf.height);
     ctx.restore();
+    _pipelineStageProfileEnd('persistence', startedAt);
   }
 }
 
@@ -2855,26 +2893,57 @@ const _frontStagePriorityPlan = _pipelineRuntime.compileFrontStagePriority(
 
 function _runFrontStagePriority(frame) {
   if (!frame.frontStageActive) return;
+  const startedAt = _pipelineStageProfileStart();
   _frontStagePriorityPlan.execute(
     frame,
     frame.layerPriority,
     frame.layerPulseSpeed,
     frame.renderFrame,
   );
+  _pipelineStageProfileEnd('front', startedAt);
+}
+
+function _canFuseGlobalMixIntoSolarize(frame, position) {
+  if (!frame.activity.solarize || !frame.activity.globalMix) return false;
+  // FINAL belongs after Solarize and therefore cannot be fused into its input.
+  // Other positions are safe only when no active transform remains between that
+  // Global Mix position and Solarize. This preserves the serial Classic recipe.
+  if (position === 'before') {
+    return !frame.activity.feedback && !frame.activity.flow && !frame.activity.symmetry;
+  }
+  if (position === 'after') {
+    return !frame.activity.flow && !frame.activity.symmetry;
+  }
+  if (position === 'afterflow') {
+    return !frame.activity.symmetry;
+  }
+  return false;
 }
 
 function _runGlobalMixStage(frame, step) {
   const activity = frame.activity;
   const gmPos = frame.gmPos;
-  if (activity.globalMix && gmPos === step.conditionalPosition) {
-    _emitGlobalMix(frame.state);
+  if (!activity.globalMix || gmPos !== step.conditionalPosition) return;
+
+  if (_canFuseGlobalMixIntoSolarize(frame, gmPos)) {
+    // Solarize immediately downsamples its input to the same bounded scratch
+    // domain. Defer this otherwise-full-resolution mix into that scratch so the
+    // following synchronous readback does not first have to flush a redundant
+    // full-resolution Global Mix draw. No pipeline stage is reordered across an
+    // active transform.
+    frame.deferredGlobalMix = true;
+    return;
   }
+  const startedAt = _pipelineStageProfileStart();
+  _emitGlobalMix(frame.state);
+  _pipelineStageProfileEnd('globalMix', startedAt);
 }
 
 function _runFeedbackStage(frame) {
   const activity = frame.activity;
   if (frame.state.feedbackEnabled === false || !activity.feedback) return;
 
+  const startedAt = _pipelineStageProfileStart();
   const s = frame.state;
 
   // Exact Pass 38 Feedback transform. The only new condition is the optional
@@ -2916,39 +2985,53 @@ function _runFeedbackStage(frame) {
       ctx.restore();
     }
   }
+  _pipelineStageProfileEnd('feedback', startedAt);
 }
 
 function _runFlowStage(frame) {
   const activity = frame.activity;
   if (activity.flow) {
+    const startedAt = _pipelineStageProfileStart();
     const s = frame.state;
     applyFlowWarp(gBuf, gScratch, Math.trunc(s.flowStrength),
       Math.trunc(s.flowScale), Math.trunc(s.flowPulse), s.flowImpl, s.flowSpeed,
       s.flowTurb, s.flowSwirl, s.flowSpread);
     [gBuf, gScratch] = [gScratch, gBuf];
+    _pipelineStageProfileEnd('flow', startedAt);
   }
 }
 
 function _runSymmetryStage(frame) {
   const activity = frame.activity;
   if (activity.symmetry) {
+    const startedAt = _pipelineStageProfileStart();
     const s = frame.state;
     applySymmetry(gBuf, gScratch, s.symMode || 'v', s.symPos);
     [gBuf, gScratch] = [gScratch, gBuf];
+    _pipelineStageProfileEnd('symmetry', startedAt);
   }
 }
 
 function _runSolarizeStage(frame) {
   const activity = frame.activity;
   if (activity.solarize) {
+    const startedAt = _pipelineStageProfileStart();
     const s = frame.state;
+    const fusedGlobalMix = frame.deferredGlobalMix ? {
+      source: _graphicsCanvas(gCur),
+      blend: s.globalMixBlend || 'screen',
+      amount: s.globalMixAmt,
+    } : null;
     applySolarize(gBuf, s.solarizeThresh, s.solarizeAmt,
       s.solarizeR, s.solarizeG, s.solarizeB,
-      s.solarizeMode || 'threshold', s.solarizeLevel, s.solarizeSoft, s.solarizeInvert);
+      s.solarizeMode || 'threshold', s.solarizeLevel, s.solarizeSoft, s.solarizeInvert,
+      s.solarizeFluidity, fusedGlobalMix);
+    _pipelineStageProfileEnd('solarize', startedAt);
   }
 }
 
 function _runPresentationStage(frame) {
+  const startedAt = _pipelineStageProfileStart();
   const s = frame.state;
   const activity = frame.activity;
 
@@ -2980,6 +3063,7 @@ function _runPresentationStage(frame) {
     }
     image(gBuf, 0, 0, width, height);
   }
+  _pipelineStageProfileEnd('presentation', startedAt);
 }
 
 const _pipelineStageHandlers = Object.freeze({
@@ -3186,6 +3270,7 @@ function draw() {
   _pipelineFrame.scanPriority = 1.0;
   _pipelineFrame.lumaMix = s.lumaKeyMix;
   _pipelineFrame.gmPos = s.globalMixPos || 'after';
+  _pipelineFrame.deferredGlobalMix = false;
   pipelinePlan.executeEffectsAndPresentation(_pipelineFrame);
   if (activePipelineStarted) {
     _capabilityInstrumentation?.sample('activePipeline', performance.now() - activePipelineStarted);
@@ -3779,7 +3864,40 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
       presentSamples: t.presentSamples || 0,
       processedFrames: t.processedFrames || 0,
       reusedFrames: t.reusedFrames || 0,
+      fusedGlobalMixFrames: t.fusedGlobalMixFrames || 0,
     };
+  }
+
+  function gpuColorTelemetrySnapshot() {
+    const t = window.__huffClassicGpuTelemetry || {};
+    return {
+      supported: t.supported,
+      initAttempts: t.initAttempts || 0,
+      initFailures: t.initFailures || 0,
+      contextLosses: t.contextLosses || 0,
+      solarFrames: t.solarFrames || 0,
+      solarQuantizeFrames: t.solarQuantizeFrames || 0,
+      solarThresholdFrames: t.solarThresholdFrames || 0,
+      lumaFrames: t.lumaFrames || 0,
+      lumaFallbacks: t.lumaFallbacks || 0,
+      lumaCalibrationRuns: t.lumaCalibrationRuns || 0,
+      lumaCalibrationMode: Number.isFinite(t.lumaCalibrationMode) ? t.lumaCalibrationMode : -1,
+      lumaCalibrationContext: String(t.lumaCalibrationContext || 'none'),
+      lumaCalibrationMaxDiff: Number.isFinite(t.lumaCalibrationMaxDiff) ? t.lumaCalibrationMaxDiff : 255,
+      lumaCalibrationMeanDiff: Number.isFinite(t.lumaCalibrationMeanDiff) ? t.lumaCalibrationMeanDiff : 255,
+      fallbacks: t.fallbacks || 0,
+    };
+  }
+
+  function pipelineStageTelemetrySnapshot() {
+    const t = window.__huffPipelineStageTelemetry || {};
+    const names = ['persistence','front','globalMix','feedback','flow','symmetry','solarize','presentation'];
+    const out = Object.create(null);
+    for (const name of names) {
+      const rec = t[name] || {};
+      out[name] = { ms: rec.ms || 0, samples: rec.samples || 0 };
+    }
+    return out;
   }
 
   function lumaTelemetrySnapshot() {
@@ -3804,6 +3922,12 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
       stencilCaptureSamples: t.stencilCaptureSamples || 0,
       stencilCaptures: t.stencilCaptures || 0,
       stencilReuses: t.stencilReuses || 0,
+      livePatchFastBuilds: t.livePatchFastBuilds || 0,
+      livePatchFastReuses: t.livePatchFastReuses || 0,
+      livePatchMergedBuilds: t.livePatchMergedBuilds || 0,
+      gpuPatchBuilds: t.gpuPatchBuilds || 0,
+      gpuPatchReuses: t.gpuPatchReuses || 0,
+      gpuPatchFallbacks: t.gpuPatchFallbacks || 0,
     };
   }
 
@@ -3906,6 +4030,8 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
   let frames = 0, lastReport = performance.now();
   let lastTelemetry = { ..._profileTelemetry };
   let lastSolarTelemetry = solarTelemetrySnapshot();
+  let lastPipelineStageTelemetry = pipelineStageTelemetrySnapshot();
+  let lastGpuColorTelemetry = gpuColorTelemetrySnapshot();
   let lastLumaTelemetry = lumaTelemetrySnapshot();
   let lastGlitchTelemetry = glitchTelemetrySnapshot();
   let lastScanlineTelemetry = scanlineTelemetrySnapshot();
@@ -3948,6 +4074,21 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
         ? (solarNow.presentMs - lastSolarTelemetry.presentMs) / solarPresentSamples : 0;
       const solarProcessedDelta = solarNow.processedFrames - lastSolarTelemetry.processedFrames;
       const solarReusedDelta = solarNow.reusedFrames - lastSolarTelemetry.reusedFrames;
+      const solarFusedGlobalMixDelta = solarNow.fusedGlobalMixFrames - lastSolarTelemetry.fusedGlobalMixFrames;
+      const gpuColorNow = gpuColorTelemetrySnapshot();
+      const gpuSolarDelta = gpuColorNow.solarFrames - lastGpuColorTelemetry.solarFrames;
+      const gpuQuantizeDelta = gpuColorNow.solarQuantizeFrames - lastGpuColorTelemetry.solarQuantizeFrames;
+      const gpuThresholdDelta = gpuColorNow.solarThresholdFrames - lastGpuColorTelemetry.solarThresholdFrames;
+      const gpuLumaDelta = gpuColorNow.lumaFrames - lastGpuColorTelemetry.lumaFrames;
+      const gpuLumaFallbackDelta = gpuColorNow.lumaFallbacks - lastGpuColorTelemetry.lumaFallbacks;
+      const gpuFallbackDelta = gpuColorNow.fallbacks - lastGpuColorTelemetry.fallbacks;
+      const pipelineStageNow = pipelineStageTelemetrySnapshot();
+      const stageAvg = name => {
+        const nowRec = pipelineStageNow[name];
+        const lastRec = lastPipelineStageTelemetry[name];
+        const samples = nowRec.samples - lastRec.samples;
+        return samples > 0 ? (nowRec.ms - lastRec.ms) / samples : 0;
+      };
       const lumaNow = lumaTelemetrySnapshot();
       const lumaReadbackSamples = lumaNow.readbackSamples - lastLumaTelemetry.readbackSamples;
       const lumaTransformSamples = lumaNow.transformSamples - lastLumaTelemetry.transformSamples;
@@ -3974,6 +4115,12 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
         ? (lumaNow.stencilCaptureMs - lastLumaTelemetry.stencilCaptureMs) / lumaStencilCaptureSamples : 0;
       const lumaStencilCaptureDelta = lumaNow.stencilCaptures - lastLumaTelemetry.stencilCaptures;
       const lumaStencilReuseDelta = lumaNow.stencilReuses - lastLumaTelemetry.stencilReuses;
+      const lumaLivePatchFastBuildDelta = lumaNow.livePatchFastBuilds - lastLumaTelemetry.livePatchFastBuilds;
+      const lumaLivePatchFastReuseDelta = lumaNow.livePatchFastReuses - lastLumaTelemetry.livePatchFastReuses;
+      const lumaLivePatchMergedDelta = lumaNow.livePatchMergedBuilds - lastLumaTelemetry.livePatchMergedBuilds;
+      const lumaGpuPatchBuildDelta = lumaNow.gpuPatchBuilds - lastLumaTelemetry.gpuPatchBuilds;
+      const lumaGpuPatchReuseDelta = lumaNow.gpuPatchReuses - lastLumaTelemetry.gpuPatchReuses;
+      const lumaGpuPatchFallbackDelta = lumaNow.gpuPatchFallbacks - lastLumaTelemetry.gpuPatchFallbacks;
       const glitchNow = glitchTelemetrySnapshot();
       const glitchFramesDelta = glitchNow.frames - lastGlitchTelemetry.frames;
       const glitchTilesDelta = glitchNow.tiles - lastGlitchTelemetry.tiles;
@@ -4119,11 +4266,28 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
         'sp send    ' + spoutSendAvg.toFixed(2).padStart(6) + ' ms\n' +
         'sp frames  ' + `${spoutSentDelta}/${spoutBufferedDelta}`.padStart(6) + ' sent/skip\n' +
         'sp socket  ' + spoutSocketMissDelta.toFixed(0).padStart(6) + ' misses\n' +
+        'stage pers ' + stageAvg('persistence').toFixed(2).padStart(6) + ' ms\n' +
+        'stage front' + stageAvg('front').toFixed(2).padStart(6) + ' ms\n' +
+        'stage mix  ' + stageAvg('globalMix').toFixed(2).padStart(6) + ' ms\n' +
+        'stage fb   ' + stageAvg('feedback').toFixed(2).padStart(6) + ' ms\n' +
+        'stage flow ' + stageAvg('flow').toFixed(2).padStart(6) + ' ms\n' +
+        'stage sym  ' + stageAvg('symmetry').toFixed(2).padStart(6) + ' ms\n' +
+        'stage solar' + stageAvg('solarize').toFixed(2).padStart(6) + ' ms\n' +
+        'stage pres ' + stageAvg('presentation').toFixed(2).padStart(6) + ' ms\n' +
         'sol read   ' + solarReadbackAvg.toFixed(2).padStart(6) + ' ms\n' +
         'sol xform  ' + solarTransformAvg.toFixed(2).padStart(6) + ' ms\n' +
         'sol upload ' + solarUploadAvg.toFixed(2).padStart(6) + ' ms\n' +
         'sol present' + solarPresentAvg.toFixed(2).padStart(6) + ' ms\n' +
         'sol cache  ' + `${solarProcessedDelta}/${solarReusedDelta}`.padStart(6) + ' process/reuse\n' +
+        'sol gm fuse' + solarFusedGlobalMixDelta.toFixed(0).padStart(6) + ' frames\n' +
+        'gpu color  ' + String(gpuColorNow.supported === true ? 'ON' : gpuColorNow.supported === false ? 'FALLBACK' : 'idle').padStart(8) + '\n' +
+        'gpu sol    ' + gpuSolarDelta.toFixed(0).padStart(6) + ' frames\n' +
+        'gpu thresh ' + gpuThresholdDelta.toFixed(0).padStart(6) + ' frames\n' +
+        'gpu quant  ' + gpuQuantizeDelta.toFixed(0).padStart(6) + ' frames\n' +
+        'gpu fall   ' + gpuFallbackDelta.toFixed(0).padStart(6) + ' frames\n' +
+        'gpu luma   ' + gpuLumaDelta.toFixed(0).padStart(6) + ' frames\n' +
+        'gpu lu fall' + gpuLumaFallbackDelta.toFixed(0).padStart(6) + ' frames\n' +
+        'gpu lu cal ' + `${gpuColorNow.lumaCalibrationContext}:${gpuColorNow.lumaCalibrationMode}/${gpuColorNow.lumaCalibrationMaxDiff}/${gpuColorNow.lumaCalibrationMeanDiff.toFixed(2)}`.padStart(20) + ' ctx:mode/max/mean\n' +
         'luma read  ' + lumaReadbackAvg.toFixed(2).padStart(6) + ' ms\n' +
         'luma src   ' + `${lumaReadbackSamples}/${lumaSourceReuseDelta}`.padStart(6) + ' read/reuse\n' +
         'luma obj rd' + lumaObjectReadbackAvg.toFixed(2).padStart(6) + ' ms\n' +
@@ -4132,6 +4296,9 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
         'luma upload' + lumaUploadAvg.toFixed(2).padStart(6) + ' ms\n' +
         'luma pres  ' + lumaPresentAvg.toFixed(2).padStart(6) + ' ms\n' +
         'luma cache ' + `${lumaRebuiltDelta}/${lumaReusedDelta}`.padStart(6) + ' rebuild/reuse\n' +
+        'luma patch ' + `${lumaLivePatchFastBuildDelta}/${lumaLivePatchFastReuseDelta}`.padStart(6) + ' fast/reuse\n' +
+        'luma merge ' + lumaLivePatchMergedDelta.toFixed(0).padStart(6) + ' builds\n' +
+        'luma gpu   ' + `${lumaGpuPatchBuildDelta}/${lumaGpuPatchReuseDelta}/${lumaGpuPatchFallbackDelta}`.padStart(10) + ' build/reuse/fall\n' +
         'luma stenc ' + lumaStencilCaptureAvg.toFixed(2).padStart(6) + ' ms capture\n' +
         'stencil    ' + `${lumaStencilCaptureDelta}/${lumaStencilReuseDelta}`.padStart(6) + ' capture/reuse\n' +
         'gl tiles   ' + glitchTilesAvg.toFixed(0).padStart(6) + ' / frame\n' +
@@ -4160,6 +4327,8 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
       lastReport = now;
       lastTelemetry = { ..._profileTelemetry };
       lastSolarTelemetry = solarTelemetrySnapshot();
+      lastPipelineStageTelemetry = pipelineStageTelemetrySnapshot();
+      lastGpuColorTelemetry = gpuColorTelemetrySnapshot();
       lastLumaTelemetry = lumaTelemetrySnapshot();
       lastGlitchTelemetry = glitchTelemetrySnapshot();
       lastScanlineTelemetry = scanlineTelemetrySnapshot();
@@ -4183,6 +4352,8 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
     lastReport = performance.now();
     lastTelemetry = { ..._profileTelemetry };
     lastSolarTelemetry = solarTelemetrySnapshot();
+    lastPipelineStageTelemetry = pipelineStageTelemetrySnapshot();
+    lastGpuColorTelemetry = gpuColorTelemetrySnapshot();
     lastLumaTelemetry = lumaTelemetrySnapshot();
     lastGlitchTelemetry = glitchTelemetrySnapshot();
     lastScanlineTelemetry = scanlineTelemetrySnapshot();

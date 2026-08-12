@@ -1,10 +1,14 @@
-# Git Commit Message — use after runtime acceptance
+perf: accelerate live Luma key in HUFF Classic
 
-```bash
-git add . && git commit \
-  -m "feat: add Classic Solarize luma quantize mode" \
-  -m "Extend HUFF Classic Solarize with a second LUMA QUANTIZE mode inspired by the documented Magic DaVE Solarise model while preserving the accepted THRESHOLD algorithm as the default compatibility path." \
-  -m "Add LEVEL, SOFT and INVERT controls, use AMOUNT as shared wet/dry strength, preserve chroma via a luminance-delta transform, and map LEVEL 1-99 from fine quantisation toward two luma levels with 100 reserved for luma removal." \
-  -m "Reuse the existing bounded 640px Solarize scratch, single getImageData/putImageData cycle and adaptive load guard; add no full-resolution buffer or second synchronous readback." \
-  -m "Migrate old presets to THRESHOLD, leave factory presets and Flow untouched, preserve Pass 41A playback plus Corrupt/Scan/Luma/Feedback/pipeline/native boundaries, and add Pass 42 validation and documentation."
-```
+- add self-calibrating bounded WebGL1 path for LIVE/COMPOSITE Luma
+- verify WebGL-to-Canvas2D alpha behavior against CPU X-FADE and SOFT ADD reference
+- lazily test an unpremultiplied Luma context if the existing GPU context fails parity
+- avoid Luma getImageData, JS pixel transform and putImageData on GPU success
+- cache the bounded GPU keyed patch per decoded source frame and key state
+- add final 256-entry Clip/Gain/Invert/Cleanup/Density LUT to CPU fallback
+- bound Luma workspaces by long edge and total pixel budget for portrait safety
+- add GPU Luma calibration/build/reuse/fallback profiler telemetry
+- preserve Luma controls, Solarize, Feedback/Persistence, frozen Flow, presets and native runtime
+- add no frame skipping, sample/hold, playback-rate changes or wgpu
+
+HUFF Classic Pass 47

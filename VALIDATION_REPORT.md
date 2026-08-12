@@ -1,95 +1,59 @@
-# Validation Report — HUFF Classic Pass 42
+# HUFF Classic Pass 47 — Validation Report
 
-## Baseline
-
-- Source: accepted `huff-08102026.zip` / Pass 41A.
-- Product: HUFF Classic only (Tauri v1 + p5.js / Canvas2D).
-- Runtime acceptance of Pass 41A was already confirmed on the development machine before this pass.
-
-## Pass 42 deterministic validator
-
-Command:
-
-```bash
-npm run validate:pass42
-```
-
-Result:
+## Static validation
 
 ```text
-PASS 42 validation: 196,893 checks PASS
-196,608 LUMA QUANTIZE pixels byte/word compared
+npm run validate:pass47
+PASS 47 validation: 98,580 checks PASS
 ```
 
-The validator checks:
+The validator covers:
 
-- new UI IDs and compatibility defaults;
-- old-preset migration to MODE=THRESHOLD;
-- mode-aware activity/no-op behavior;
-- exact SHA-256 identity of the four accepted THRESHOLD Solarize helper functions from Pass 41A;
-- LUMA QUANTIZE LEVEL/SOFT/INVERT structure;
-- LEVEL 99 = two grayscale luma levels;
-- LEVEL 100 = grayscale luma removal;
-- SOFT 100 no-invert restoration;
-- AMOUNT 0 no-op;
-- INVERT grayscale reversal;
-- alpha preservation;
-- exact byte-loop / Uint32-loop parity for 196,608 generated pixels;
-- one runtime Solarize `getImageData()` and one `putImageData()` only;
-- no second Solarize canvas or new p5 full-resolution surface;
-- 640px scratch ceiling and adaptive stride retained;
-- exact SHA-256 identity of 220 protected Pass 41A/native files, including pipeline runtime, capability instrumentation, factory presets, and the native Tauri tree (excluding pre-existing `.DS_Store`).
+- Classic/Tauri-v1 boundary (no WebGPU/WGSL);
+- GPU LIVE Luma first-refusal before the CPU readback fallback;
+- absence of `getImageData`, `putImageData`, `readPixels`, `gl.finish`, and
+  `gl.flush` from the successful GPU patch helper;
+- runtime alpha parity calibration structure for X-FADE and SOFT ADD;
+- 65,536 randomized byte-domain matte comparisons between CPU reference and
+  GPU shader model;
+- 32,768 randomized final-key-LUT equivalence checks;
+- landscape/portrait long-edge and pixel-budget assertions;
+- exact protected Solarize/Fluidity/Flow helper hashes;
+- protected native/runtime/config/preset manifest.
 
-## Inherited Solarize regression validator
-
-Command:
-
-```bash
-npm run validate:pass16
-```
-
-Result:
+## Historical simulations
 
 ```text
-Pass 16 validation passed: 644 checks, 8,391,032 exact pixel comparisons
+npm run simulate:pass40v   PASS
+npm run simulate:pass40w   PASS
+npm run simulate:pass41a   PASS
 ```
 
-This independently reconfirms the packed/byte THRESHOLD Solarize behavior and the Pass 16 readback/presentation optimization boundary after the Pass 42 augmentation.
+## Release preflight
 
-## Playback-boundary simulation
-
-Command:
-
-```bash
-npm run simulate:pass41a
-```
-
-Result: **PASS**. The accepted 1080p-class processing ceiling, source-fit calculations, and history-capacity model remain intact.
-
-## Syntax / data checks
-
-- 61 JavaScript/MJS/CJS files: `node --check` PASS.
-- 33 JSON files: parse PASS.
-- 8 shell scripts: `bash -n` PASS.
-
-## Static release preflight
-
-Command:
-
-```bash
+```text
 npm run release:preflight
+38 passed / 0 warnings / 0 blockers
 ```
 
-Result: **38 passed, 0 warnings, 0 blockers.** The preflight confirms the Tauri v1 release/version configuration, macOS/Syphon assets, Windows/Spout assets, Linux platform configuration, Node/npm availability, and pinned Tauri CLI metadata.
+## CPU fallback microbenchmark
 
-## Native compile status
+A Node-only arithmetic microbenchmark over a 640x360 luma plane measured direct
+key-alpha math at ~2.03 ms/iteration and LUT lookup at ~0.39 ms/iteration
+(~5.25x for that isolated calculation). This does not include Canvas readback,
+upload, or presentation and is not a target-machine FPS claim.
 
-Cargo/Rust are not installed in this execution environment, so a Tauri native compile was not performed here. Pass 42 does not modify `src-tauri/**`; the protected manifest confirms those native files are byte-identical to the accepted Pass 41A archive.
+## Browser GPU limitation in this environment
 
-## Historical Pass 41A validator note
+Container Chromium could not initialize a usable GPU/WebGL process, so the
+one-time WebGL->Canvas2D alpha calibration and actual GPU performance cannot be
+truthfully runtime-certified here. Pass 47 therefore performs that parity probe
+inside HUFF on the target runtime and automatically falls back to CPU if it
+fails.
 
-`validate:pass41a` intentionally freezes `src/effects.js` to the Pass 40W hash because Pass 41A was a playback-only change. Pass 42 legitimately modifies the Solarize section of `src/effects.js`, so that historical exact-file validator is no longer the acceptance validator for the current tree. Pass 42 replaces that condition with function-level SHA checks for the original THRESHOLD implementation plus broader protected-file hashing.
+## Historical validator note
 
-## Remaining runtime gate
-
-Static validation cannot certify Canvas2D/WebView appearance or frame pacing. Runtime-test the checklist in `TESTING_CHECKLIST.md` before committing Pass 42 as the next authoritative HUFF Classic baseline.
+`validate:pass46` is expected to fail because Pass 47 intentionally changes the
+Luma helper hashes that Pass 46 froze. This is not treated as a regression;
+Pass 47's validator supersedes those Luma-specific hash expectations while
+continuing to protect the unaffected creative/runtime boundaries.
