@@ -1,0 +1,43 @@
+HUFF CLASSIC — OPTIMIZATION PASS 49
+===================================
+
+TITLE
+Syphon Stability Contract
+
+STATUS
+Accepted on target machine before Pass 50.
+
+BASELINE
+HUFF Classic Pass 48.
+
+GOAL
+Narrow Syphon to a smaller, explicit Classic operating envelope and make start/stop/recovery behavior deterministic before attempting any transport optimization.
+
+STABILITY CONTRACT
+- Quality presets replace arbitrary width/height/FPS combinations.
+- CLASSIC = 1280×720 / 30 fps and is the recommended reference mode.
+- 1080p30 remains available as a higher-load mode.
+- 720p60 remains available as an experimental higher-rate mode.
+- 15 fps and 24 fps are removed from the normal Syphon UI.
+- one frame remains in flight until native acknowledgement; no output latency queue is allowed.
+- no confirmed receiver -> 1 fps bootstrap publication.
+- confirmed receiver -> selected profile rate.
+- repeated Start -> Stop -> Start must tear down Worker/socket/native transport state cleanly.
+- page shutdown must release the browser transport and stop the native server.
+
+LIFECYCLE
+OFF -> STARTING -> WAITING -> STREAMING
+                     ^          |
+                     |          v
+                  RECOVERING <--+
+
+Any running state may transition through STOPPING -> OFF.
+
+PROTECTED FOR PASS 50
+Pass 50 may optimize transport ownership, but it may not remove:
+- the profile contract;
+- explicit lifecycle states;
+- 1 fps bootstrap behavior;
+- one-frame-in-flight acknowledgement gating;
+- bounded recovery and fallback;
+- native Metal/Syphon publisher behavior.

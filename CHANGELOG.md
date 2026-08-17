@@ -1,3 +1,67 @@
+## Pass 51 — Syphon 720p60 Bounded Pipeline
+
+### Product boundary
+- Classic Syphon is now fixed at 1280×720.
+- 60 fps is primary/default; 30 fps is safe/manual and automatic fallback.
+- 1080p Syphon output is removed from Classic.
+
+### Optimized
+- Worker-direct transport now owns two native frame credits instead of waiting for every native ACK before the next browser capture.
+- Worker caps outstanding native depth at two and bounds local WebSocket buffering.
+- Native ACKs release credits in the Worker; controls receive sampled status/profiling rather than using ACKs as the frame scheduler.
+- Direct ACK timeout recovery moves into the Worker.
+
+### Protected
+- Pass 49 lifecycle/bootstrap/main-socket fallback.
+- Pass 50 Worker-owned WebSocket.
+- native Rust/Metal/Syphon protocol and publisher.
+- effects, Luma, Solarize, Feedback/Persistence, frozen Flow and Spout.
+
+## Pass 50 — Syphon Worker-Owned Transport
+
+### Optimized
+- Worker now owns the preferred Syphon WebSocket and sends raw RGBA directly to Rust.
+- Removed the full-frame Worker -> controls ArrayBuffer transfer from the preferred path.
+- Added bounded Worker transport negotiation with automatic Pass 49 main-socket fallback.
+- Added transport-route/fallback profiler telemetry.
+
+### Protected
+- Pass 49 Syphon profiles/lifecycle/bootstrap/one-frame gate.
+- native Rust/Metal/Syphon protocol and publisher.
+- effects, Luma, Solarize, Feedback/Persistence, Flow and Spout.
+
+## Pass 49 — Syphon Stability Contract
+
+### Stabilized
+- narrowed Syphon UI to CLASSIC 720p30, 1080p30 and experimental 720p60 profiles.
+- replaced ambiguous transport booleans with explicit lifecycle states.
+- strengthened start/stop/restart/shutdown cleanup while retaining 1 fps bootstrap and one-frame-in-flight behavior.
+
+## Pass 48 — Stable Layer Priority + Mix/Fade Vocabulary
+
+### Layer Priority
+- Reduced Layer Priority to two explicit stable choices: `SCAN TOP` and `CORRUPT TOP`.
+- Removed the old frame-alternating Neutral mode.
+- Removed Pulse ordering and Pulse Speed.
+- Added deterministic migration of old dynamic priority values to `SCAN TOP`.
+
+### Global Mix
+- Added `CURVE`: `LINEAR`, `SMOOTH`, `PUNCH`.
+- `LINEAR` is exact legacy Mix behavior.
+- Curves reshape the existing amount only and are shared by the normal and Solarize-fused Global Mix paths.
+- No new render stage, scratch surface, or feedback route is added.
+
+### Luma Key
+- Preserved `X-FADE` and `SOFT ADD`.
+- Added `LIGHTEN`, `DARKEN`, `MULTIPLY`, `OVERLAY`, `HARD LIGHT`, and `DIFFERENCE` for `TARGET=COMPOSITE`.
+- Expanded fades operate on the existing keyed clean patch and do not change key extraction or shaping.
+
+### Protected
+- Pass 47 LIVE Luma acceleration and fallback behavior.
+- Solarize family and Fluidity.
+- Feedback/Persistence and frozen Flow.
+- Playback/native output architecture.
+
 ## Pass 47 — LIVE Luma GPU Acceleration + Scratch Budget Repair
 
 ### Optimized

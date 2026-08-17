@@ -615,9 +615,9 @@ const PRESET_IDS = [
   'bgMode',
   'cluSpeedVar','cluPulse',
   'cluSteer','cluBreathe','cluBounds','cluCohere',
-  'pipelineRecipe','layerPriority','layerPulseSpeed',
+  'pipelineRecipe','layerPriority',
   'lumaKeyOn','lumaKeyTarget','lumaKeyMix','lumaKeyAB','lumaKeyInvert','lumaKeyGain','lumaKeySource','lumaKeyFade','lumaKeyCleanup','lumaKeyDensity',
-  'globalMixOn','globalMixBlend','globalMixAmt','globalMixPos',
+  'globalMixOn','globalMixBlend','globalMixAmt','globalMixCurve','globalMixPos',
 ];
 
 function capturePreset() {
@@ -740,8 +740,15 @@ function applyPreset(data) {
     sourceData.lumaKeySource = 'clean';
   }
   if (!('lumaKeyFade' in sourceData)) sourceData.lumaKeyFade = 'xfade';
+  const validLumaFades = new Set(['xfade','add','lighten','darken','multiply','overlay','hardlight','difference']);
+  if (!validLumaFades.has(String(sourceData.lumaKeyFade || ''))) sourceData.lumaKeyFade = 'xfade';
   if (!('lumaKeyCleanup' in sourceData)) sourceData.lumaKeyCleanup = '0';
   if (!('lumaKeyDensity' in sourceData)) sourceData.lumaKeyDensity = '0';
+  // Pass 48 removes render-time Layer Priority oscillators. Imported NEUTRAL,
+  // ALTERNATE, PULSE, or unknown values migrate deterministically to SCAN TOP.
+  if (sourceData.layerPriority !== 'glitch' && sourceData.layerPriority !== 'scan') sourceData.layerPriority = 'scan';
+  if (!('globalMixCurve' in sourceData)) sourceData.globalMixCurve = 'linear';
+  if (!new Set(['linear','smooth','punch']).has(String(sourceData.globalMixCurve || ''))) sourceData.globalMixCurve = 'linear';
 
   _suppressUndo = true;
   try {
@@ -1371,10 +1378,10 @@ function hookUI() {
     'depthScatter','depthScatterVal','corruptDrift','corruptDriftVal',
     'scanAngle','bgMode','dim',
     'cluSpeedVar','cluSpeedVarVal','cluPulse','cluPulseVal','cluBreathe','cluBreatheVal','cluBounds',
-    'pipelineRecipe','layerPriority','layerPriorityState','layerPulseSpeed','layerPulseSpeedVal',
+    'pipelineRecipe','layerPriority','layerPriorityState',
     'lumaKeyOn','lumaKeyTarget','lumaKeyTargetState','lumaKeyMix','lumaKeyMixVal','lumaKeyAB','lumaKeyABVal','lumaKeyInvert',
     'lumaKeyGain','lumaKeyGainVal','lumaKeySource','lumaKeyFade','lumaKeyCleanup','lumaKeyCleanupVal','lumaKeyDensity','lumaKeyDensityVal','lumaKeyCaptureBtn','lumaKeyStencilState',
-    'globalMixOn','globalMixBlend','globalMixAmt','globalMixAmtVal','globalMixPos',
+    'globalMixOn','globalMixBlend','globalMixAmt','globalMixAmtVal','globalMixCurve','globalMixPos',
   ].forEach(k => els[k] = _$(k));
 
   initRenderStateCache();
@@ -1700,7 +1707,7 @@ function hookSliders() {
     'depthScatter','corruptDrift',
     'solarizeThresh','solarizeLevel','solarizeSoft','solarizeAmt','solarizeFluidity','solarizeR','solarizeG','solarizeB',
     'cluSpeedVar','cluPulse','cluBreathe',
-    'lumaKeyMix','lumaKeyAB','lumaKeyGain','lumaKeyCleanup','lumaKeyDensity','globalMixAmt','scanAngle','scanSpinSpeed','layerPulseSpeed',
+    'lumaKeyMix','lumaKeyAB','lumaKeyGain','lumaKeyCleanup','lumaKeyDensity','globalMixAmt','scanAngle','scanSpinSpeed',
   ];
 
   sliderIds.forEach(id => {
@@ -1809,13 +1816,9 @@ function hookSliders() {
 
   const syncLayerPriorityUI = () => {
     const mode = String(els.layerPriority?.value || 'scan');
-    if (els.layerPulseSpeed) els.layerPulseSpeed.disabled = mode !== 'pulse';
     if (els.layerPriorityState) {
-      els.layerPriorityState.textContent = mode === 'glitch' ? 'STABLE · CORRUPT TOP'
-        : mode === 'neutral' ? 'ALTERNATES EVERY FRAME'
-        : mode === 'pulse' ? 'ALTERNATES BY PULSE'
-        : 'STABLE · SCAN TOP';
-      els.layerPriorityState.classList.toggle('warn', mode === 'neutral' || mode === 'pulse');
+      els.layerPriorityState.textContent = mode === 'glitch' ? 'STABLE · CORRUPT TOP' : 'STABLE · SCAN TOP';
+      els.layerPriorityState.classList.remove('warn');
     }
   };
   els.layerPriority?.addEventListener('change', () => {
@@ -1854,7 +1857,7 @@ function hookSliders() {
   // Checkboxes and selects also get snapshotted for undo
   ['corruptOn','corruptUpdateMode','corruptDistribution','clusterTiles','corruptMaskMode','corruptMaskSide','clusters','feedbackEnabled','feedbackMotionRange','feedbackStrobe','flowOn','baseOn','symOn','solarizeOn','solarizeMode','solarizeInvert',
    'cluBounds','pipelineRecipe','layerPriority','seedOnLoad','bgMode','symMode',
-   'lumaKeyOn','lumaKeyTarget','lumaKeyInvert','lumaKeySource','lumaKeyFade','globalMixOn','globalMixBlend','globalMixPos','scanSpinLeft','scanSpinRight','scanPanelLayout'].forEach(id => {
+   'lumaKeyOn','lumaKeyTarget','lumaKeyInvert','lumaKeySource','lumaKeyFade','globalMixOn','globalMixBlend','globalMixCurve','globalMixPos','scanSpinLeft','scanSpinRight','scanPanelLayout'].forEach(id => {
     _$(id)?.addEventListener('change', snapshotForUndo);
   });
 
@@ -1949,7 +1952,7 @@ function hookSliders() {
     if (els.lumaKeyFade) {
       els.lumaKeyFade.disabled = target !== 'composite';
       els.lumaKeyFade.title = target === 'composite'
-        ? 'X-FADE / SOFT ADD for the legacy composite clean-patch key.'
+        ? 'Choose how the keyed clean patch composites over the processed image.'
         : 'Fade mode belongs to COMPOSITE target only. CORRUPT/SCAN target the effect objects directly.';
     }
     if (els.lumaKeyTargetState) {
@@ -2235,7 +2238,6 @@ function updateLabels() {
   set(els.cluPulse,         els.cluPulseVal,         v => (+v).toFixed(1));
   set(els.cluBreathe,       els.cluBreatheVal,       pct);
   set(els.lumaKeyMix,       els.lumaKeyMixVal,       f2);
-  set(els.layerPulseSpeed,  els.layerPulseSpeedVal,  v => (+v).toFixed(1));
   set(els.lumaKeyAB,        els.lumaKeyABVal,        f2);
   set(els.lumaKeyGain,      els.lumaKeyGainVal,      f2);
   set(els.lumaKeyCleanup,   els.lumaKeyCleanupVal,   f2);
@@ -2627,6 +2629,14 @@ function _emitGlitchGroup(state, density, glitchPriority, lumaMix) {
   }
 }
 
+function _globalMixEffectiveAmount(state) {
+  const a = Math.max(0, Math.min(1, Number(state.globalMixAmt) || 0));
+  const curve = String(state.globalMixCurve || 'linear');
+  if (curve === 'smooth') return a * a * (3 - 2 * a);
+  if (curve === 'punch') return 1 - (1 - a) * (1 - a);
+  return a;
+}
+
 function _emitGlobalMix(state) {
   if (!state.globalMixOn || state.globalMixAmt <= 0) return;
   const gCurEl = gCur.elt ?? gCur.drawingContext?.canvas;
@@ -2634,7 +2644,7 @@ function _emitGlobalMix(state) {
   const ctx = gBuf.drawingContext;
   ctx.save();
   ctx.globalCompositeOperation = state.globalMixBlend || 'screen';
-  ctx.globalAlpha = state.globalMixAmt;
+  ctx.globalAlpha = _globalMixEffectiveAmount(state);
   ctx.drawImage(gCurEl, 0, 0, gBuf.width, gBuf.height);
   ctx.restore();
 }
@@ -2814,8 +2824,6 @@ const _pipelineFrame = Object.seal({
   scanAngleArg: null,
   frontStageActive: false,
   layerPriority: 'scan',
-  layerPulseSpeed: 2,
-  renderFrame: 0,
   glitchPriority: 1,
   scanPriority: 1,
   lumaMix: 0,
@@ -2894,12 +2902,7 @@ const _frontStagePriorityPlan = _pipelineRuntime.compileFrontStagePriority(
 function _runFrontStagePriority(frame) {
   if (!frame.frontStageActive) return;
   const startedAt = _pipelineStageProfileStart();
-  _frontStagePriorityPlan.execute(
-    frame,
-    frame.layerPriority,
-    frame.layerPulseSpeed,
-    frame.renderFrame,
-  );
+  _frontStagePriorityPlan.execute(frame, frame.layerPriority);
   _pipelineStageProfileEnd('front', startedAt);
 }
 
@@ -3020,7 +3023,7 @@ function _runSolarizeStage(frame) {
     const fusedGlobalMix = frame.deferredGlobalMix ? {
       source: _graphicsCanvas(gCur),
       blend: s.globalMixBlend || 'screen',
-      amount: s.globalMixAmt,
+      amount: _globalMixEffectiveAmount(s),
     } : null;
     applySolarize(gBuf, s.solarizeThresh, s.solarizeAmt,
       s.solarizeR, s.solarizeG, s.solarizeB,
@@ -3259,11 +3262,9 @@ function draw() {
   pipelinePlan.executePersistent(_pipelineFrame);
 
   // Paint order remains the exact Classic layer-priority model. The validated
-  // priority plan resolves only the four modes already present in Pass 22.
+  // Pass 48 priority plan is deliberately stable and binary.
   _pipelineFrame.frontStageActive = activity.scanlines || activity.glitch || activity.luma;
   _pipelineFrame.layerPriority = s.layerPriority || 'scan';
-  _pipelineFrame.layerPulseSpeed = s.layerPulseSpeed;
-  _pipelineFrame.renderFrame = frameCount;
   _pipelineFrame.density = density;
   _pipelineFrame.scanAngleArg = scanAngleArg;
   _pipelineFrame.glitchPriority = 1.0;
@@ -3979,6 +3980,7 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
       captureSamples: t.captureSamples || 0,
       workerDrawMs: t.workerDrawMs || 0,
       workerReadMs: t.workerReadMs || 0,
+      workerSendMs: t.workerSendMs || 0,
       workerSamples: t.workerSamples || 0,
       endToEndMs: t.endToEndMs || 0,
       endToEndSamples: t.endToEndSamples || 0,
@@ -3987,7 +3989,13 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
       nativeSamples: t.nativeSamples || 0,
       inFlightSkips: t.inFlightSkips || 0,
       bufferedSkips: t.bufferedSkips || 0,
+      capacitySkips: t.capacitySkips || 0,
+      workerOutstanding: t.workerOutstanding || 0,
+      workerPeakOutstanding: t.workerPeakOutstanding || 0,
       uiUpdates: t.uiUpdates || 0,
+      workerDirectFrames: t.workerDirectFrames || 0,
+      mainSocketFrames: t.mainSocketFrames || 0,
+      workerTransportFallbacks: t.workerTransportFallbacks || 0,
     };
   }
 
@@ -4164,6 +4172,8 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
         ? (syphonNow.workerDrawMs - lastSyphonTelemetry.workerDrawMs) / syphonWorkerSamples : 0;
       const syphonWorkerReadAvg = syphonWorkerSamples > 0
         ? (syphonNow.workerReadMs - lastSyphonTelemetry.workerReadMs) / syphonWorkerSamples : 0;
+      const syphonWorkerSendAvg = syphonWorkerSamples > 0
+        ? (syphonNow.workerSendMs - lastSyphonTelemetry.workerSendMs) / syphonWorkerSamples : 0;
       const syphonEndToEndAvg = syphonEndToEndSamples > 0
         ? (syphonNow.endToEndMs - lastSyphonTelemetry.endToEndMs) / syphonEndToEndSamples : 0;
       const syphonNativeUploadAvg = syphonNativeSamples > 0
@@ -4172,7 +4182,11 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
         ? (syphonNow.nativePublishMs - lastSyphonTelemetry.nativePublishMs) / syphonNativeSamples : 0;
       const syphonInFlightSkips = syphonNow.inFlightSkips - lastSyphonTelemetry.inFlightSkips;
       const syphonBufferedSkips = syphonNow.bufferedSkips - lastSyphonTelemetry.bufferedSkips;
+      const syphonCapacitySkips = syphonNow.capacitySkips - lastSyphonTelemetry.capacitySkips;
       const syphonUiUpdates = syphonNow.uiUpdates - lastSyphonTelemetry.uiUpdates;
+      const syphonWorkerDirect = syphonNow.workerDirectFrames - lastSyphonTelemetry.workerDirectFrames;
+      const syphonMainSocket = syphonNow.mainSocketFrames - lastSyphonTelemetry.mainSocketFrames;
+      const syphonTransportFallbacks = syphonNow.workerTransportFallbacks - lastSyphonTelemetry.workerTransportFallbacks;
       const spoutNow = spoutTelemetrySnapshot();
       const spoutDrawSamples = spoutNow.drawSamples - lastSpoutTelemetry.drawSamples;
       const spoutReadSamples = spoutNow.readSamples - lastSpoutTelemetry.readSamples;
@@ -4256,10 +4270,14 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
         'sy cap     ' + syphonCaptureAvg.toFixed(2).padStart(6) + ' ms\n' +
         'sy draw    ' + syphonWorkerDrawAvg.toFixed(2).padStart(6) + ' ms\n' +
         'sy read    ' + syphonWorkerReadAvg.toFixed(2).padStart(6) + ' ms\n' +
+        'sy send    ' + syphonWorkerSendAvg.toFixed(2).padStart(6) + ' ms\n' +
         'sy pipe    ' + syphonEndToEndAvg.toFixed(2).padStart(6) + ' ms\n' +
         'sy upload  ' + syphonNativeUploadAvg.toFixed(2).padStart(6) + ' ms\n' +
         'sy publish ' + syphonNativePublishAvg.toFixed(2).padStart(6) + ' ms\n' +
-        'sy skips   ' + `${syphonInFlightSkips}/${syphonBufferedSkips}`.padStart(6) + ' flight/buffer\n' +
+        'sy skips   ' + `${syphonInFlightSkips}/${syphonBufferedSkips}/${syphonCapacitySkips}`.padStart(6) + ' cap/buf/credit\n' +
+        'sy credit  ' + `${syphonNow.workerOutstanding}/2`.padStart(6) + ` now · peak ${syphonNow.workerPeakOutstanding}\n` +
+        'sy route   ' + `${syphonWorkerDirect}/${syphonMainSocket}`.padStart(6) + ' worker/main\n' +
+        'sy fall    ' + syphonTransportFallbacks.toFixed(0).padStart(6) + ' transport\n' +
         'sy ui      ' + syphonUiUpdates.toFixed(0).padStart(6) + ' updates\n' +
         'sp draw    ' + spoutDrawAvg.toFixed(2).padStart(6) + ' ms\n' +
         'sp read    ' + spoutReadAvg.toFixed(2).padStart(6) + ' ms\n' +

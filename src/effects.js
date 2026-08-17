@@ -3659,9 +3659,25 @@ function _ensureLivePipelineLumaGpuPatch(
   return { ...dims, canvas:_plkGpuPatchCanvas };
 }
 
+const _PIPELINE_LUMA_FADE_OPS = Object.freeze({
+  xfade: 'source-over',
+  add: 'screen',
+  lighten: 'lighten',
+  darken: 'darken',
+  multiply: 'multiply',
+  overlay: 'overlay',
+  hardlight: 'hard-light',
+  difference: 'difference',
+});
+
+function _resolvePipelineLumaFadeMode(fadeMode) {
+  const mode = String(fadeMode || 'xfade');
+  return Object.prototype.hasOwnProperty.call(_PIPELINE_LUMA_FADE_OPS, mode) ? mode : 'xfade';
+}
+
 function _drawPipelineLumaCanvas(ctx, canvas, safeFadeMode, mix, W, H, sw, sh) {
   ctx.save();
-  ctx.globalCompositeOperation = safeFadeMode === 'add' ? 'screen' : 'source-over';
+  ctx.globalCompositeOperation = _PIPELINE_LUMA_FADE_OPS[safeFadeMode] || 'source-over';
   ctx.globalAlpha = mix;
   if (sw === W && sh === H) ctx.drawImage(canvas, 0, 0);
   else ctx.drawImage(canvas, 0, 0, W, H);
@@ -3688,7 +3704,7 @@ function applyPipelineLumaKey(
   const safeGain = Math.max(0.25, Math.min(4, Number.isFinite(Number(gain)) ? Number(gain) : 1));
   const safeCleanup = Math.max(0, Math.min(1, Number.isFinite(Number(cleanup)) ? Number(cleanup) : 0));
   const safeDensity = Math.max(0, Math.min(1, Number.isFinite(Number(density)) ? Number(density) : 0));
-  const safeFadeMode = fadeMode === 'add' ? 'add' : 'xfade';
+  const safeFadeMode = _resolvePipelineLumaFadeMode(fadeMode);
   const profile = window.__huffProfilerActive === true;
   const liveCleanSource = keySource !== 'stencil';
 

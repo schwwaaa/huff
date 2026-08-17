@@ -1,14 +1,20 @@
-perf: accelerate live Luma key in HUFF Classic
+perf: pipeline Classic Syphon for stable 720p60 output
 
-- add self-calibrating bounded WebGL1 path for LIVE/COMPOSITE Luma
-- verify WebGL-to-Canvas2D alpha behavior against CPU X-FADE and SOFT ADD reference
-- lazily test an unpremultiplied Luma context if the existing GPU context fails parity
-- avoid Luma getImageData, JS pixel transform and putImageData on GPU success
-- cache the bounded GPU keyed patch per decoded source frame and key state
-- add final 256-entry Clip/Gain/Invert/Cleanup/Density LUT to CPU fallback
-- bound Luma workspaces by long edge and total pixel budget for portrait safety
-- add GPU Luma calibration/build/reuse/fallback profiler telemetry
-- preserve Luma controls, Solarize, Feedback/Persistence, frozen Flow, presets and native runtime
-- add no frame skipping, sample/hold, playback-rate changes or wgpu
+- fix HUFF Classic Syphon output to 1280x720
+- make 720p60 the primary/default worker-direct target
+- retain 720p30 as the safe selectable mode and automatic fallback
+- remove 1080p Syphon output from HUFF Classic
+- replace worker-direct native ACK gating with a strict two-credit pipeline
+- allow browser capture/readback of the next frame to overlap native publication
+- keep a hard maximum of two outstanding native frames
+- drop excess Syphon output opportunities instead of creating a latency queue
+- move direct-path ACK credit ownership and timeout recovery into the Worker
+- bound Worker WebSocket buffering to approximately one additional 720p RGBA frame
+- aggregate native ACK/status telemetry instead of making every ACK a controls scheduling dependency
+- preserve one-frame-in-flight behavior for the accepted Pass 49 main-socket fallback
+- automatically cap fallback output to 720p30 when 60 fps was requested
+- preserve one-fps bootstrap discovery, lifecycle cleanup, and receiver recovery
+- leave native Syphon/Metal code, effects, Luma, Solarize, Feedback, Flow and Spout unchanged
+- add Pass 51 validation, pipeline simulation, profiler diagnostics and documentation
 
-HUFF Classic Pass 47
+HUFF Classic Pass 51

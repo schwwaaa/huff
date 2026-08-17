@@ -1,49 +1,60 @@
-# Pass 47 Runtime Checklist — LIVE Luma Performance
+# HUFF Classic Pass 51 — Runtime Testing Checklist
 
-## Primary isolated comparison
+## A. Product boundary
 
-- [ ] Use the same source/process state that produced approximately 60 FPS with Luma OFF and approximately 52 FPS with Luma ON in Pass 46.
-- [ ] Luma: ON.
-- [ ] TARGET: COMPOSITE.
-- [ ] KEY SRC: LIVE.
-- [ ] Preserve the same Clip, Mix, Invert, Gain, Cleanup, Density and Fade values.
-- [ ] Keep unrelated effects in the same state as the original isolation test.
-- [ ] Let the patch settle for several seconds and record steady FPS.
+- [ ] Open Syphon and confirm only **60 FPS — 1280×720** and **30 FPS — 1280×720 (safe)** exist.
+- [ ] Confirm 60 FPS is selected by default.
+- [ ] Confirm there is no 1080p Syphon option.
 
-## Profiler gate
+## B. 720p60 worker-direct
 
-Open profiler with backtick (`):
+- [ ] Start Syphon at 60 FPS with a receiver attached.
+- [ ] Confirm status shows `worker-direct`.
+- [ ] Confirm moving output is stable and visually current.
+- [ ] Open the backtick profiler and watch `sy credit`; it should remain bounded at `/2`.
+- [ ] Confirm `sy fall` does not increase in a normal healthy session.
+- [ ] Compare receiver motion cadence against Pass 50 / 720p30.
 
-- [ ] `gpu color` = `ON`.
-- [ ] `gpu luma` advances.
-- [ ] `gpu lu fall` remains 0 during successful LIVE frames.
-- [ ] `gpu lu cal` reports `premultiplied:<mode>` or `unpremultiplied:<mode>` and max error <= 2.
-- [ ] `luma gpu` build/reuse counts advance.
-- [ ] `luma read`, `luma xform`, `luma upload` remain at 0 for successful GPU LIVE frames.
-- [ ] Record `stage front`.
+## C. Backpressure / heavy HUFF state
 
-If `gpu lu cal` reports a rejected mode / large error and `gpu lu fall` advances,
-HUFF is intentionally on CPU fallback. Send the exact calibration line.
+- [ ] Enable a heavy accepted state: Feedback/Persistence + Luma + Solarize + other normal effects.
+- [ ] Confirm HUFF rendering does not stall because Syphon is busy.
+- [ ] Confirm Syphon does not accumulate visible latency over time.
+- [ ] If `sy credit` sits at `2/2`, confirm output opportunities are dropped rather than queued and latency remains current.
 
-## Visual parity
+## D. Receiver lifecycle
 
-- [ ] Compare Pass 46 and Pass 47 at identical Clip/Gain/Cleanup/Density/Invert values.
-- [ ] Test X-FADE.
-- [ ] Test SOFT ADD.
-- [ ] Sweep MIX 0 -> 1.
-- [ ] Confirm dark/bright matte polarity is unchanged.
-- [ ] Capture a STENCIL and confirm stored-key behavior remains correct.
+- [ ] Start HUFF Syphon before opening the receiver; confirm bootstrap discovery still works.
+- [ ] Close receiver while streaming, wait, then reopen it.
+- [ ] Repeat receiver connect/disconnect several times.
+- [ ] Confirm no discoverable-but-black regression.
 
-## Scratch budget
+## E. Start / stop / restart
 
-- [ ] On landscape 1080p, stored stencil should report approximately 640x360.
-- [ ] On portrait 1080x1920, stored stencil should report approximately 360x640, not a tall 640x1000+ surface.
+- [ ] Start → Stop → Start at 60 FPS at least five times.
+- [ ] Stop while receiver is connected.
+- [ ] Stop while no receiver is connected.
+- [ ] Close HUFF while Syphon is streaming and confirm no orphan process/publisher state.
 
-## Regression
+## F. 720p30 safe mode
 
-- [ ] Solarize THRESHOLD unchanged.
-- [ ] Solarize LUMA QUANTIZE unchanged.
-- [ ] Solarize FLUIDITY unchanged.
-- [ ] Feedback/Persistence unchanged.
-- [ ] Flow unchanged.
-- [ ] No frame holding/skipping/strobe has been introduced.
+- [ ] Select 30 FPS and confirm worker-direct can run at 720p30.
+- [ ] Confirm the same receiver lifecycle behavior.
+
+## G. Forced fallback
+
+- [ ] Force/unavailable Worker transport (or otherwise trigger the existing fallback path).
+- [ ] Confirm status changes to `main-socket fallback` / equivalent.
+- [ ] With 60 FPS selected, confirm the effective streaming status reports **1280×720 @ 30 fps**.
+- [ ] Confirm moving output continues instead of stopping/going black.
+- [ ] Stop and restart; confirm HUFF makes a fresh worker-direct attempt and returns to selected 60 FPS when healthy.
+
+## H. Long run
+
+- [ ] Run 720p60 worker-direct for at least 30 minutes with moving video.
+- [ ] Include several minutes of heavy Feedback/Luma/Solarize use.
+- [ ] Confirm no increasing latency, runaway memory, frozen worker, socket buildup, or lifecycle instability.
+
+## Acceptance
+
+Accept Pass 51 if 720p60 is materially smoother than Pass 50 without weakening Pass 49/50 stability, and if any direct-transport failure reliably degrades to current 720p30 output rather than accumulating latency or losing Syphon publication.

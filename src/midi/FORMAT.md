@@ -191,3 +191,14 @@ Pass 39M note: Feedback keeps the original `feedback`, `persistence`, `fbX`, `fb
 
 
 > **Pass 41A playback note:** `historyFrames` is the public decoded-history control and is clamped to a strict 192 MiB FrameRing budget. At 1080p the maximum is 24 RGBA snapshots. Legacy `quality` mappings remain valid as a hidden alias but no longer change mirror preview JPEG quality/FPS. `processResolution` (`auto`, `720p`, `1080p`) and `sourceFit` (`stretch`, `fit`, `fill`, `one-to-one`) are select controls rather than numeric ranges.
+
+
+### Pass 48 select values
+
+Select controls remain addressable through the existing mapping/state path. Current values:
+
+| ID | Values |
+|----|--------|
+| `layerPriority` | `scan`, `glitch` |
+| `globalMixCurve` | `linear`, `smooth`, `punch` |
+| `lumaKeyFade` | `xfade`, `add`, `lighten`, `darken`, `multiply`, `overlay`, `hardlight`, `difference` |

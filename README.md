@@ -1,4 +1,4 @@
-> **Pass 47 candidate:** LIVE/COMPOSITE Luma now attempts a self-calibrating bounded WebGL 1 keyed-patch path before the accepted CPU fallback. The path is enabled only when the actual WebGL-to-Canvas2D alpha handoff matches the established key composite, and Luma scratch sizing is now bounded for portrait as well as landscape sources. See `LUMA_LIVE_GPU_ACCELERATION_AUDIT.md`.
+> **Pass 51 candidate:** HUFF Classic Syphon is now a fixed 1280×720 output with 60 fps as the primary worker-direct target and 30 fps as the safe fallback. Pass 51 pipelines at most two native frames so browser readback for the next frame can overlap native publication of the previous frame. See `SYPHON_720P60_PIPELINE_AUDIT.md`.
 
 
 
@@ -366,6 +366,41 @@ When enabled, tile placement is biased toward radial clusters rather than unifor
 | **SPEED** | 0–15 | Speed of cluster centre physics simulation. 0 = static positions. |
 | **INERTIA** | 0.01–0.99 | How much cluster centres carry momentum between frames. High inertia = smooth slow movement. Low = jittery. |
 
+### Layer Priority Group
+
+Layer Priority is intentionally simple in Pass 48. It decides the stable paint order between the Corrupt/Luma contribution and Scanlines.
+
+| Control | Options | Description |
+|---------|---------|-------------|
+| **PRIORITY** | SCAN TOP / CORRUPT TOP | Select which front-stage family is painted last. The old render-frame ALTERNATE/NEUTRAL and PULSE modes are removed. |
+
+### Luma Key Group
+
+Pipeline Luma uses a luminance-derived key to restore/reveal clean source imagery or gate front-stage effect objects. For `TARGET=COMPOSITE`, Pass 48 expands the keyed-patch compositing vocabulary without changing Clip/Gain/Cleanup/Density or the Pass 47 LIVE matte path.
+
+| Control | Options / Range | Description |
+|---------|-----------------|-------------|
+| **TARGET** | COMPOSITE / CORRUPT / SCAN | Choose whether the key composites clean imagery or gates an effect family. |
+| **KEY SRC** | LIVE / STENCIL | Derive the key continuously or use the captured stencil. |
+| **MIX** | 0–1 | Overall keyed contribution. |
+| **INVERT** | toggle | Reverse key polarity. |
+| **GAIN / CLEANUP / DENSITY** | continuous | Shape the key control signal. |
+| **FADE** | X-FADE / SOFT ADD / LIGHTEN / DARKEN / MULTIPLY / OVERLAY / HARD LIGHT / DIFFERENCE | `X-FADE` and `SOFT ADD` preserve the established modes. The additional choices change only how the keyed clean patch combines with the process image. |
+
+### Global Mix Group
+
+Global Mix reintroduces the clean source at a selected point in the fixed Classic chain. Pass 48 keeps the same blend modes and insertion stages, but adds three response profiles for the existing Mix control.
+
+| Control | Options / Range | Description |
+|---------|-----------------|-------------|
+| **ON** | toggle | Enable Global Mix. |
+| **BLEND** | Canvas blend modes | Relationship between the clean source and current process image. |
+| **MIX** | 0–1 | User-facing mix amount. |
+| **CURVE** | LINEAR / SMOOTH / PUNCH | LINEAR is exact legacy behavior; SMOOTH eases both endpoints; PUNCH makes clean imagery enter earlier. |
+| **POSITION** | BEFORE FB / AFTER FB / AFTER FLOW / FINAL | Determines whether the clean contribution enters recursion or is introduced farther downstream. |
+
+The curve is only an amount mapping; it does **not** allocate another buffer or add another compositing stage.
+
 ### Solarize Group
 
 Solarize now has two deliberately separate algorithms. **THRESHOLD** is the accepted HUFF Classic behavior and remains the compatibility default. **LUMA QUANTIZE** is a Magic DaVE-inspired luminance-quantisation mode that preserves the source chroma structure while reducing the number of luminance levels.
@@ -592,17 +627,18 @@ Syphon lets huff share its canvas as a named texture that any Syphon-enabled app
 
 **Usage:**
 1. Click the **SYPHON** button in the top bar.
-2. Set the output resolution (default: 1280×720).
-3. Set the FPS cap (default: 30).
-4. Click **▶ Start**. The sender appears as `huff` in any Syphon receiver.
-5. Click **■ Stop** to close the server.
+2. Choose **60 FPS — 1280×720** (default) or **30 FPS — 1280×720 (safe)**. HUFF Classic Syphon no longer exposes 1080p.
+3. Click **▶ Start**. The sender appears as `huff` in any Syphon receiver.
+4. Click **■ Stop** to close the server.
 
 **Technical notes:**
 - The Syphon.framework is bundled inside the huff app bundle — no separate installation is needed.
-- The pipeline is: worker-assisted canvas scaling/readback → raw RGBA bytes on a dedicated `syphon-sender` WebSocket → Rust `syphon::push_pixels()` → reusable `MTLTexture` upload → `SyphonMetalServer.publishFrameTexture()`.
+- Preferred Pass 51 path: canvas snapshot → Worker scale/readback → Worker-owned `syphon-sender` WebSocket → Rust `syphon::push_pixels()` → reusable `MTLTexture` → `SyphonMetalServer`. The Worker permits at most two native frames outstanding.
+- If Worker WebSocket ownership is unavailable or unstable, HUFF automatically falls back to the accepted Pass 49 main-owned WebSocket route.
 - Width and height are declared once in the socket hello message; normal frames contain raw RGBA only. Legacy `HUFFSYPH` packets remain accepted for compatibility.
-- Capture and Metal upload pause while no Syphon receiver is attached, and one publish acknowledgement permits the next frame.
-- This still uses a CPU round-trip (JS pixel readback). Frame rate is throttled to the configured FPS cap to limit the readback cost.
+- Before a receiver is confirmed, HUFF publishes one bootstrap frame per second; after attachment it runs at the selected profile rate.
+- In worker-direct mode, the Worker owns a strict two-credit native pipeline: it may prepare/send frame B while native publication completes frame A, but a third output opportunity is dropped until an acknowledgement restores credit. Safe fallback remains one-frame-in-flight.
+- Classic Syphon still performs CPU pixel readback and native Metal upload; Pass 51 improves overlap/latency but is not zero-copy. If worker-direct fails while 60 fps is requested, HUFF automatically runs the accepted fallback at 720p30.
 
 ### Spout (Windows)
 
@@ -801,10 +837,10 @@ huff/
 ## Caveats and Known Limitations
 
 **CPU pixel readback for Syphon and Spout.**
-Both output routes use `getImageData()` to read pixels from the canvas back to the CPU, then send them over the local WebSocket to Rust, which uploads them to a GPU texture. This is a full GPU→CPU→GPU round trip per frame. It works well at 720p/30fps but is not zero-copy. GPU-direct sharing (sharing the WebGL texture handle directly with Syphon/Spout) is not feasible in the Tauri WebView context in this release.
+Both output routes use `getImageData()` to read pixels from the canvas back to the CPU, then send them over the local WebSocket to Rust, which uploads them to a GPU texture. This is a full GPU→CPU→GPU round trip per frame. It is not zero-copy; Pass 51 targets 720p60 only through the optimized worker-direct route and retains 720p30 as the safe path. GPU-direct sharing (sharing the WebGL texture handle directly with Syphon/Spout) is not feasible in the Tauri WebView context in this release.
 
-**Frame rate is throttled for Syphon/Spout.**
-The FPS cap in the Syphon/Spout panels defaults to 30 fps and should not be set higher than your actual canvas frame rate. Sending faster than the canvas draws produces duplicate frames and wastes CPU.
+**Frame rate is bounded for native outputs.**
+Syphon is fixed to 1280×720 in HUFF Classic. 60 fps is the primary worker-direct target; 30 fps is the safe user-selectable mode and automatic transport fallback. Spout retains its separate FPS controls. Sending native output faster than the canvas can actually produce new frames still wastes CPU/GPU bandwidth.
 
 **Memory grows with resolution.**
 The 192 MB ring cap is enforced by frame count, not pixel size. At 4K resolution, the ring effectively holds only a few frames regardless of the quality setting, and the datamosh effect loses temporal depth. 720p or 1080p is the practical sweet spot.

@@ -1,0 +1,61 @@
+HUFF CLASSIC — OPTIMIZATION PASS 50
+===================================
+
+TITLE
+Syphon Worker-Owned Transport Optimization
+
+BASELINE
+Accepted Pass 49 Syphon Stability Contract, carried forward on the Pass 48 code lineage.
+
+GOAL
+Remove one large browser-thread transfer from the preferred Syphon path without weakening Pass 49 stability.
+
+PASS 49 FALLBACK PATH
+final canvas
+ -> ImageBitmap
+ -> Worker scale/readback
+ -> full RGBA ArrayBuffer back to controls WebView
+ -> controls WebSocket
+ -> Rust
+ -> Metal texture
+ -> Syphon
+
+PASS 50 PREFERRED PATH
+final canvas
+ -> ImageBitmap
+ -> Worker scale/readback
+ -> Worker-owned WebSocket
+ -> Rust
+ -> Metal texture
+ -> Syphon
+
+The full RGBA buffer no longer returns to the controls WebView on the preferred path. Only compact state/acknowledgement metadata crosses Worker -> controls.
+
+AUTOMATIC FALLBACK
+Worker-direct transport is opportunistic, not mandatory. HUFF returns to the accepted Pass 49 main-owned socket path when:
+- Worker/OffscreenCanvas is unavailable;
+- Worker WebSocket startup exceeds 1.8 seconds;
+- Worker WebSocket errors or closes;
+- the Worker crashes;
+- ImageBitmap/Worker capture fails;
+- an in-flight acknowledgement times out.
+
+A later Start begins with a fresh attempt at Worker-direct transport.
+
+PROTECTED
+- Pass 49 profile contract;
+- explicit Syphon lifecycle;
+- 1 fps bootstrap publication;
+- one-frame-in-flight gating;
+- native raw-RGBA protocol;
+- native Metal/Syphon implementation;
+- all creative effects, Flow, Feedback/Persistence, Luma and Solarize;
+- Spout.
+
+NO FRAME-CADENCE TRICK
+No new every-N-frame gate, sample/hold, playback-rate change or independent Worker render clock is introduced.
+
+RUNTIME GATE
+The target Mac must confirm both:
+1. worker-direct mode remains stable in normal use;
+2. forced/unavailable Worker transport falls back cleanly to the Pass 49 main-socket path.

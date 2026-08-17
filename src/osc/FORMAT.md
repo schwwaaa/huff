@@ -152,6 +152,9 @@ Use for huff's action buttons: `refreshBtn` (reseed) and `resetMotionBtn` (reset
 | ID | Values |
 |----|--------|
 | `solarizeMode` | `threshold`, `luma-quantize` |
+| `layerPriority` | `scan`, `glitch` |
+| `globalMixCurve` | `linear`, `smooth`, `punch` |
+| `lumaKeyFade` | `xfade`, `add`, `lighten`, `darken`, `multiply`, `overlay`, `hardlight`, `difference` |
 
 ### Toggles (checked = ON)
 

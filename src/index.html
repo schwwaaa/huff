@@ -906,22 +906,15 @@
         <div id="syphonStatus">Not started — click Start to publish frames via Syphon.</div>
 
         <div class="syph-row">
-          <span class="syph-label">Resolution</span>
-          <input type="number" id="syphW" value="1280" min="64" max="3840" step="1" style="width:64px">
-          <span style="color:rgba(255,255,255,.3);font-size:11px">×</span>
-          <input type="number" id="syphH" value="720"  min="64" max="2160" step="1" style="width:64px">
-          <span style="color:rgba(255,255,255,.25);font-size:10px">(match your canvas window)</span>
-        </div>
-
-        <div class="syph-row">
-          <span class="syph-label">FPS cap</span>
-          <select id="syphFps">
-            <option value="60">60</option>
-            <option value="30" selected>30</option>
-            <option value="24">24</option>
-            <option value="15">15</option>
+          <span class="syph-label">Output rate</span>
+          <select id="syphProfile">
+            <option value="720p60" selected>60 FPS — 1280×720</option>
+            <option value="720p30">30 FPS — 1280×720 (safe)</option>
           </select>
-          <span style="color:rgba(255,255,255,.25);font-size:10px">frames/sec sent to Syphon</span>
+        </div>
+        <div class="syph-row" style="margin-top:-3px">
+          <span class="syph-label"></span>
+          <span id="syphonProfileHint" style="color:rgba(255,255,255,.25);font-size:10px">HUFF Classic Syphon is fixed at 1280×720. 60 fps uses worker-direct transport; fallback automatically runs at 30 fps.</span>
         </div>
 
         <div class="syph-row" style="margin-top:6px">
@@ -1559,19 +1552,12 @@
                 <div class="group-row">
                     <div class="ctrl">
                         <label>PRIORITY</label>
-                        <select id="layerPriority" style="font-size:10px;padding:1px 2px">
+                        <select id="layerPriority" style="font-size:10px;padding:1px 2px" title="Stable paint order only. SCAN TOP draws Scanlines last; CORRUPT TOP draws Corrupt/Luma last.">
                             <option value="scan">SCAN TOP</option>
                             <option value="glitch">CORRUPT TOP</option>
-                            <option value="neutral" title="Alternates SCAN TOP and CORRUPT TOP every render frame. This is intentionally flickery, not a neutral/stable mix.">ALTERNATE</option>
-                            <option value="pulse" title="Alternates SCAN TOP and CORRUPT TOP at PULSE SPEED.">PULSE ORDER</option>
                         </select>
                     </div>
                     <span id="layerPriorityState" style="font-size:9px;color:#000;background:#d4d0c8;border:1px solid #808080;padding:1px 4px;font-family:'Share Tech Mono',monospace;white-space:nowrap">STABLE · SCAN TOP</span>
-                    <div class="ctrl">
-                        <label>PULSE SPEED</label>
-                        <input id="layerPulseSpeed" type="range" min="0.2" max="12" step="0.1" value="2">
-                        <span class="val" id="layerPulseSpeedVal">2.0</span>
-                    </div>
                 </div>
                 </div>
             </div>
@@ -1624,9 +1610,15 @@
                     </div>
                     <div class="ctrl">
                         <label>FADE</label>
-                        <select id="lumaKeyFade" title="INDIGO-inspired Luma fade modes. X-FADE preserves normal keyed replacement. SOFT ADD adapts additive fading with bounded Screen compositing to avoid the blowout of Canvas2D lighter.">
+                        <select id="lumaKeyFade" title="Key-fill compositing. X-FADE and ADD follow INDIGO's Luma-key model; the additional blend fades are HUFF Classic extensions applied to the same keyed patch.">
                             <option value="xfade">X-FADE</option>
                             <option value="add">SOFT ADD</option>
+                            <option value="lighten">LIGHTEN</option>
+                            <option value="darken">DARKEN</option>
+                            <option value="multiply">MULTIPLY</option>
+                            <option value="overlay">OVERLAY</option>
+                            <option value="hardlight">HARD LIGHT</option>
+                            <option value="difference">DIFFERENCE</option>
                         </select>
                     </div>
                 </div>
@@ -1846,6 +1838,14 @@
                         <label>MIX</label>
                         <input id="globalMixAmt" type="range" min="0" max="1" step="0.01" value="0">
                         <span class="val" id="globalMixAmtVal">0.00</span>
+                    </div>
+                    <div class="ctrl">
+                        <label>CURVE</label>
+                        <select id="globalMixCurve" title="HUFF fader response only; does not add a render pass. LINEAR preserves the established mix. SMOOTH eases both ends. PUNCH brings the clean mix in earlier.">
+                            <option value="linear">LINEAR</option>
+                            <option value="smooth">SMOOTH</option>
+                            <option value="punch">PUNCH</option>
+                        </select>
                     </div>
                     <div class="ctrl">
                         <label>POSITION</label>
@@ -2352,14 +2352,21 @@
     <script>
     (() => {
         'use strict';
-        // HUFF Classic Syphon transport
+        // HUFF Classic Syphon transport — accepted Pass 49 stability contract,
+        // Pass 50 Worker-owned WebSocket, and Pass 51 bounded 720p60 pipeline.
         //
-        // Main path when supported:
-        //   p5 canvas → ImageBitmap → Worker/OffscreenCanvas scale + readback
-        //   → one raw RGBA frame in flight → Rust → persistent Metal texture
+        // Preferred path:
+        //   p5 canvas → ImageBitmap → Worker/OffscreenCanvas scale + RGBA readback
+        //   → Worker-owned WebSocket → Rust → persistent Metal texture
         //   → SyphonMetalServer
         //
-        // Older WKWebViews retain a bounded main-thread Canvas2D fallback.
+        // Stability fallback (Pass 49 contract):
+        //   p5 canvas → ImageBitmap → Worker scale/readback → ArrayBuffer to main
+        //   → main-thread WebSocket → Rust → Metal → Syphon
+        //
+        // Older WKWebViews can still fall back further to bounded main-thread
+        // Canvas2D scale/readback. Worker-direct is capped at two outstanding
+        // native frames; all fallback paths remain one-frame-in-flight.
 
         const invoke     = window.__TAURI__?.invoke;
         const overlay    = document.getElementById('syphonOverlay');
@@ -2369,9 +2376,23 @@
         const pill       = document.getElementById('syphonPill');
         const syphonBtn  = document.getElementById('syphonBtn');
         const frameLabel = document.getElementById('syphonFrameCount');
-        const wInput     = document.getElementById('syphW');
-        const hInput     = document.getElementById('syphH');
-        const fpsSelect  = document.getElementById('syphFps');
+        const profileSelect = document.getElementById('syphProfile');
+        const profileHint = document.getElementById('syphonProfileHint');
+
+        const OUTPUT_PROFILES = Object.freeze({
+            '720p60': Object.freeze({ width: 1280, height: 720, fps: 60, hint: 'Primary Classic target: 1280×720 / 60 fps. Requires healthy worker-direct transport.' }),
+            '720p30': Object.freeze({ width: 1280, height: 720, fps: 30, hint: 'Safe Classic mode: 1280×720 / 30 fps. Also used automatically if worker-direct transport falls back.' }),
+        });
+
+        const LIFECYCLE = Object.freeze({
+            OFF: 'OFF',
+            STARTING: 'STARTING',
+            WAITING: 'WAITING',
+            STREAMING: 'STREAMING',
+            RECOVERING: 'RECOVERING',
+            STOPPING: 'STOPPING',
+        });
+        const TRANSPORT = Object.freeze({ NONE: 'none', WORKER: 'worker-direct', MAIN: 'main-socket' });
 
         const openModal  = () => overlay.classList.add('open');
         const closeModal = () => overlay.classList.remove('open');
@@ -2381,6 +2402,15 @@
         overlay.addEventListener('click', e => { if (e.target === overlay) closeModal(); });
         window.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); }, true);
 
+        function selectedProfile() {
+            return OUTPUT_PROFILES[profileSelect?.value] || OUTPUT_PROFILES['720p60'];
+        }
+        function refreshProfileHint() {
+            if (profileHint) profileHint.textContent = selectedProfile().hint;
+        }
+        profileSelect?.addEventListener('change', refreshProfileHint);
+        refreshProfileHint();
+
         if (!invoke) {
             statusBox.textContent = 'Syphon unavailable outside Tauri app.';
             statusBox.className = 'error';
@@ -2388,32 +2418,54 @@
             return;
         }
 
-        let active = false;
-        let receiverConnected = false;
+        let lifecycle = LIFECYCLE.OFF;
+        let lifecycleGeneration = 0;
+        let transportMode = TRANSPORT.NONE;
+        let transportReady = false;
+        let workerTransportAttempted = false;
+        let workerTransportFallbacks = 0;
+        let transportFallbackTimer = null;
+
         let rafId = null;
         let lastTs = 0;
         let outputW = 1280;
         let outputH = 720;
+        let requestedOutputFps = 60;
+        let outputFps = 60;
         let sourceCanvas = null;
         let nativeFrames = 0;
         let bootstrapFrames = 0;
-        let outputFps = parseInt(fpsSelect.value, 10) || 30;
         let lastAckAt = 0;
         let statePollTimer = null;
-        let lifecycleGeneration = 0;
-        let startPending = false;
-        let stopPending = false;
-        let shuttingDown = false;
+        let statePollBusy = false;
+        let receiverConnected = false;
 
-        // Output telemetry is sampled only while the existing backtick profiler
-        // is visible. Keeping the counters on window lets canvas.js report the
-        // complete browser → Worker → WebSocket → native publish budget without
-        // coupling Syphon scheduling to the p5 render clock.
+        // Pass 51: the accepted one-frame gate remains authoritative for the
+        // Pass 49 main-socket fallback. Worker-direct transport uses a bounded
+        // two-credit native pipeline owned by the Worker instead.
+        let frameInFlight = false;
+        let frameStartedAt = 0;
+        let workerCaptureInFlight = false;
+        let workerCanAccept = true;
+        let workerOutstanding = 0;
+        let nextFrameId = 1;
+
+        let mainWS = null;
+        let mainWSReady = false;
+
+        let worker = null;
+        let workerReady = false;
+        let workerDisabled = false;
+
+        let fallbackCanvas = null;
+        let fallbackCtx = null;
+
         const syphonTelemetry = window.__huffSyphonTelemetry = {
             captureMs: 0,
             captureSamples: 0,
             workerDrawMs: 0,
             workerReadMs: 0,
+            workerSendMs: 0,
             workerSamples: 0,
             endToEndMs: 0,
             endToEndSamples: 0,
@@ -2422,59 +2474,70 @@
             nativeSamples: 0,
             inFlightSkips: 0,
             bufferedSkips: 0,
+            capacitySkips: 0,
+            workerOutstanding: 0,
+            workerPeakOutstanding: 0,
             uiUpdates: 0,
+            workerDirectFrames: 0,
+            mainSocketFrames: 0,
+            workerTransportFallbacks: 0,
         };
         function profileAdd(name, amount = 1) {
             if (!window.__huffProfilerActive) return;
             syphonTelemetry[name] = (syphonTelemetry[name] || 0) + amount;
         }
 
-        // ACKs arrive at the selected output rate. Updating multiple DOM nodes
-        // for every ACK adds avoidable main-thread work, so UI refreshes are
-        // coalesced to four per second while transport acknowledgements remain
-        // per-frame and unchanged.
         const DISPLAY_PERIOD_MS = 250;
+        const BOOTSTRAP_FPS = 1;
+        const WORKER_TRANSPORT_TIMEOUT_MS = 1800;
+        const ACK_TIMEOUT_MS = 2500;
         let displayDirty = true;
         let lastDisplayAt = -Infinity;
         let lastStatusText = '';
         let lastFrameText = '';
         let lastStatusClass = '';
 
-        // Some Syphon clients discover the server before they fully attach to
-        // its current surface. A strict hasClients gate on both the browser and
-        // native sides can therefore leave a discoverable source permanently
-        // black with zero published frames. Keep a very low-rate bootstrap
-        // publication alive until a receiver is confirmed, then switch to the
-        // selected output frame rate.
-        const BOOTSTRAP_FPS = 1;
+        function isRunningLifecycle() {
+            return lifecycle === LIFECYCLE.STARTING
+                || lifecycle === LIFECYCLE.WAITING
+                || lifecycle === LIFECYCLE.STREAMING
+                || lifecycle === LIFECYCLE.RECOVERING;
+        }
 
-        let syphWS = null;
-        let wsReady = false;
-        let frameInFlight = false;
-        let frameStartedAt = 0;
-        let nextFrameId = 1;
-
-        let worker = null;
-        let workerReady = false;
-        let workerDisabled = false;
-
-        let fallbackCanvas = null;
-        let fallbackCtx = null;
-        let statePollBusy = false;
+        function setLifecycle(next) {
+            lifecycle = next;
+            if (profileSelect) profileSelect.disabled = next !== LIFECYCLE.OFF;
+            displayDirty = true;
+        }
 
         function updateDisplay(force = false) {
-            if (!active) return;
+            if (lifecycle === LIFECYCLE.OFF) return;
             displayDirty = true;
             const now = performance.now();
             if (!force && now - lastDisplayAt < DISPLAY_PERIOD_MS) return;
 
-            const statusText = receiverConnected
-                ? `Syphon active — receiver connected — streaming ${outputW}×${outputH}.`
-                : `Syphon active — waiting for a receiver. Publishing a 1 fps bootstrap frame.`;
-            const statusClass = 'active';
-            const mode = workerReady ? 'worker' : 'main-thread fallback';
+            let statusText = '';
+            let statusClass = 'active';
+            if (lifecycle === LIFECYCLE.STARTING) {
+                statusText = 'Starting Syphon…';
+            } else if (lifecycle === LIFECYCLE.RECOVERING) {
+                statusText = 'Syphon active — recovering output transport…';
+            } else if (lifecycle === LIFECYCLE.STOPPING) {
+                statusText = 'Stopping Syphon…';
+            } else if (receiverConnected) {
+                statusText = `Syphon active — receiver connected — streaming ${outputW}×${outputH} @ ${outputFps} fps.`;
+            } else {
+                statusText = 'Syphon active — waiting for a receiver. Publishing a 1 fps bootstrap frame.';
+            }
+
+            const transportLabel = transportMode === TRANSPORT.WORKER
+                ? 'worker-direct'
+                : transportMode === TRANSPORT.MAIN
+                    ? (workerReady ? 'main-socket fallback' : 'main-thread fallback')
+                    : 'transport pending';
             const bootstrap = receiverConnected ? '' : ` · ${bootstrapFrames} bootstrap`;
-            const frameText = `${nativeFrames} frames published${bootstrap} · ${mode}`;
+            const fallback = workerTransportFallbacks > 0 ? ` · ${workerTransportFallbacks} transport fallback` : '';
+            const frameText = `${nativeFrames} frames published${bootstrap} · ${transportLabel}${fallback}`;
 
             if (statusText !== lastStatusText) {
                 statusBox.textContent = statusText;
@@ -2488,7 +2551,6 @@
                 frameLabel.textContent = frameText;
                 lastFrameText = frameText;
             }
-
             displayDirty = false;
             lastDisplayAt = now;
             profileAdd('uiUpdates');
@@ -2499,26 +2561,76 @@
         }
 
         function applyRuntimeState(state) {
-            if (!state || !active) return;
+            if (!state || !isRunningLifecycle()) return;
             const nextConnected = !!state.hasClients;
             const connectionChanged = nextConnected !== receiverConnected;
             receiverConnected = nextConnected;
             nativeFrames = Number(state.frames) || 0;
+            if (transportReady && lifecycle !== LIFECYCLE.STARTING) {
+                setLifecycle(receiverConnected ? LIFECYCLE.STREAMING : LIFECYCLE.WAITING);
+            }
             updateDisplay(connectionChanged);
         }
 
-        function closeSyphWS() {
-            wsReady = false;
-            frameInFlight = false;
-            const socket = syphWS;
-            syphWS = null;
+        function handleAck(message, releaseFallbackFrame = true) {
+            const now = performance.now();
+            if (releaseFallbackFrame) frameInFlight = false;
+            lastAckAt = now;
+            const nextConnected = !!message.hasClients;
+            const connectionChanged = nextConnected !== receiverConnected;
+            receiverConnected = nextConnected;
+            nativeFrames = Number(message.frames) || nativeFrames;
+            const publishedCount = Math.max(0, Number(message.publishedFrames) || (message.published ? 1 : 0));
+            if (!receiverConnected && publishedCount > 0) bootstrapFrames += publishedCount;
+
+            const profileSamples = Math.max(0, Number(message.profileSamples) || (message.profiled ? 1 : 0));
+            if (window.__huffProfilerActive && profileSamples > 0) {
+                profileAdd('workerDrawMs', Number(message.drawMs) || 0);
+                profileAdd('workerReadMs', Number(message.readMs) || 0);
+                profileAdd('workerSendMs', Number(message.sendMs) || 0);
+                profileAdd('workerSamples', profileSamples);
+            }
+            if (window.__huffProfilerActive) {
+                const pipeSamples = Math.max(0, Number(message.endToEndSamples) || 0);
+                if (pipeSamples > 0) {
+                    profileAdd('endToEndMs', Number(message.endToEndMs) || 0);
+                    profileAdd('endToEndSamples', pipeSamples);
+                } else if (releaseFallbackFrame && frameStartedAt > 0) {
+                    profileAdd('endToEndMs', Math.max(0, now - frameStartedAt));
+                    profileAdd('endToEndSamples');
+                }
+                const nativeSamples = Math.max(0, Number(message.nativeSamples) || (message.nativeSample ? 1 : 0));
+                if (nativeSamples > 0) {
+                    profileAdd('nativeUploadMs', (Number(message.nativeUploadUs) || 0) / 1000);
+                    profileAdd('nativePublishMs', (Number(message.nativePublishUs) || 0) / 1000);
+                    profileAdd('nativeSamples', nativeSamples);
+                }
+            }
+            if (transportMode === TRANSPORT.WORKER) {
+                profileAdd('workerDirectFrames', Math.max(1, Number(message.ackedFrames) || 1));
+            }
+            if (transportMode === TRANSPORT.MAIN) profileAdd('mainSocketFrames');
+            if (transportReady) setLifecycle(receiverConnected ? LIFECYCLE.STREAMING : LIFECYCLE.WAITING);
+            updateDisplay(connectionChanged);
+        }
+
+        function wsURL() {
+            return (typeof __getWSURL__ === 'function')
+                ? __getWSURL__()
+                : (window.WS_MIRROR_URL || 'ws://127.0.0.1:8787');
+        }
+
+        function closeMainSocket() {
+            mainWSReady = false;
+            const socket = mainWS;
+            mainWS = null;
             if (socket) {
                 try { socket.onopen = socket.onmessage = socket.onerror = socket.onclose = null; } catch {}
                 try { socket.close(); } catch {}
             }
         }
 
-        function handleSocketMessage(event) {
+        function handleMainSocketMessage(event) {
             if (typeof event.data !== 'string') return;
             try {
                 const message = JSON.parse(event.data);
@@ -2526,63 +2638,43 @@
                     applyRuntimeState(message);
                     return;
                 }
-                if (message.type === 'syphon-ack') {
-                    const now = performance.now();
-                    frameInFlight = false;
-                    lastAckAt = now;
-                    const nextConnected = !!message.hasClients;
-                    const connectionChanged = nextConnected !== receiverConnected;
-                    receiverConnected = nextConnected;
-                    nativeFrames = Number(message.frames) || nativeFrames;
-                    if (!receiverConnected && message.published) bootstrapFrames++;
-
-                    if (window.__huffProfilerActive && frameStartedAt > 0) {
-                        profileAdd('endToEndMs', Math.max(0, now - frameStartedAt));
-                        profileAdd('endToEndSamples');
-                        if (message.nativeSample) {
-                            profileAdd('nativeUploadMs', (Number(message.nativeUploadUs) || 0) / 1000);
-                            profileAdd('nativePublishMs', (Number(message.nativePublishUs) || 0) / 1000);
-                            profileAdd('nativeSamples');
-                        }
-                    }
-                    updateDisplay(connectionChanged);
-                }
+                if (message.type === 'syphon-ack') handleAck(message);
             } catch {}
         }
 
-        function ensureSyphWS() {
-            if (!active) return;
-            if (syphWS && (syphWS.readyState === WebSocket.OPEN || syphWS.readyState === WebSocket.CONNECTING)) return;
-
-            const url = (typeof __getWSURL__ === 'function')
-                ? __getWSURL__()
-                : (window.WS_MIRROR_URL || 'ws://127.0.0.1:8787');
-            const socket = new WebSocket(url);
-            syphWS = socket;
+        function ensureMainSocket() {
+            if (!isRunningLifecycle() || transportMode !== TRANSPORT.MAIN) return;
+            if (mainWS && (mainWS.readyState === WebSocket.OPEN || mainWS.readyState === WebSocket.CONNECTING)) return;
+            const socket = new WebSocket(wsURL());
+            mainWS = socket;
             socket.binaryType = 'arraybuffer';
-            socket.onmessage = handleSocketMessage;
+            socket.onmessage = handleMainSocketMessage;
             socket.onopen = () => {
-                if (socket !== syphWS || !active) {
+                if (socket !== mainWS || !isRunningLifecycle() || transportMode !== TRANSPORT.MAIN) {
                     try { socket.close(); } catch {}
                     return;
                 }
-                wsReady = true;
+                mainWSReady = true;
+                transportReady = true;
                 socket.send(JSON.stringify({
-                    type: 'hello',
-                    role: 'syphon-sender',
-                    width: outputW,
-                    height: outputH,
+                    type: 'hello', role: 'syphon-sender', width: outputW, height: outputH,
                 }));
+                setLifecycle(receiverConnected ? LIFECYCLE.STREAMING : LIFECYCLE.WAITING);
+                updateDisplay(true);
             };
             socket.onclose = () => {
-                if (socket === syphWS) {
-                    wsReady = false;
-                    syphWS = null;
+                if (socket === mainWS) {
+                    mainWSReady = false;
+                    mainWS = null;
+                    transportReady = false;
                     frameInFlight = false;
+                    if (isRunningLifecycle() && transportMode === TRANSPORT.MAIN) {
+                        setLifecycle(LIFECYCLE.RECOVERING);
+                    }
                 }
             };
             socket.onerror = () => {
-                if (socket === syphWS) wsReady = false;
+                if (socket === mainWS) mainWSReady = false;
             };
         }
 
@@ -2598,8 +2690,16 @@
             return sourceCanvas;
         }
 
+        function clearWorkerTransportTimer() {
+            if (transportFallbackTimer) {
+                clearTimeout(transportFallbackTimer);
+                transportFallbackTimer = null;
+            }
+        }
+
         function destroyWorker() {
             workerReady = false;
+            clearWorkerTransportTimer();
             if (worker) {
                 try { worker.onmessage = worker.onerror = null; } catch {}
                 try { worker.postMessage({ type: 'release' }); } catch {}
@@ -2608,8 +2708,59 @@
             worker = null;
         }
 
+        function activateMainTransport(reason = 'worker transport unavailable') {
+            if (!isRunningLifecycle()) return;
+            clearWorkerTransportTimer();
+            if (transportMode === TRANSPORT.WORKER || workerTransportAttempted) {
+                workerTransportFallbacks++;
+                syphonTelemetry.workerTransportFallbacks = workerTransportFallbacks;
+            }
+            transportMode = TRANSPORT.MAIN;
+            transportReady = false;
+            outputFps = Math.min(requestedOutputFps, 30);
+            frameInFlight = false;
+            workerCaptureInFlight = false;
+            workerCanAccept = false;
+            workerOutstanding = 0;
+            syphonTelemetry.workerOutstanding = 0;
+            try { worker?.postMessage({ type: 'disable-transport' }); } catch {}
+            closeMainSocket();
+            setLifecycle(LIFECYCLE.RECOVERING);
+            console.warn(`[huff syphon] using Pass 49 main-socket fallback: ${reason}`);
+            ensureMainSocket();
+            updateDisplay(true);
+        }
+
+        function beginWorkerTransport() {
+            if (!worker || !workerReady || workerDisabled || !isRunningLifecycle()) {
+                activateMainTransport('Worker unavailable');
+                return;
+            }
+            workerTransportAttempted = true;
+            transportMode = TRANSPORT.NONE;
+            transportReady = false;
+            setLifecycle(LIFECYCLE.RECOVERING);
+            try {
+                worker.postMessage({
+                    type: 'enable-transport',
+                    url: wsURL(),
+                    width: outputW,
+                    height: outputH,
+                });
+            } catch (error) {
+                activateMainTransport(`Worker WebSocket setup failed: ${error}`);
+                return;
+            }
+            clearWorkerTransportTimer();
+            transportFallbackTimer = setTimeout(() => {
+                if (!transportReady && isRunningLifecycle()) {
+                    activateMainTransport('Worker WebSocket timed out');
+                }
+            }, WORKER_TRANSPORT_TIMEOUT_MS);
+        }
+
         function ensureWorker() {
-            if (worker || workerDisabled) return workerReady;
+            if (worker || workerDisabled) return !!worker;
             const supported = typeof Worker !== 'undefined'
                 && typeof OffscreenCanvas !== 'undefined'
                 && typeof createImageBitmap === 'function';
@@ -2624,15 +2775,74 @@
                     const message = event.data || {};
                     if (message.type === 'configured') {
                         workerReady = true;
+                        beginWorkerTransport();
                         updateDisplay(true);
+                        return;
+                    }
+                    if (message.type === 'transport-open') {
+                        if (transportMode === TRANSPORT.MAIN) {
+                            try { worker?.postMessage({ type: 'disable-transport' }); } catch {}
+                            return;
+                        }
+                        clearWorkerTransportTimer();
+                        transportMode = TRANSPORT.WORKER;
+                        transportReady = true;
+                        outputFps = requestedOutputFps;
+                        workerCaptureInFlight = false;
+                        workerCanAccept = true;
+                        workerOutstanding = 0;
+                        syphonTelemetry.workerOutstanding = 0;
+                        setLifecycle(receiverConnected ? LIFECYCLE.STREAMING : LIFECYCLE.WAITING);
+                        updateDisplay(true);
+                        return;
+                    }
+                    if (message.type === 'transport-state') {
+                        applyRuntimeState(message);
+                        return;
+                    }
+                    if (message.type === 'transport-ack') {
+                        if (transportMode !== TRANSPORT.WORKER) return;
+                        workerOutstanding = Math.max(0, Number(message.outstanding) || 0);
+                        syphonTelemetry.workerOutstanding = workerOutstanding;
+                        syphonTelemetry.workerPeakOutstanding = Math.max(syphonTelemetry.workerPeakOutstanding || 0, workerOutstanding);
+                        handleAck(message, false);
+                        return;
+                    }
+                    if (message.type === 'frame-consumed') {
+                        workerCaptureInFlight = false;
+                        workerOutstanding = Math.max(0, Number(message.outstanding) || 0);
+                        workerCanAccept = message.canAccept !== false;
+                        syphonTelemetry.workerOutstanding = workerOutstanding;
+                        syphonTelemetry.workerPeakOutstanding = Math.max(syphonTelemetry.workerPeakOutstanding || 0, workerOutstanding);
+                        return;
+                    }
+                    if (message.type === 'transport-capacity') {
+                        workerOutstanding = Math.max(0, Number(message.outstanding) || 0);
+                        workerCanAccept = true;
+                        syphonTelemetry.workerOutstanding = workerOutstanding;
+                        return;
+                    }
+                    if (message.type === 'transport-busy') {
+                        workerCaptureInFlight = false;
+                        workerCanAccept = false;
+                        workerOutstanding = Math.max(0, Number(message.outstanding) || workerOutstanding);
+                        syphonTelemetry.workerOutstanding = workerOutstanding;
+                        profileAdd('bufferedSkips');
+                        return;
+                    }
+                    if (message.type === 'transport-failed') {
+                        if (transportMode !== TRANSPORT.MAIN) {
+                            activateMainTransport(message.message || 'Worker WebSocket failed');
+                        }
                         return;
                     }
                     if (message.type === 'error') {
                         console.warn('[huff syphon worker]', message.message);
+                        workerCaptureInFlight = false;
                         frameInFlight = false;
                         workerDisabled = true;
                         destroyWorker();
-                        updateDisplay(true);
+                        activateMainTransport(message.message || 'Worker processing failed');
                         return;
                     }
                     if (message.type !== 'pixels') return;
@@ -2640,28 +2850,29 @@
                     if (window.__huffProfilerActive && message.profiled) {
                         profileAdd('workerDrawMs', Number(message.drawMs) || 0);
                         profileAdd('workerReadMs', Number(message.readMs) || 0);
+                        profileAdd('workerSendMs', 0);
                         profileAdd('workerSamples');
                     }
-
-                    if (!active || !wsReady || syphWS?.readyState !== WebSocket.OPEN) {
+                    if (transportMode !== TRANSPORT.MAIN || !mainWSReady || mainWS?.readyState !== WebSocket.OPEN) {
                         frameInFlight = false;
                         return;
                     }
                     try {
-                        syphWS.send(message.buffer);
-                        // Rust sends syphon-ack after the frame is either
-                        // published or intentionally skipped. Keep the gate
-                        // closed until that acknowledgement arrives.
+                        mainWS.send(message.buffer);
                     } catch {
                         frameInFlight = false;
-                        closeSyphWS();
+                        transportReady = false;
+                        closeMainSocket();
+                        setLifecycle(LIFECYCLE.RECOVERING);
                     }
                 };
                 worker.onerror = (event) => {
                     console.warn('[huff syphon worker]', event.message || event);
+                    workerCaptureInFlight = false;
                     frameInFlight = false;
                     workerDisabled = true;
                     destroyWorker();
+                    activateMainTransport(event.message || 'Worker crashed');
                 };
                 worker.postMessage({ type: 'configure', width: outputW, height: outputH });
                 return true;
@@ -2691,6 +2902,10 @@
         }
 
         function captureFallback(source) {
+            if (transportMode !== TRANSPORT.MAIN || !mainWSReady) {
+                frameInFlight = false;
+                return;
+            }
             if (!ensureFallbackSurface()) {
                 frameInFlight = false;
                 return;
@@ -2707,7 +2922,7 @@
                     profileAdd('captureMs', performance.now() - started);
                     profileAdd('captureSamples');
                 }
-                syphWS.send(imageData.data.buffer);
+                mainWS.send(imageData.data.buffer);
             } catch (error) {
                 console.warn('[huff syphon] capture failed:', error);
                 frameInFlight = false;
@@ -2727,8 +2942,6 @@
                             resizeHeight: outputH,
                             resizeQuality: 'low',
                         });
-                        // Older WKWebViews may accept but ignore resize options.
-                        // The Worker still retains its proven scaling path.
                     } catch {}
                 }
                 if (!bitmap) bitmap = await createImageBitmap(source);
@@ -2737,10 +2950,10 @@
                     profileAdd('captureMs', performance.now() - started);
                     profileAdd('captureSamples');
                 }
-
-                if (!active || !worker || !wsReady) {
+                if (!isRunningLifecycle() || !worker || !transportReady) {
                     try { bitmap.close?.(); } catch {}
-                    frameInFlight = false;
+                    workerCaptureInFlight = false;
+                    if (transportMode === TRANSPORT.MAIN) frameInFlight = false;
                     return;
                 }
                 worker.postMessage({
@@ -2749,47 +2962,70 @@
                     width: outputW,
                     height: outputH,
                     profile: profiled,
+                    returnPixels: transportMode === TRANSPORT.MAIN,
                     bitmap,
                 }, [bitmap]);
             } catch (error) {
                 try { bitmap?.close?.(); } catch {}
                 console.warn('[huff syphon] ImageBitmap capture failed:', error);
+                workerCaptureInFlight = false;
                 frameInFlight = false;
                 workerDisabled = true;
                 destroyWorker();
+                if (transportMode !== TRANSPORT.MAIN) activateMainTransport('ImageBitmap/Worker capture failed');
+            }
+        }
+
+        function recoverTransport(reason) {
+            frameInFlight = false;
+            workerCaptureInFlight = false;
+            workerCanAccept = false;
+            transportReady = false;
+            setLifecycle(LIFECYCLE.RECOVERING);
+            if (transportMode === TRANSPORT.WORKER) {
+                activateMainTransport(reason);
+            } else if (transportMode === TRANSPORT.MAIN) {
+                closeMainSocket();
+                ensureMainSocket();
             }
         }
 
         function sendFrame(ts) {
-            if (!active) return;
+            if (!isRunningLifecycle()) return;
             rafId = requestAnimationFrame(sendFrame);
             flushDisplayIfDue();
 
-            if (!wsReady) {
-                ensureSyphWS();
+            if (!transportReady) {
+                if (transportMode === TRANSPORT.MAIN) ensureMainSocket();
                 return;
             }
 
-            // A lost socket/ACK must not permanently freeze output.
-            if (frameInFlight) {
+            // Pass 49 fallback remains strictly one-frame-in-flight. Pass 51
+            // worker-direct instead pipelines at most two native frames, with
+            // the Worker owning credits and acknowledgements.
+            if (transportMode === TRANSPORT.MAIN && frameInFlight) {
                 profileAdd('inFlightSkips');
-                if (ts - frameStartedAt > 2500) {
-                    frameInFlight = false;
-                    closeSyphWS();
-                    ensureSyphWS();
+                if (ts - frameStartedAt > ACK_TIMEOUT_MS) {
+                    recoverTransport('Syphon ACK timeout');
                 }
                 return;
             }
+            if (transportMode === TRANSPORT.WORKER) {
+                if (workerCaptureInFlight) {
+                    profileAdd('inFlightSkips');
+                    return;
+                }
+                if (!workerCanAccept) {
+                    profileAdd('capacitySkips');
+                    return;
+                }
+            }
 
-            if (syphWS.bufferedAmount > 0) {
+            if (transportMode === TRANSPORT.MAIN && mainWS?.bufferedAmount > 0) {
                 profileAdd('bufferedSkips');
                 return;
             }
 
-            // Full-rate publishing begins as soon as Syphon confirms a client.
-            // Before that, publish one bounded bootstrap frame per second. This
-            // prevents a discoverable-but-black source when a client waits for a
-            // first frame before completing attachment.
             const fpsCap = receiverConnected ? outputFps : BOOTSTRAP_FPS;
             const period = 1000 / fpsCap;
             if (ts - lastTs < period) return;
@@ -2798,24 +3034,23 @@
             if (!source) return;
 
             lastTs = ts;
-            frameInFlight = true;
             frameStartedAt = ts;
             const id = nextFrameId++;
 
-            if (ensureWorker() && workerReady) {
+            if (workerReady && worker) {
+                if (transportMode === TRANSPORT.WORKER) workerCaptureInFlight = true;
+                else frameInFlight = true;
                 captureWorker(source, id);
             } else {
+                frameInFlight = true;
                 captureFallback(source);
             }
         }
 
         async function pollRuntimeState(force = false) {
-            if (!active || statePollBusy) return;
-            // Healthy per-frame ACKs already carry current native state. Avoid
-            // a redundant Tauri command and Objective-C hasClients query while
-            // the output socket is advancing normally.
+            if (!isRunningLifecycle() || statePollBusy) return;
             const now = performance.now();
-            if (!force && wsReady && lastAckAt > 0 && now - lastAckAt < 1500) return;
+            if (!force && transportReady && lastAckAt > 0 && now - lastAckAt < 1500) return;
             statePollBusy = true;
             try {
                 const state = await invoke('syphon_runtime_state');
@@ -2825,10 +3060,17 @@
         }
 
         function releaseSyphonTransport({ stopNative = false, clearPollTimer = false } = {}) {
-            active = false;
             receiverConnected = false;
             frameInFlight = false;
+            workerCaptureInFlight = false;
+            workerCanAccept = true;
+            workerOutstanding = 0;
+            syphonTelemetry.workerOutstanding = 0;
             statePollBusy = false;
+            transportReady = false;
+            transportMode = TRANSPORT.NONE;
+            workerTransportAttempted = false;
+            clearWorkerTransportTimer();
             if (rafId) {
                 cancelAnimationFrame(rafId);
                 rafId = null;
@@ -2837,7 +3079,7 @@
                 clearInterval(statePollTimer);
                 statePollTimer = null;
             }
-            closeSyphWS();
+            closeMainSocket();
             destroyWorker();
             if (fallbackCanvas) {
                 fallbackCanvas.width = 1;
@@ -2851,99 +3093,106 @@
             }
         }
 
-        async function startSyphon() {
-            if (active || startPending || stopPending || shuttingDown) return;
-            const generation = ++lifecycleGeneration;
-            startPending = true;
-            const w = Math.max(64, parseInt(wInput.value, 10) || 1280);
-            const h = Math.max(64, parseInt(hInput.value, 10) || 720);
+        function resetSessionCounters() {
+            nativeFrames = 0;
+            bootstrapFrames = 0;
+            lastTs = 0;
+            lastAckAt = 0;
+            frameInFlight = false;
+            frameStartedAt = 0;
+            workerCaptureInFlight = false;
+            workerCanAccept = true;
+            workerOutstanding = 0;
+            syphonTelemetry.workerOutstanding = 0;
+            syphonTelemetry.workerPeakOutstanding = 0;
+            nextFrameId = 1;
+            workerDisabled = false;
+            workerTransportAttempted = false;
+            workerTransportFallbacks = 0;
+            syphonTelemetry.workerTransportFallbacks = 0;
+            displayDirty = true;
+            lastDisplayAt = -Infinity;
+            lastStatusText = '';
+            lastFrameText = '';
+            lastStatusClass = '';
+        }
 
-            statusBox.textContent = 'Starting Syphon…';
-            statusBox.className = '';
+        async function startSyphon() {
+            if (lifecycle !== LIFECYCLE.OFF) return;
+            const generation = ++lifecycleGeneration;
+            const profile = selectedProfile();
+            outputW = profile.width;
+            outputH = profile.height;
+            requestedOutputFps = profile.fps;
+            outputFps = requestedOutputFps;
+            resetSessionCounters();
+            setLifecycle(LIFECYCLE.STARTING);
+            updateDisplay(true);
 
             try {
-                const message = await invoke('start_syphon', { width: w, height: h });
-                if (shuttingDown || generation !== lifecycleGeneration) {
+                const message = await invoke('start_syphon', { width: outputW, height: outputH });
+                if (generation !== lifecycleGeneration || lifecycle !== LIFECYCLE.STARTING) {
                     try { invoke('stop_syphon').catch(() => {}); } catch {}
                     return;
                 }
-                outputW = w;
-                outputH = h;
-                active = true;
-                receiverConnected = false;
-                nativeFrames = 0;
-                bootstrapFrames = 0;
-                lastTs = 0;
-                lastAckAt = 0;
-                frameInFlight = false;
-                workerDisabled = false;
-                outputFps = parseInt(fpsSelect.value, 10) || 30;
-                displayDirty = true;
-                lastDisplayAt = -Infinity;
-                lastStatusText = '';
-                lastFrameText = '';
-                lastStatusClass = '';
-                ensureWorker();
-                ensureSyphWS();
-                await pollRuntimeState(true);
-                if (shuttingDown || generation !== lifecycleGeneration || !active) {
-                    releaseSyphonTransport();
-                    return;
-                }
 
-                statusBox.textContent = `${message}\nWaiting for a receiver; publishing a 1 fps bootstrap frame until one connects.`;
-                statusBox.className = 'active';
-                pill.textContent = `SYPHON: ${w}×${h}`;
+                setLifecycle(LIFECYCLE.RECOVERING);
+                pill.textContent = `SYPHON: ${outputW}×${outputH}`;
                 pill.style.color = 'rgba(180,100,255,.9)';
                 toggleBtn.textContent = '■ Stop';
                 toggleBtn.classList.add('active');
-                updateDisplay(true);
+                statusBox.textContent = `${message}\nEstablishing output transport…`;
+                statusBox.className = 'active';
 
-                rafId = requestAnimationFrame(sendFrame);
+                if (!ensureWorker()) activateMainTransport('Worker/OffscreenCanvas unavailable');
+                await pollRuntimeState(true);
+                if (generation !== lifecycleGeneration || !isRunningLifecycle()) return;
+
+                if (!rafId) rafId = requestAnimationFrame(sendFrame);
+                updateDisplay(true);
             } catch (error) {
-                if (!shuttingDown && generation === lifecycleGeneration) {
+                if (generation === lifecycleGeneration) {
+                    setLifecycle(LIFECYCLE.OFF);
                     statusBox.textContent = `⚠ ${error}`;
                     statusBox.className = 'error';
+                    pill.textContent = 'SYPHON: OFF';
+                    toggleBtn.textContent = '▶ Start';
+                    toggleBtn.classList.remove('active');
+                    releaseSyphonTransport();
                 }
-            } finally {
-                if (generation === lifecycleGeneration) startPending = false;
             }
         }
 
         async function stopSyphon() {
-            if (stopPending) return;
-            stopPending = true;
+            if (lifecycle === LIFECYCLE.OFF || lifecycle === LIFECYCLE.STOPPING) return;
             ++lifecycleGeneration;
-            startPending = false;
+            setLifecycle(LIFECYCLE.STOPPING);
+            updateDisplay(true);
             releaseSyphonTransport();
 
             try {
                 statusBox.textContent = await invoke('stop_syphon');
             } catch {}
-            finally { stopPending = false; }
 
+            setLifecycle(LIFECYCLE.OFF);
             statusBox.className = '';
             pill.textContent = 'SYPHON: OFF';
             pill.style.color = 'rgba(180,100,255,.5)';
             toggleBtn.textContent = '▶ Start';
             toggleBtn.classList.remove('active');
             if (frameLabel) frameLabel.textContent = '';
+            refreshProfileHint();
         }
 
         toggleBtn.addEventListener('click', () => {
-            active ? stopSyphon() : startSyphon();
-        });
-        fpsSelect.addEventListener('change', () => {
-            outputFps = parseInt(fpsSelect.value, 10) || 30;
+            lifecycle === LIFECYCLE.OFF ? startSyphon() : stopSyphon();
         });
 
         statePollTimer = setInterval(() => pollRuntimeState(false), 1000);
         function shutdownSyphon() {
-            if (shuttingDown) return;
-            shuttingDown = true;
+            if (lifecycle === LIFECYCLE.STOPPING) return;
             ++lifecycleGeneration;
-            startPending = false;
-            stopPending = false;
+            setLifecycle(LIFECYCLE.STOPPING);
             releaseSyphonTransport({ stopNative: true, clearPollTimer: true });
         }
         window.addEventListener('pagehide', shutdownSyphon, { once: true });

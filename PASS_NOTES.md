@@ -1,3 +1,46 @@
+## Pass 51 — Syphon 720p60 Bounded Pipeline
+
+- Makes HUFF Classic Syphon 1280×720-only.
+- Makes 720p60 the default worker-direct target and retains 720p30 as safe mode/fallback.
+- Removes 1080p from the Classic Syphon UI.
+- Moves direct native ACK credit ownership into the Worker.
+- Allows at most two native frames outstanding so next-frame browser readback can overlap native publication.
+- Drops excess output opportunities instead of building a latency queue.
+- Automatically caps a failed 60 fps worker-direct session to the accepted 720p30 main-socket fallback.
+- Preserves bootstrap/lifecycle behavior and all creative/render behavior.
+
+## Pass 50 — Syphon Worker-Owned Transport
+
+- Preserves the accepted Pass 49 Syphon Stability Contract.
+- Preferred path moves the local Syphon WebSocket into the existing readback Worker.
+- Raw RGBA is sent directly Worker -> Rust instead of being transferred back through the controls WebView first.
+- Compact state/ack telemetry still returns Worker -> controls.
+- Automatically falls back to the Pass 49 main-owned socket on Worker WebSocket timeout/error/close/crash.
+- Retains the older main-thread Canvas2D fallback when Worker/OffscreenCanvas is unavailable.
+- Adds `sy send`, `sy route`, and `sy fall` profiler diagnostics.
+- No native Syphon/Metal changes and no effect/render changes.
+
+## Pass 49 — Syphon Stability Contract
+
+- Accepted on the target machine.
+- Narrows Syphon to CLASSIC 720p30 (recommended), 1080p30 (higher load), and 720p60 (experimental).
+- Removes arbitrary Syphon dimensions plus 15/24 fps choices.
+- Formalizes OFF / STARTING / WAITING / STREAMING / RECOVERING / STOPPING lifecycle.
+- Preserves 1 fps bootstrap and one-frame-in-flight acknowledgement gating.
+
+## Pass 48 — Stable Layer Priority / Global Mix Curves / Expanded Luma Fades
+
+- Removes the old render-frame alternating `NEUTRAL` Layer Priority behavior.
+- Removes `PULSE` Layer Priority and `PULSE SPEED` completely from the active Classic control/runtime path.
+- Layer Priority is now a stable binary hierarchy: `SCAN TOP` or `CORRUPT TOP`.
+- Legacy `neutral`, `pulse`, or unknown imported values resolve to `SCAN TOP`.
+- Adds Global Mix `CURVE`: `LINEAR` (exact compatibility), `SMOOTH` (ease at both ends), and `PUNCH` (clean image enters earlier).
+- Global Mix curves reuse the existing Mix amount in both direct and Solarize-fused paths; no new image pass or buffer is introduced.
+- Expands Luma COMPOSITE Fade from `X-FADE` / `SOFT ADD` to `LIGHTEN`, `DARKEN`, `MULTIPLY`, `OVERLAY`, `HARD LIGHT`, and `DIFFERENCE`.
+- X-FADE and SOFT ADD retain their established Canvas operations exactly.
+- Additional fade choices alter only keyed-patch compositing; Clip/Gain/Cleanup/Density/Invert/key extraction remain unchanged.
+- Flow remains frozen; Solarize and Feedback helpers remain byte-identical to Pass 47.
+
 ## Pass 47 — LIVE Luma GPU Handoff / Scratch Budget
 
 - Triggered by target-machine isolation: LIVE/COMPOSITE Luma alone could reduce ~60 FPS to ~52 FPS.

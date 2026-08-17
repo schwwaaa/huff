@@ -158,8 +158,8 @@ body {
         <div class="win-body doc-content">
           
 <h2>CPU Pixel Readback for Syphon and Spout</h2>
-<p>Both Syphon and Spout routes use <code>getImageData()</code> to read the canvas pixels back from the GPU to CPU inside the WebView, ship them over the loopback WebSocket, then re-upload to a Metal or D3D11 texture in Rust. This is a full <strong>GPU → CPU → GPU</strong> round-trip per frame.</p>
-<div class="callout warn"><strong>Why zero-copy isn't implemented:</strong> The WebView (WKWebView on macOS, WebView2 on Windows) does not expose its render surface as a native texture handle. This is a Tauri/browser architecture constraint, not a fixable bug. At 720p/30fps the readback costs roughly 3–6ms per frame — well within budget. Do not set the FPS cap higher than your canvas draw rate. For 4K output use OBS window capture.</div>
+<p>Syphon and Spout still require <code>getImageData()</code> to make WebView pixels CPU-readable before Rust uploads them into Metal or D3D11. This remains a full <strong>GPU → CPU → GPU</strong> architecture. Pass 51 retains the Worker-owned local WebSocket and adds a strict two-credit pipeline so browser readback for a following 720p frame can overlap native publication without creating an unbounded latency queue.</p>
+<div class="callout warn"><strong>Why zero-copy isn't implemented:</strong> The WebView does not expose its rendered Canvas2D surface as a native shareable texture handle. Pass 51 improves overlap rather than removing readback. HUFF Classic Syphon is therefore fixed at 1280×720: 60 fps is the optimized worker-direct target and 30 fps is the safe fallback.</div>
 <hr/>
 
 <h2>Frame Ring Memory at High Resolution</h2>

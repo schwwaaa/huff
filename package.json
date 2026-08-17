@@ -62,7 +62,13 @@
     "validate:pass44": "node scripts/validate-pass44.mjs",
     "validate:pass45": "node scripts/validate-pass45.mjs",
     "validate:pass46": "node scripts/validate-pass46.mjs",
-    "validate:pass47": "node scripts/validate-pass47.mjs"
+    "validate:pass47": "node scripts/validate-pass47.mjs",
+    "validate:pass48": "node scripts/validate-pass48.mjs",
+    "validate:pass49": "node scripts/validate-pass49.mjs",
+    "validate:pass50": "node scripts/validate-pass50.mjs",
+    "simulate:pass50": "node scripts/simulate-pass50-syphon-worker.mjs",
+    "validate:pass51": "node scripts/validate-pass51.mjs",
+    "simulate:pass51": "node scripts/simulate-pass51-syphon-pipeline.mjs"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^1.6.3"

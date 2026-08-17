@@ -236,9 +236,11 @@ gScratch  shared ping-pong target for feedback, Flow Warp, and Symmetry
   <div>  → latest-frame Rust relay → canvas role socket → ImageBitmap display</div>
   <div>  → mirror acknowledgement permits next submission</div>
   <div></div>
-  <div>Syphon:</div>
-  <div>  worker scale/readback → raw RGBA → syphon-sender role socket</div>
-  <div>  → syphon::push_pixels() → reusable MTLTexture → Syphon clients</div>
+  <div>Syphon (preferred Pass 51 route):</div>
+  <div>  1280×720 snapshot → worker scale/readback → Worker-owned syphon-sender socket</div>
+  <div>  → max 2 outstanding raw RGBA frames → syphon::push_pixels()</div>
+  <div>  → reusable MTLTexture → Syphon clients</div>
+  <div>  fallback: 720p30 Worker RGBA → controls-owned syphon-sender socket → same native path</div>
   <div></div>
   <div>Spout:</div>
   <div>  canvas scale/readback → raw RGBA → spout-sender role socket</div>

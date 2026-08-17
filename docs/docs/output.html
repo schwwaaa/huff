@@ -166,11 +166,10 @@ body {
 <h3>Usage</h3>
 <ol>
   <li>Click the <strong>SYPHON</strong> button in the top bar.</li>
-  <li>Set the output <strong>resolution</strong> (default: 1280×720).</li>
-  <li>Set the <strong>FPS cap</strong> (default: 30fps — do not set higher than your canvas frame rate).</li>
+  <li>Choose an output rate: <strong>60 FPS — 1280×720</strong> (default) or <strong>30 FPS — 1280×720</strong> (safe). Classic Syphon no longer exposes 1080p.</li>
   <li>Click <strong>▶ Start</strong>. The sender appears as <code>huff</code> in any Syphon receiver.</li>
 </ol>
-<div class="callout warn"><strong>CPU round-trip:</strong> Uses getImageData() → loopback WebSocket → Metal texture re-upload. Not zero-copy. Works reliably at 720p/30fps. See <a href="caveats.html">Caveats</a> for details.</div>
+<div class="callout warn"><strong>Classic transport:</strong> Syphon remains a CPU-readback/native-Metal-upload path. Pass 51 keeps raw RGBA inside the Worker and allows at most two native frames outstanding so 720p60 can pipeline browser readback with native publication. If worker-direct is unavailable or fails, HUFF automatically falls back to the accepted 720p30 main-socket route. See <a href="caveats.html">Caveats</a>.</div>
 <h3>Installation Notes</h3>
 <p>The Syphon.framework is <strong>bundled inside the huff app bundle</strong> — no separate installation required.</p>
 <hr/>

@@ -258,7 +258,7 @@ body {
     <tr><td>scanAlpha</td><td>Scan Opacity</td><td>0</td><td>1</td><td></td></tr>
     <tr><td>clusterCount</td><td>Scan Bands</td><td>1</td><td>50</td><td>Displaces current frame — no ring sampling</td></tr>
     <tr><td>clusterRadius</td><td>Band Size</td><td>1</td><td>120</td><td></td></tr>
-    <tr><td>globalMixAmt</td><td>Global Mix Amount</td><td>0</td><td>1</td><td>Opacity of base video in the blend</td></tr>
+    <tr><td>globalMixAmt</td><td>Global Mix Amount</td><td>0</td><td>1</td><td>Global Mix fader before the selected response curve.</td></tr>
     <tr><td>solarizeThresh</td><td>Sol Thresh</td><td>0</td><td>1</td><td>THRESHOLD mode only.</td></tr>
     <tr><td>solarizeLevel</td><td>Sol Level</td><td>0</td><td>100</td><td>LUMA QUANTIZE coarseness; 99 = two luma levels, 100 = luma removed.</td></tr>
     <tr><td>solarizeSoft</td><td>Sol Soft</td><td>0</td><td>100</td><td>LUMA QUANTIZE transition softness.</td></tr>
@@ -316,10 +316,12 @@ body {
     <tr><td>corruptMaskMode</td><td>Corrupt Mask</td><td>full, stencil</td></tr>
     <tr><td>corruptMaskSide</td><td>Corrupt Stencil Side</td><td>bright, dark</td></tr>
     <tr><td>cluBounds</td><td>Corrupt Group Edge</td><td>bounce, wrap</td></tr>
-    <tr><td>globalMixBlend</td><td>Global Mix Blend</td><td>screen, multiply, overlay, difference, hard-light, lighter</td></tr>
+    <tr><td>globalMixBlend</td><td>Global Mix Blend</td><td>screen, lighter, lighten, color-dodge, multiply, darken, color-burn, overlay, soft-light, hard-light, difference, exclusion, hue, saturation, color, luminosity, source-over</td></tr>
+    <tr><td>globalMixCurve</td><td>Global Mix Curve</td><td>linear, smooth, punch</td><td>LINEAR is exact legacy alpha. SMOOTH uses smoothstep. PUNCH raises low/mid fader response without adding a render pass.</td></tr>
+    <tr><td>layerPriority</td><td>Layer Priority</td><td>scan, glitch</td><td>Stable hierarchy only: SCAN TOP or CORRUPT TOP. Legacy neutral/pulse imports migrate to scan.</td></tr>
     <tr><td>lumaKeyTarget</td><td>Luma Key Target</td><td>composite, corrupt, scan</td><td>COMPOSITE = legacy clean-key overlay; CORRUPT = key Corrupt patches; SCAN = key Scan panels/FIELD objects. Legacy presets default to composite.</td></tr>
     <tr><td>lumaKeySource</td><td>Luma Key Source</td><td>clean, stencil</td></tr>
-    <tr><td>lumaKeyFade</td><td>Luma Fade Mode</td><td>xfade, add</td><td>add is presented as SOFT ADD and uses bounded Screen compositing rather than Canvas lighter.</td></tr>
+    <tr><td>lumaKeyFade</td><td>Luma Fade Mode</td><td>xfade, add, lighten, darken, multiply, overlay, hardlight, difference</td><td>X-FADE and SOFT ADD preserve the existing keyed-fill behavior. The additional HUFF modes apply Canvas blend operations to the same keyed patch.</td></tr>
     <tr><td>solarizeMode</td><td>Solarize Mode</td><td>threshold, luma-quantize</td></tr>
     <tr><td>symMode</td><td>Symmetry Mode</td><td>v, h, hv</td></tr>
     <tr><td>bgMode</td><td>Background</td><td>black, white, green, blue</td></tr>

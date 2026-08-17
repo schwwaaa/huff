@@ -2,35 +2,36 @@
 
 ## Authoritative lineage
 
-- Pass 41A (`huff-08102026.zip`) remains the runtime-accepted Classic foundation.
-- Pass 42 Luma Quantize and Pass 43 Fluidity received strong positive runtime feedback and remain protected.
-- Pass 44 mode-specific Solarize UI remains retained.
-- Passes 45–46 accelerated Solarize GPU paths and added serial timing.
-- Target-machine isolation then showed LIVE/COMPOSITE Luma alone at roughly 52 FPS.
+- Pass 41A (`huff-08102026.zip`) remains the runtime-accepted HUFF Classic foundation.
+- Passes 42–48 retain the accepted Solarize/Luma/compositing work.
+- Pass 49 — **Syphon Stability Contract** — accepted on the target machine.
+- Pass 50 — Worker-owned Syphon transport — reported to work well on the target machine.
 
 ## Current candidate
 
-**Pass 47 — LIVE Luma GPU Handoff + Aspect-Safe Scratch Budget.**
+**Pass 51 — 720p60 Syphon Bounded Pipeline.**
 
-Pass 47 gives LIVE/COMPOSITE Luma a self-calibrating bounded WebGL1 path before
-the accepted CPU fallback. The accelerator is enabled only after a one-time
-WebGL->Canvas2D alpha parity probe passes for X-FADE and SOFT ADD. Successful
-GPU frames avoid Luma's normal `getImageData()` / JS pixel transform /
-`putImageData()` path. The CPU fallback also gains a final 256-entry key LUT.
+Classic Syphon is now fixed at 1280×720. 60 fps is the default worker-direct target; 30 fps is the safe selectable mode and automatic fallback rate. 1080p Syphon is removed from Classic.
 
-Luma workspace sizing is now constrained by long edge and pixel budget, so
-portrait sources cannot silently create much larger key workspaces.
+## Pass 51 transport
 
-## Protected behavior
+`Canvas -> ImageBitmap -> Worker scale/readback -> Worker WebSocket -> max 2 outstanding native frames -> Rust -> Metal -> Syphon`
 
-Luma controls/matte polarity, Solarize THRESHOLD/LUMA QUANTIZE/FLUIDITY,
-Feedback/Persistence, frozen Flow, factory presets, serial recipe ordering and
-native Tauri/Syphon/Spout runtime remain protected. No frame skipping or playback
-cadence changes are introduced.
+The Worker owns native ACK credits. Browser capture of the next frame may begin after the Worker has sent the current frame rather than waiting for native publication to finish.
 
-## Gate
+## Protected stability contract
 
-Recreate the isolated Luma test that was ~52 FPS. On an accelerated path the
-profiler should show `gpu luma` advancing, `gpu lu fall` at zero, and no ongoing
-`luma read/xform/upload` samples. If the parity probe rejects acceleration,
-record `gpu lu cal`; CPU fallback is intentional rather than a visual compromise.
+- explicit OFF / STARTING / WAITING / STREAMING / RECOVERING / STOPPING lifecycle;
+- 1 fps bootstrap while waiting for a receiver;
+- bounded transport, never an unbounded latency queue;
+- Pass 49 one-frame main-socket fallback;
+- fallback automatically caps requested 60 fps to 30 fps;
+- clean Start/Stop/restart/shutdown ownership.
+
+## Protected creative behavior
+
+All effect/render behavior, Luma, Solarize, Global Mix, Layer Priority, Feedback/Persistence, frozen Flow, playback, Spout, native Syphon protocol and native Metal publisher are unchanged.
+
+## Runtime gate
+
+Test 720p60 first and confirm `worker-direct`. The profiler should show `sy credit` moving between 0–2 without persistent credit saturation. Then test receiver reconnects, Start/Stop/Start, heavy-effects streaming and forced fallback to 720p30.

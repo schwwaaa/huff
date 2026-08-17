@@ -1,0 +1,59 @@
+HUFF CLASSIC — OPTIMIZATION PASS 51
+===================================
+
+TITLE
+720p60 Syphon Bounded Pipeline
+
+BASELINE
+Runtime-positive Pass 50 Worker-owned Syphon transport, preserving the accepted Pass 49 lifecycle/bootstrap/fallback contract.
+
+PRODUCT BOUNDARY
+HUFF Classic Syphon is now fixed at 1280×720.
+- 60 fps: primary/default target when worker-direct transport is healthy.
+- 30 fps: safe manual mode and automatic fallback rate.
+- 1080p Syphon output is removed from Classic.
+
+PROBLEM
+Pass 50 still released the browser capture gate only after the native Syphon acknowledgement. At 60 fps that forced snapshot + Worker draw/readback + local WebSocket + Rust upload + Metal publish + ACK to finish before the next 16.67 ms output opportunity.
+
+PASS 51 PREFERRED PIPELINE
+final canvas
+ -> ImageBitmap capture
+ -> Worker draw/readback at 1280×720
+ -> Worker-owned WebSocket
+ -> native frame A
+ -> while native A publishes, controls may prepare Worker frame B
+ -> maximum two native frames outstanding
+ -> native ACK restores one Worker-owned credit
+
+A third output opportunity is dropped while both credits are occupied. There is no unbounded queue and no delayed-frame accumulation.
+
+ACK OWNERSHIP
+Native acknowledgements are consumed in the Worker for direct transport. The controls page receives only:
+- frame-consumed / capacity messages used for the small browser capture gate;
+- sampled receiver/status/profiling reports (up to roughly 4 Hz plus state changes/native samples).
+
+The controls page therefore does not wait for a native ACK before beginning the next browser capture under normal worker-direct operation.
+
+FALLBACK
+The accepted Pass 49 main-socket route remains strictly one-frame-in-flight. If Worker WebSocket transport is unavailable, times out, crashes, closes, or loses an ACK, Pass 51 automatically changes the effective Syphon rate to 30 fps and uses the accepted fallback path.
+
+NO CREATIVE FRAME TRICK
+This pass does not skip/hold frames inside HUFF effects, change playback speed, alter render cadence, or touch Flow/Feedback/Solarize/Luma. The only dropped opportunities are bounded native-output submissions when the Syphon transport cannot accept another current frame without creating latency.
+
+PROTECTED
+- explicit OFF / STARTING / WAITING / STREAMING / RECOVERING / STOPPING Syphon lifecycle;
+- 1 fps receiver bootstrap behavior;
+- Pass 49 fallback transport;
+- Pass 50 Worker-owned WebSocket;
+- native raw-RGBA protocol and Metal/Syphon publisher;
+- all creative effects and render pipeline;
+- Spout.
+
+RUNTIME GATE
+Target-machine acceptance requires:
+1. 720p60 worker-direct moving output with receiver connected;
+2. no growing latency during heavy effects;
+3. stable receiver disconnect/reconnect and Start/Stop/Start;
+4. automatic 720p30 fallback when worker-direct is intentionally/unintentionally unavailable;
+5. long-duration stream without orphaned Worker/socket/native state.

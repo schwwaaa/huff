@@ -89,22 +89,18 @@
     'glitch-luma-group',
   ]);
 
+  // Pass 48: Layer Priority is intentionally a stable binary routing choice.
+  // The former NEUTRAL/ALTERNATE and PULSE modes were render-time order
+  // oscillators rather than meaningful layer hierarchy, and are removed.
   const FRONT_STAGE_PRIORITY_MODES = Object.freeze({
     scan: FRONT_STAGE_SCAN_TOP_ORDER,
     glitch: FRONT_STAGE_GLITCH_TOP_ORDER,
-    neutral: 'alternate-each-render-frame',
-    pulse: 'alternate-by-layer-pulse-speed',
   });
 
   const FRONT_STAGE_PRIORITY_CONTRACT = Object.freeze({
     stateKey: 'layerPriority',
-    pulseSpeedKey: 'layerPulseSpeed',
-    renderFrameKey: 'frameCount',
     defaultMode: 'scan',
     fallbackMode: 'scan',
-    renderRateBasis: 60,
-    pulseMinimumSpeed: 0.1,
-    pulseMinimumFrames: 1,
     groups: FRONT_STAGE_GROUPS,
     modes: FRONT_STAGE_PRIORITY_MODES,
   });
@@ -132,17 +128,11 @@
     if (JSON.stringify(contract.modes?.glitch) !== JSON.stringify(FRONT_STAGE_GLITCH_TOP_ORDER)) {
       errors.push('GLITCH TOP order differs from Pass 22');
     }
-    if (contract.modes?.neutral !== 'alternate-each-render-frame') {
-      errors.push('NEUTRAL mode differs from Pass 22');
-    }
-    if (contract.modes?.pulse !== 'alternate-by-layer-pulse-speed') {
-      errors.push('PULSE mode differs from Pass 22');
+    if (Object.keys(contract.modes ?? {}).some(mode => mode !== 'scan' && mode !== 'glitch')) {
+      errors.push('front-stage priority contains a non-stable mode');
     }
     if (contract.defaultMode !== 'scan' || contract.fallbackMode !== 'scan') {
-      errors.push('front-stage default/fallback mode differs from Pass 22');
-    }
-    if (contract.renderRateBasis !== 60 || contract.pulseMinimumSpeed !== 0.1 || contract.pulseMinimumFrames !== 1) {
-      errors.push('front-stage pulse timing constants differ from Pass 22');
+      errors.push('front-stage default/fallback must remain SCAN TOP');
     }
 
     return Object.freeze({
@@ -151,27 +141,10 @@
     });
   }
 
-  function resolveFrontStageOrder(mode, pulseSpeed, renderFrame) {
+  function resolveFrontStageOrder(mode) {
     if (mode === 'glitch') return FRONT_STAGE_GLITCH_TOP_ORDER;
-    if (mode === 'neutral') {
-      return (renderFrame & 1) === 0
-        ? FRONT_STAGE_GLITCH_TOP_ORDER
-        : FRONT_STAGE_SCAN_TOP_ORDER;
-    }
-    if (mode === 'pulse') {
-      // Preserve the exact Pass 22 pulse calculation and 60fps timing basis.
-      const pulseFrames = Math.max(
-        FRONT_STAGE_PRIORITY_CONTRACT.pulseMinimumFrames,
-        Math.round(
-          FRONT_STAGE_PRIORITY_CONTRACT.renderRateBasis /
-          Math.max(FRONT_STAGE_PRIORITY_CONTRACT.pulseMinimumSpeed, pulseSpeed),
-        ),
-      );
-      return (Math.floor(renderFrame / pulseFrames) & 1) === 0
-        ? FRONT_STAGE_GLITCH_TOP_ORDER
-        : FRONT_STAGE_SCAN_TOP_ORDER;
-    }
-    // "scan", an empty value, and unknown legacy values retain SCAN TOP.
+    // SCAN TOP is both the default and the deterministic migration target for
+    // removed legacy ALTERNATE/PULSE values.
     return FRONT_STAGE_SCAN_TOP_ORDER;
   }
 
@@ -202,8 +175,8 @@
       contract: FRONT_STAGE_PRIORITY_CONTRACT,
       validation: contractValidation,
       resolveOrder: resolveFrontStageOrder,
-      execute(frame, mode, pulseSpeed, renderFrame) {
-        const order = resolveFrontStageOrder(mode, pulseSpeed, renderFrame);
+      execute(frame, mode) {
+        const order = resolveFrontStageOrder(mode);
         compiledHandlers[order[0]](frame);
         compiledHandlers[order[1]](frame);
       },
