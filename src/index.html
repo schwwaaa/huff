@@ -268,6 +268,45 @@
         }
         .corrupt-status.ready { color: var(--ui-text); font-weight: bold; text-shadow: none; }
         .corrupt-status.warn { color: var(--term-yel); }
+        .pipeline-awareness {
+            display: flex; flex-wrap: wrap; align-items: center; gap: 4px;
+            margin-top: 3px; padding-top: 3px; border-top: 1px dotted var(--win-dark);
+            font-family: 'Share Tech Mono', monospace; font-size: 9px;
+        }
+        .pipeline-awareness-label {
+            color: rgba(0,0,0,.58); letter-spacing: .06em; white-space: nowrap;
+        }
+        .pipeline-feed {
+            color: rgba(0,0,0,.62); background: #c5c1b9;
+            border-top: 1px solid #808080; border-left: 1px solid #808080;
+            border-right: 1px solid #fff; border-bottom: 1px solid #fff;
+            padding: 1px 4px; white-space: nowrap;
+        }
+        .pipeline-feed.active {
+            color: #000; background: #fff; font-weight: bold;
+        }
+        .pipeline-feed-summary {
+            color: #000; background: #d4d0c8;
+            border: 1px solid #808080; padding: 1px 4px; white-space: nowrap;
+        }
+        .pipeline-feed-summary.warn {
+            color: #000; background: #ffe36e; font-weight: bold;
+        }
+        .pipeline-role {
+            font-family: 'Share Tech Mono', monospace; font-size: 9px;
+            color: rgba(0,0,0,.58); white-space: nowrap;
+        }
+        .pipeline-stage-state {
+            font-family: 'Share Tech Mono', monospace; font-size: 9px;
+            color: #000; background: #d4d0c8; border: 1px solid #808080;
+            padding: 1px 4px; white-space: nowrap;
+        }
+        .pipeline-stage-state.warn {
+            background: #ffe36e; font-weight: bold;
+        }
+        .pipeline-stage-state.ready {
+            background: #fff; font-weight: bold;
+        }
 
         /* ═══════════════════════════════════════════════
            CTRL CHIPS — inset terminal boxes
@@ -1542,6 +1581,14 @@
                     </div>
                     <span style="font-size:9px;color:rgba(255,255,255,.38);font-family:'Share Tech Mono',monospace;white-space:nowrap">VALIDATED SERIAL</span>
                 </div>
+                <div class="pipeline-awareness" title="HUFF Classic has three primary ways to feed live imagery into its persistent image system: Corrupt, Scanlines, or Luma Key with TARGET set to COMPOSITE. Symmetry and Solarize are downstream processors, not independent source stages.">
+                    <span class="pipeline-awareness-label">IMAGE FEED</span>
+                    <span id="pipelineFeedCorrupt" class="pipeline-feed">CORRUPT</span>
+                    <span id="pipelineFeedScan" class="pipeline-feed">SCANLINES</span>
+                    <span id="pipelineFeedLuma" class="pipeline-feed">LUMA/COMP</span>
+                    <span id="pipelineFeedSummary" class="pipeline-feed-summary warn">NONE</span>
+                    <span id="pipelineRouteSummary" class="pipeline-awareness-label">→ FEEDBACK → FLOW → SYMMETRY → SOLARIZE</span>
+                </div>
                 </div>
             </div>
 
@@ -1643,7 +1690,9 @@
                 <div class="group-label">Symmetry</div>
                 <div class="group-body">
                 <div class="group-row">
-                    <div class="ctrl"><label>ON</label><input id="symOn" type="checkbox"></div>
+                    <div class="ctrl"><label>ON</label><input id="symOn" type="checkbox" title="Downstream processor. In the CLASSIC recipe, start imagery with Corrupt, Scanlines, or Luma Key set to COMPOSITE so Symmetry has a live image stream to transform."></div>
+                    <span class="pipeline-role">DOWNSTREAM</span>
+                    <span id="symPipelineState" class="pipeline-stage-state">WAITING FOR FEED</span>
                     <div class="ctrl">
                         <label>MODE</label>
                         <select id="symMode">
@@ -1865,12 +1914,15 @@
                 <div class="group-label">Solarize</div>
                 <div class="group-body">
                 <div class="group-row">
-                    <div class="ctrl"><label>ON</label><input id="solarizeOn" type="checkbox"></div>
+                    <div class="ctrl"><label>ON</label><input id="solarizeOn" type="checkbox" title="Downstream color processor. In the CLASSIC recipe, start imagery with Corrupt, Scanlines, or Luma Key set to COMPOSITE so Solarize has a live image stream to color-process."></div>
+                    <span class="pipeline-role">DOWNSTREAM</span>
+                    <span id="solarizePipelineState" class="pipeline-stage-state">WAITING FOR FEED</span>
                     <div class="ctrl">
                         <label>MODE</label>
-                        <select id="solarizeMode" title="THRESHOLD preserves the existing HUFF Classic Solarize exactly. LUMA QUANTIZE adds Magic DaVE-inspired luminance quantisation while retaining source chroma.">
+                        <select id="solarizeMode" title="THRESHOLD preserves HUFF Classic Solarize. LUMA QUANTIZE quantizes luminance while retaining chroma. CHROMA POSTERIZE is the complementary Magic DaVE-inspired colour quantizer that preserves luminance.">
                             <option value="threshold" selected>THRESHOLD</option>
                             <option value="luma-quantize">LUMA QUANTIZE</option>
+                            <option value="chroma-posterize">CHROMA POSTERIZE</option>
                         </select>
                     </div>
                     <div class="ctrl solarize-threshold-only">
@@ -1889,6 +1941,21 @@
                         <span class="val" id="solarizeSoftVal">0%</span>
                     </div>
                     <div class="ctrl solarize-luma-only"><label>INVERT</label><input id="solarizeInvert" type="checkbox" title="LUMA QUANTIZE only. Inverts the luminance component while retaining chroma."></div>
+                    <div class="ctrl solarize-poster-only solarize-mode-hidden">
+                        <label>LEVEL</label>
+                        <input id="solarizePosterLevel" type="range" min="0" max="100" step="1" value="75" title="CHROMA POSTERIZE only. Higher values reduce the two chroma axes to fewer colour bands while preserving luminance.">
+                        <span class="val" id="solarizePosterLevelVal">75%</span>
+                    </div>
+                    <div class="ctrl solarize-poster-only solarize-mode-hidden">
+                        <label>SOFT</label>
+                        <input id="solarizePosterSoft" type="range" min="0" max="100" step="1" value="0" title="CHROMA POSTERIZE only. Blends the quantized chroma back toward the original colour; 100% is neutral.">
+                        <span class="val" id="solarizePosterSoftVal">0%</span>
+                    </div>
+                    <div class="ctrl solarize-poster-only solarize-mode-hidden">
+                        <label>PHASE</label>
+                        <input id="solarizePosterPhase" type="range" min="-180" max="180" step="1" value="0" title="CHROMA POSTERIZE only. Rotates the chroma quantization grid before quantizing, changing which hues fall into the same posterized bands without changing luminance.">
+                        <span class="val" id="solarizePosterPhaseVal">0°</span>
+                    </div>
                     <div class="ctrl">
                         <label>AMOUNT</label>
                         <input id="solarizeAmt" type="range" min="0" max="1" step="0.01" value="1.0">

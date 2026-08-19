@@ -2,6 +2,7 @@
 
 ## Cross-platform
 
+- Symmetry and Solarize are downstream processors in the HUFF Classic instrument model. They are not release-promised standalone source stages. Pass 52D makes this dependency visible and directs users to start imagery with Corrupt, Scanlines, or Luma Key / COMPOSITE.
 - HUFF Classic remains a Canvas2D/WebView application; performance depends on the host WebView, decoder, and source material.
 - 720p and 1080p are the supported capability tiers. No general 4K performance claim is made.
 - Syphon and Spout use browser pixel readback before native texture publication.

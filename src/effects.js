@@ -102,6 +102,7 @@ const _classicGpuTelemetry = window.__huffClassicGpuTelemetry || {
   solarFrames: 0,
   solarQuantizeFrames: 0,
   solarThresholdFrames: 0,
+  solarPosterizeFrames: 0,
   lumaFrames: 0,
   lumaFallbacks: 0,
   lumaCalibrationRuns: 0,
@@ -234,6 +235,39 @@ function _initClassicGpu() {
     const solarThreshold = _linkClassicGpuProgram(gl, vertexSource, solarThresholdFragment,
       ['uSource','uThreshold','uAmount','uScale']);
 
+    const chromaPosterFragment = `
+      precision highp float;
+      varying vec2 vUv;
+      uniform sampler2D uSource;
+      uniform float uSteps;
+      uniform float uSoft;
+      uniform float uAmount;
+      uniform float uPhase;
+      void main() {
+        vec4 src = texture2D(uSource, vUv);
+        vec3 rgb = clamp(src.rgb, 0.0, 1.0);
+        float y = dot(rgb, vec3(0.299, 0.587, 0.114));
+        float cb = 0.5 + (rgb.b - y) / 1.772;
+        float cr = 0.5 + (rgb.r - y) / 1.402;
+        vec2 c = vec2(cb - 0.5, cr - 0.5);
+        float cs = cos(uPhase), sn = sin(uPhase);
+        vec2 rot = vec2(cs*c.x - sn*c.y, sn*c.x + cs*c.y);
+        vec2 unit = clamp(rot + 0.5, 0.0, 1.0);
+        vec2 q = floor(unit * uSteps + 0.5) / uSteps;
+        vec2 softened = mix(q, unit, uSoft) - 0.5;
+        vec2 unrot = vec2(cs*softened.x + sn*softened.y, -sn*softened.x + cs*softened.y);
+        float outCb = unrot.x + 0.5;
+        float outCr = unrot.y + 0.5;
+        float r = y + 1.402 * (outCr - 0.5);
+        float b = y + 1.772 * (outCb - 0.5);
+        float g = (y - 0.299*r - 0.114*b) / 0.587;
+        vec3 poster = clamp(vec3(r,g,b), 0.0, 1.0);
+        gl_FragColor = vec4(mix(rgb, poster, uAmount), src.a);
+      }
+    `;
+    const chromaPoster = _linkClassicGpuProgram(gl, vertexSource, chromaPosterFragment,
+      ['uSource','uSteps','uSoft','uAmount','uPhase']);
+
     // Pass 47 LIVE/COMPOSITE Luma patch. The shader reproduces the established
     // byte-domain matte math, including Clip/Gain, Invert and INDIGO-inspired
     // Cleanup/Density shaping. uAlphaMode is selected by a one-time runtime
@@ -303,7 +337,7 @@ function _initClassicGpu() {
       _classicGpu = null;
     }, false);
 
-    _classicGpu = { canvas, gl, buffer, texture, solar, solarThreshold, lumaPatch, lumaAlphaMode:null, lumaContextMode:'premultiplied', width:0, height:0, texWidth:0, texHeight:0 };
+    _classicGpu = { canvas, gl, buffer, texture, solar, solarThreshold, chromaPoster, lumaPatch, lumaAlphaMode:null, lumaContextMode:'premultiplied', width:0, height:0, texWidth:0, texHeight:0 };
     _classicGpuTelemetry.supported = true;
     return _classicGpu;
   } catch (err) {
@@ -385,6 +419,30 @@ function _runClassicGpuSolarize(sourceCanvas, width, height, uniforms) {
     return gpu.canvas;
   } catch (err) {
     console.warn('[huff] Classic bounded Solarize GPU stage failed; using CPU fallback', err);
+    _classicGpuTelemetry.fallbacks++;
+    return null;
+  }
+}
+
+function _runClassicGpuChromaPosterize(sourceCanvas, width, height, uniforms) {
+  if (window.HUFF_CLASSIC_FORCE_CPU_COLOR === true) return null;
+  const gpu = _initClassicGpu();
+  if (!gpu || !sourceCanvas || width <= 0 || height <= 0) { _classicGpuTelemetry.fallbacks++; return null; }
+  const { gl } = gpu;
+  try {
+    _uploadClassicGpuSource(gpu, sourceCanvas, width, height);
+    const entry = gpu.chromaPoster;
+    _bindClassicGpuProgram(gpu, entry);
+    gl.uniform1f(entry.uniforms.uSteps, uniforms.steps);
+    gl.uniform1f(entry.uniforms.uSoft, uniforms.soft);
+    gl.uniform1f(entry.uniforms.uAmount, uniforms.amount);
+    gl.uniform1f(entry.uniforms.uPhase, uniforms.phase);
+    _classicGpuTelemetry.solarFrames++;
+    _classicGpuTelemetry.solarPosterizeFrames++;
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+    return gpu.canvas;
+  } catch (err) {
+    console.warn('[huff] Classic bounded CHROMA POSTERIZE GPU stage failed; using CPU fallback', err);
     _classicGpuTelemetry.fallbacks++;
     return null;
   }
@@ -687,6 +745,33 @@ function _tryClassicGpuSolarize(srcCanvas, width, height, fusedGlobalMix, level,
     removeLuma: levels === 0,
     soft: Math.max(0, Math.min(1, (Number(soft) || 0) / 100)),
     invert: !!invert,
+    amount: Math.max(0, Math.min(1, Number(amount) || 0)),
+  });
+}
+
+function _tryClassicGpuChromaPosterize(srcCanvas, width, height, fusedGlobalMix, level, soft, phaseDeg, amount, profile) {
+  const stage = _ensureClassicGpuStage(width, height);
+  if (!stage) return null;
+  copyCanvasFrame(_classicGpuStageCtx, srcCanvas, width, height);
+  if (fusedGlobalMix?.source && Number(fusedGlobalMix.amount) > 0) {
+    const prevOp = _classicGpuStageCtx.globalCompositeOperation;
+    const prevAlpha = _classicGpuStageCtx.globalAlpha;
+    try {
+      _classicGpuStageCtx.globalCompositeOperation = fusedGlobalMix.blend || 'screen';
+      _classicGpuStageCtx.globalAlpha = Math.max(0, Math.min(1, Number(fusedGlobalMix.amount) || 0));
+      _classicGpuStageCtx.drawImage(fusedGlobalMix.source, 0, 0, width, height);
+    } finally {
+      _classicGpuStageCtx.globalCompositeOperation = prevOp || 'source-over';
+      _classicGpuStageCtx.globalAlpha = prevAlpha;
+    }
+    if (profile) _solProfileAdd('fusedGlobalMixFrames');
+  }
+  const levelPct = Math.max(0, Math.min(100, Number(level) || 0));
+  const steps = Math.max(2, Math.min(64, Math.round(64 - 62 * (levelPct / 100))));
+  return _runClassicGpuChromaPosterize(stage, width, height, {
+    steps,
+    soft: Math.max(0, Math.min(1, (Number(soft) || 0) / 100)),
+    phase: (Number(phaseDeg) || 0) * Math.PI / 180,
     amount: Math.max(0, Math.min(1, Number(amount) || 0)),
   });
 }
@@ -2312,6 +2397,7 @@ const _solTelemetry = window.__huffSolarizeTelemetry || {
   processedFrames: 0,
   reusedFrames: 0,
   fusedGlobalMixFrames: 0,
+  directLiveSourceFrames: 0,
 };
 window.__huffSolarizeTelemetry = _solTelemetry;
 
@@ -2584,6 +2670,33 @@ function _presentSolarizeFluidCache(ctx, sourceCanvas, width, height) {
   }
 }
 
+function _posterizeChromaPixelsBytes(pix, levelPct, softPct, phaseDeg, amount) {
+  const steps = Math.max(2, Math.min(64, Math.round(64 - 62 * (Math.max(0, Math.min(100, Number(levelPct) || 0)) / 100))));
+  const soft = Math.max(0, Math.min(1, (Number(softPct) || 0) / 100));
+  const wet = Math.max(0, Math.min(1, Number(amount) || 0));
+  const phase = (Number(phaseDeg) || 0) * Math.PI / 180;
+  const cs = Math.cos(phase), sn = Math.sin(phase);
+  for (let i = 0; i < pix.length; i += 4) {
+    const or = pix[i], og = pix[i+1], ob = pix[i+2];
+    const r = or / 255, g = og / 255, b = ob / 255;
+    const y = 0.299*r + 0.587*g + 0.114*b;
+    const cb = 0.5 + (b-y)/1.772, cr = 0.5 + (r-y)/1.402;
+    const cx = cb - 0.5, cy = cr - 0.5;
+    const rx = cs*cx - sn*cy, ry = sn*cx + cs*cy;
+    const ux = Math.max(0, Math.min(1, rx + 0.5)), uy = Math.max(0, Math.min(1, ry + 0.5));
+    const qx = Math.round(ux * steps) / steps, qy = Math.round(uy * steps) / steps;
+    const sx = (qx*(1-soft) + ux*soft) - 0.5, sy = (qy*(1-soft) + uy*soft) - 0.5;
+    const ucx = cs*sx + sn*sy, ucy = -sn*sx + cs*sy;
+    const outCb = ucx + 0.5, outCr = ucy + 0.5;
+    let rr = y + 1.402*(outCr-0.5), bb = y + 1.772*(outCb-0.5);
+    let gg = (y - 0.299*rr - 0.114*bb) / 0.587;
+    rr = Math.max(0, Math.min(1, rr)); gg = Math.max(0, Math.min(1, gg)); bb = Math.max(0, Math.min(1, bb));
+    pix[i] = Math.round(or*(1-wet) + rr*255*wet);
+    pix[i+1] = Math.round(og*(1-wet) + gg*255*wet);
+    pix[i+2] = Math.round(ob*(1-wet) + bb*255*wet);
+  }
+}
+
 // ── Pass 44 cadence boundary ────────────────────────────────────────────────
 // Solarize now transforms every render call. The older adaptive 2nd/3rd-frame
 // reuse guard is intentionally removed: overload mitigation must not alter the
@@ -2592,19 +2705,25 @@ function _presentSolarizeFluidCache(ctx, sourceCanvas, width, height) {
 // bounded scratch domain.
 let _solLastMode = 'threshold';
 
-function applySolarize(buf, thresh = 0.5, amount = 1.0, solR = 1.0, solG = 1.0, solB = 1.0, mode = 'threshold', level = 75, soft = 0, invert = false, fluidity = 100, fusedGlobalMix = null) {
+function applySolarize(buf, thresh = 0.5, amount = 1.0, solR = 1.0, solG = 1.0, solB = 1.0, mode = 'threshold', level = 75, soft = 0, invert = false, fluidity = 100, fusedGlobalMix = null, posterLevel = 75, posterSoft = 0, posterPhase = 0, sourceOverride = null) {
   // Keep the function safe when called outside the main dispatcher. The
   // original THRESHOLD identity checks remain exact; LUMA QUANTIZE adds its own
   // neutral conditions without changing the established Classic path.
-  const lumaQuantize = String(mode || 'threshold') === 'luma-quantize';
-  if (!lumaQuantize) {
+  const activeModeName = String(mode || 'threshold');
+  const lumaQuantize = activeModeName === 'luma-quantize';
+  const chromaPosterize = activeModeName === 'chroma-posterize';
+  if (!lumaQuantize && !chromaPosterize) {
     if (thresh >= 1) return;
     if (amount === 0 && solR === 1 && solG === 1 && solB === 1) return;
-  } else {
+  } else if (lumaQuantize) {
     const levelPct = Math.max(0, Math.min(100, Number(level) || 0));
     const softPct = Math.max(0, Math.min(100, Number(soft) || 0));
     if (amount === 0) return;
     if (!invert && (levelPct <= 0 || softPct >= 100)) return;
+  } else {
+    const levelPct = Math.max(0, Math.min(100, Number(posterLevel) || 0));
+    const softPct = Math.max(0, Math.min(100, Number(posterSoft) || 0));
+    if (amount === 0 || levelPct <= 0 || softPct >= 100) return;
   }
   const BW = buf.width, BH = buf.height;
   const MAX_W = 640;
@@ -2619,10 +2738,33 @@ function applySolarize(buf, thresh = 0.5, amount = 1.0, solR = 1.0, solG = 1.0, 
   // already-accelerated LUMA QUANTIZE mode.
   const now = performance.now();
   const profile = window.__huffProfilerActive === true;
-  const srcCanvas = buf.elt || buf.drawingContext.canvas;
+  // Pass 52A: a terminal colour stage needs a live image source when it is
+  // the only active processing stage. The persistent gBuf is intentionally not
+  // refreshed every frame during the active Classic pipeline; using it as the
+  // source for solo Solarize therefore re-processed stale/decayed history.
+  // sourceOverride is used only by the dispatcher for that isolated case.
+  // Combined-effect paths continue to read gBuf exactly as before.
+  const srcCanvas = sourceOverride || buf.elt || buf.drawingContext.canvas;
+  if (profile && sourceOverride) _solProfileAdd('directLiveSourceFrames');
   if (lumaQuantize) {
     const gpuResult = _tryClassicGpuSolarize(
       srcCanvas, sw, sh, fusedGlobalMix, level, soft, !!invert, amount, profile
+    );
+    if (gpuResult) {
+      if (profile) _solProfileAdd('processedFrames');
+      const presentStart = profile ? performance.now() : 0;
+      const fluidCanvas = _updateSolarizeFluidity(fluidity, now, sw, sh, gpuResult);
+      _presentSolarizeFluidCache(buf.drawingContext, fluidCanvas, BW, BH);
+      if (profile) {
+        _solProfileAdd('presentMs', performance.now() - presentStart);
+        _solProfileAdd('presentSamples');
+      }
+      return;
+    }
+  }
+  else if (chromaPosterize) {
+    const gpuResult = _tryClassicGpuChromaPosterize(
+      srcCanvas, sw, sh, fusedGlobalMix, posterLevel, posterSoft, posterPhase, amount, profile
     );
     if (gpuResult) {
       if (profile) _solProfileAdd('processedFrames');
@@ -2670,7 +2812,7 @@ function applySolarize(buf, thresh = 0.5, amount = 1.0, solR = 1.0, solG = 1.0, 
   }
 
   // Every-frame Solarize processing; Pass 44 no longer changes temporal cadence.
-  const activeMode = lumaQuantize ? 'luma-quantize' : 'threshold';
+  const activeMode = lumaQuantize ? 'luma-quantize' : (chromaPosterize ? 'chroma-posterize' : 'threshold');
   if (activeMode !== _solLastMode) _solLastMode = activeMode;
 
   let phaseStart = profile ? performance.now() : 0;
@@ -2707,6 +2849,8 @@ function applySolarize(buf, thresh = 0.5, amount = 1.0, solR = 1.0, solG = 1.0, 
     _refreshSolarizeLumaMap(level, soft, !!invert, amount);
     if (_solLittleEndian) _solarizeLumaPixelsWords(pix);
     else _solarizeLumaPixelsBytes(pix);
+  } else if (chromaPosterize) {
+    _posterizeChromaPixelsBytes(pix, posterLevel, posterSoft, posterPhase, amount);
   } else {
     const t = thresh * 255;
     _refreshSolarizeMaps(amount, solR, solG, solB);

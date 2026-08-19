@@ -1,81 +1,76 @@
-# HUFF Classic Pass 51 — Validation Report
+# Pass 52D validation
 
-## Scope
+Pass 52D is a UI-awareness candidate built from Pass 52B.
 
-Pass 51 changes only the browser-side Syphon output contract/scheduler and its documentation/validation. It does **not** change the native Syphon Metal publisher, native raw-RGBA WebSocket protocol, HUFF effects, serial pipeline, Luma, Solarize, Feedback/Persistence, Flow, or Spout.
+Validation from the working package:
 
-## Static / regression validation
+- `node --check src/canvas.js` — PASS
+- `node --check scripts/validate-pass52d.mjs` — PASS
+- `npm run validate:pass52d` — **67 checks PASS**
+- `npm run validate:pass52b` — **34 checks PASS**
+- `npm run validate:pass52` — **33,813 checks PASS**
+- `npm run simulate:pass51` — **PASS**
+- `npm run simulate:pass40w` — **PASS**
+- `npm run simulate:pass41a` — **PASS**
+- `npm run release:preflight` — **38 passed, 0 warnings, 0 blockers**
 
-Executed from the Pass 51 working tree:
+The Pass 52D validator hash-protects the exact Pass 52B render-stage functions, verifies that `effects.js`, `pipeline-runtime.js`, and the Pass 51 Syphon worker remain exact Pass 52B bytes, and checks the three-source UI decision table.
 
-```text
-npm run validate:pass48
-HUFF Classic Pass 48 validation: 69 checks PASS
+Target-machine acceptance is still required for usability: the pass succeeds only if a user can immediately understand why Symmetry/Solarize need image material in the Classic route without the UI feeling intrusive.
 
-npm run validate:pass49
-HUFF Classic Pass 49 validation: 33 checks PASS
+# HUFF Classic Pass 52 — Validation Report
 
-npm run validate:pass50
-HUFF Classic Pass 50 validation: 33 checks PASS
+## Static validation
 
-npm run simulate:pass50
-HUFF Classic Pass 50 Syphon Worker simulation PASS
+- `node --check src/effects.js` — PASS
+- `node --check src/canvas.js` — PASS
+- `node --check scripts/validate-pass52.mjs` — PASS
+- `npm run validate:pass52` — PASS
+- `npm run simulate:pass51` — PASS
+- `npm run simulate:pass40w` — PASS
+- `npm run simulate:pass41a` — PASS
+- `npm run release:preflight` — 38 passed, 0 warnings, 0 blockers
 
-npm run validate:pass51
-HUFF Classic Pass 51 validation: 39 checks PASS
+Pass 52 validation includes 32,768 randomized byte-safety cases plus 1,024 exact AMOUNT=0 neutral cases for the chroma-posterization equations.
 
-npm run simulate:pass51
-HUFF Classic Pass 51 Syphon two-credit pipeline simulation PASS
+## Historical validator note
 
-npm run simulate:pass40w
-PASS 40W Scan/Luma/Corrupt layer-handoff simulation PASS
+`validate:pass51` intentionally pins the exact Pass 51 `src/effects.js` hash, so it now reports that effects are no longer protected. That is expected because Pass 52 deliberately augments the colour effect implementation. Pass 51's Syphon Worker simulation still passes, and the Pass 52 validator directly protects the native Syphon files and Pass 51 Worker hash.
 
-npm run simulate:pass41a
-PASS playback simulation
+## Runtime gate
 
-npm run release:preflight
-Release preflight: 38 passed, 0 warnings, 0 blockers
-```
+The target Mac/WebView remains authoritative for actual WebGL execution and FPS. Confirm CHROMA POSTERIZE visual behavior and `gpu poster` advancement.
 
-## Pass 51 simulation coverage
+## Pass 52A validation
 
-The Pass 51 Worker simulation executes the real `src/syphon-stream-worker.js` with mocked `OffscreenCanvas` and `WebSocket` objects. It verifies:
+Static/runtime-logic validation performed after the standalone Solarize source-ownership repair:
 
-1. worker-direct opens with exactly two native credits;
-2. frame A is sent and leaves one credit available;
-3. frame B is sent **before native ACK A** and fills the second credit;
-4. frame C is rejected while both credits are occupied;
-5. the rejected frame does not enter the socket queue;
-6. native ACK A releases one credit and emits a capacity signal;
-7. frame C can then enter the pipeline;
-8. the accepted Pass 49 full-pixel return fallback still works.
+- `npm run validate:pass52a` — 23 checks PASS
+- `npm run validate:pass52` — 33,813 checks PASS
+- `npm run simulate:pass51` — PASS
+- `npm run simulate:pass40w` — PASS
+- `npm run simulate:pass41a` — PASS
+- `npm run release:preflight` — 38 passed, 0 warnings, 0 blockers
 
-## Protected hash boundary
+The Pass 52A validator executes the isolation predicate as a truth table: Solarize-only must select the clean live source, while each established upstream image stage independently forces Solarize back onto `gBuf` ownership.
 
-`baseline/pass48-pass51-protected.sha256` records exact hashes for:
+Target-macOS runtime validation is still required before a Git commit is issued.
 
-- `src-tauri/src/main.rs`
-- `src-tauri/src/syphon.rs`
-- `src/effects.js`
-- `src/pipeline-runtime.js`
+## Pass 52B validation
 
-The Pass 51 validator also enforces those exact hashes.
+Pass 52B corrects the source-ownership predicate and adds standalone Symmetry ownership.
 
-## Syntax checks
+- `node --check src/canvas.js` — PASS
+- `node --check src/effects.js` — PASS
+- `node --check scripts/validate-pass52b.mjs` — PASS
+- `npm run validate:pass52` — **33,813 checks PASS**
+- `npm run validate:pass52b` — **34 checks PASS**
+- `npm run simulate:pass52b` — **PASS**
+- `npm run simulate:pass51` — **PASS**
+- `npm run simulate:pass40w` — **PASS**
+- `npm run simulate:pass41a` — **PASS**
+- `npm run release:preflight` — **38 passed, 0 warnings, 0 blockers**
 
-The modified Syphon inline JavaScript was extracted from `src/index.html` and passed `node --check`. `src/syphon-stream-worker.js` and `src/canvas.js` also passed `node --check`.
+`validate:pass52a` is intentionally superseded and now fails its exact historical helper-signature check because Pass 52B replaces the incomplete `activity`-only predicate with a frame-aware ownership predicate. Pass 52B directly exercises the missing case: Feedback ENABLE off while the historical Feedback amount remains non-zero.
 
-## Native-build limitation
-
-Cargo/Rust is not installed in this build environment, so a fresh `tauri dev`/native compile cannot be certified here. This pass deliberately leaves the native Rust/Syphon files byte-identical to the already-running lineage, but the target Mac remains the authoritative runtime gate.
-
-## Runtime acceptance required
-
-Static validation cannot prove WKWebView/OffscreenCanvas readback throughput or actual 720p60 receiver cadence. The target machine must confirm:
-
-- stable 1280×720/60 worker-direct output;
-- bounded `sy credit` depth (never above 2);
-- no increasing output latency during saturation;
-- receiver disconnect/reconnect and Start/Stop/Start stability;
-- forced worker-direct failure continues at effective 1280×720/30 through the accepted fallback;
-- long-duration stability under heavy HUFF effects.
+The target Mac remains the runtime gate. Do not finalize the Pass 52 Git commit until standalone Symmetry and Solarize are visually confirmed.

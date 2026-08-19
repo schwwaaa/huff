@@ -1,3 +1,36 @@
+## Pass 52D — Three-Source Pipeline Awareness
+
+- Built directly from Pass 52B; Pass 52C remains rejected.
+- Preserves Corrupt, Scanlines, and Luma/Composite as HUFF Classic's three primary image feeds.
+- Marks Symmetry and Solarize as downstream processors instead of promising standalone behavior.
+- Adds live feed indicators and a recipe-aware quick pipeline route to the Pipeline group.
+- Warns `NEEDS IMAGE FEED` when Symmetry or Solarize is enabled with no primary feed.
+- Luma counts as a primary feed only when ON, TARGET = COMPOSITE, and MIX > 0.
+- CRISP FINISH explicitly reports Symmetry/Solarize as pre-feed relative to the front image layers.
+- No auto-enable, no CLEAN fourth feed, no effect math change, no render-stage change, no Syphon change.
+- Pass 52B standalone-source experiments remain historical implementation attempts, not the product contract.
+
+## Pass 52B — Standalone Symmetry / Solarize Source Ownership
+
+- Supersedes the incomplete Pass 52A solo-Solarize ownership predicate.
+- Distinguishes `activity.feedback` from an actually enabled Feedback transform.
+- Gives Symmetry direct `gCur` ownership when no enabled upstream image stage owns `gBuf`.
+- Gives Solarize direct `gCur` ownership under the same condition when Symmetry is inactive.
+- Symmetry + Solarize now resolves as `gCur -> Symmetry -> Solarize`.
+- Preserves real Feedback, Flow, Global Mix, Luma, Glitch and Scanline combinations.
+- Changes dispatcher/source selection only; the Symmetry and Solarize algorithms are unchanged.
+- No frame skipping, full-resolution source seed, Flow change, Syphon change, or native change.
+
+## Pass 52 — Chroma Posterize
+
+- Built on runtime-accepted Pass 51.
+- Adds CHROMA POSTERIZE to the existing Solarize-family bounded colour slot.
+- Preserves luminance while quantizing two chroma axes.
+- Adds LEVEL, SOFT, and PHASE; reuses AMOUNT and FLUIDITY.
+- Adds a bounded WebGL1 path plus bounded CPU fallback.
+- Adds no extra full-resolution stage, framebuffer, frame gate, or playback change.
+- Preserves Pass 51 Syphon, Luma, Feedback, frozen Flow, and native output behavior.
+
 ## Pass 51 — Syphon 720p60 Bounded Pipeline
 
 - Makes HUFF Classic Syphon 1280×720-only.
@@ -122,3 +155,7 @@ Key changes:
 Pass 40W front-stage behavior is protected exactly outside `src/canvas.js` and the
 source-control UI. No decoder backend, Flow, Luma, Scan FIELD, Corrupt, Feedback,
 or native output architecture is redesigned here.
+
+## Pass 52A — Solarize Solo Source-Ownership Repair
+
+Runtime candidate. The Pass 52 standalone Solarize test exposed a pre-existing pipeline ownership gap: Solarize is terminal and did not inject fresh live pixels when no upstream image stage was active. Pass 52A supplies `gCur` directly only in the isolated Solarize case. Combined HUFF processing continues to use the persistent `gBuf` path.

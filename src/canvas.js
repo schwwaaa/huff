@@ -606,7 +606,7 @@ const PRESET_IDS = [
   'flowOn','flowStrength','flowScale','flowPulse','flowImpl','flowSpeed','flowTurb','flowSwirl','flowSpread',
   'baseOn','baseMix','seedOnLoad',
   'symOn','symMode','symPos',
-  'solarizeOn','solarizeMode','solarizeThresh','solarizeLevel','solarizeSoft','solarizeInvert','solarizeAmt','solarizeFluidity','solarizeR','solarizeG','solarizeB',
+  'solarizeOn','solarizeMode','solarizeThresh','solarizeLevel','solarizeSoft','solarizeInvert','solarizePosterLevel','solarizePosterSoft','solarizePosterPhase','solarizeAmt','solarizeFluidity','solarizeR','solarizeG','solarizeB',
   'scanAlpha','scanShift','scanDrift','scanSpeed','scanGap','scanSkew',
   'scanAngle','scanFocus','scanRoll',
   'scanSpinLeft','scanSpinRight','scanSpinSpeed',
@@ -673,6 +673,9 @@ function applyPreset(data) {
   // Pass 43 adds Solarize-local temporal slew. 100% is a strict compatibility
   // bypass, so all older presets retain Pass 42 frame-for-frame behavior.
   if (!('solarizeFluidity' in sourceData)) sourceData.solarizeFluidity = '100';
+  if (!('solarizePosterLevel' in sourceData)) sourceData.solarizePosterLevel = '75';
+  if (!('solarizePosterSoft' in sourceData)) sourceData.solarizePosterSoft = '0';
+  if (!('solarizePosterPhase' in sourceData)) sourceData.solarizePosterPhase = '0';
   const validRecipeIds = new Set(['classic', 'crisp-finish']);
   if (!validRecipeIds.has(String(sourceData.pipelineRecipe || ''))) {
     sourceData.pipelineRecipe = 'classic';
@@ -1365,7 +1368,7 @@ function hookUI() {
     'flowSpeed','flowSpeedVal','flowTurb','flowTurbVal','flowSwirl','flowSwirlVal','flowSpread','flowSpreadVal',
     'baseOn','baseMix','baseMixVal','seedOnLoad',
     'symOn','symMode','symPos','symPosVal',
-    'solarizeOn','solarizeMode','solarizeThresh','solarizeThreshVal','solarizeLevel','solarizeLevelVal','solarizeSoft','solarizeSoftVal','solarizeInvert','solarizeAmt','solarizeAmtVal','solarizeFluidity','solarizeFluidityVal',
+    'solarizeOn','solarizeMode','solarizeThresh','solarizeThreshVal','solarizeLevel','solarizeLevelVal','solarizeSoft','solarizeSoftVal','solarizeInvert','solarizePosterLevel','solarizePosterLevelVal','solarizePosterSoft','solarizePosterSoftVal','solarizePosterPhase','solarizePosterPhaseVal','solarizeAmt','solarizeAmtVal','solarizeFluidity','solarizeFluidityVal',
     'solarizeR','solarizeRVal','solarizeG','solarizeGVal','solarizeB','solarizeBVal',
     'scanAlpha','scanAlphaVal','scanShift','scanShiftVal','scanDrift','scanDriftVal',
     'scanSpeed','scanSpeedVal','scanGap','scanGapVal','scanSkew','scanSkewVal',
@@ -1379,6 +1382,7 @@ function hookUI() {
     'scanAngle','bgMode','dim',
     'cluSpeedVar','cluSpeedVarVal','cluPulse','cluPulseVal','cluBreathe','cluBreatheVal','cluBounds',
     'pipelineRecipe','layerPriority','layerPriorityState',
+    'pipelineFeedCorrupt','pipelineFeedScan','pipelineFeedLuma','pipelineFeedSummary','pipelineRouteSummary','symPipelineState','solarizePipelineState',
     'lumaKeyOn','lumaKeyTarget','lumaKeyTargetState','lumaKeyMix','lumaKeyMixVal','lumaKeyAB','lumaKeyABVal','lumaKeyInvert',
     'lumaKeyGain','lumaKeyGainVal','lumaKeySource','lumaKeyFade','lumaKeyCleanup','lumaKeyCleanupVal','lumaKeyDensity','lumaKeyDensityVal','lumaKeyCaptureBtn','lumaKeyStencilState',
     'globalMixOn','globalMixBlend','globalMixAmt','globalMixAmtVal','globalMixCurve','globalMixPos',
@@ -1705,7 +1709,7 @@ function hookSliders() {
     'glitchAlpha','glitchJitter','glitchSmearAngle',
     'flowStrength','flowScale','flowPulse','flowImpl','flowSpeed','flowTurb','flowSwirl','flowSpread','baseMix','symPos',
     'depthScatter','corruptDrift',
-    'solarizeThresh','solarizeLevel','solarizeSoft','solarizeAmt','solarizeFluidity','solarizeR','solarizeG','solarizeB',
+    'solarizeThresh','solarizeLevel','solarizeSoft','solarizePosterLevel','solarizePosterSoft','solarizePosterPhase','solarizeAmt','solarizeFluidity','solarizeR','solarizeG','solarizeB',
     'cluSpeedVar','cluPulse','cluBreathe',
     'lumaKeyMix','lumaKeyAB','lumaKeyGain','lumaKeyCleanup','lumaKeyDensity','globalMixAmt','scanAngle','scanSpinSpeed',
   ];
@@ -1828,24 +1832,29 @@ function hookSliders() {
   syncLayerPriorityUI();
 
   const syncSolarizeModeUI = () => {
-    const lumaMode = String(els.solarizeMode?.value || 'threshold') === 'luma-quantize';
-    if (els.solarizeThresh) els.solarizeThresh.disabled = lumaMode;
-    if (els.solarizeR) els.solarizeR.disabled = lumaMode;
-    if (els.solarizeG) els.solarizeG.disabled = lumaMode;
-    if (els.solarizeB) els.solarizeB.disabled = lumaMode;
+    const mode = String(els.solarizeMode?.value || 'threshold');
+    const lumaMode = mode === 'luma-quantize';
+    const posterMode = mode === 'chroma-posterize';
+    const thresholdMode = !lumaMode && !posterMode;
+    if (els.solarizeThresh) els.solarizeThresh.disabled = !thresholdMode;
+    if (els.solarizeR) els.solarizeR.disabled = !thresholdMode;
+    if (els.solarizeG) els.solarizeG.disabled = !thresholdMode;
+    if (els.solarizeB) els.solarizeB.disabled = !thresholdMode;
     if (els.solarizeLevel) els.solarizeLevel.disabled = !lumaMode;
     if (els.solarizeSoft) els.solarizeSoft.disabled = !lumaMode;
     if (els.solarizeInvert) els.solarizeInvert.disabled = !lumaMode;
+    if (els.solarizePosterLevel) els.solarizePosterLevel.disabled = !posterMode;
+    if (els.solarizePosterSoft) els.solarizePosterSoft.disabled = !posterMode;
+    if (els.solarizePosterPhase) els.solarizePosterPhase.disabled = !posterMode;
 
-    // Pass 44: show only parameters that actually belong to the selected
-    // Solarize algorithm. Shared controls (ON, MODE, AMOUNT, FLUIDITY) stay
-    // visible; inactive mode-specific controls are hidden rather than merely
-    // greyed out so the performance surface is unambiguous.
     document.querySelectorAll('.solarize-threshold-only').forEach(el => {
-      el.classList.toggle('solarize-mode-hidden', lumaMode);
+      el.classList.toggle('solarize-mode-hidden', !thresholdMode);
     });
     document.querySelectorAll('.solarize-luma-only').forEach(el => {
       el.classList.toggle('solarize-mode-hidden', !lumaMode);
+    });
+    document.querySelectorAll('.solarize-poster-only').forEach(el => {
+      el.classList.toggle('solarize-mode-hidden', !posterMode);
     });
   };
   els.solarizeMode?.addEventListener('change', () => {
@@ -1853,6 +1862,77 @@ function hookSliders() {
     updateLabels();
   });
   syncSolarizeModeUI();
+
+  // Pass 53: make HUFF Classic's existing three-source image-feed model visible
+  // without changing the render graph. Corrupt, Scanlines, and Luma/Composite
+  // are the primary live-image entry points; Symmetry and Solarize remain
+  // downstream processors. This is UI awareness only.
+  const getPrimaryImageFeeds = () => {
+    const feeds = [];
+    if (els.corruptOn?.checked) feeds.push('CORRUPT');
+    if (els.clusters?.checked) feeds.push('SCANLINES');
+    const lumaComposite = !!els.lumaKeyOn?.checked
+      && String(els.lumaKeyTarget?.value || 'composite') === 'composite'
+      && Number(els.lumaKeyMix?.value || 0) > 0.0001;
+    if (lumaComposite) feeds.push('LUMA/COMP');
+    return feeds;
+  };
+
+  const setPipelineStageBadge = (el, enabled, recipe, feeds) => {
+    if (!el) return;
+    el.classList.remove('warn', 'ready');
+    if (recipe === 'crisp-finish') {
+      el.textContent = enabled ? 'CRISP · PRE-FEED' : 'DOWNSTREAM · PRE-FEED';
+      if (enabled) el.classList.add('warn');
+      el.title = 'CRISP FINISH places Corrupt, Luma/Composite, and Scanlines after Symmetry/Solarize. Switch to CLASSIC when you want those three image feeds processed by this stage.';
+      return;
+    }
+    if (!feeds.length) {
+      el.textContent = enabled ? 'NEEDS IMAGE FEED' : 'WAITING FOR FEED';
+      if (enabled) el.classList.add('warn');
+      el.title = 'HUFF Classic downstream stage: enable Corrupt, Scanlines, or Luma Key with TARGET = COMPOSITE and MIX above 0 so live imagery enters the persistent image path.';
+      return;
+    }
+    el.textContent = enabled ? `PROCESSING · ${feeds.join('+')}` : `READY · ${feeds.join('+')}`;
+    el.classList.add('ready');
+    el.title = `Active HUFF Classic image feed: ${feeds.join(', ')}.`;
+  };
+
+  const syncPipelineAwarenessUI = () => {
+    const recipe = String(els.pipelineRecipe?.value || 'classic');
+    const feeds = getPrimaryImageFeeds();
+    const corruptActive = feeds.includes('CORRUPT');
+    const scanActive = feeds.includes('SCANLINES');
+    const lumaActive = feeds.includes('LUMA/COMP');
+    els.pipelineFeedCorrupt?.classList.toggle('active', corruptActive);
+    els.pipelineFeedScan?.classList.toggle('active', scanActive);
+    els.pipelineFeedLuma?.classList.toggle('active', lumaActive);
+
+    if (els.pipelineFeedSummary) {
+      els.pipelineFeedSummary.classList.toggle('warn', feeds.length === 0);
+      els.pipelineFeedSummary.textContent = feeds.length ? feeds.join(' + ') : 'NONE · ENABLE A FEED';
+      els.pipelineFeedSummary.title = feeds.length
+        ? `Primary image feed active: ${feeds.join(', ')}.`
+        : 'No primary image feed is active. Start with Corrupt, Scanlines, or Luma Key set to COMPOSITE with MIX above 0.';
+    }
+    if (els.pipelineRouteSummary) {
+      els.pipelineRouteSummary.textContent = recipe === 'crisp-finish'
+        ? 'CRISP: FEEDBACK → FLOW → SYMMETRY → SOLARIZE → IMAGE FEED'
+        : 'CLASSIC: IMAGE FEED → FEEDBACK → FLOW → SYMMETRY → SOLARIZE';
+      els.pipelineRouteSummary.title = recipe === 'crisp-finish'
+        ? 'CRISP FINISH deliberately draws Corrupt, Luma/Composite, and Scanlines after the transform/color stages.'
+        : 'CLASSIC preserves the Pass 22 serial order: image feeds enter before Feedback, Flow, Symmetry, and Solarize.';
+    }
+
+    setPipelineStageBadge(els.symPipelineState, !!els.symOn?.checked, recipe, feeds);
+    setPipelineStageBadge(els.solarizePipelineState, !!els.solarizeOn?.checked, recipe, feeds);
+  };
+
+  ['corruptOn','clusters','lumaKeyOn','lumaKeyTarget','pipelineRecipe','symOn','solarizeOn'].forEach(id => {
+    els[id]?.addEventListener('change', syncPipelineAwarenessUI);
+  });
+  els.lumaKeyMix?.addEventListener('input', syncPipelineAwarenessUI);
+  syncPipelineAwarenessUI();
 
   // Checkboxes and selects also get snapshotted for undo
   ['corruptOn','corruptUpdateMode','corruptDistribution','clusterTiles','corruptMaskMode','corruptMaskSide','clusters','feedbackEnabled','feedbackMotionRange','feedbackStrobe','flowOn','baseOn','symOn','solarizeOn','solarizeMode','solarizeInvert',
@@ -2229,6 +2309,9 @@ function updateLabels() {
   set(els.solarizeThresh,   els.solarizeThreshVal,   f2);
   set(els.solarizeLevel,    els.solarizeLevelVal,    v => `${Math.round(+v || 0)}%`);
   set(els.solarizeSoft,     els.solarizeSoftVal,     v => `${Math.round(+v || 0)}%`);
+  set(els.solarizePosterLevel, els.solarizePosterLevelVal, v => `${Math.round(+v || 0)}%`);
+  set(els.solarizePosterSoft, els.solarizePosterSoftVal, v => `${Math.round(+v || 0)}%`);
+  set(els.solarizePosterPhase, els.solarizePosterPhaseVal, v => `${Math.round(+v || 0)}°`);
   set(els.solarizeAmt,      els.solarizeAmtVal,      f2);
   set(els.solarizeFluidity, els.solarizeFluidityVal, v => `${Math.round(+v || 0)}%`);
   set(els.solarizeR,        els.solarizeRVal,        f2);
@@ -2715,6 +2798,13 @@ function _solarizeHasVisibleEffect(state) {
     return true;
   }
 
+  if (mode === 'chroma-posterize') {
+    if (state.solarizeAmt === 0) return false;
+    const level = Math.max(0, Math.min(100, Number(state.solarizePosterLevel) || 0));
+    const soft = Math.max(0, Math.min(100, Number(state.solarizePosterSoft) || 0));
+    return level > 0 && soft < 100;
+  }
+
   // THRESHOLD is the exact accepted HUFF Classic Solarize path.
   // Threshold 1 maps to 255 and the effect uses a strict `lum > threshold`
   // comparison, so no possible pixel is modified.
@@ -3004,15 +3094,53 @@ function _runFlowStage(frame) {
   }
 }
 
+function _feedbackActuallyOwnsBuffer(frame) {
+  // `activity.feedback` deliberately remains true when the historical Feedback
+  // amount is non-neutral so PERSISTENCE keeps its established Classic pipeline
+  // semantics. That activity bit therefore cannot be used by itself to decide
+  // whether the Feedback transform actually produced an image this frame.
+  // Ownership requires the explicit ENABLE control as well.
+  return frame.state.feedbackEnabled !== false && !!frame.activity.feedback;
+}
+
+function _symmetryShouldReadCleanLiveSource(frame) {
+  const activity = frame.activity;
+  if (!activity.symmetry) return false;
+
+  // Symmetry is a stateless spatial transform. With no enabled image-producing
+  // stage ahead of it, its source must be the current clean frame rather than the
+  // persistent gBuf left from the previous render. Solarize is downstream, so an
+  // active Solarize does not block this direct-live ownership path.
+  return !(
+    activity.glitch || activity.scanlines || activity.luma ||
+    activity.globalMix || _feedbackActuallyOwnsBuffer(frame) || activity.flow
+  );
+}
+
 function _runSymmetryStage(frame) {
   const activity = frame.activity;
   if (activity.symmetry) {
     const startedAt = _pipelineStageProfileStart();
     const s = frame.state;
-    applySymmetry(gBuf, gScratch, s.symMode || 'v', s.symPos);
+    const symmetrySource = _symmetryShouldReadCleanLiveSource(frame) ? gCur : gBuf;
+    applySymmetry(symmetrySource, gScratch, s.symMode || 'v', s.symPos);
     [gBuf, gScratch] = [gScratch, gBuf];
     _pipelineStageProfileEnd('symmetry', startedAt);
   }
+}
+
+function _solarizeShouldReadCleanLiveSource(frame) {
+  const activity = frame.activity;
+  // Solarize is a terminal colour operation. When it has no enabled upstream
+  // image owner, read gCur directly instead of repeatedly transforming stale
+  // persistent gBuf state. A disabled Feedback transform is intentionally not an
+  // ownership barrier even though `activity.feedback` may remain true to preserve
+  // the independent PERSISTENCE contract.
+  return !!activity.solarize && !(
+    activity.glitch || activity.scanlines || activity.luma ||
+    activity.globalMix || _feedbackActuallyOwnsBuffer(frame) ||
+    activity.flow || activity.symmetry
+  );
 }
 
 function _runSolarizeStage(frame) {
@@ -3025,10 +3153,14 @@ function _runSolarizeStage(frame) {
       blend: s.globalMixBlend || 'screen',
       amount: _globalMixEffectiveAmount(s),
     } : null;
+    const directLiveSource = _solarizeShouldReadCleanLiveSource(frame)
+      ? _graphicsCanvas(gCur)
+      : null;
     applySolarize(gBuf, s.solarizeThresh, s.solarizeAmt,
       s.solarizeR, s.solarizeG, s.solarizeB,
       s.solarizeMode || 'threshold', s.solarizeLevel, s.solarizeSoft, s.solarizeInvert,
-      s.solarizeFluidity, fusedGlobalMix);
+      s.solarizeFluidity, fusedGlobalMix, s.solarizePosterLevel, s.solarizePosterSoft, s.solarizePosterPhase,
+      directLiveSource);
     _pipelineStageProfileEnd('solarize', startedAt);
   }
 }
@@ -3866,6 +3998,7 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
       processedFrames: t.processedFrames || 0,
       reusedFrames: t.reusedFrames || 0,
       fusedGlobalMixFrames: t.fusedGlobalMixFrames || 0,
+      directLiveSourceFrames: t.directLiveSourceFrames || 0,
     };
   }
 
@@ -3879,6 +4012,7 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
       solarFrames: t.solarFrames || 0,
       solarQuantizeFrames: t.solarQuantizeFrames || 0,
       solarThresholdFrames: t.solarThresholdFrames || 0,
+      solarPosterizeFrames: t.solarPosterizeFrames || 0,
       lumaFrames: t.lumaFrames || 0,
       lumaFallbacks: t.lumaFallbacks || 0,
       lumaCalibrationRuns: t.lumaCalibrationRuns || 0,
@@ -4083,6 +4217,7 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
       const solarProcessedDelta = solarNow.processedFrames - lastSolarTelemetry.processedFrames;
       const solarReusedDelta = solarNow.reusedFrames - lastSolarTelemetry.reusedFrames;
       const solarFusedGlobalMixDelta = solarNow.fusedGlobalMixFrames - lastSolarTelemetry.fusedGlobalMixFrames;
+      const solarDirectLiveDelta = solarNow.directLiveSourceFrames - lastSolarTelemetry.directLiveSourceFrames;
       const gpuColorNow = gpuColorTelemetrySnapshot();
       const gpuSolarDelta = gpuColorNow.solarFrames - lastGpuColorTelemetry.solarFrames;
       const gpuQuantizeDelta = gpuColorNow.solarQuantizeFrames - lastGpuColorTelemetry.solarQuantizeFrames;
@@ -4298,6 +4433,7 @@ window.addEventListener('beforeunload', _shutdownMediaLifecycle, { once:true });
         'sol present' + solarPresentAvg.toFixed(2).padStart(6) + ' ms\n' +
         'sol cache  ' + `${solarProcessedDelta}/${solarReusedDelta}`.padStart(6) + ' process/reuse\n' +
         'sol gm fuse' + solarFusedGlobalMixDelta.toFixed(0).padStart(6) + ' frames\n' +
+        'sol live   ' + solarDirectLiveDelta.toFixed(0).padStart(6) + ' frames\n' +
         'gpu color  ' + String(gpuColorNow.supported === true ? 'ON' : gpuColorNow.supported === false ? 'FALLBACK' : 'idle').padStart(8) + '\n' +
         'gpu sol    ' + gpuSolarDelta.toFixed(0).padStart(6) + ' frames\n' +
         'gpu thresh ' + gpuThresholdDelta.toFixed(0).padStart(6) + ' frames\n' +

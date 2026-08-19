@@ -1,3 +1,5 @@
+> **Pass 52D candidate:** HUFF Classic now exposes its constrained three-source image-entry model directly in the controls: Corrupt, Scanlines, or Luma Key / COMPOSITE feed the persistent image system; Symmetry and Solarize are labeled as downstream processors. This pass is UI awareness only and preserves the exact Pass 52B render-stage behavior. See `THREE_SOURCE_PIPELINE_AWARENESS_AUDIT.md`.
+
 > **Pass 51 candidate:** HUFF Classic Syphon is now a fixed 1280×720 output with 60 fps as the primary worker-direct target and 30 fps as the safe fallback. Pass 51 pipelines at most two native frames so browser readback for the next frame can overlap native publication of the previous frame. See `SYPHON_720P60_PIPELINE_AUDIT.md`.
 
 

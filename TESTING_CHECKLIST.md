@@ -1,60 +1,57 @@
-# HUFF Classic Pass 51 — Runtime Testing Checklist
+# HUFF Classic Pass 52D — Three-Source Pipeline Awareness
 
-## A. Product boundary
+- [ ] Start with moving video and Corrupt, Scanlines, and Luma Key all OFF.
+- [ ] Pipeline shows `IMAGE FEED` with CORRUPT / SCANLINES / LUMA/COMP and summary `NONE · ENABLE A FEED`.
+- [ ] Enable Symmetry only; its badge changes to `NEEDS IMAGE FEED`.
+- [ ] Enable Corrupt; CORRUPT lights and Symmetry reports `PROCESSING · CORRUPT`.
+- [ ] Repeat with Scanlines as the only feed.
+- [ ] Repeat with Luma Key ON, TARGET = COMPOSITE, MIX > 0.
+- [ ] Set Luma MIX to 0; LUMA/COMP must stop reporting as an active feed.
+- [ ] Set Luma TARGET to CORRUPT or SCAN; LUMA/COMP must stop reporting as an independent feed.
+- [ ] Enable Solarize with no primary feed; its badge changes to `NEEDS IMAGE FEED`.
+- [ ] Enable one or more feeds and verify Solarize reports them immediately.
+- [ ] Switch Pipeline RECIPE to CRISP FINISH; quick route shows the image feed after Symmetry/Solarize and enabled downstream badges show `CRISP · PRE-FEED`.
+- [ ] Return to CLASSIC and confirm accepted Corrupt/Scan/Luma + Feedback/Flow/Symmetry/Solarize combinations look unchanged.
+- [ ] Confirm Pass 51 Syphon 720p60 remains stable.
 
-- [ ] Open Syphon and confirm only **60 FPS — 1280×720** and **30 FPS — 1280×720 (safe)** exist.
-- [ ] Confirm 60 FPS is selected by default.
-- [ ] Confirm there is no 1080p Syphon option.
+> Historical note: the Pass 52A/52B standalone-Symmetry/Solarize checklists below document experiments that did not become the release contract. Pass 52D intentionally makes the dependency visible instead of requiring standalone behavior.
 
-## B. 720p60 worker-direct
+# HUFF Classic Pass 52 — Runtime Checklist
 
-- [ ] Start Syphon at 60 FPS with a receiver attached.
-- [ ] Confirm status shows `worker-direct`.
-- [ ] Confirm moving output is stable and visually current.
-- [ ] Open the backtick profiler and watch `sy credit`; it should remain bounded at `/2`.
-- [ ] Confirm `sy fall` does not increase in a normal healthy session.
-- [ ] Compare receiver motion cadence against Pass 50 / 720p30.
+- [ ] Confirm Pass 51 720p60 Syphon still behaves identically.
+- [ ] Select Solarize → CHROMA POSTERIZE.
+- [ ] LEVEL 0 is neutral.
+- [ ] SOFT 100 is neutral.
+- [ ] Raise LEVEL and confirm colour bands collapse while brightness structure remains recognizable.
+- [ ] Sweep PHASE and confirm colour groupings reorganize without acting like a plain hue rotation.
+- [ ] Confirm AMOUNT is a normal wet/dry control.
+- [ ] Confirm FLUIDITY still gives the accepted viscous temporal response.
+- [ ] Open profiler: `gpu poster` should advance; `gpu fall` should remain 0 on healthy WebGL.
+- [ ] Test with heavy Feedback.
+- [ ] Test with Global Mix and verify fusion/appearance remains stable.
+- [ ] Switch repeatedly among THRESHOLD / LUMA QUANTIZE / CHROMA POSTERIZE and confirm mode-specific controls are unambiguous.
 
-## C. Backpressure / heavy HUFF state
+## Pass 52A — Solarize standalone regression
 
-- [ ] Enable a heavy accepted state: Feedback/Persistence + Luma + Solarize + other normal effects.
-- [ ] Confirm HUFF rendering does not stall because Syphon is busy.
-- [ ] Confirm Syphon does not accumulate visible latency over time.
-- [ ] If `sy credit` sits at `2/2`, confirm output opportunities are dropped rather than queued and latency remains current.
+- [ ] Disable Glitch, Scanlines, Luma Key, Global Mix, Feedback, Flow, and Symmetry.
+- [ ] Enable Solarize THRESHOLD only; confirm source motion remains live and THRESH/AMOUNT/RGB controls are visible.
+- [ ] Select LUMA QUANTIZE only; confirm moving source remains live and LEVEL/SOFT/INVERT respond.
+- [ ] Select CHROMA POSTERIZE only; confirm moving source remains live and LEVEL/SOFT/PHASE respond.
+- [ ] Confirm profiler `sol live` advances during each isolated Solarize mode.
+- [ ] Enable Feedback; confirm `sol live` stops and the accepted persistent-buffer combination remains intact.
+- [ ] Disable Feedback and enable Flow; confirm `sol live` stops and Flow + Solarize retains its prior look.
+- [ ] Recheck Pass 51 Syphon 720p60 output while Solarize is active.
 
-## D. Receiver lifecycle
+## Pass 52B — Standalone Symmetry + Solarize ownership
 
-- [ ] Start HUFF Syphon before opening the receiver; confirm bootstrap discovery still works.
-- [ ] Close receiver while streaming, wait, then reopen it.
-- [ ] Repeat receiver connect/disconnect several times.
-- [ ] Confirm no discoverable-but-black regression.
-
-## E. Start / stop / restart
-
-- [ ] Start → Stop → Start at 60 FPS at least five times.
-- [ ] Stop while receiver is connected.
-- [ ] Stop while no receiver is connected.
-- [ ] Close HUFF while Syphon is streaming and confirm no orphan process/publisher state.
-
-## F. 720p30 safe mode
-
-- [ ] Select 30 FPS and confirm worker-direct can run at 720p30.
-- [ ] Confirm the same receiver lifecycle behavior.
-
-## G. Forced fallback
-
-- [ ] Force/unavailable Worker transport (or otherwise trigger the existing fallback path).
-- [ ] Confirm status changes to `main-socket fallback` / equivalent.
-- [ ] With 60 FPS selected, confirm the effective streaming status reports **1280×720 @ 30 fps**.
-- [ ] Confirm moving output continues instead of stopping/going black.
-- [ ] Stop and restart; confirm HUFF makes a fresh worker-direct attempt and returns to selected 60 FPS when healthy.
-
-## H. Long run
-
-- [ ] Run 720p60 worker-direct for at least 30 minutes with moving video.
-- [ ] Include several minutes of heavy Feedback/Luma/Solarize use.
-- [ ] Confirm no increasing latency, runaway memory, frozen worker, socket buildup, or lifecycle instability.
-
-## Acceptance
-
-Accept Pass 51 if 720p60 is materially smoother than Pass 50 without weakening Pass 49/50 stability, and if any direct-transport failure reliably degrades to current 720p30 output rather than accumulating latency or losing Syphon publication.
+- [ ] Leave the historical Feedback AMOUNT at its current/non-zero value, but switch Feedback ENABLE **OFF**.
+- [ ] Disable Glitch, Scanlines, Luma Key, Global Mix, and Flow.
+- [ ] Enable **Symmetry only** and confirm moving video remains live.
+- [ ] Test Symmetry V / H / HV and sweep POS.
+- [ ] Disable Symmetry; enable **Solarize only** and test THRESHOLD.
+- [ ] Test LUMA QUANTIZE alone.
+- [ ] Test CHROMA POSTERIZE alone.
+- [ ] Confirm `sol live` advances for isolated Solarize with Feedback ENABLE off even if Feedback AMOUNT is still non-zero.
+- [ ] Enable **Symmetry + Solarize** together; confirm Solarize processes the live mirrored result rather than bypassing Symmetry.
+- [ ] Turn Feedback ENABLE back ON; confirm the established Feedback + Symmetry and Feedback + Solarize behavior remains persistent.
+- [ ] Recheck 720p60 Syphon after the visual tests.
