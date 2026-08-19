@@ -1,0 +1,20 @@
+HUFF CLASSIC OPTIMIZATION PASS 7
+================================
+Date: 2026-08-03
+Baseline: HUFF Classic Optimization Pass 6
+
+Scope:
+- reusable typed glitch target buffers
+- reusable linked-cell Spatial Gap index
+- persistent Float64 cluster offset buffers
+- removal of continuous target/Map/cell/offset object allocation
+
+No new effects, controls, routing, wgpu rendering, Syphon transport changes,
+framework moves, Spout changes, or platform feature changes are included.
+
+Status:
+- source and deterministic bookkeeping equivalence validation passed
+- complete target-machine visual parity and endurance testing pending
+- HUFF Classic is not yet declared stabilized
+
+Read DOCUMENTATION_INDEX.md first.

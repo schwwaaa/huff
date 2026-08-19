@@ -1,3 +1,7 @@
+## Pass 53 preset runtime gate
+
+Native preset Save/Open dialogs require final validation in the target macOS Tauri runtime. Static validation confirms the dialog wiring, JSON format, migration paths, and protected render behavior, but this container cannot launch the target system dialogs.
+
 # HUFF Classic — Release Known Issues After Pass 29
 
 ## Cross-platform

@@ -1,0 +1,62 @@
+HUFF CLASSIC — EFFECT AUGMENTATION / OPTIMIZATION PASS 45
+Solarize Luma Quantize GPU Acceleration + Merged Luma CPU Traversal
+
+BASELINE
+- Direct continuation of HUFF Classic Pass 44.
+- Pass 41A remains the accepted Classic foundation.
+- Pass 42 Luma Quantize and Pass 43 Fluidity remain visually accepted/protected.
+
+RUNTIME REPORT THAT TRIGGERED THIS PASS
+- Pipeline Luma + Solarize LUMA QUANTIZE could fall to approximately 40 FPS.
+- Pass 44 had reduced redundant work but still left two synchronous Canvas2D
+  pixel-boundary operations in the combined path.
+
+CHANGES
+1. Solarize LUMA QUANTIZE may now use a bounded WebGL 1 fragment pass.
+   - Same <=640px working ceiling.
+   - No WebGL readPixels.
+   - No full-resolution WebGL framebuffer.
+   - One retained source texture using texSubImage2D after allocation.
+   - LEVEL's exponential level count is calculated once outside the shader.
+   - CPU Pass 44 Quantize remains automatic fallback.
+
+2. LIVE / COMPOSITE Pipeline Luma combines two CPU traversals into one.
+   - luma byte capture;
+   - original source alpha capture;
+   - keyed alpha calculation;
+   are now performed during one pass over a newly decoded source frame.
+   Same-frame parameter edits retain the existing cached alpha rebuild.
+
+3. Profiler adds bounded accelerator / merged-Luma counters.
+
+REJECTED DURING DEVELOPMENT
+- A GPU Luma prototype failed final Canvas2D composite parity because WebGL
+  alpha/premultiplication behavior materially changed the accepted image.
+- It is NOT shipped.
+
+PROTECTED
+- HUFF Classic Tauri v1 + p5.js / Canvas2D renderer identity.
+- Solarize THRESHOLD.
+- Solarize LUMA QUANTIZE control transfer.
+- Solarize FLUIDITY coefficient/behavior.
+- Feedback/Persistence.
+- Flow (frozen).
+- factory presets.
+- native Tauri/Syphon/Spout runtime.
+
+NO FRAME-CADENCE OPTIMIZATION
+- no frame skipping;
+- no every-N-frame Solarize gate;
+- no playback-speed change;
+- no new sample-and-hold behavior.
+
+RUNTIME ACCEPTANCE TEST
+Use the same state that exposed the Pass 44 slowdown:
+- Luma Key ON / COMPOSITE / LIVE;
+- heavy Feedback + Persistence;
+- Global Mix ON (especially AFTER FB / HARD LIGHT if that is the working patch);
+- Solarize ON / LUMA QUANTIZE;
+- Flow and Symmetry set as desired for the actual patch.
+
+Open the profiler with ` and verify `gpu sol` advances and `gpu fall` remains 0.
+Compare FPS directly with Pass 44. Runtime acceptance remains user-owned.

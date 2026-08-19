@@ -16,7 +16,7 @@ mod syphon;
 
 mod spout;
 
-use std::{collections::HashMap, net::SocketAddr, sync::Arc};
+use std::{collections::HashMap, net::SocketAddr, path::PathBuf, sync::Arc};
 use std::sync::atomic::{AtomicBool, Ordering};
 #[cfg(target_os = "macos")]
 use std::time::{Duration, Instant};
@@ -75,6 +75,53 @@ fn parse_midi(bytes: &[u8]) -> MidiEvent {
     };
 
     MidiEvent { kind, channel, data1: d1, data2: d2, value: d2 as f32 / 127.0, raw: bytes.to_vec() }
+}
+
+// ── Preset file I/O ──────────────────────────────────────────────────────────
+// The controls WebView owns the native Open/Save dialogs. These commands only
+// read/write the explicit path returned by that user gesture. Keep the surface
+// deliberately narrow: JSON only, UTF-8 only, and a small file-size ceiling.
+
+const PRESET_FILE_MAX_BYTES: usize = 1024 * 1024;
+
+fn normalized_preset_json_path(path: String, append_missing: bool) -> Result<PathBuf, String> {
+    let mut p = PathBuf::from(path);
+    match p.extension().and_then(|ext| ext.to_str()) {
+        Some(ext) if ext.eq_ignore_ascii_case("json") => {}
+        Some(_) => return Err("HUFF preset files must use the .json extension".into()),
+        None if append_missing => { p.set_extension("json"); },
+        None => return Err("HUFF preset files must use the .json extension".into()),
+    }
+    Ok(p)
+}
+
+#[command]
+fn write_preset_file(path: String, contents: String) -> Result<String, String> {
+    if contents.len() > PRESET_FILE_MAX_BYTES {
+        return Err("Preset is larger than the 1 MiB safety limit".into());
+    }
+    serde_json::from_str::<serde_json::Value>(&contents)
+        .map_err(|e| format!("Preset JSON is invalid: {e}"))?;
+
+    let path = normalized_preset_json_path(path, true)?;
+    std::fs::write(&path, contents.as_bytes())
+        .map_err(|e| format!("Could not save preset: {e}"))?;
+    Ok(path.to_string_lossy().into_owned())
+}
+
+#[command]
+fn read_preset_file(path: String) -> Result<String, String> {
+    let path = normalized_preset_json_path(path, false)?;
+    let metadata = std::fs::metadata(&path)
+        .map_err(|e| format!("Could not inspect preset: {e}"))?;
+    if metadata.len() > PRESET_FILE_MAX_BYTES as u64 {
+        return Err("Preset file is larger than the 1 MiB safety limit".into());
+    }
+    let contents = std::fs::read_to_string(&path)
+        .map_err(|e| format!("Could not read preset: {e}"))?;
+    serde_json::from_str::<serde_json::Value>(&contents)
+        .map_err(|e| format!("Preset JSON is invalid: {e}"))?;
+    Ok(contents)
 }
 
 // ── Tauri MIDI commands ───────────────────────────────────────────────────────
@@ -722,6 +769,8 @@ tauri::Builder::default()
       connect_midi_port,
       connect_midi_port_by_name,
       disconnect_midi,
+      write_preset_file,
+      read_preset_file,
       get_osc_port,
       start_syphon,
       stop_syphon,

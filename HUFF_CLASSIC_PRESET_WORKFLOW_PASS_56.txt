@@ -1,0 +1,47 @@
+HUFF Classic Pass 56 — Save + Session Recall
+=============================================
+
+Baseline
+--------
+Built directly from Pass 55 — Keyboard Focus Safety.
+
+Problem
+-------
+Pass 54/55 correctly allowed JSON preset files to be loaded into a temporary session preset bank, but SAVE FILE… only wrote the JSON to disk. A newly saved preset was therefore not immediately recallable from the preset dropdown unless the user loaded the same JSON file again.
+
+Pass 56 contract
+----------------
+A successful SAVE FILE… now has two coordinated outputs:
+
+1. DURABLE USER FILE
+   - native Save dialog writes the versioned HUFF preset JSON to the user's chosen local path;
+   - the local JSON remains after HUFF closes.
+
+2. TEMPORARY SESSION SLOT
+   - the exact preset snapshot written to disk is immediately registered in HUFF's in-memory preset bank;
+   - the dropdown refreshes and selects that new session preset;
+   - it can be recalled immediately after further slider/control changes;
+   - the session slot disappears when HUFF closes.
+
+LOAD FILE… retains Pass 54 behavior:
+- load a local JSON;
+- apply it immediately;
+- add/refresh it in the same temporary session dropdown.
+
+The session dropdown group is now labeled:
+  SESSION — SAVED / LOADED
+
+Resaving the same local path refreshes the existing session slot rather than creating duplicate entries. Saving another file creates another temporary performance slot.
+
+Not included
+------------
+- no factory-preset curation;
+- no automatic persistence of session entries;
+- no hidden application preset directory;
+- no localStorage/sessionStorage persistence for new presets;
+- no render/effect/pipeline changes;
+- no Syphon changes.
+
+Future factory presets
+----------------------
+The durable JSON files produced by this workflow can later be deliberately curated and promoted into the built-in preset bank. Pass 56 does not perform that promotion automatically.

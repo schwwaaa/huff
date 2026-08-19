@@ -1,0 +1,9 @@
+HUFF Classic Optimization Pass 16S
+Syphon bootstrap publication hotfix
+Supersedes Pass 16
+
+Key repair:
+- one no-client bootstrap frame per second
+- no duplicate native hasClients gate
+- selected full-rate output after receiver attachment
+- Pass 16 Solarize optimization retained

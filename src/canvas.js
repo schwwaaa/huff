@@ -2,10 +2,10 @@
  * Enhancements over previous version:
  *  - FrameRing replaces plain array — O(1) push/read, no shift() cost
  *  - allocBuffers uses double-buffer swap — resize never exposes disposed graphics to draw()
- *  - Preset save / load (JSON export + file import)
+ *  - Preset save / load (native file dialogs + portable JSON; built-in recall)
  *  - 10-step undo stack with Ctrl+Z (debounced 300 ms snapshot)
  *  - showToast() — visible error/status feedback for camera, file, and decode failures
- *  - "UI hidden" persistent indicator when header is toggled off with P
+ *  - global keyboard shortcuts never consume typing inside editable controls
  *  - WS mirror JPEG quality and target FPS dynamically follow the quality slider
  *  - hookUI split into focused sub-functions
  *  - Pass 8: one shared full-resolution scratch buffer for feedback/flow/symmetry
@@ -575,7 +575,7 @@ function _syncUIIndicator() {
       padding:'3px 14px', borderRadius:'3px', fontSize:'12px',
       pointerEvents:'none', zIndex:'999998', display:'none',
     });
-    ind.textContent = 'UI hidden  ·  P to show';
+    ind.textContent = 'UI hidden';
     document.body.appendChild(ind);
   }
   ind.style.display = hidden ? 'block' : 'none';
@@ -785,121 +785,367 @@ function applyPreset(data) {
   }
 }
 
-// ─── Preset system — localStorage + JSON export/import ───────────────────────
-// Presets are stored by name in localStorage so they persist across sessions
-// and are instantly accessible from the dropdown without file dialogs.
-// JSON export/import provides portability between machines.
+// ─── Preset system — built-ins + explicit local files ────────────────────────
+// HUFF Classic treats presets as portable documents:
+//   BUILT-IN presets: immutable states shipped with the application.
+//   SAVE FILE…:       current state -> native system Save dialog -> JSON file.
+//   LOAD FILE…:       native system Open dialog -> JSON file -> current state + session menu slot.
+//
+// Older beta builds stored named presets in localStorage and exported whole
+// preset banks. Pass 53 keeps those states recallable/readable for migration,
+// but new saves never write to localStorage. Loaded user files live in RAM only
+// for the current HUFF session and disappear from the menu when HUFF closes.
 
-const PRESETS_LS_KEY = 'huff_presets_v1';
+const PRESETS_LS_KEY = 'huff_presets_v1'; // read-only legacy migration
+const PRESET_FILE_FORMAT = 'huff-classic-preset';
+const PRESET_FILE_FORMAT_VERSION = 1;
+const PRESET_FILE_MAX_BYTES = 1024 * 1024;
 
-function _loadPresetMap() {
-  try { return JSON.parse(localStorage.getItem(PRESETS_LS_KEY) || '{}'); } catch { return {}; }
+let _classicDefaultPreset = null;
+const _sessionLoadedPresets = new Map();
+let _sessionLoadedPresetSerial = 0;
+
+function _loadLegacyPresetMap() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(PRESETS_LS_KEY) || '{}');
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
 }
-function _savePresetMap(map) {
-  try { localStorage.setItem(PRESETS_LS_KEY, JSON.stringify(map)); } catch {}
+
+function _presetFilename(name) {
+  const base = String(name || 'huff-preset')
+    .trim()
+    .replace(/[^a-z0-9._-]+/gi, '-')
+    .replace(/^-+|-+$/g, '') || 'huff-preset';
+  return `${base.toLowerCase().endsWith('.json') ? base : `${base}.json`}`;
+}
+
+function _presetDisplayNameFromPath(path) {
+  const leaf = String(path || '').split(/[\\/]/).pop() || 'preset';
+  return leaf.replace(/\.json$/i, '') || 'preset';
+}
+
+function _makePresetFile(name, preset) {
+  return {
+    format: PRESET_FILE_FORMAT,
+    formatVersion: PRESET_FILE_FORMAT_VERSION,
+    app: 'HUFF Classic',
+    name: String(name || 'HUFF Preset').trim() || 'HUFF Preset',
+    preset,
+  };
+}
+
+function _parsePresetDocument(parsed, fallbackName='Preset') {
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('Preset JSON must contain an object');
+  }
+
+  // Pass 53 portable single-preset document.
+  if (parsed.format === PRESET_FILE_FORMAT && parsed.preset && typeof parsed.preset === 'object') {
+    return {
+      kind: 'single',
+      name: String(parsed.name || fallbackName),
+      preset: parsed.preset,
+      formatVersion: Number(parsed.formatVersion || 1),
+    };
+  }
+
+  // Legacy single-preset JSON accepted without conversion.
+  if ('_v' in parsed) {
+    return { kind: 'single', name: fallbackName, preset: parsed, formatVersion: 0 };
+  }
+
+  // Pass 52D and earlier "Export JSON" files were maps of name -> preset.
+  const entries = Object.entries(parsed).filter(([, data]) => data && typeof data === 'object' && '_v' in data);
+  if (entries.length) {
+    return { kind: 'bank', entries };
+  }
+
+  throw new Error('Not a HUFF preset file');
+}
+
+function _setPresetFileState(text, warn=false) {
+  const el = _$('presetFileState');
+  if (!el) return;
+  el.textContent = text;
+  el.style.color = warn ? '#ff9070' : 'rgba(255,255,255,.42)';
+}
+
+function _registerSessionLoadedPreset(name, preset, sourceRef='', kind='file') {
+  const cleanName = String(name || 'Preset').trim() || 'Preset';
+  const cleanSource = String(sourceRef || '').trim();
+
+  // Loading the same native path again refreshes that performance slot instead
+  // of silently creating duplicates. Browser fallback uses the file name as the
+  // best available source identity. Nothing here is persisted to localStorage.
+  if (cleanSource) {
+    for (const [id, entry] of _sessionLoadedPresets) {
+      if (entry.sourceRef === cleanSource && entry.kind === kind) {
+        entry.name = cleanName;
+        entry.preset = preset;
+        return id;
+      }
+    }
+  }
+
+  const id = `loaded-${++_sessionLoadedPresetSerial}`;
+  _sessionLoadedPresets.set(id, { name: cleanName, preset, sourceRef: cleanSource, kind });
+  return id;
+}
+
+function _sessionPresetDisplayNames() {
+  const counts = new Map();
+  return [..._sessionLoadedPresets.entries()].map(([id, entry]) => {
+    const base = String(entry.name || 'Preset');
+    const n = (counts.get(base) || 0) + 1;
+    counts.set(base, n);
+    return [id, entry, n === 1 ? base : `${base} (${n})`];
+  });
 }
 
 function refreshPresetList() {
   const sel = _$('presetList');
   if (!sel) return;
-  const map  = _loadPresetMap();
   const prev = sel.value;
-  sel.innerHTML = '<option value="">— saved presets —</option>';
-  Object.keys(map).sort().forEach(name => {
-    const o = document.createElement('option');
-    o.value = name; o.textContent = name;
-    sel.appendChild(o);
-  });
-  if (prev && map[prev]) sel.value = prev;
+  sel.replaceChildren();
+
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = '— built-in presets —';
+  sel.appendChild(placeholder);
+
+  const builtins = document.createElement('optgroup');
+  builtins.label = 'BUILT-IN';
+  const classic = document.createElement('option');
+  classic.value = 'builtin:classic-default';
+  classic.textContent = 'Classic Default';
+  builtins.appendChild(classic);
+  sel.appendChild(builtins);
+
+  // Read-only bridge for presets saved by pre-Pass-53 beta builds. This is not
+  // the new persistence model; recall one and SAVE FILE… to migrate it.
+  const legacy = _loadLegacyPresetMap();
+  const legacyNames = Object.keys(legacy).filter(name => legacy[name] && typeof legacy[name] === 'object').sort();
+  if (legacyNames.length) {
+    const group = document.createElement('optgroup');
+    group.label = 'LEGACY LOCAL — SAVE FILE TO MIGRATE';
+    legacyNames.forEach(name => {
+      const o = document.createElement('option');
+      o.value = `legacy:${name}`;
+      o.textContent = name;
+      group.appendChild(o);
+    });
+    sel.appendChild(group);
+  }
+
+  if (_sessionLoadedPresets.size) {
+    const group = document.createElement('optgroup');
+    group.label = 'SESSION — SAVED / LOADED';
+    _sessionPresetDisplayNames().forEach(([id, entry, displayName]) => {
+      const o = document.createElement('option');
+      o.value = `session:${id}`;
+      o.textContent = displayName;
+      o.title = entry.sourceRef ? `Loaded for this HUFF session · ${_presetDisplayNameFromPath(entry.sourceRef)}` : 'Loaded for this HUFF session';
+      group.appendChild(o);
+    });
+    sel.appendChild(group);
+  }
+
+  if (prev && [...sel.options].some(o => o.value === prev)) sel.value = prev;
 }
 
-function saveNamedPreset() {
-  const nameEl = _$('presetName');
-  const name   = (nameEl?.value || '').trim();
-  if (!name) { showToast('Enter a preset name first', true); return; }
-  const map = _loadPresetMap();
-  map[name] = capturePreset();
-  _savePresetMap(map);
-  refreshPresetList();
+function recallPresetSelection() {
   const sel = _$('presetList');
-  if (sel) sel.value = name;
-  showToast(`Preset "${name}" saved`);
-}
+  const value = String(sel?.value || '');
+  if (!value) { showToast('Select a preset first', true); return; }
 
-function loadNamedPreset() {
-  const sel  = _$('presetList');
-  const name = sel?.value;
-  if (!name) { showToast('Select a preset first', true); return; }
-  const map  = _loadPresetMap();
-  if (!map[name]) { showToast(`Preset "${name}" not found`, true); return; }
+  let name = '';
+  let preset = null;
+  if (value === 'builtin:classic-default') {
+    name = 'Classic Default';
+    preset = _classicDefaultPreset;
+  } else if (value.startsWith('legacy:')) {
+    name = value.slice('legacy:'.length);
+    preset = _loadLegacyPresetMap()[name];
+  } else if (value.startsWith('session:')) {
+    const id = value.slice('session:'.length);
+    const entry = _sessionLoadedPresets.get(id);
+    if (entry) {
+      name = entry.name;
+      preset = entry.preset;
+    }
+  }
+
+  if (!preset) { showToast(`Preset "${name || value}" is unavailable`, true); return; }
   snapshotForUndo();
-  applyPreset(map[name]);
-  showToast(`Preset "${name}" loaded`);
+  applyPreset(preset);
+  const nameEl = _$('presetName');
+  if (nameEl && name !== 'Classic Default') nameEl.value = name;
+  if (value.startsWith('legacy:')) {
+    _setPresetFileState(`legacy local · ${name} · SAVE FILE… to migrate`, true);
+  } else if (value.startsWith('session:')) {
+    _setPresetFileState(`session loaded · ${name}`);
+  } else {
+    _setPresetFileState(`built-in · ${name}`);
+  }
+  showToast(`Preset "${name}" recalled`);
 }
 
-function deleteNamedPreset() {
-  const sel  = _$('presetList');
-  const name = sel?.value;
-  if (!name) { showToast('Select a preset to delete', true); return; }
-  const map  = _loadPresetMap();
-  if (!map[name]) return;
-  delete map[name];
-  _savePresetMap(map);
-  refreshPresetList();
-  showToast(`Preset "${name}" deleted`);
-}
-
-// JSON export — downloads all named presets as one file for sharing/backup
-function exportPresetsJSON() {
-  const map  = _loadPresetMap();
-  const keys = Object.keys(map);
-  if (keys.length === 0) { showToast('No presets saved yet', true); return; }
-  const blob = new Blob([JSON.stringify(map, null, 2)], { type:'application/json' });
-  const a    = document.createElement('a');
-  a.href     = URL.createObjectURL(blob);
-  a.download = `huff-presets-${Date.now()}.json`;
+function _browserDownloadPreset(contents, filename) {
+  const blob = new Blob([contents], { type:'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 10000);
-  showToast(`${keys.length} preset${keys.length !== 1 ? 's' : ''} exported`);
 }
 
-// JSON import — merges presets from a file into the existing localStorage set
-function importPresetsFromFile(file) {
+async function savePresetToFile() {
+  const nameEl = _$('presetName');
+  const name = (nameEl?.value || '').trim() || 'HUFF Preset';
+  const filename = _presetFilename(name);
+  const documentData = _makePresetFile(name, capturePreset());
+  const contents = JSON.stringify(documentData, null, 2);
+  if (new Blob([contents]).size > PRESET_FILE_MAX_BYTES) {
+    showToast('Preset is unexpectedly large; save cancelled', true);
+    return;
+  }
+
+  const invoke = window.__TAURI__?.invoke;
+  const dialog = window.__TAURI__?.dialog;
+  if (invoke && dialog?.save) {
+    try {
+      let path;
+      try {
+        path = await dialog.save({
+          defaultPath: filename,
+          filters: [{ name:'HUFF Preset', extensions:['json'] }],
+        });
+      } catch {
+        // Older Tauri v1 dialog implementations can ignore/reject defaultPath.
+        path = await dialog.save({ filters: [{ name:'HUFF Preset', extensions:['json'] }] });
+      }
+      if (!path) { _setPresetFileState('save cancelled'); return; }
+      const savedPath = await invoke('write_preset_file', { path, contents });
+      // A successful local save also arms that exact snapshot for immediate
+      // performance recall during this HUFF run. The file remains the durable
+      // object; this session slot is RAM-only and disappears when HUFF quits.
+      const sessionId = _registerSessionLoadedPreset(
+        name,
+        documentData.preset,
+        savedPath || path || filename,
+        'file',
+      );
+      refreshPresetList();
+      const sel = _$('presetList');
+      if (sel) sel.value = `session:${sessionId}`;
+      _setPresetFileState(`session saved · ${name} · clears on quit`);
+      showToast(`Preset "${name}" saved + added to this session`);
+      return;
+    } catch (e) {
+      console.error('[huff] preset save failed', e);
+      showToast(`Preset save failed: ${String(e)}`, true);
+      _setPresetFileState('save failed', true);
+      return;
+    }
+  }
+
+  // Plain browser/dev preview fallback. Packaged HUFF uses the native dialog.
+  _browserDownloadPreset(contents, filename);
+  const sessionId = _registerSessionLoadedPreset(name, documentData.preset, filename, 'file');
+  refreshPresetList();
+  const sel = _$('presetList');
+  if (sel) sel.value = `session:${sessionId}`;
+  _setPresetFileState(`session saved · ${name} · browser download · clears on quit`, true);
+  showToast(`Preset "${name}" downloaded + added to this session`);
+}
+
+function _applyLoadedPresetDocument(parsed, sourcePath='') {
+  const fallbackName = _presetDisplayNameFromPath(sourcePath);
+  const doc = _parsePresetDocument(parsed, fallbackName);
+
+  if (doc.kind === 'single') {
+    const name = doc.name || fallbackName;
+    const id = _registerSessionLoadedPreset(name, doc.preset, sourcePath || fallbackName, 'file');
+    refreshPresetList();
+    const sel = _$('presetList');
+    if (sel) sel.value = `session:${id}`;
+
+    snapshotForUndo();
+    applyPreset(doc.preset);
+    const nameEl = _$('presetName');
+    if (nameEl) nameEl.value = name;
+    _setPresetFileState(`session loaded · ${name} · clears on quit`);
+    showToast(`Preset "${name}" loaded into this session`);
+    return;
+  }
+
+  const loadedIds = [];
+  doc.entries.forEach(([name, preset]) => {
+    const sourceKey = sourcePath ? `${sourcePath}#${name}` : `${fallbackName}#${name}`;
+    loadedIds.push([name, preset, _registerSessionLoadedPreset(name, preset, sourceKey, 'legacy-bank')]);
+  });
+  refreshPresetList();
+  if (loadedIds.length === 1) {
+    const [name, preset, id] = loadedIds[0];
+    snapshotForUndo();
+    applyPreset(preset);
+    const sel = _$('presetList');
+    if (sel) sel.value = `session:${id}`;
+    const nameEl = _$('presetName');
+    if (nameEl) nameEl.value = name;
+    _setPresetFileState(`session loaded · ${name} · clears on quit`);
+    showToast(`Legacy preset "${name}" loaded into this session`);
+  } else {
+    _setPresetFileState(`session loaded · ${loadedIds.length} presets · clears on quit`);
+    showToast(`Loaded ${loadedIds.length} presets into this HUFF session`);
+  }
+}
+
+function loadPresetFromBrowserFile(file) {
   if (!file) return;
+  if (file.size > PRESET_FILE_MAX_BYTES) { showToast('Preset file is too large', true); return; }
   const reader = new FileReader();
   reader.onload = e => {
     try {
-      const incoming = JSON.parse(e.target.result);
-      // Accept either a map of {name: presetData} or a single preset object
-      const isSinglePreset = '_v' in incoming && !Object.values(incoming).some(v => v && '_v' in v);
-      if (isSinglePreset) {
-        // Single preset — ask for a name via the name field
-        const nameEl = _$('presetName');
-        const name   = (nameEl?.value || '').trim() || `imported-${Date.now()}`;
-        const map    = _loadPresetMap();
-        map[name]    = incoming;
-        _savePresetMap(map);
-        refreshPresetList();
-        const sel = _$('presetList');
-        if (sel) sel.value = name;
-        showToast(`Preset imported as "${name}"`);
-      } else {
-        // Map of named presets — merge all
-        const map = _loadPresetMap();
-        let count = 0;
-        Object.entries(incoming).forEach(([name, data]) => {
-          if (data && typeof data === 'object') { map[name] = data; count++; }
-        });
-        _savePresetMap(map);
-        refreshPresetList();
-        showToast(`${count} preset${count !== 1 ? 's' : ''} imported`);
-      }
-    } catch {
-      showToast('Invalid preset file', true);
+      _applyLoadedPresetDocument(JSON.parse(String(e.target?.result || '')), file.name);
+    } catch (err) {
+      console.error('[huff] invalid preset file', err);
+      showToast(`Invalid preset file: ${String(err?.message || err)}`, true);
+      _setPresetFileState('invalid preset file', true);
     }
   };
-  reader.onerror = () => showToast('Could not read file', true);
+  reader.onerror = () => showToast('Could not read preset file', true);
   reader.readAsText(file);
+}
+
+async function loadPresetViaFileDialog() {
+  const invoke = window.__TAURI__?.invoke;
+  const dialog = window.__TAURI__?.dialog;
+  if (invoke && dialog?.open) {
+    try {
+      const selected = await dialog.open({
+        multiple: false,
+        directory: false,
+        filters: [{ name:'HUFF Preset', extensions:['json'] }],
+      });
+      const path = Array.isArray(selected) ? selected[0] : selected;
+      if (!path) { _setPresetFileState('load cancelled'); return; }
+      const contents = await invoke('read_preset_file', { path });
+      _applyLoadedPresetDocument(JSON.parse(contents), path);
+      return;
+    } catch (e) {
+      console.error('[huff] preset load failed', e);
+      showToast(`Preset load failed: ${String(e)}`, true);
+      _setPresetFileState('load failed', true);
+      return;
+    }
+  }
+
+  // Plain browser/dev preview fallback.
+  _$('presetLoadInput')?.click();
 }
 
 // ─── Undo stack ───────────────────────────────────────────────────────────────
@@ -2075,44 +2321,51 @@ function hookSliders() {
 }
 
 function hookPresets() {
-  // Named preset controls
-  _$('presetSaveBtn')?.addEventListener('click', saveNamedPreset);
-  _$('presetLoadBtn')?.addEventListener('click', loadNamedPreset);
-  _$('presetDeleteBtn')?.addEventListener('click', deleteNamedPreset);
+  // Capture the shipped HTML defaults once. This creates the first immutable
+  // built-in preset without tying it to localStorage or an external file.
+  _classicDefaultPreset = Object.freeze({ ...capturePreset() });
+  refreshPresetList();
 
-  // Double-clicking a preset in the list loads it immediately
-  _$('presetList')?.addEventListener('dblclick', loadNamedPreset);
+  // Dropdown recall covers built-ins, legacy migration entries, and user JSON files
+  // loaded into this session. SAVE and LOAD still always mean local file dialogs.
+  _$('presetBuiltinLoadBtn')?.addEventListener('click', recallPresetSelection);
+  _$('presetList')?.addEventListener('dblclick', recallPresetSelection);
 
-  // JSON export/import
-  _$('presetExportBtn')?.addEventListener('click', exportPresetsJSON);
-  const importBtn   = _$('presetImportBtn');
-  const importInput = _$('presetLoadInput');
-  if (importBtn && importInput) {
-    importBtn.addEventListener('click', () => importInput.click());
-    importInput.addEventListener('change', () => {
-      importPresetsFromFile(importInput.files?.[0]);
-      importInput.value = '';
-    });
-  }
+  _$('presetSaveBtn')?.addEventListener('click', () => { void savePresetToFile(); });
+  _$('presetLoadBtn')?.addEventListener('click', () => { void loadPresetViaFileDialog(); });
 
-  // Allow Enter key in name field to trigger save
-  _$('presetName')?.addEventListener('keydown', e => {
-    if (e.key === 'Enter') { e.preventDefault(); saveNamedPreset(); }
+  // Browser-only fallback used when index.html is previewed outside Tauri.
+  const fallbackInput = _$('presetLoadInput');
+  fallbackInput?.addEventListener('change', () => {
+    loadPresetFromBrowserFile(fallbackInput.files?.[0]);
+    fallbackInput.value = '';
   });
 
-  // Populate list on startup
-  refreshPresetList();
+  // Enter in the name field now opens the same Save dialog as SAVE FILE….
+  _$('presetName')?.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); void savePresetToFile(); }
+  });
 
   // Reset btn
   els.resetBtn?.addEventListener('click', () => { snapshotForUndo(); refreshGlitch(); });
   els.clearBufBtn?.addEventListener('click', () => clearAll());
 }
 
+function _keyboardEventTargetsEditableControl(e) {
+  const target = e?.target;
+  if (!target || !(target instanceof Element)) return false;
+  if (target.isContentEditable) return true;
+  return !!target.closest('input, textarea, select, [contenteditable=\"true\"], [role=\"textbox\"]');
+}
+
 function hookKeyboard() {
   window.addEventListener('keydown', e => {
-    if ((e.key === 'p' || e.key === 'P') && !e.ctrlKey && !e.metaKey) {
-      toggleUI(); e.preventDefault(); return;
-    }
+    // Pass 55: P is deliberately no longer a global shortcut. Preset names and
+    // other text fields must be able to consume ordinary letters without HUFF
+    // changing application state. While focus is in an editable control, all
+    // remaining app-global shortcuts defer to normal text/control behavior.
+    if (_keyboardEventTargetsEditableControl(e)) return;
+
     if ((e.key === 'f' || e.key === 'F') && !e.ctrlKey && !e.metaKey) {
       if (!document.fullscreenElement) document.documentElement.requestFullscreen?.();
       else document.exitFullscreen?.();

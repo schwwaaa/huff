@@ -1,0 +1,15 @@
+HUFF Classic Optimization Pass 21
+Date: 2026-08-05
+Baseline: runtime-confirmed Pass 20
+
+Scope:
+- Cache Flow SPREAD-derived noise coordinates.
+- Cache Flow TURBULENCE coordinates.
+- Cache radial SWIRL sine/cosine values.
+- Cache per-tile source clipping bounds.
+- Preserve Flow noise, displacement, quantization, draw rectangles, and paint order.
+
+Validation:
+- 5,000 Flow cases
+- 4,417,878 exact field/noise/draw comparisons
+- all retained validators passed

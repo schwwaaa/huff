@@ -1,0 +1,45 @@
+HUFF CLASSIC — EFFECT AUGMENTATION PASS 52
+==========================================
+
+TITLE
+Chroma Posterize
+
+BASELINE
+Runtime-accepted Pass 51, including the stable 720p60 Syphon worker-direct pipeline and 720p30 safe fallback.
+
+REFERENCE DIRECTION
+Magic DaVE treats solarization and posterization as related but distinct colour effects. Earlier HUFF Classic passes adapted the luminance side as LUMA QUANTIZE. Pass 52 adds the complementary chroma-oriented treatment without adding another serial render stage.
+
+DESIGN
+Solarize remains one bounded colour-finishing slot with three selectable algorithms:
+- THRESHOLD — exact existing HUFF Classic Solarize.
+- LUMA QUANTIZE — existing luminance quantization while retaining chroma.
+- CHROMA POSTERIZE — new chroma quantization while retaining luminance.
+
+CHROMA POSTERIZE CONTROLS
+- LEVEL 0–100: increases chroma quantization severity; 0 is neutral.
+- SOFT 0–100: blends quantized chroma back toward original chroma; 100 is neutral.
+- PHASE -180° to +180°: rotates the chroma quantization grid before quantization, changing hue grouping without becoming a generic hue-rotation effect.
+- AMOUNT: shared wet/dry strength.
+- FLUIDITY: shared Solarize-family temporal response.
+
+IMPLEMENTATION
+The existing <=640px Classic WebGL1 colour accelerator receives a third shader. It converts RGB to a luminance + two-axis chroma representation, preserves luminance, quantizes the rotated chroma axes, reconstructs RGB, and mixes by AMOUNT.
+
+There is no extra full-resolution pass. THRESHOLD, LUMA QUANTIZE, and CHROMA POSTERIZE remain mutually exclusive modes in the same colour-finishing stage. Global Mix fusion and FLUIDITY continue to operate through the same bounded stage.
+
+CPU FALLBACK
+If WebGL is unavailable or lost, the same chroma equations run on the existing bounded Canvas2D/ImageData fallback. No new full-resolution CPU traversal is introduced.
+
+PROTECTED
+- Pass 51 Syphon lifecycle and two-credit worker-direct transport.
+- 720p60 primary / 720p30 safe Classic Syphon boundary.
+- Luma Key behavior.
+- THRESHOLD and LUMA QUANTIZE transfer behavior.
+- Feedback/Persistence.
+- frozen Flow.
+- Layer Priority and Global Mix behavior.
+- native Tauri/Syphon/Spout code.
+
+RUNTIME GATE
+First evaluate CHROMA POSTERIZE by itself, then with heavy Feedback and with Global Mix. Confirm the profiler's `gpu poster` counter advances on the normal accelerated path and that `gpu fall` stays at zero.

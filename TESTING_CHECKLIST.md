@@ -1,3 +1,66 @@
+# Pass 56 Runtime Test
+
+- [ ] Change multiple controls and enter a preset name.
+- [ ] Click SAVE FILE… and save the JSON locally.
+- [ ] Confirm the preset immediately appears under SESSION — SAVED / LOADED.
+- [ ] Move several controls away from the saved state.
+- [ ] Select the saved preset and press RECALL without using LOAD FILE….
+- [ ] Confirm the exact saved state returns.
+- [ ] Save the same named/path preset again after modifying controls; confirm the existing session entry refreshes rather than duplicates.
+- [ ] Save a second preset file; confirm both entries are available for performance recall.
+- [ ] Quit HUFF and relaunch; confirm session entries are gone.
+- [ ] Confirm both JSON files still exist locally.
+- [ ] LOAD FILE… one of them; confirm it reappears in the temporary session bank.
+
+---
+
+# Pass 55 — Runtime Testing Checklist
+
+- [ ] Click PRESET NAME and type `Purple Feedback Pass`.
+- [ ] Confirm both lowercase and uppercase `P` type normally.
+- [ ] Confirm typing `F` in the field does not toggle fullscreen.
+- [ ] Confirm Ctrl/Cmd+Z while editing stays with the editable field.
+- [ ] Save the preset and confirm Pass 54 SAVE FILE… still works.
+- [ ] Load the JSON and confirm it enters the temporary session bank.
+- [ ] Defocus all editable fields and confirm `F` still toggles fullscreen.
+- [ ] Defocus all editable fields and confirm Ctrl/Cmd+Z still invokes HUFF undo.
+- [ ] Recheck moving playback/effects for no visual change.
+- [ ] Recheck Syphon 720p60 if output is part of the current smoke test.
+
+## Pass 54 — Session preset bank
+
+- [ ] Start HUFF and confirm no prior user JSON presets appear under `SESSION — LOADED FILES`.
+- [ ] LOAD FILE… `A.json`; confirm A applies immediately and appears in the dropdown session group.
+- [ ] LOAD FILE… `B.json`; confirm A remains present and B is added.
+- [ ] Use RECALL to alternate A -> B -> A while video is moving.
+- [ ] Recall a built-in preset, then return to A without reopening its file.
+- [ ] Load the same `A.json` path again; confirm its session slot refreshes rather than duplicating.
+- [ ] Load a different file whose internal preset name also matches A; confirm both remain selectable and the second label is disambiguated.
+- [ ] Load an old multi-preset export; confirm its entries are added without removing A/B.
+- [ ] SAVE FILE… a current state and confirm the JSON is written locally as in Pass 53.
+- [ ] Quit HUFF completely and relaunch. Confirm session-loaded A/B/bank entries are gone from HUFF.
+- [ ] Confirm the JSON files remain on disk and can be loaded again.
+- [ ] Recheck Pass 52D image-feed awareness and Pass 51 Syphon output.
+
+# HUFF Classic Pass 53 — Preset File Workflow
+
+- [ ] Change several obvious parameters so the current state is easy to recognize.
+- [ ] Enter a preset name.
+- [ ] Click **SAVE FILE…** and confirm the macOS native Save dialog appears.
+- [ ] Save the preset into a normal user-selected folder.
+- [ ] Confirm the saved file uses `.json`.
+- [ ] Change the controls to a visibly different state.
+- [ ] Click **LOAD FILE…** and confirm the macOS native Open dialog appears.
+- [ ] Choose the saved JSON and confirm the exact preset state is restored.
+- [ ] Quit HUFF completely, relaunch it, and load the same file again.
+- [ ] Recall **Classic Default** under BUILT-IN and confirm it returns the shipped control defaults.
+- [ ] If pre-Pass-53 local presets exist, confirm they appear under LEGACY LOCAL and can be recalled.
+- [ ] Recall one legacy local preset, then SAVE FILE… and reload the resulting JSON to confirm migration.
+- [ ] If an old multi-preset Export JSON exists, load it and confirm its entries appear under LOADED LEGACY FILE BANK.
+- [ ] Confirm no new saved preset appears merely because the app was relaunched; user files live where the user saved them.
+- [ ] Confirm Pass 52D image-feed awareness still works.
+- [ ] Confirm Pass 51 Syphon 720p60 remains stable.
+
 # HUFF Classic Pass 52D — Three-Source Pipeline Awareness
 
 - [ ] Start with moving video and Corrupt, Scanlines, and Luma Key all OFF.

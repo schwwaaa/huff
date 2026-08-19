@@ -1,0 +1,54 @@
+HUFF CLASSIC — PASS 52D
+Three-Source Pipeline Awareness
+
+STATUS
+Runtime/UI candidate built directly from Pass 52B. Pass 52C remains rejected and is not part of this package.
+
+PRODUCT DECISION
+HUFF Classic preserves its constrained three-source image-entry model rather than forcing Symmetry and Solarize to behave as standalone filters.
+
+PRIMARY IMAGE FEEDS
+1. CORRUPT
+2. SCANLINES
+3. LUMA KEY when TARGET = COMPOSITE and MIX > 0
+
+DOWNSTREAM PROCESSORS
+- Feedback
+- Flow
+- Symmetry
+- Solarize
+
+WHY THIS PASS EXISTS
+A new user can reasonably enable Symmetry or Solarize first and conclude that the control is broken. The underlying Classic pipeline is persistent: Symmetry and Solarize primarily process imagery already introduced into gBuf by an image-feed stage. Pass 52D makes that dependency visible instead of silently changing the render graph.
+
+UI CHANGES
+- Pipeline panel now shows three explicit IMAGE FEED indicators: CORRUPT, SCANLINES, LUMA/COMP.
+- Active feeds light immediately as controls change.
+- Luma counts as an independent feed only when ON, TARGET = COMPOSITE, and MIX > 0.
+- Symmetry and Solarize display DOWNSTREAM role labels.
+- Enabling either with no primary feed shows NEEDS IMAGE FEED.
+- With a feed active the badge reports PROCESSING plus the active feed(s).
+- CLASSIC shows the quick route: IMAGE FEED -> FEEDBACK -> FLOW -> SYMMETRY -> SOLARIZE.
+- CRISP FINISH explicitly shows the inverse placement of the front image-feed layers: FEEDBACK -> FLOW -> SYMMETRY -> SOLARIZE -> IMAGE FEED.
+- No control is disabled and no source is auto-enabled.
+
+IMPORTANT
+Global Mix remains its existing clean-source reinjection utility and is not redefined as a fourth primary image starter in the UI model.
+
+RUNTIME CONTRACT
+No render-stage implementation was changed. Pass 52B draw(), source sync, persistent decay, front-stage routing, Global Mix, Feedback, Flow, Symmetry, Solarize, presentation, effects.js, pipeline-runtime.js, Syphon worker, and native publishers are protected.
+
+TEST GATE
+1. Start moving video with Corrupt, Scanlines, and Luma Key off.
+2. Enable Symmetry. It should visibly report NEEDS IMAGE FEED rather than implying standalone behavior.
+3. Enable Corrupt. Symmetry should report PROCESSING · CORRUPT.
+4. Repeat using Scanlines as the only feed.
+5. Repeat using Luma Key ON + TARGET COMPOSITE + MIX > 0.
+6. Set Luma MIX to 0 and confirm LUMA/COMP no longer reports as an active feed.
+7. Enable Solarize with no primary feed and confirm NEEDS IMAGE FEED.
+8. Enable one or more feeds and confirm Solarize reports the active feed set.
+9. Switch to CRISP FINISH and confirm both downstream badges explain that they are PRE-FEED in this recipe.
+10. Confirm accepted Pass 52B combinations, Pass 51 Syphon, Feedback, and Flow are visually unchanged.
+
+GIT
+Hold the final Pass 52 commit until target-machine UI/runtime acceptance.

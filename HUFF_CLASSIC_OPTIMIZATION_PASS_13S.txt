@@ -1,0 +1,19 @@
+HUFF CLASSIC OPTIMIZATION PASS 13S
+
+Baseline: Pass 12R / Pass 11 runtime
+Purpose: stability-safe source lifecycle hardening
+
+Retained:
+- Blob URL + p5 createVideo decoding
+- independent p5, transport, mirror, and profiler clocks
+- all validated Passes 1–11 optimizations
+- Syphon, Spout, Rust relay, and framework packaging
+
+Added:
+- source-generation guards
+- owned readiness and autoplay cleanup
+- stale camera rejection
+- idempotent media/audio/mirror shutdown
+- profiler-only decode/ring/mirror telemetry
+
+Rejected Pass 13 render-boundary scheduling is not included.

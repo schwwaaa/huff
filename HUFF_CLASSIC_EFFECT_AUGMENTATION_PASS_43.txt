@@ -1,0 +1,59 @@
+HUFF CLASSIC EFFECT AUGMENTATION PASS 43
+SOLARIZE — FLUIDITY
+
+Baseline
+--------
+HUFF Classic Pass 42 — Solarize Luma Quantize, built from the runtime-accepted
+Pass 41A Classic baseline. Legacy Tauri v1 + p5.js / Canvas2D only.
+
+Purpose
+-------
+Give Solarize its own controllable temporal viscosity for heavy recursive
+Feedback/Persistence use without slowing source playback and without adding a
+new frame-skip, strobe, or sample/hold mechanism.
+
+Runtime change
+--------------
+Adds one Solarize control:
+
+FLUIDITY 0..100%
+- 100% = exact Pass 42 instantaneous Solarize presentation.
+- lower values = Solarize changes continuously but increasingly slowly.
+- 0% is intentionally very slow rather than a permanent freeze.
+
+Implementation
+--------------
+The already-processed max-640px Solarize target is continuously leaked into a
+second bounded low-resolution history canvas. The blend coefficient is
+time-normalized against a 60 Hz reference, so the feel does not intentionally
+depend on source FPS or render cadence.
+
+This is temporal interpolation of Solarize state, not frame skipping. No new
+setInterval/setTimeout/update-every-N-frames gate is introduced by Pass 43.
+The pre-existing Solarize overload safeguard from earlier Classic passes is
+left unchanged as part of the accepted performance boundary.
+
+Performance / compatibility boundary
+------------------------------------
+- FLUIDITY defaults to 100%.
+- At 100%, the new history canvas is not allocated or drawn and the existing
+  Pass 42 `_presentSolarizeCache()` path is used exactly.
+- Below 100%, one additional low-resolution Canvas2D blend/presentation source
+  is used.
+- No additional getImageData().
+- No additional putImageData().
+- No full-resolution temporal buffer.
+- No source playback-rate changes.
+- No changes to Feedback/Persistence equations.
+- No changes to Flow.
+
+Preset migration
+----------------
+Old presets missing `solarizeFluidity` receive 100%, preserving Pass 42.
+
+Protected
+---------
+Pass 42 THRESHOLD and LUMA QUANTIZE pixel transforms, Pass 41A playback/source/
+history behavior, Pass 40W Corrupt/Scan/Luma behavior, Scan FIELD, Feedback/
+Persistence, frozen Flow, pipeline runtime, capability instrumentation, factory
+presets, and native Tauri runtime remain unchanged.

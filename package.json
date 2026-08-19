@@ -73,7 +73,11 @@
     "validate:pass52a": "node scripts/validate-pass52a.mjs",
     "validate:pass52b": "node scripts/validate-pass52b.mjs",
     "simulate:pass52b": "node scripts/simulate-pass52b-standalone-ownership.mjs",
-    "validate:pass52d": "node scripts/validate-pass52d.mjs"
+    "validate:pass52d": "node scripts/validate-pass52d.mjs",
+    "validate:pass53": "node scripts/validate-pass53.mjs",
+    "validate:pass54": "node scripts/validate-pass54.mjs",
+    "validate:pass55": "node scripts/validate-pass55.mjs",
+    "validate:pass56": "node scripts/validate-pass56.mjs"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^1.6.3"

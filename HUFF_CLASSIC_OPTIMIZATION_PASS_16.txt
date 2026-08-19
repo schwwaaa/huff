@@ -1,0 +1,27 @@
+HUFF CLASSIC OPTIMIZATION PASS 16
+=================================
+
+Baseline: Pass 15
+Target: Solarize synchronous pixel/readback path
+
+Implemented:
+- removed the full-resolution Solarize cache canvas
+- removed one full-resolution copy on processed Solarize frames
+- added packed Uint32 pixel processing on little-endian systems
+- retained the exact byte-loop fallback
+- added pre-shifted channel maps
+- removed temporary channel-map string keys
+- added profiler-only Solarize phase timing
+- preserved the existing adaptive Solarize load guard
+
+Not changed:
+- Blob URL + p5 createVideo decoding
+- p5/transport/mirror/profiler scheduling
+- effect order or controls
+- temporal history
+- Syphon, Spout, Rust/Tauri, or framework packaging
+
+Validation:
+- 644 Pass 16 checks
+- 8,391,032 exact pixel comparisons
+- target-runtime visual and performance comparison still required

@@ -1,0 +1,81 @@
+HUFF CLASSIC — PASS 52A
+=======================
+
+TITLE
+Solarize Solo Source-Ownership Repair
+
+BASELINE
+Pass 52 — Chroma Posterize, built on runtime-accepted Pass 51 Syphon.
+
+USER REPORT
+Solarize-family processing looked correct in combinations, but Solarize did not appear to operate correctly by itself.
+
+ROOT CAUSE
+This was not caused by CHROMA POSTERIZE. The same source-ownership behavior already existed in the Pass 51 pipeline.
+
+HUFF Classic keeps gBuf persistent while the active pipeline is running. Most established stages either inject fresh gCur pixels (Glitch, Scanlines, Luma, Global Mix) or intentionally transform persistent gBuf (Feedback, Flow, Symmetry). Solarize is a terminal color processor: it transforms its input but does not itself inject fresh source pixels.
+
+Therefore, when Solarize was the only active image-processing stage:
+
+  gCur = live decoded video
+  gBuf = seeded once when leaving bypass
+  Persistence = continues to decay gBuf
+  Solarize = repeatedly transforms that stale/decaying gBuf
+
+That made solo Solarize behave like a terminal treatment with no live feed rather than a live color effect.
+
+REPAIR
+When Solarize is the only active image-processing stage, its bounded color processor now reads directly from the current clean gCur canvas and writes the result to gBuf.
+
+  gCur (live) -> bounded Solarize family -> gBuf -> presentation
+
+The direct-live input is used ONLY when Solarize is isolated.
+
+When any of these stages are active, Solarize continues to read gBuf exactly as before:
+- Glitch
+- Scanlines
+- Luma
+- Global Mix
+- Feedback
+- Flow
+- Symmetry
+
+This preserves the accepted combined-effect pipeline and protects Feedback/Persistence behavior where a persistent image is intentionally being built or transformed.
+
+ALL THREE MODES ARE COVERED
+- THRESHOLD
+- LUMA QUANTIZE
+- CHROMA POSTERIZE
+
+FLUIDITY
+FLUIDITY still works. With solo Solarize, the current live processed image becomes the target that leaks into Solarize's bounded history canvas. No sample/hold or frame skipping was added.
+
+PERFORMANCE
+No new full-resolution copy was added. applySolarize accepts an optional source canvas, so the existing <=640px GPU/CPU stage can read gCur directly instead of first copying gCur into the full-resolution persistent gBuf.
+
+PROFILER
+A new profiler line appears:
+
+  sol live
+
+It advances when the isolated Solarize family is using the repaired direct-live source path. It should stop advancing as soon as another image-processing stage becomes active.
+
+PROTECTED
+- Pass 52 Chroma Posterize equations and controls
+- THRESHOLD and LUMA QUANTIZE algorithms
+- Pass 51 720p60 Syphon pipeline
+- Luma Key behavior
+- Feedback/Persistence behavior in combined-effect paths
+- Flow
+- Layer Priority
+- Global Mix
+- native Tauri/Syphon/Spout runtime
+
+RUNTIME GATE
+Before committing Pass 52, test:
+1. Turn every image effect off except Solarize.
+2. Confirm moving video remains moving.
+3. Test THRESHOLD, LUMA QUANTIZE, and CHROMA POSTERIZE separately.
+4. Confirm each visibly responds to its parameters.
+5. Open profiler: `sol live` should advance.
+6. Enable Feedback or Flow: `sol live` should stop advancing and the established combined pipeline should resume.

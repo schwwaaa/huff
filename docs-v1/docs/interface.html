@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css"/>
+<link href="https://fonts.googleapis.com/css2?family=VT323&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<title>The Interface — huff docs</title>
+
+<style>
+:root {
+  --gray:  #C0C0C0; --light: #FFFFFF; --mid: #808080; --dark: #404040;
+  --red:   #ff4647; --black: #000000; --green: #00FF00; --dgreen: #00CC00;
+  --teal:  #008080;
+}
+*,*::before,*::after{box-sizing:border-box;}
+body {
+  background:var(--teal);
+  background-image:repeating-linear-gradient(45deg,rgba(0,0,0,.06) 0px,rgba(0,0,0,.06) 1px,transparent 1px,transparent 5px);
+  font-family:'VT323','Courier New',monospace;
+  color:#000; min-height:100vh; padding-bottom:40px;
+}
+.raised    {border-top:2px solid var(--light);border-left:2px solid var(--light);border-bottom:2px solid var(--dark);border-right:2px solid var(--dark);}
+.inset     {border-top:2px solid var(--dark);border-left:2px solid var(--dark);border-bottom:2px solid var(--light);border-right:2px solid var(--light);}
+.raised-sm {border-top:1px solid var(--light);border-left:1px solid var(--light);border-bottom:1px solid var(--dark);border-right:1px solid var(--dark);}
+/* Taskbar */
+.taskbar {
+  position:sticky;top:0;z-index:1000;
+  background:var(--gray);
+  border-top:2px solid var(--light);border-bottom:2px solid var(--dark);
+  padding:3px 8px;display:flex;align-items:center;gap:4px;flex-wrap:wrap;
+}
+.taskbar-brand {
+  background:linear-gradient(90deg,var(--red),#cc2222);color:#fff;
+  font-size:16px;padding:2px 12px;letter-spacing:.08em;
+  border-top:2px solid #ff9999;border-left:2px solid #ff9999;
+  border-bottom:2px solid #770000;border-right:2px solid #770000;
+  white-space:nowrap;text-decoration:none;
+}
+.taskbar-btn {
+  background:var(--gray);color:#000;font-family:'VT323',monospace;
+  font-size:14px;padding:2px 10px;text-decoration:none;
+  white-space:nowrap;display:inline-block;
+}
+.taskbar-btn:hover{background:#D4D0C8;color:#000;}
+.taskbar-clock{margin-left:auto;font-family:'Share Tech Mono',monospace;font-size:13px;padding:2px 10px;}
+/* Window */
+.window{background:var(--gray);border-top:3px solid var(--light);border-left:3px solid var(--light);border-bottom:3px solid var(--dark);border-right:3px solid var(--dark);}
+.win-titlebar{background:linear-gradient(90deg,var(--red),#cc2222);color:#fff;font-size:15px;padding:3px 8px;display:flex;align-items:center;justify-content:space-between;letter-spacing:.06em;user-select:none;}
+.win-titlebar-title::before{content:'■ ';font-size:10px;}
+.win-controls{display:flex;gap:2px;}
+.win-btn{background:var(--gray);color:#000;font-family:'VT323',monospace;font-size:12px;border-top:1px solid var(--light);border-left:1px solid var(--light);border-bottom:1px solid var(--dark);border-right:1px solid var(--dark);width:18px;height:16px;display:flex;align-items:center;justify-content:center;}
+.win-body{padding:14px 16px;}
+/* Sidebar nav */
+.doc-nav {
+  background:var(--gray);
+  border-top:2px solid var(--light);border-left:2px solid var(--light);
+  border-bottom:2px solid var(--dark);border-right:2px solid var(--dark);
+}
+.doc-nav .nav-title {
+  background:linear-gradient(90deg,var(--red),#cc2222);
+  color:#fff;font-size:13px;padding:3px 8px;letter-spacing:.08em;
+}
+.doc-nav-list{list-style:none;margin:0;padding:4px 0;}
+.doc-nav-list li a {
+  display:block;padding:3px 10px;font-size:14px;letter-spacing:.05em;
+  color:#000;text-decoration:none;
+}
+.doc-nav-list li a:hover{background:#D4D0C8;}
+.doc-nav-list li a.active{background:var(--black);color:var(--green);}
+.doc-nav-sep{height:1px;background:var(--mid);margin:3px 6px;}
+/* Term */
+.term{background:var(--black);border-top:2px solid var(--dark);border-left:2px solid var(--dark);border-bottom:2px solid var(--light);border-right:2px solid var(--light);padding:10px 14px;font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--green);line-height:1.65;overflow-x:auto;}
+.term .comment{color:#006600;}
+.term .dim{color:#009900;}
+/* Section label */
+.section-label{font-size:13px;font-weight:bold;letter-spacing:.18em;text-transform:uppercase;color:var(--red);border-bottom:2px solid var(--mid);padding-bottom:3px;margin-bottom:10px;}
+/* Tables */
+.win-table{width:100%;border-collapse:collapse;font-family:'Share Tech Mono',monospace;font-size:12px;}
+.win-table th{background:var(--gray);text-align:left;font-family:'VT323',monospace;font-size:13px;letter-spacing:.1em;color:var(--red);padding:3px 8px;border-bottom:2px solid var(--mid);}
+.win-table td{padding:4px 8px;border-bottom:1px solid #B8B8B8;color:#222;vertical-align:top;}
+.win-table tr:nth-child(even) td{background:#D4D0C8;}
+.win-table td:first-child{font-weight:bold;white-space:nowrap;}
+.win-table code{font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--black);}
+/* Callout */
+.callout{background:var(--black);border-left:3px solid var(--red);border-top:1px solid var(--dark);border-bottom:1px solid var(--light);border-right:1px solid var(--light);padding:8px 12px;font-family:'Share Tech Mono',monospace;font-size:12px;color:#AAAAAA;line-height:1.6;}
+.callout strong{color:var(--green);}
+.callout.warn{border-left-color:#FFFF00;}
+.callout.warn strong{color:#FFFF00;}
+.callout.note{border-left-color:var(--green);}
+/* Breadcrumb */
+.breadcrumb-win{font-size:12px;font-family:'Share Tech Mono',monospace;color:#555;padding:4px 0 8px;letter-spacing:.04em;}
+.breadcrumb-win a{color:var(--red);text-decoration:none;}
+.breadcrumb-win a:hover{text-decoration:underline;}
+/* Back btn */
+.back-btn{font-family:'VT323',monospace;font-size:14px;padding:2px 10px;background:var(--gray);color:#000;text-decoration:none;display:inline-block;border-top:2px solid var(--light);border-left:2px solid var(--light);border-bottom:2px solid var(--dark);border-right:2px solid var(--dark);}
+.back-btn:hover{background:#D4D0C8;color:#000;}
+/* Content typography */
+.doc-content h2{font-size:20px;font-weight:bold;letter-spacing:.1em;color:var(--red);margin:20px 0 8px;text-transform:uppercase;}
+.doc-content h3{font-size:16px;font-weight:bold;letter-spacing:.08em;color:#333;margin:14px 0 6px;text-transform:uppercase;}
+.doc-content p{font-family:'Share Tech Mono',monospace;font-size:12px;line-height:1.7;margin-bottom:10px;color:#222;}
+.doc-content ul,.doc-content ol{font-family:'Share Tech Mono',monospace;font-size:12px;line-height:1.8;padding-left:20px;margin-bottom:10px;color:#222;}
+.doc-content li{margin-bottom:2px;}
+.doc-content code{font-family:'Share Tech Mono',monospace;font-size:11px;background:#D4D0C8;padding:1px 4px;color:#000;}
+.doc-content strong{color:#000;}
+.doc-content a{color:var(--red);}
+.doc-content a:hover{color:#cc0000;}
+.doc-content hr{border:none;border-top:2px solid var(--mid);margin:16px 0;}
+/* Mobile */
+@media(max-width:767px){
+  .taskbar-btn{font-size:12px;padding:2px 6px;}
+  .win-titlebar{font-size:13px;}
+  .term{font-size:11px;}
+  .doc-nav{margin-bottom:10px;}
+}
+</style>
+</head>
+<body>
+<div class="taskbar">
+  <a class="taskbar-brand" href="../index.html">■ huff</a>
+  <a class="taskbar-btn raised-sm" href="../index.html">Home</a>
+  <a class="taskbar-btn raised-sm" href="how-it-works.html">How It Works</a>
+  <a class="taskbar-btn raised-sm" href="installation.html">Install</a>
+  <a class="taskbar-btn raised-sm" href="interface.html">Interface</a>
+  <a class="taskbar-btn raised-sm" href="midi.html">MIDI</a>
+  <a class="taskbar-btn raised-sm" href="osc.html">OSC</a>
+  <a class="taskbar-btn raised-sm" href="output.html">Output</a>
+  <div class="taskbar-clock raised-sm" id="clock">--:--:--</div>
+</div>
+<div class="container-fluid px-2 px-md-3 mt-3">
+  <div class="row g-3">
+    <div class="col-12 col-md-3 col-lg-2">
+      <div class="doc-nav">
+  <div class="nav-title">■ DOCUMENTATION</div>
+  <ul class="doc-nav-list">
+    <li><a href="../index.html">← Back to huff</a></li>
+    <li><div class="doc-nav-sep"></div></li>
+    <li><a href="how-it-works.html">How It Works</a></li>
+<li><a href="installation.html">Installation</a></li>
+<li><a href="interface.html" class="active">The Interface</a></li>
+<li><a href="midi.html">MIDI</a></li>
+<li><a href="osc.html">OSC</a></li>
+<li><a href="output.html">Video Output</a></li>
+<li><a href="parameter-reference.html">Parameter Reference</a></li>
+<li><a href="architecture.html">Architecture</a></li>
+<li><a href="caveats.html">Caveats</a></li>
+<li><a href="troubleshooting.html">Troubleshooting</a></li>
+
+  </ul>
+</div>
+    </div>
+    <div class="col-12 col-md-9 col-lg-10">
+      <div class="window">
+        <div class="win-titlebar">
+          <span class="win-titlebar-title">The Interface</span>
+          <div class="win-controls"><div class="win-btn">_</div><div class="win-btn">□</div><div class="win-btn">✕</div></div>
+        </div>
+        <div class="win-body doc-content">
+          
+<p>huff opens two windows. The <strong>controls window</strong> is your workspace. The <strong>canvas window</strong> is the fullscreen output that receives processed frames over the embedded WebSocket relay.</p>
+<p>Controls are organised into collapsible <strong>groups</strong>. Click a group label to collapse or expand it. Collapsing a group does not disable its effects — use the <strong>ON</strong> toggle inside each group for that.</p>
+<hr/>
+
+<h2>Top Bar</h2>
+<div class="table-responsive"><table class="win-table">
+  <thead><tr><th>Control</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td>File</td><td>Load a video file. Drag-and-drop also works. MP4, MOV, WebM, and any format your system decoder handles.</td></tr>
+    <tr><td>▶ Play / ⏸ Pause</td><td>Toggle video playback. Resuming after pause restarts the frame pump automatically.</td></tr>
+    <tr><td>VOL</td><td>Output volume. Routed through a dedicated Web Audio <code>AudioContext</code> + <code>GainNode</code> so audio playback runs on its own thread and does not drop out under heavy canvas load. Drag to zero to mute.</td></tr>
+    <tr><td>RATE</td><td>Playback speed: 0.25×, 0.5×, 1×, 2×, 4×. Applies immediately without reloading.</td></tr>
+    <tr><td>LOOP</td><td>Loop the file continuously. Unchecking plays once and stops.</td></tr>
+    <tr><td>↻ Refresh</td><td>Re-seed glitch randomisation.</td></tr>
+    <tr><td>↺ Reset</td><td>Reset all parameters to defaults.</td></tr>
+    <tr><td>CLR BUF</td><td>Instantly wipes the frame ring and all internal buffers (<code>gBuf</code> and the shared <code>gScratch</code> ping-pong buffer) and resets cluster physics. Use this to clear accumulated trails/feedback/glitch history without resetting any parameter values or noise phases — the animation continues from where it was.</td></tr>
+    <tr><td>Camera</td><td>Select a webcam from the dropdown. Click ↻ Refresh to scan for newly connected devices.</td></tr>
+    <tr><td>Seek Bar</td><td>Scrub to any position in the loaded file. Uses fast keyframe seeking while dragging for low latency; playback resumes automatically on release.</td></tr>
+    <tr><td>Time Display</td><td>Shows current position and total duration as <code>M:SS / M:SS</code>.</td></tr>
+  </tbody>
+</table></div>
+<hr/>
+
+<h2>Source Group</h2>
+<div class="table-responsive"><table class="win-table">
+  <thead><tr><th>Control</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td>BASE VIDEO</td><td>Show the raw source frame underneath the glitch output.</td></tr>
+    <tr><td>BASE MIX</td><td>Opacity of the base video layer at final composite. 0 = fully glitched output, 1 = raw source on top.</td></tr>
+    <tr><td>BASE BG</td><td>Background fill colour when no tile covers a pixel: Black, Green (chroma key), Blue, or White.</td></tr>
+    <tr><td>SEED ON LOAD</td><td>Randomise the seed each time a new file is loaded, giving every clip a visually distinct glitch pattern.</td></tr>
+    <tr><td>SEED</td><td>Randomisation seed. Same seed + parameters = same output.</td></tr>
+    <tr><td>QUALITY</td><td>Scales the frame ring depth (0 → 4 frames, 1 → 60 frames). The single most impactful performance lever.</td></tr>
+  </tbody>
+</table></div>
+<hr/>
+
+<h2>Feedback Group</h2>
+<div class="table-responsive"><table class="win-table">
+  <thead><tr><th>Control</th><th>Range</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td>FEEDBACK</td><td>0–3</td><td>Contribution of the previous frame. Values &gt; 1 over-expose.</td></tr>
+    <tr><td>PERSISTENCE</td><td>0–10</td><td>Decay rate between frames. Higher = trails linger longer.</td></tr>
+    <tr><td>FB X</td><td>-1–1</td><td>Horizontal translation per frame. Creates lateral drift.</td></tr>
+    <tr><td>FB Y</td><td>-1–1</td><td>Vertical translation per frame.</td></tr>
+    <tr><td>FB Z</td><td>0.98–1.03</td><td>Zoom per frame. &lt; 1 = implode inward. &gt; 1 = explode outward.</td></tr>
+    <tr><td>FB θ</td><td>-2–2</td><td>Rotation in degrees per frame. Creates spinning feedback tunnels.</td></tr>
+    <tr><td>↺ Reset Motion</td><td>button</td><td>Returns FB X/Y/Z/θ to neutral (0, 0, 1.0, 0).</td></tr>
+  </tbody>
+</table></div>
+<div class="callout warn">
+FEEDBACK above ~2.5 combined with non-neutral FB Z can saturate the buffer (full white or full black) within seconds. Recovery: lower FEEDBACK to 0, click ↺ Reset Motion, or use <strong>CLR BUF</strong> in the top bar to wipe the buffer instantly.
+</div>
+<hr/>
+
+<h2>Glitch Group</h2>
+<p>The core datamosh engine. Reads tiles from past frames and blits them onto the current frame at noise-driven positions.</p>
+<div class="table-responsive"><table class="win-table">
+  <thead><tr><th>Control</th><th>Range</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td>ON</td><td>toggle</td><td>Enable/disable the glitch pass entirely.</td></tr>
+    <tr><td>DEPTH</td><td>0–0.5</td><td>How far back in the ring tiles are sampled.</td></tr>
+    <tr><td>SCATTER</td><td>0–1</td><td>Per-tile randomisation of the lookback index.</td></tr>
+    <tr><td>CORRUPT %</td><td>0–7</td><td>Fraction of grid tiles displaced per frame. 0 = nothing moves. 7 = every tile replaced.</td></tr>
+    <tr><td>DRIFT</td><td>0–1</td><td>Noise-driven oscillation of corruption density. The percentage breathes slowly when &gt; 0.</td></tr>
+    <tr><td>PIXEL SIZE</td><td>150–2000</td><td>Tile size in pixels. Larger = blockier datamosh. Smaller = fine grain displacement.</td></tr>
+    <tr><td>GLITCH SIZE</td><td>1–60</td><td>Spatial scaling of each tile relative to PIXEL SIZE.</td></tr>
+    <tr><td>OPACITY</td><td>0–1</td><td>Alpha of each blit tile. Also scaled by the A/B Mix layer-priority weight.</td></tr>
+    <tr><td>JITTER</td><td>0–1</td><td>Magnitude of per-tile position noise.</td></tr>
+    <tr><td>SMEAR</td><td>0–200</td><td>Duplicate stamps trailed behind each tile.</td></tr>
+    <tr><td>SMEAR ANGLE</td><td>0–360</td><td>Direction of the smear trail. 0 = noise-driven per frame.</td></tr>
+    <tr><td>SPEED</td><td>0–5</td><td>Phase velocity of the noise field driving tile selection.</td></tr>
+    <tr><td>FINE</td><td>0–10</td><td>Secondary fine speed multiplier.</td></tr>
+    <tr><td>MULT</td><td>0–10</td><td>Overall speed multiplier.</td></tr>
+    <tr><td>GLITCH X / Y</td><td>-1000–1000</td><td>Base offset applied to all tile destination positions.</td></tr>
+  </tbody>
+</table></div>
+<hr/>
+
+<h2>Clusters Group</h2>
+<p>Locked directly beneath Glitch as part of the same conceptual unit. Biases glitch tile placement toward moving focal points (cluster centres) rather than scattering tiles randomly. Glitch must also be ON. Each centre has its own physics simulation with inertia, steering, and optional velocity bursts. Centres always use the physics simulation — even at SPEED 0, where the desired velocity is zero and centres glide to a stop and hold position (no per-frame re-randomisation).</p>
+<div class="table-responsive"><table class="win-table">
+  <thead><tr><th>Control</th><th>Range</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td>ON</td><td>toggle</td><td>Enable cluster-biased tile placement. Glitch must also be ON.</td></tr>
+    <tr><td>CENTERS</td><td>1–20</td><td>Number of cluster centres. Each is an independent physics body that tiles gravitate toward.</td></tr>
+    <tr><td>SPREAD</td><td>1–300</td><td>Radius in pixels around each centre within which tiles are distributed.</td></tr>
+    <tr><td>MIN RAD</td><td>0–150</td><td>Minimum distance from centre — creates a hollow ring of tiles.</td></tr>
+    <tr><td>SPATIAL GAP</td><td>0–200</td><td>Minimum pixel distance between any two tiles. Prevents overlap.</td></tr>
+    <tr><td>BIAS</td><td>0–1</td><td>Fraction of tiles forced into clusters. Remainder placed randomly across the canvas.</td></tr>
+    <tr><td>DRIFT</td><td>0–5</td><td>Adds noise-driven wandering to centre positions.</td></tr>
+    <tr><td>SPEED</td><td>0–10</td><td>Speed of cluster centre physics simulation, step 0.01 for fine low-end control. 0 = centres glide to a stop and hold still.</td></tr>
+    <tr><td>SPD VAR</td><td>0–2</td><td>Per-centre speed variation. Each centre gets its own speed multiplier so they move at different rates. 0 = all same speed.</td></tr>
+    <tr><td>PULSE</td><td>0–10</td><td>Periodic velocity kick — centres suddenly burst in a random direction then settle. Higher = more frequent bursts.</td></tr>
+    <tr><td>INERTIA</td><td>0.01–0.99</td><td>Momentum of cluster centres. High = smooth gliding. Low = snappy response to steering.</td></tr>
+  </tbody>
+</table></div>
+<hr/>
+
+<h2>Layer Priority Group</h2>
+<p>A deliberately stable binary paint-order control between the Corrupt/Luma group and Scanlines. Pass 48 removes the old frame-alternating and pulse-order modes because they behaved like temporal flicker rather than meaningful layer hierarchy.</p>
+<div class="table-responsive"><table class="win-table">
+  <thead><tr><th>Control</th><th>Options</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td>PRIORITY</td><td>SCAN TOP / CORRUPT TOP</td><td>SCAN TOP draws Scanlines last. CORRUPT TOP draws the Corrupt/Luma group last. Both are stable until explicitly changed.</td></tr>
+  </tbody>
+</table></div>
+<hr/>
+
+<h2>Luma Key Group</h2>
+<p>A luminance-derived key with explicit target, key source, Clip/Gain-style shaping, stored stencil memory and keyed-fill compositing. X-FADE and SOFT ADD retain the INDIGO-inspired pair; Pass 48 adds a small set of HUFF Classic blend fades over the same keyed patch.</p>
+<div class="table-responsive"><table class="win-table">
+  <thead><tr><th>Control</th><th>Range / Options</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td>ON</td><td>toggle</td><td>Enable the Luma Key.</td></tr>
+    <tr><td>TARGET</td><td>COMPOSITE / CORRUPT / SCAN</td><td>Choose whether the key restores clean imagery over the composite or directly gates Corrupt / Scan objects.</td></tr>
+    <tr><td>DARK ↔ BRIGHT</td><td>0–1</td><td>Clip / luminance threshold.</td></tr>
+    <tr><td>GAIN</td><td>0.25–4</td><td>Controls key edge steepness.</td></tr>
+    <tr><td>MIX</td><td>0–1</td><td>Overall key opacity.</td></tr>
+    <tr><td>INVERT</td><td>toggle</td><td>Invert the key signal.</td></tr>
+    <tr><td>KEY SRC</td><td>LIVE / STENCIL</td><td>LIVE follows incoming luminance. STENCIL uses the captured internal luminance plane.</td></tr>
+    <tr><td>STENCIL</td><td>CAPTURE</td><td>Capture bounded luminance memory for later keying.</td></tr>
+    <tr><td>FADE</td><td>X-FADE / SOFT ADD / LIGHTEN / DARKEN / MULTIPLY / OVERLAY / HARD LIGHT / DIFFERENCE</td><td>COMPOSITE-target keyed-fill relationship. The first two preserve the existing behavior; the additional modes are HUFF Classic extensions using the same matte and keyed patch.</td></tr>
+    <tr><td>CLEANUP</td><td>0–1</td><td>Suppress low-level key leakage.</td></tr>
+    <tr><td>DENSITY</td><td>0–1</td><td>Push strong key regions toward full opacity.</td></tr>
+  </tbody>
+</table></div>
+<hr/>
+
+<h2>Buffer Trails Group</h2>
+<div class="table-responsive"><table class="win-table">
+  <thead><tr><th>Control</th><th>Range</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td>ON</td><td>toggle</td><td>Enable/disable.</td></tr>
+    <tr><td>TRAIL LAYERS</td><td>0–4</td><td>Number of ghost frames composited.</td></tr>
+    <tr><td>TRAIL DEPTH</td><td>0–1</td><td>How far back in the ring to pull trail frames from.</td></tr>
+    <tr><td>LUMA KEY</td><td>0–1</td><td>Drops dark pixels from trail frames. Only bright areas trail.</td></tr>
+  </tbody>
+</table></div>
+<hr/>
+
+<h2>Symmetry Group</h2>
+<div class="table-responsive"><table class="win-table">
+  <thead><tr><th>Control</th><th>Options</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td>ON</td><td>toggle</td><td>Enable/disable.</td></tr>
+    <tr><td>MODE</td><td>vertical / horizontal / both</td><td>Vertical mirror, horizontal mirror, or both axes.</td></tr>
+    <tr><td>SYM POS</td><td>0–1</td><td>Position of the mirror axis. 0.5 = centred.</td></tr>
+  </tbody>
+</table></div>
+<hr/>
+
+<h2>Scanlines Group</h2>
+<p>Displaces bands of the <strong>current video frame</strong> spatially — no temporal sampling from the ring. Bands shift the current content perpendicular to their axis; they do not pull from historical frames, so they stay smooth and follow live motion with no buffer-trail artifact. The whole band pattern can be rotated to any angle, including continuous spin.</p>
+<div class="table-responsive"><table class="win-table">
+  <thead><tr><th>Control</th><th>Range</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td>ON</td><td>toggle</td><td>Enable/disable.</td></tr>
+    <tr><td>ANGLE</td><td>-180°–180°, step 0.5°</td><td>Rotates the entire band pattern. 0° = horizontal bands displaced left/right. 90°/-90° = vertical bands displaced up/down. Any other value = diagonal bands. The band span and displacement axis are recalculated for the full rotated canvas so bands always cover the whole frame and stay centred, at any angle.</td></tr>
+    <tr><td>0° / -90° / 90° buttons</td><td>buttons</td><td>Snap ANGLE directly to 0°, -90°, or 90°. Because the slider spans 360° in a small space, landing exactly on these values by dragging is impractical — these buttons jump to them instantly and update the label.</td></tr>
+    <tr><td>SPIN L / SPIN R</td><td>toggles</td><td>Continuously rotate the band pattern left (counter-clockwise) or right (clockwise) instead of holding a static ANGLE. If both are somehow active, SPIN R takes priority. While neither is checked, the internal spin position stays in sync with the ANGLE slider so enabling spin starts from the slider's current angle with no jump.</td></tr>
+    <tr><td>SPIN SPD</td><td>0.1–10</td><td>Spin speed. At 1.0 the pattern completes a full rotation in roughly 12 seconds (60fps); higher values spin proportionally faster.</td></tr>
+    <tr><td>BANDS</td><td>1–50</td><td>Number of active displacement bands per frame.</td></tr>
+    <tr><td>SIZE</td><td>1–120</td><td>Base size of each band in pixels (along the band axis).</td></tr>
+    <tr><td>FOCUS</td><td>0–1</td><td>Biases where bands are distributed across the rotated span. 0.5 = even spread across the whole canvas. Toward 0 or 1 pulls bands toward one end of the span. Fixes the tendency of unbiased noise to cluster bands near the centre.</td></tr>
+    <tr><td>SHIFT</td><td>0–0.5</td><td>Maximum displacement perpendicular to the band axis, as a fraction of the canvas dimension along that axis.</td></tr>
+    <tr><td>SKEW</td><td>-1–1</td><td>Position-based offset along the displacement axis, making bands angle diagonally relative to their own axis.</td></tr>
+    <tr><td>DRIFT</td><td>0–3</td><td>Dual-frequency noise driving band position along the rotated span: a slow base wander layered with faster, smaller jitter. Higher values increase both.</td></tr>
+    <tr><td>ROLL</td><td>-2–2</td><td>Continuous scroll of all bands along the rotated span, independent of DRIFT. Positive and negative values scroll in opposite directions; 0 = no roll.</td></tr>
+    <tr><td>SPEED</td><td>0–5</td><td>Speed of the DRIFT/ROLL phase accumulation. Operates independently of glitch speed — works even with glitch off.</td></tr>
+    <tr><td>GAP</td><td>0–200</td><td>Snaps band positions to a regular grid spacing along the rotated span.</td></tr>
+    <tr><td>OPACITY</td><td>0–1</td><td>Alpha of displaced band content. Also scaled by the A/B Mix layer-priority weight.</td></tr>
+  </tbody>
+</table></div>
+<hr/>
+
+<h2>Global Mix Group</h2>
+<p>Reintroduces the clean source into the active effects chain at a selected serial position. Position determines whether the clean relationship enters recursive Feedback or only affects a later/final image. Pass 48 keeps this deliberately light and adds only a fader-response curve; no new render pass or image source is introduced.</p>
+<div class="table-responsive"><table class="win-table">
+  <thead><tr><th>Control</th><th>Range / Options</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td>ON</td><td>toggle</td><td>Enable/disable. Zero MIX remains a true bypass.</td></tr>
+    <tr><td>BLEND</td><td>SCREEN / ADD / LIGHTEN / DODGE / MULTIPLY / DARKEN / BURN / OVERLAY / SOFT LIGHT / HARD LIGHT / DIFFERENCE / EXCLUSION / HUE / SATURATION / COLOR / LUMINOSITY / NORMAL</td><td>Canvas blend relationship between clean source and the current Process image.</td></tr>
+    <tr><td>MIX</td><td>0–1</td><td>Global Mix fader.</td></tr>
+    <tr><td>CURVE</td><td>LINEAR / SMOOTH / PUNCH</td><td>LINEAR is exact legacy behavior. SMOOTH eases both ends. PUNCH brings the clean relationship in earlier. The curve changes only the effective alpha and adds no image-processing pass.</td></tr>
+    <tr><td>POSITION</td><td>BEFORE FB / AFTER FB / AFTER FLOW / FINAL</td><td>Selects the legal insertion point in the fixed Classic serial pipeline.</td></tr>
+  </tbody>
+</table></div>
+<hr/>
+
+<h2>Solarize Group</h2>
+<p><strong>THRESHOLD</strong> preserves the accepted HUFF Classic Solarize. <strong>LUMA QUANTIZE</strong> adds a Magic DaVE-inspired luminance quantiser using the same bounded Solarize scratch/readback path.</p>
+<p><strong>Pass 44 UI:</strong> inactive mode-specific controls are hidden. THRESHOLD shows THRESH + SOL R/G/B; LUMA QUANTIZE shows LEVEL + SOFT + INVERT. ON, MODE, AMOUNT and FLUIDITY remain visible in both modes.</p>
+<div class="table-responsive"><table class="win-table">
+  <thead><tr><th>Control</th><th>Range</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td>ON</td><td>toggle</td><td>Enable/disable.</td></tr>
+    <tr><td>MODE</td><td>THRESHOLD / LUMA QUANTIZE</td><td>Select the original or new Solarize algorithm.</td></tr>
+    <tr><td>THRESH</td><td>0–1</td><td>THRESHOLD only. Original luminance threshold.</td></tr>
+    <tr><td>LEVEL</td><td>0–100%</td><td>LUMA QUANTIZE only. Higher = coarser luminance contouring; 99% = two levels, 100% = luminance removed.</td></tr>
+    <tr><td>SOFT</td><td>0–100%</td><td>LUMA QUANTIZE only. Softens the step transitions.</td></tr>
+    <tr><td>INVERT</td><td>toggle</td><td>LUMA QUANTIZE only. Reverses luminance while retaining chroma.</td></tr>
+    <tr><td>FLUIDITY</td><td>0–100%</td><td>Solarize-local temporal slew. 100% = instantaneous Pass 42 behavior; lower values make Solarize evolve more slowly without changing playback speed or adding a new frame-skip gate.</td></tr>
+    <tr><td>AMOUNT</td><td>0–1</td><td>Shared wet/dry strength.</td></tr>
+    <tr><td>SOL R / G / B</td><td>0–2</td><td>THRESHOLD only. Existing per-channel tint multipliers.</td></tr>
+  </tbody>
+</table></div>
+<hr/>
+
+<h2>Flow Group</h2>
+<p>Noise-field UV displacement applied after Feedback. Each grid cell samples a Perlin noise field to determine where it pulls its source pixels from.</p>
+<div class="table-responsive"><table class="win-table">
+  <thead><tr><th>Control</th><th>Range</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td>ON</td><td>toggle</td><td>Enable/disable.</td></tr>
+    <tr><td>STRENGTH</td><td>0–20</td><td>Maximum pixel displacement.</td></tr>
+    <tr><td>SCALE</td><td>40–200</td><td>Spatial scale of the noise field — grid cell size in pixels.</td></tr>
+    <tr><td>SPEED</td><td>0–4</td><td>Multiplies the time accumulator driving the noise field. 0 = frozen — the warp pattern stops evolving but stays applied. 1 = normal speed.</td></tr>
+    <tr><td>PULSE</td><td>0–200</td><td>Frames back in the ring to sample during warp. Adds temporal smear. 0 = sample the current buffer.</td></tr>
+    <tr><td>PULL</td><td>-1–1</td><td>Radial bias added to the noise displacement. Positive values pull toward the canvas centre (implode). Negative values push away from centre (explode/centrifugal). 0 = pure noise field, no radial bias.</td></tr>
+    <tr><td>SWIRL</td><td>-2–2</td><td>Rotates each cell's displacement vector by an angle proportional to its distance from centre, adding a vortex/spiral motion on top of the noise field and any PULL. Positive and negative values spin in opposite directions.</td></tr>
+    <tr><td>TURB</td><td>0–1</td><td>Blends in a second noise octave at higher frequency and lower amplitude, layered on top of the base field for more turbulent, less uniform displacement. 0 = single-octave field only.</td></tr>
+  </tbody>
+</table></div>
+<hr/>
+
+<h2>Presets</h2>
+<p>Presets are named snapshots of all current parameter values, stored in the browser's localStorage and listed in a dropdown for quick recall. JSON export/import provides portability across machines and sharing with collaborators.</p>
+<div class="table-responsive"><table class="win-table">
+  <thead><tr><th>Control</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td>preset name field</td><td>Type a name, then click 💾 Save (or press Enter) to save the current parameter snapshot under that name.</td></tr>
+    <tr><td>💾 Save</td><td>Saves the current snapshot to localStorage under the name in the field. Overwrites an existing preset of the same name.</td></tr>
+    <tr><td>— saved presets — dropdown</td><td>Lists all saved preset names alphabetically. Double-click an entry to load it.</td></tr>
+    <tr><td>▶ Load</td><td>Loads the selected preset. Counts as one undo step.</td></tr>
+    <tr><td>✕ Delete</td><td>Permanently removes the selected preset from localStorage.</td></tr>
+    <tr><td>↑ Export JSON</td><td>Downloads all saved presets as a single timestamped <code>.json</code> file — a map of preset name → parameter snapshot.</td></tr>
+    <tr><td>↓ Import JSON</td><td>Loads a previously exported file. A file containing a map of named presets merges all of them into your saved list (overwriting any name collisions). A file containing a single preset snapshot is imported under the name currently in the preset name field, or <code>imported-&lt;timestamp&gt;</code> if the field is empty.</td></tr>
+    <tr><td>Ctrl+Z / Cmd+Z</td><td>10-step undo. Steps back through parameter changes one snapshot at a time. Loading a preset counts as one undo step.</td></tr>
+  </tbody>
+</table></div>
+<div class="callout warn">
+Presets are stored in the browser's localStorage — treat this as a cache, not a primary store. Use ↑ Export JSON to back up presets to a file you keep with your project. Cluster centre positions and velocities are runtime state and are not saved in presets; loading a preset restores all slider values but cluster centres will be wherever their physics simulation currently has them.
+</div>
+<hr/>
+
+<h2>Keyboard Shortcuts</h2>
+<div class="table-responsive"><table class="win-table">
+  <thead><tr><th>Key</th><th>Action</th></tr></thead>
+  <tbody>
+    <tr><td>P</td><td>Toggle the control panel. A pill indicator appears at the bottom of the screen reading "UI hidden · P to show" so you can always get back.</td></tr>
+    <tr><td>F</td><td>Toggle fullscreen.</td></tr>
+    <tr><td>Ctrl+Z / Cmd+Z</td><td>Undo the last parameter change. Up to 10 steps.</td></tr>
+  </tbody>
+</table></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js"></script>
+<script>
+function tick(){document.getElementById('clock').textContent=new Date().toLocaleTimeString('en-US',{hour12:false});}
+tick();setInterval(tick,1000);
+</script>
+</body>
+</html>

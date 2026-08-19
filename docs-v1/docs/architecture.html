@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css"/>
+<link href="https://fonts.googleapis.com/css2?family=VT323&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<title>Architecture — huff docs</title>
+
+<style>
+:root {
+  --gray:  #C0C0C0; --light: #FFFFFF; --mid: #808080; --dark: #404040;
+  --red:   #ff4647; --black: #000000; --green: #00FF00; --dgreen: #00CC00;
+  --teal:  #008080;
+}
+*,*::before,*::after{box-sizing:border-box;}
+body {
+  background:var(--teal);
+  background-image:repeating-linear-gradient(45deg,rgba(0,0,0,.06) 0px,rgba(0,0,0,.06) 1px,transparent 1px,transparent 5px);
+  font-family:'VT323','Courier New',monospace;
+  color:#000; min-height:100vh; padding-bottom:40px;
+}
+.raised    {border-top:2px solid var(--light);border-left:2px solid var(--light);border-bottom:2px solid var(--dark);border-right:2px solid var(--dark);}
+.inset     {border-top:2px solid var(--dark);border-left:2px solid var(--dark);border-bottom:2px solid var(--light);border-right:2px solid var(--light);}
+.raised-sm {border-top:1px solid var(--light);border-left:1px solid var(--light);border-bottom:1px solid var(--dark);border-right:1px solid var(--dark);}
+/* Taskbar */
+.taskbar {
+  position:sticky;top:0;z-index:1000;
+  background:var(--gray);
+  border-top:2px solid var(--light);border-bottom:2px solid var(--dark);
+  padding:3px 8px;display:flex;align-items:center;gap:4px;flex-wrap:wrap;
+}
+.taskbar-brand {
+  background:linear-gradient(90deg,var(--red),#cc2222);color:#fff;
+  font-size:16px;padding:2px 12px;letter-spacing:.08em;
+  border-top:2px solid #ff9999;border-left:2px solid #ff9999;
+  border-bottom:2px solid #770000;border-right:2px solid #770000;
+  white-space:nowrap;text-decoration:none;
+}
+.taskbar-btn {
+  background:var(--gray);color:#000;font-family:'VT323',monospace;
+  font-size:14px;padding:2px 10px;text-decoration:none;
+  white-space:nowrap;display:inline-block;
+}
+.taskbar-btn:hover{background:#D4D0C8;color:#000;}
+.taskbar-clock{margin-left:auto;font-family:'Share Tech Mono',monospace;font-size:13px;padding:2px 10px;}
+/* Window */
+.window{background:var(--gray);border-top:3px solid var(--light);border-left:3px solid var(--light);border-bottom:3px solid var(--dark);border-right:3px solid var(--dark);}
+.win-titlebar{background:linear-gradient(90deg,var(--red),#cc2222);color:#fff;font-size:15px;padding:3px 8px;display:flex;align-items:center;justify-content:space-between;letter-spacing:.06em;user-select:none;}
+.win-titlebar-title::before{content:'■ ';font-size:10px;}
+.win-controls{display:flex;gap:2px;}
+.win-btn{background:var(--gray);color:#000;font-family:'VT323',monospace;font-size:12px;border-top:1px solid var(--light);border-left:1px solid var(--light);border-bottom:1px solid var(--dark);border-right:1px solid var(--dark);width:18px;height:16px;display:flex;align-items:center;justify-content:center;}
+.win-body{padding:14px 16px;}
+/* Sidebar nav */
+.doc-nav {
+  background:var(--gray);
+  border-top:2px solid var(--light);border-left:2px solid var(--light);
+  border-bottom:2px solid var(--dark);border-right:2px solid var(--dark);
+}
+.doc-nav .nav-title {
+  background:linear-gradient(90deg,var(--red),#cc2222);
+  color:#fff;font-size:13px;padding:3px 8px;letter-spacing:.08em;
+}
+.doc-nav-list{list-style:none;margin:0;padding:4px 0;}
+.doc-nav-list li a {
+  display:block;padding:3px 10px;font-size:14px;letter-spacing:.05em;
+  color:#000;text-decoration:none;
+}
+.doc-nav-list li a:hover{background:#D4D0C8;}
+.doc-nav-list li a.active{background:var(--black);color:var(--green);}
+.doc-nav-sep{height:1px;background:var(--mid);margin:3px 6px;}
+/* Term */
+.term{background:var(--black);border-top:2px solid var(--dark);border-left:2px solid var(--dark);border-bottom:2px solid var(--light);border-right:2px solid var(--light);padding:10px 14px;font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--green);line-height:1.65;overflow-x:auto;}
+.term .comment{color:#006600;}
+.term .dim{color:#009900;}
+/* Section label */
+.section-label{font-size:13px;font-weight:bold;letter-spacing:.18em;text-transform:uppercase;color:var(--red);border-bottom:2px solid var(--mid);padding-bottom:3px;margin-bottom:10px;}
+/* Tables */
+.win-table{width:100%;border-collapse:collapse;font-family:'Share Tech Mono',monospace;font-size:12px;}
+.win-table th{background:var(--gray);text-align:left;font-family:'VT323',monospace;font-size:13px;letter-spacing:.1em;color:var(--red);padding:3px 8px;border-bottom:2px solid var(--mid);}
+.win-table td{padding:4px 8px;border-bottom:1px solid #B8B8B8;color:#222;vertical-align:top;}
+.win-table tr:nth-child(even) td{background:#D4D0C8;}
+.win-table td:first-child{font-weight:bold;white-space:nowrap;}
+.win-table code{font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--black);}
+/* Callout */
+.callout{background:var(--black);border-left:3px solid var(--red);border-top:1px solid var(--dark);border-bottom:1px solid var(--light);border-right:1px solid var(--light);padding:8px 12px;font-family:'Share Tech Mono',monospace;font-size:12px;color:#AAAAAA;line-height:1.6;}
+.callout strong{color:var(--green);}
+.callout.warn{border-left-color:#FFFF00;}
+.callout.warn strong{color:#FFFF00;}
+.callout.note{border-left-color:var(--green);}
+/* Breadcrumb */
+.breadcrumb-win{font-size:12px;font-family:'Share Tech Mono',monospace;color:#555;padding:4px 0 8px;letter-spacing:.04em;}
+.breadcrumb-win a{color:var(--red);text-decoration:none;}
+.breadcrumb-win a:hover{text-decoration:underline;}
+/* Back btn */
+.back-btn{font-family:'VT323',monospace;font-size:14px;padding:2px 10px;background:var(--gray);color:#000;text-decoration:none;display:inline-block;border-top:2px solid var(--light);border-left:2px solid var(--light);border-bottom:2px solid var(--dark);border-right:2px solid var(--dark);}
+.back-btn:hover{background:#D4D0C8;color:#000;}
+/* Content typography */
+.doc-content h2{font-size:20px;font-weight:bold;letter-spacing:.1em;color:var(--red);margin:20px 0 8px;text-transform:uppercase;}
+.doc-content h3{font-size:16px;font-weight:bold;letter-spacing:.08em;color:#333;margin:14px 0 6px;text-transform:uppercase;}
+.doc-content p{font-family:'Share Tech Mono',monospace;font-size:12px;line-height:1.7;margin-bottom:10px;color:#222;}
+.doc-content ul,.doc-content ol{font-family:'Share Tech Mono',monospace;font-size:12px;line-height:1.8;padding-left:20px;margin-bottom:10px;color:#222;}
+.doc-content li{margin-bottom:2px;}
+.doc-content code{font-family:'Share Tech Mono',monospace;font-size:11px;background:#D4D0C8;padding:1px 4px;color:#000;}
+.doc-content strong{color:#000;}
+.doc-content a{color:var(--red);}
+.doc-content a:hover{color:#cc0000;}
+.doc-content hr{border:none;border-top:2px solid var(--mid);margin:16px 0;}
+/* Mobile */
+@media(max-width:767px){
+  .taskbar-btn{font-size:12px;padding:2px 6px;}
+  .win-titlebar{font-size:13px;}
+  .term{font-size:11px;}
+  .doc-nav{margin-bottom:10px;}
+}
+</style>
+</head>
+<body>
+<div class="taskbar">
+  <a class="taskbar-brand" href="../index.html">■ huff</a>
+  <a class="taskbar-btn raised-sm" href="../index.html">Home</a>
+  <a class="taskbar-btn raised-sm" href="how-it-works.html">How It Works</a>
+  <a class="taskbar-btn raised-sm" href="installation.html">Install</a>
+  <a class="taskbar-btn raised-sm" href="interface.html">Interface</a>
+  <a class="taskbar-btn raised-sm" href="midi.html">MIDI</a>
+  <a class="taskbar-btn raised-sm" href="osc.html">OSC</a>
+  <a class="taskbar-btn raised-sm" href="output.html">Output</a>
+  <div class="taskbar-clock raised-sm" id="clock">--:--:--</div>
+</div>
+<div class="container-fluid px-2 px-md-3 mt-3">
+  <div class="row g-3">
+    <div class="col-12 col-md-3 col-lg-2">
+      <div class="doc-nav">
+  <div class="nav-title">■ DOCUMENTATION</div>
+  <ul class="doc-nav-list">
+    <li><a href="../index.html">← Back to huff</a></li>
+    <li><div class="doc-nav-sep"></div></li>
+    <li><a href="how-it-works.html">How It Works</a></li>
+<li><a href="installation.html">Installation</a></li>
+<li><a href="interface.html">The Interface</a></li>
+<li><a href="midi.html">MIDI</a></li>
+<li><a href="osc.html">OSC</a></li>
+<li><a href="output.html">Video Output</a></li>
+<li><a href="parameter-reference.html">Parameter Reference</a></li>
+<li><a href="architecture.html" class="active">Architecture</a></li>
+<li><a href="caveats.html">Caveats</a></li>
+<li><a href="troubleshooting.html">Troubleshooting</a></li>
+
+  </ul>
+</div>
+    </div>
+    <div class="col-12 col-md-9 col-lg-10">
+      <div class="window">
+        <div class="win-titlebar">
+          <span class="win-titlebar-title">Architecture</span>
+          <div class="win-controls"><div class="win-btn">_</div><div class="win-btn">□</div><div class="win-btn">✕</div></div>
+        </div>
+        <div class="win-body doc-content">
+          
+<h2>Project Structure</h2>
+<div class="term" style="font-size:11px;line-height:1.8">
+huff/
+├── src/
+│   ├── index.html        <span class="comment"># Controls window — UI, p5 draw loop, effect chain</span>
+│   ├── canvas.html       <span class="comment"># Output mirror window</span>
+│   ├── canvas.js         <span class="comment"># p5 setup, draw loop, video handling, WS sender</span>
+│   ├── effects.js        <span class="comment"># applyGlitch · applyTrails · applyScanlines</span>
+│   │                     <span class="comment">#   applyFlowWarp · applySolarize · applySymmetry</span>
+│   ├── p5.js             <span class="comment"># p5.js library (bundled locally)</span>
+│   ├── midi/             <span class="comment"># Bundled MIDI map files</span>
+│   ├── osc/              <span class="comment"># Bundled OSC map files</span>
+│   └── presets/          <span class="comment"># Factory preset JSON files</span>
+│
+├── src-tauri/
+│   ├── src/
+│   │   ├── main.rs       <span class="comment"># WS relay · MIDI commands · OSC listener</span>
+│   │   │                 <span class="comment">#   Syphon handlers · Spout handlers</span>
+│   │   ├── syphon.rs     <span class="comment"># macOS Syphon via ObjC FFI (Metal texture)</span>
+│   │   └── spout.rs      <span class="comment"># Windows Spout2 via SpoutDX C-ABI bridge</span>
+│   ├── native/
+│   │   └── spout_bridge/ <span class="comment"># C++ SpoutDX bridge (CMake)</span>
+│   ├── frameworks/
+│   │   └── Syphon.framework
+│   └── tauri.conf.json
+│
+└── scripts/
+    ├── create_universal_dmg.sh
+    └── tauri-build.cjs
+</div>
+<hr/>
+
+<h2>WebSocket Relay</h2>
+<p>The relay runs inside the Tauri Rust process — not in Node.js or the browser.</p>
+<ul>
+  <li>Binds on <code>127.0.0.1:8787</code> (IPv4) and <code>[::1]:8787</code> (IPv6) via tokio + tokio-tungstenite</li>
+  <li>Clients register via a JSON hello: <code>{"type":"hello","role":"index"}</code> or <code>"canvas"</code></li>
+  <li>Text messages → broadcast to all other clients</li>
+  <li>Binary messages → inspected for magic prefix: <code>HUFFSYPH</code> → Syphon, <code>HUFFSPOUT</code> → Spout, all other → canvas clients</li>
+</ul>
+<hr/>
+
+<h2>Rust Crates</h2>
+<div class="table-responsive"><table class="win-table">
+  <thead><tr><th>Crate</th><th>Version</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td>tauri</td><td>1.x</td><td>App shell, two-window management, Tauri IPC</td></tr>
+    <tr><td>tokio</td><td>1.x</td><td>Async runtime (relay + OSC listener)</td></tr>
+    <tr><td>tokio-tungstenite</td><td>0.21</td><td>WebSocket server</td></tr>
+    <tr><td>midir</td><td>0.9</td><td>Native MIDI input (USB + virtual)</td></tr>
+    <tr><td>rosc</td><td>0.10</td><td>OSC UDP packet decoder</td></tr>
+    <tr><td>once_cell</td><td>1.x</td><td>Lazy static initialisation for global client map</td></tr>
+    <tr><td>serde / serde_json</td><td>1.x</td><td>JSON IPC serialisation</td></tr>
+    <tr><td>objc / objc-foundation</td><td>0.2 / 0.1</td><td>macOS Syphon ObjC FFI (macOS only)</td></tr>
+    <tr><td>cmake</td><td>0.1</td><td>Spout bridge CMake build (Windows only)</td></tr>
+  </tbody>
+</table></div>
+<hr/>
+
+<h2>Frontend Architecture</h2>
+<p>The frontend intentionally has no build step and no bundler. Everything is plain ES6 loaded via script tags. This keeps the dev cycle fast — edit a file, reload the WebView, see the change immediately.</p>
+<p><code>index.html</code> is large (~2300 lines) because the entire controls UI, all MIDI/OSC/Syphon/Spout logic, and the p5 draw loop all live in one file. This is intentional — a single file is trivially auditable and has no dependency graph to maintain.</p>
+<p><code>effects.js</code> contains the Canvas2D effect functions called by <code>canvas.js</code>. The renderer shares a canvas-backed <code>FrameRing</code>, the clean-source surface <code>gCur</code>, the active persistent surface <code>gBuf</code>, and one reusable ping-pong surface <code>gScratch</code>. Flow, symmetry, and feedback reuse that same scratch surface rather than owning separate full-resolution buffers. Flow's static tile geometry is retained in a typed workspace and rebuilt only after render-size or SCALE changes. Scanline band preparation likewise uses a persistent typed workspace with cached rotated-span geometry and per-band noise constants.</p>
+<p><code>canvas.js</code> maintains one sealed render-activity record reused every frame. It distinguishes enabled controls from stages that can actually contribute pixels. Neutral stages never acquire <code>gScratch</code>, trigger CPU readback, or issue full-resolution buffer work. In the all-neutral path, the main canvas receives a direct clean-frame copy and <code>gBuf</code> is refreshed only when the decoded-frame serial changes.</p>
+<p>The Rust relay tracks <code>index</code> and <code>canvas</code> roles. It reports canvas receiver count to the controls WebView and acknowledges accepted JPEG frames, allowing the browser to stop mirror capture entirely without an output client and to keep only one relay submission in flight.</p>
+<hr/>
+
+<h2>macOS Universal Binary Build</h2>
+<div class="term" style="font-size:11px;line-height:1.8">
+scripts/create_universal_dmg.sh
+  ↓
+tauri build --target aarch64-apple-darwin  →  huff_arm64.app
+tauri build --target x86_64-apple-darwin   →  huff_x64.app
+  ↓
+lipo -create huff_arm64.app/.../huff
+             huff_x64.app/.../huff
+     -output huff_universal.app/.../huff
+  ↓
+hdiutil create → huff-universal.dmg
+</div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js"></script>
+<script>
+function tick(){document.getElementById('clock').textContent=new Date().toLocaleTimeString('en-US',{hour12:false});}
+tick();setInterval(tick,1000);
+</script>
+</body>
+</html>

@@ -1,3 +1,11 @@
+# Pass 54 direction
+
+Preset workflow now has two explicit layers: durable user-owned JSON files and a temporary in-memory performance bank. Validate multi-file recall and clean-on-relaunch behavior before expanding factory presets or adding any higher-level show/project concept.
+
+# Pass 53 direction
+
+Preset persistence is being normalized before further feature augmentation. The release contract is built-in factory recall plus explicit portable user files selected through native Save/Open dialogs. No further effect or routing work should be mixed into this pass.
+
 # Pass 52D direction
 
 - Validate the three-source pipeline-awareness UI on the target Mac before any further effect or pipeline changes.

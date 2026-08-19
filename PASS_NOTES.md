@@ -1,3 +1,52 @@
+# Pass 56 — Preset Save + Session Recall
+
+- Successful SAVE FILE… now performs the intended double action: local JSON persistence + temporary in-app recall slot.
+- The exact state serialized to disk is used for the session entry.
+- Newly saved entries are selected immediately and can be recalled after further edits.
+- Same-path resaves refresh the existing session slot.
+- Session entries remain nonpersistent and disappear on quit.
+- Factory-preset curation remains future work.
+
+---
+
+# Pass Notes
+
+## Pass 55 — Keyboard Focus Safety
+
+- Built directly from accepted Pass 54.
+- Removes `P` as a global hide/show-controls shortcut.
+- Prevents application-wide keyboard shortcuts from consuming keys while editable controls own focus.
+- Preserves `F` fullscreen and Ctrl/Cmd+Z HUFF undo outside editing.
+- Preserves Pass 54 preset/session behavior, Pass 52D pipeline behavior, and Pass 51 Syphon.
+
+## Pass 54 — Session Preset Bank
+
+- Builds directly on accepted Pass 53 portable preset file I/O.
+- Adds each loaded single-preset JSON to `SESSION — LOADED FILES` in the preset dropdown.
+- Multiple loaded files accumulate for the current performance session.
+- Loaded presets still apply immediately on file selection.
+- Dropdown RECALL can switch among built-ins, legacy migration entries, and session-loaded files.
+- Reloading the same file path refreshes its existing session slot.
+- Same-named presets from different files remain separate with display-only numeric suffixes.
+- Legacy exported banks add all entries to the temporary session group instead of replacing prior loads.
+- Session slots live only in memory and disappear when HUFF closes.
+- User JSON files remain the durable local copies.
+- No localStorage/sessionStorage persistence is introduced.
+- No render/effect/native/Syphon behavior is changed.
+
+## Pass 53 — Preset File Workflow Repair
+
+- Replaces new localStorage preset persistence with explicit portable files.
+- `SAVE FILE…` opens the native Tauri Save dialog and writes one versioned JSON preset.
+- `LOAD FILE…` opens the native Tauri Open dialog and applies the selected file.
+- Separates `BUILT-IN` preset recall from user-file Save/Load semantics.
+- Adds `Classic Default` as the first immutable built-in state.
+- Keeps old localStorage presets read-only for migration.
+- Keeps old single-preset JSON and exported preset-bank JSON compatible.
+- Removes the duplicate hidden preset file-input ID and obsolete Save/Delete/Export/Import local-bank controls.
+- Adds narrow native JSON read/write commands with a 1 MiB safety ceiling.
+- Changes no render-stage or effect behavior.
+
 ## Pass 52D — Three-Source Pipeline Awareness
 
 - Built directly from Pass 52B; Pass 52C remains rejected.

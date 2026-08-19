@@ -1,0 +1,38 @@
+HISTORICAL NOTE — Target-machine testing did not validate standalone Symmetry/Solarize as a reliable product contract. Pass 52B remains the rollback/code baseline for Pass 52D; Pass 52D preserves the three-source model and makes the downstream dependency visible.
+
+HUFF CLASSIC — PASS 52B
+Standalone Symmetry + Solarize Source Ownership Repair
+
+STATUS
+Runtime candidate. Built from Pass 52A before the Pass 52 Git commit is finalized.
+
+REPORTED ISSUE
+Solarize and Symmetry did not behave as true standalone effects when other image-processing stages were disabled.
+
+ROOT CAUSE
+Two related ownership problems existed in the persistent Classic pipeline:
+
+1. Symmetry always read gBuf. When it was the only transform, gBuf could contain the previous persistent result instead of the current clean gCur frame.
+
+2. Pass 52A attempted to give isolated Solarize direct gCur ownership, but its isolation predicate treated activity.feedback as proof that Feedback owned gBuf. The historical activity bit intentionally remains true for a non-neutral Feedback amount even when the explicit Feedback ENABLE switch is off, in order to preserve the independent Persistence pipeline contract. As a result, disabled Feedback could still prevent Solarize from selecting the direct-live path.
+
+PASS 52B CORRECTION
+- Adds an explicit distinction between Feedback activity and actual Feedback transform ownership.
+- A disabled Feedback transform no longer blocks standalone source ownership.
+- Symmetry reads gCur directly when no enabled upstream image-producing stage owns gBuf.
+- Solarize reads gCur directly under the same ownership rule when Symmetry is also inactive.
+- Symmetry + Solarize uses: gCur -> Symmetry -> Solarize -> output.
+- Enabled Feedback, Flow, Global Mix, Luma, Glitch, or Scanlines preserve established combined-pipeline ownership.
+- No full-resolution source-copy stage was added.
+- No frame skipping, cadence changes, playback changes, Flow changes, Syphon changes, or native runtime changes.
+
+RUNTIME TEST GATE
+1. Disable Feedback with its ENABLE switch. The Feedback amount may remain at its historical non-zero value.
+2. Disable Glitch, Scanlines, Luma Key, Global Mix, and Flow.
+3. Test Symmetry only with moving video. V/H/HV and POS must follow live video continuously.
+4. Disable Symmetry and test each Solarize mode alone with moving video.
+5. Enable Symmetry + Solarize together. Symmetry must operate on live video and Solarize must finish the mirrored result.
+6. Re-enable Feedback and confirm the accepted persistent combinations remain unchanged.
+
+GIT
+Do not finalize the Pass 52 Git commit until this runtime candidate is accepted.

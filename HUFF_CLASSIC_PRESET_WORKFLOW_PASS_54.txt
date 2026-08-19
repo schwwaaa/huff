@@ -1,0 +1,31 @@
+HUFF CLASSIC PASS 54 — SESSION PRESET BANK
+
+BASELINE
+Pass 53 — Preset File Workflow Repair.
+
+GOAL
+Make portable JSON presets useful for live performance setup without turning HUFF Classic into an internal preset database.
+
+CONTRACT
+- Built-in presets remain shipped with HUFF.
+- SAVE FILE… writes a portable JSON preset to a user-selected local path.
+- LOAD FILE… applies the selected JSON immediately and adds it to the preset dropdown for the current HUFF process.
+- Multiple loaded files accumulate into a temporary SESSION — LOADED FILES group.
+- Recalling those entries does not reread disk; the loaded state remains available in RAM for the performance session.
+- Loading the same file path again refreshes its existing session slot instead of adding a duplicate.
+- Different files with the same internal preset name remain separate and receive visible (2), (3), … labels.
+- Closing HUFF clears all session-loaded slots. The original JSON files remain wherever the user saved them.
+- No new preset data is written to localStorage or sessionStorage.
+- Legacy pre-Pass-53 localStorage presets remain read-only migration sources.
+- Legacy exported preset-bank JSON populates the same temporary session group.
+
+PROTECTED
+No image pipeline, effect algorithm, native preset file command, Syphon transport, playback, Flow, Feedback, Luma, Solarize, or Symmetry behavior is changed.
+
+TARGET-MACHINE GATE
+1. Load preset A.json and confirm it applies and appears under SESSION — LOADED FILES.
+2. Load preset B.json and confirm both A and B remain selectable.
+3. Switch repeatedly A -> B -> A during playback.
+4. Reload A.json after modifying the file and confirm its existing slot refreshes instead of duplicating.
+5. Quit HUFF completely and relaunch; confirm A/B are no longer in HUFF's dropdown.
+6. Confirm A.json and B.json still exist on disk and can be loaded again.

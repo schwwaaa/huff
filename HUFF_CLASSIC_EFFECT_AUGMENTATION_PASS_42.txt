@@ -1,0 +1,69 @@
+HUFF CLASSIC EFFECT AUGMENTATION PASS 42
+SOLARIZE — LUMA QUANTIZE
+
+Baseline
+--------
+Accepted HUFF Classic Pass 41A (`huff-08102026.zip`).
+Legacy Tauri v1 + p5.js / Canvas2D only. No wgpu renderer changes.
+
+Purpose
+-------
+Add a second Solarize algorithm inspired by the Snell & Wilcox Magic DaVE
+Solarise control while preserving HUFF Classic's existing THRESHOLD Solarize
+exactly as the default compatibility mode.
+
+Runtime changes
+---------------
+1. Solarize MODE:
+   - THRESHOLD: existing HUFF Classic behavior; default.
+   - LUMA QUANTIZE: new luminance-contour mode.
+
+2. LUMA QUANTIZE controls:
+   - LEVEL 0..100%: higher values reduce luminance to fewer levels.
+     99% maps to two luminance levels; 100% removes luminance.
+   - SOFT 0..100%: blends hard quantized contours toward the unquantized
+     luminance signal.
+   - INVERT: reverses luminance while retaining source chroma structure.
+   - AMOUNT remains the shared wet/dry strength.
+
+3. Chroma-preserving transform:
+   - calculate source luminance;
+   - produce target luminance from LEVEL/SOFT/INVERT;
+   - apply the luminance delta equally to R/G/B, retaining channel differences
+     before gamut clipping;
+   - preserve alpha exactly.
+
+4. Performance boundary:
+   - reuses the existing max-640px Solarize scratch surface;
+   - shares the same single synchronous getImageData() readback;
+   - shares the same single putImageData() upload;
+   - shares the existing adaptive 1x/2x/3x processing-stride guard;
+   - adds no full-resolution buffer and no second pixel readback.
+
+Compatibility
+-------------
+Old presets that do not contain the new fields migrate to:
+- solarizeMode = threshold
+- solarizeLevel = 75
+- solarizeSoft = 0
+- solarizeInvert = false
+
+The new LEVEL/SOFT defaults are irrelevant until LUMA QUANTIZE is explicitly
+selected. Factory presets are not modified.
+
+Reference boundary
+------------------
+Magic DaVE documents Solarise as luma quantisation / special bit reduction,
+with high LEVEL values becoming coarse, the penultimate setting producing two
+luma levels, the extreme setting removing luma, SOFT controlling transitions,
+and INVERT reversing luminance. The manual does not publish the exact hardware
+transfer curve. Pass 42 therefore uses an explicit modern exponential 256→2
+level mapping for 1..99 and reserves 100 for the documented luma-removal
+endpoint. This is inspired by the documented operating model, not claimed as a
+bit-exact DaVE emulation.
+
+Protected
+---------
+Pass 41A playback/source/history, Pass 40W Corrupt/Scan/Luma behavior, Scan
+FIELD, Feedback/Persistence, frozen Flow, pipeline runtime, capability
+instrumentation, factory presets, and native Tauri runtime remain unchanged.

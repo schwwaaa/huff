@@ -1,0 +1,45 @@
+HUFF CLASSIC PASS 55 — KEYBOARD FOCUS SAFETY
+
+BASELINE
+- Built directly from runtime-accepted Pass 54 Session Preset Bank.
+- Pass 54 preset JSON/session-bank behavior is unchanged.
+- Pass 52D three-source pipeline behavior is unchanged.
+- Pass 51 Syphon 720p60 behavior is unchanged.
+
+PROBLEM
+The controls WebView registered P as a global shortcut for hiding the HUFF header.
+The handler ran in capture phase and did not check whether the user was typing in
+an editable field. Typing a preset name containing the letter P therefore hid the
+controls instead of entering the character normally.
+
+CHANGE
+1. Remove P/P as a global HUFF keyboard shortcut entirely.
+2. Remove the stale "P to show" promise from the hidden-UI indicator text.
+3. Add one shared editable-focus guard to the remaining app-global shortcuts.
+4. While an input, textarea, select, contenteditable element, or ARIA textbox owns
+   focus, HUFF does not intercept fullscreen F or instrument Ctrl/Cmd+Z.
+5. Outside editable controls, F fullscreen and Ctrl/Cmd+Z instrument undo remain.
+
+WHY THIS SHAPE
+The immediate bug was P, but the same global handler could also intercept F while
+typing a preset name and Ctrl/Cmd+Z that should belong to text editing. Fixing the
+keyboard focus contract once prevents the same class of bug rather than patching
+only one letter.
+
+NO CHANGES
+- no preset schema changes
+- no session-bank changes
+- no file-dialog/native I/O changes
+- no render-pipeline changes
+- no effect changes
+- no Flow changes
+- no Syphon changes
+- no frame scheduling changes
+
+TARGET TEST
+1. Click PRESET NAME.
+2. Type names containing p/P and f/F, e.g. "Purple Feedback Pass".
+3. Confirm every character appears and the HUFF controls do not hide/fullscreen.
+4. Use Cmd/Ctrl+Z while editing the text and confirm normal field undo behavior.
+5. Defocus the field and verify F still toggles fullscreen.
+6. Defocus the field and verify Cmd/Ctrl+Z still invokes HUFF instrument undo.

@@ -1,3 +1,13 @@
+## Pass 56 preset workflow
+
+Saving a user preset now both writes the portable JSON file to disk and adds that exact state to the current session preset dropdown for immediate recall. Session entries are temporary; local JSON files remain user-owned and can be loaded again later.
+
+# HUFF Classic
+
+> **Pass 55 candidate:** fixes keyboard focus ownership in the Pass 54 preset workflow. `P` is no longer a global hide-controls shortcut, and app-wide shortcuts no longer consume keystrokes while the user is editing a field. Rendering, presets, pipeline behavior, and Syphon are otherwise unchanged.
+
+> **Pass 54 candidate:** Portable JSON remains the durable user-preset format, while every JSON loaded during the current run is added to a temporary `SESSION — LOADED FILES` dropdown group for performance recall. The session bank disappears when HUFF closes; the files stay wherever the user saved them. Pass 53 native Save/Open behavior and the accepted Pass 52D image pipeline are unchanged. See `PRESET_SESSION_BANK_AUDIT.md`.
+
 > **Pass 52D candidate:** HUFF Classic now exposes its constrained three-source image-entry model directly in the controls: Corrupt, Scanlines, or Luma Key / COMPOSITE feed the persistent image system; Symmetry and Solarize are labeled as downstream processors. This pass is UI awareness only and preserves the exact Pass 52B render-stage behavior. See `THREE_SOURCE_PIPELINE_AWARENESS_AUDIT.md`.
 
 > **Pass 51 candidate:** HUFF Classic Syphon is now a fixed 1280×720 output with 60 fps as the primary worker-direct target and 30 fps as the safe fallback. Pass 51 pipelines at most two native frames so browser readback for the next frame can overlap native publication of the previous frame. See `SYPHON_720P60_PIPELINE_AUDIT.md`.
@@ -456,23 +466,17 @@ Blends multiple past frames as translucent ghost layers underneath the current f
 
 ### Presets
 
-Presets save and recall a complete snapshot of all parameter values. They are stored in `localStorage` and persist across sessions.
+HUFF Classic separates **built-in presets**, **portable user JSON files**, and a **temporary performance session bank**.
 
-- **Save** — type a name and click Save. If the name already exists it is overwritten.
-- **Load** — select a preset from the dropdown and click Load.
-- **Delete** — select and click Delete.
+- **RECALL** — recall the selected built-in, legacy migration preset, or JSON file already loaded into this HUFF session.
+- **SAVE FILE…** — save the current HUFF state as one portable JSON preset at a location you choose.
+- **LOAD FILE…** — choose a local preset JSON. It applies immediately and is added to `SESSION — LOADED FILES` in the dropdown.
+- Load multiple JSON files before a performance and switch among them without reopening the file dialog.
+- Loading the same file path again refreshes its session slot.
+- Closing HUFF clears the session-loaded menu entries. HUFF does not copy those files into hidden storage; the JSON files remain on disk.
+- Pre-Pass-53 localStorage presets remain read-only migration entries and can be converted with **SAVE FILE…**.
 
-**Factory presets** (read-only, always available):
-
-| Preset | Character |
-|--------|-----------|
-| `clean` | All effects off — raw source passthrough |
-| `chaos` | High corruption, deep ring, fast clusters |
-| `melt` | Slow feedback zoom with deep scanlines |
-| `mirror` | Symmetry-forward with light solarise |
-| `pulse` | Rhythmic cluster glitch with trails |
-| `solar` | Solarise dominant, flow warp texture |
-| `vapor` | Soft trails, slow feedback rotation |
+`Classic Default` is currently the guaranteed built-in state. Additional curated factory presets can be shipped in the built-in group without changing the user-file/session-bank contract.
 
 ### Keyboard Shortcuts
 

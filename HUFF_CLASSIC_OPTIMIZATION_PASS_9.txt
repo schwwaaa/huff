@@ -1,0 +1,18 @@
+HUFF CLASSIC OPTIMIZATION PASS 9
+Date: 2026-08-03
+Baseline: HUFF Classic Optimization Pass 8
+
+Scope:
+- Cache static Flow Warp tile geometry by render size and SCALE.
+- Keep FrameRing write contexts in copy mode.
+- Cache ring-capacity calculations by resolution and QUALITY.
+- Pause JPEG mirror capture/encoding without a canvas receiver.
+- Keep one relay mirror frame in flight through Rust acknowledgement.
+
+Validation:
+- npm run validate:pass9
+- JavaScript/HTML/JSON/TOML/shell static checks
+- Rust runtime compilation still required on the target machine
+
+Product boundary:
+HUFF Classic only — Tauri v1 + p5.js/Canvas2D. No wgpu renderer.

@@ -1,0 +1,4 @@
+HUFF CLASSIC OPTIMIZATION PASS 12R
+
+The original Pass 12 direct-renderer migration is rejected due to a video decode regression.
+This package restores the complete Pass 11 runtime/native baseline and adds rollback documentation.

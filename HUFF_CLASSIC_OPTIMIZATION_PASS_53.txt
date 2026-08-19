@@ -1,0 +1,58 @@
+HUFF CLASSIC — PASS 53
+Preset File Workflow Repair
+
+STATUS
+Runtime/UI candidate built directly from accepted Pass 52D.
+
+GOAL
+Make preset behavior match the desktop instrument model:
+- HUFF can ship with immutable built-in presets.
+- SAVE FILE… opens a native system Save dialog and writes one portable JSON preset.
+- LOAD FILE… opens a native system Open dialog and immediately recalls the selected preset.
+- New presets are not hidden in localStorage.
+
+ROOT CAUSE
+The prior Presets panel was not actually a native file workflow. SAVE stored named presets in WebView localStorage. LOAD recalled that hidden localStorage map. EXPORT used an anchor/browser download. IMPORT used a hidden HTML file input, which was accidentally duplicated in index.html. The interface therefore implied a conventional desktop preset workflow while implementing a browser-local preset bank.
+
+PASS 53 DESIGN
+1. Built-in and user-file concepts are separated.
+2. Classic Default is the first immutable built-in state and proves the baked-preset path.
+3. SAVE FILE… uses the Tauri v1 native Save dialog.
+4. LOAD FILE… uses the Tauri v1 native Open dialog.
+5. A saved file contains one named HUFF preset in a versioned wrapper.
+6. The native read/write commands accept JSON only and cap files at 1 MiB.
+7. Legacy raw single-preset JSON remains loadable.
+8. Old exported name->preset banks remain loadable; their entries appear in a temporary FILE BANK group for recall/migration.
+9. Old localStorage presets remain read-only in a LEGACY LOCAL group. Recall one and SAVE FILE… to migrate it.
+10. No new preset operation writes to localStorage.
+11. Plain-browser preview retains a browser file/download fallback; packaged HUFF uses native dialogs.
+
+PORTABLE FILE SHAPE
+{
+  "format": "huff-classic-preset",
+  "formatVersion": 1,
+  "app": "HUFF Classic",
+  "name": "My Preset",
+  "preset": { ...canonical control state... }
+}
+
+PROTECTED
+- exact Pass 52D three-source pipeline awareness
+- exact accepted Pass 52B render-stage functions
+- effects.js
+- pipeline-runtime.js
+- Pass 51 Syphon worker transport
+- Feedback / Flow / Luma / Symmetry / Solarize algorithms
+- playback and history behavior
+
+TARGET-MACHINE TEST GATE
+1. Change several obvious controls.
+2. Enter a preset name and click SAVE FILE….
+3. Confirm a native Save dialog appears and choose a normal local folder.
+4. Change the controls again.
+5. Click LOAD FILE… and select the saved JSON.
+6. Confirm the saved state is restored.
+7. Quit and relaunch HUFF; LOAD FILE… must still restore the file.
+8. Recall Classic Default from BUILT-IN.
+9. If legacy local presets exist, confirm they appear read-only and can be recalled then migrated with SAVE FILE….
+10. Confirm Pass 51 Syphon and the Pass 52D image pipeline are unchanged.

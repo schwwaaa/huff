@@ -1,0 +1,56 @@
+HUFF CLASSIC OPTIMIZATION PASS 4
+Syphon stream + mandatory framework packaging
+
+BASELINE
+- Built directly from huff-08022026.zip.
+- Preserves Tauri v1, p5.js, Canvas2D, existing effects, controls, routing, and output dimensions.
+- Preserves the framework layout that was supplied in the baseline.
+
+CHANGES
+1. Syphon output now checks SyphonMetalServer.hasClients.
+   With no receiver attached, HUFF keeps the source discoverable but pauses canvas scaling,
+   getImageData(), raw WebSocket transmission, and Metal uploads.
+
+2. One-frame-in-flight acknowledgement.
+   Rust acknowledges every Syphon frame after publish/skip. The frontend will not capture
+   another frame until that acknowledgement arrives. This prevents hidden raw-RGBA queues.
+
+3. Worker readback path.
+   On compatible WKWebView versions, ImageBitmap + Worker + OffscreenCanvas move output
+   scaling and getImageData() away from the controls WebView main thread. A bounded
+   main-thread fallback remains for older WebViews.
+
+4. Native autorelease pools.
+   Syphon/Metal Objective-C calls are wrapped in short-lived autorelease pools so command
+   buffers and other autoreleased objects do not accumulate on Tokio worker threads.
+
+5. Persistent Metal resources retained.
+   Existing persistent device, command queue, server, and three-texture ring are preserved.
+
+6. Mandatory framework validation.
+   macOS compilation fails immediately if src-tauri/frameworks/Syphon.framework or its
+   binary is missing. Build scripts also verify that the framework exists inside each app.
+
+7. Universal bundle signature repair.
+   The manual lipo step invalidates prior signatures. build.sh now re-signs and verifies the
+   assembled universal app. HUFF_CODESIGN_IDENTITY may contain a Developer ID identity;
+   otherwise an ad-hoc signature is used for local testing. Public distribution still needs
+   Developer ID signing and notarization.
+
+TEST
+1. npm run dev
+2. Start Syphon with no receiver open. Status should say waiting for receiver and the
+   published-frame count should remain unchanged.
+3. Open a Syphon receiver and select "huff". Status should change to receiver connected.
+4. Test 1280x720 at 30 and 60 fps, then 1920x1080 at 30 fps.
+5. Disconnect/reconnect the receiver several times without restarting HUFF.
+6. Run for 20-30 minutes and watch memory, UI responsiveness, and receiver latency.
+7. Close either HUFF window and confirm the process and Syphon source disappear.
+
+VALIDATION PERFORMED IN THE EDITING ENVIRONMENT
+- External JavaScript syntax checks passed.
+- All inline HTML scripts passed JavaScript syntax checks.
+- JSON parsing passed.
+- Shell syntax checks passed.
+- Rust delimiter balance checks passed.
+- Rust/macOS compilation and a live Syphon receiver test were not available in this environment.

@@ -1107,37 +1107,35 @@
             <span class="pill" id="sourceInfo" title="Decoded source → HUFF Classic processing resolution">SRC —</span>
         </div>
 
-        <!-- hidden preset file input -->
-        <input id="presetLoadInput" type="file" accept=".json" style="display:none">
-
-        <!-- PRESETS (outside form so buttons don't submit) -->
+        <!-- PRESETS (outside form so buttons do not submit) -->
         <div class="groups" style="margin-top:0">
         <div class="group">
             <div class="group-label">Presets</div>
             <div class="group-body">
-            <div class="group-row" style="gap:4px;flex-wrap:wrap">
-                <!-- Name + Save -->
-                <input id="presetName" type="text" placeholder="preset name…"
+            <div class="group-row" style="gap:4px;flex-wrap:wrap;align-items:center">
+                <span style="font-size:9px;color:rgba(255,255,255,.45);font-family:'Share Tech Mono',monospace">PRESETS</span>
+                <select id="presetList" title="Built-in presets plus JSON presets loaded for this HUFF session. Session-loaded presets disappear from HUFF when the app closes; the JSON files remain on disk."
+                    style="max-width:150px;font-size:10px;background:#111;color:#e8eaf0;border:1px solid rgba(255,255,255,.18);padding:1px 3px;">
+                    <option value="">— choose preset —</option>
+                </select>
+                <button id="presetBuiltinLoadBtn" type="button" class="btn-dim" style="font-size:10px;padding:3px 8px">RECALL</button>
+
+                <span style="font-size:9px;color:rgba(255,255,255,.2);padding:0 2px">|</span>
+
+                <input id="presetName" type="text" placeholder="preset name…" title="Used as the suggested filename when saving a preset."
                     style="width:110px;background:rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.18);
                            color:#e8eaf0;padding:2px 6px;font-size:10px;font-family:inherit;
                            border-radius:0;outline:none;">
-                <button id="presetSaveBtn" class="btn-dim" style="font-size:10px;padding:3px 8px">💾 Save</button>
-                <!-- List + Load + Delete -->
-                <select id="presetList" style="max-width:130px;font-size:10px;background:#111;color:#e8eaf0;border:1px solid rgba(255,255,255,.18);padding:1px 3px;">
-                    <option value="">— saved presets —</option>
-                </select>
-                <button id="presetLoadBtn" class="btn-dim" style="font-size:10px;padding:3px 8px">▶ Load</button>
-                <button id="presetDeleteBtn" class="btn-dim" style="font-size:10px;padding:3px 8px;color:#ff7070">✕ Delete</button>
-                <!-- JSON export/import for portability -->
-                <span style="font-size:9px;color:rgba(255,255,255,.2);padding:0 2px">|</span>
-                <button id="presetExportBtn" class="btn-dim" style="font-size:10px;padding:3px 8px">↑ Export JSON</button>
-                <button id="presetImportBtn" class="btn-dim" style="font-size:10px;padding:3px 8px">↓ Import JSON</button>
-                <span style="font-size:9px;color:rgba(255,255,255,.22);padding:0 4px;font-family:'Share Tech Mono',monospace">Ctrl+Z: undo</span>
+                <button id="presetSaveBtn" type="button" class="btn-dim" style="font-size:10px;padding:3px 8px" title="Save the current HUFF state to a local JSON preset file using the native Save dialog.">SAVE FILE…</button>
+                <button id="presetLoadBtn" type="button" class="btn-dim" style="font-size:10px;padding:3px 8px" title="Choose a local HUFF preset JSON file. It is loaded immediately and added to the preset menu for this HUFF session only.">LOAD FILE…</button>
+
+                <span id="presetFileState" style="font-size:9px;color:rgba(255,255,255,.34);padding:0 4px;font-family:'Share Tech Mono',monospace">loaded files stay for this session · Ctrl+Z undo</span>
             </div>
             </div>
         </div>
         </div>
-        <input id="presetLoadInput" type="file" accept=".json" style="display:none">
+        <!-- Plain-browser fallback only. Tauri builds use the native system Open dialog. -->
+        <input id="presetLoadInput" type="file" accept=".json,application/json" style="display:none">
 
         <!-- grouped controls -->
         <form id="controlsForm" autocomplete="off" novalidate>

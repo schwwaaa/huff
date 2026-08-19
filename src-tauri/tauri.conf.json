@@ -15,7 +15,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "huff · canvas",
+        "title": "huff \u00b7 canvas",
         "url": "canvas.html",
         "width": 1024,
         "height": 768,
@@ -24,7 +24,7 @@
       },
       {
         "label": "controls",
-        "title": "huff · controls",
+        "title": "huff \u00b7 controls",
         "url": "index.html",
         "width": 800,
         "height": 1200,
@@ -39,7 +39,7 @@
       "category": "Video",
       "shortDescription": "A real-time audiovisual feedback and video-processing instrument.",
       "longDescription": "HUFF Classic is a focused real-time video instrument for feedback, corruption, scanline, temporal, MIDI, OSC, Syphon, and Spout performance workflows.",
-      "copyright": "Copyright © 2026 schwwaaa",
+      "copyright": "Copyright \u00a9 2026 schwwaaa",
       "icon": [
         "icons/icon.icns",
         "icons/icon.png",
@@ -51,6 +51,12 @@
           "frameworks/Syphon.framework"
         ],
         "minimumSystemVersion": "10.15"
+      }
+    },
+    "allowlist": {
+      "dialog": {
+        "open": true,
+        "save": true
       }
     }
   }
