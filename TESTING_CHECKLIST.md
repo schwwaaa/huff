@@ -1,3 +1,13 @@
+# Pass 57 — Release Candidate Gate
+
+The authoritative integrated manual checklist is:
+
+**`RELEASE_CANDIDATE_TEST_MATRIX.md`**
+
+Run `npm run regress:pass57` first. Then execute the manual matrix without adding new features. Save any genuinely strong states as external JSON files for possible future factory-preset curation, but do not promote them into the build during Pass 57.
+
+---
+
 # Pass 56 Runtime Test
 
 - [ ] Change multiple controls and enter a preset name.

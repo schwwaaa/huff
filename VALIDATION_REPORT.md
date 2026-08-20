@@ -1,3 +1,21 @@
+# Pass 57 Validation Update
+
+Pass 57 is a release-candidate regression/freeze pass. Runtime files are exact Pass 56 bytes.
+
+Authoritative command:
+
+```bash
+npm run regress:pass57
+```
+
+The runner includes JavaScript syntax checks, Pass 56 preset-session validation, Pass 55 keyboard validation, Pass 52D pipeline-awareness validation, Pass 51 Syphon simulation, Pass 40W layer simulation, Pass 41A playback/history simulation, Pass 57 current-contract validation, and static release preflight.
+
+Historical validators that pin intentionally superseded whole-file hashes or UI labels are not current release gates. Example: Pass 54 expects `SESSION — LOADED FILES`; Pass 56 intentionally uses `SESSION — SAVED / LOADED`.
+
+Target-machine runtime testing remains required. See `RELEASE_CANDIDATE_TEST_MATRIX.md`.
+
+---
+
 # Pass 56 Validation Update
 
 `npm run validate:pass56` — 56 checks PASS.
@@ -136,3 +154,20 @@ Pass 52B corrects the source-ownership predicate and adds standalone Symmetry ow
 `validate:pass52a` is intentionally superseded and now fails its exact historical helper-signature check because Pass 52B replaces the incomplete `activity`-only predicate with a frame-aware ownership predicate. Pass 52B directly exercises the missing case: Feedback ENABLE off while the historical Feedback amount remains non-zero.
 
 The target Mac remains the runtime gate. Do not finalize the Pass 52 Git commit until standalone Symmetry and Solarize are visually confirmed.
+
+## Pass 57 packaged-worktree automated result
+
+`npm run regress:pass57` — **PASS**.
+
+Current results:
+
+- `validate:pass56` — **56 PASS**
+- `validate:pass55` — **46 PASS**
+- `validate:pass52d` — **67 PASS**
+- Pass 51 Syphon two-credit simulation — **PASS**
+- Pass 40W layer-handoff simulation — **PASS**
+- Pass 41A playback/history simulation — **PASS**
+- `validate:pass57` — **48 PASS**
+- release preflight — **38 passed, 0 warnings, 0 blockers**
+
+Pass 54's historical validator is not part of the current gate because it intentionally expects the pre-Pass-56 session-group label. Pass 51's historical whole-native-file hash validator is also superseded by later preset native-I/O work; the Pass 51 transport simulation plus Pass 57 exact current runtime hashes are the relevant current protections.

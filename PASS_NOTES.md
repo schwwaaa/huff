@@ -1,3 +1,16 @@
+# Pass 57 — Release Candidate Regression Freeze
+
+- Built directly from committed Pass 56.
+- Adds no runtime or creative behavior.
+- Hash-protects the current Pass 56 runtime and native-output files.
+- Adds `npm run regress:pass57` as the authoritative automated regression entry point.
+- Adds integrated manual release testing across playback, three-source routing, downstream processing, Luma, presets, Syphon, Spout, Linux, lifecycle, and endurance.
+- Treats superseded historical validators as historical evidence rather than current release gates.
+- Allows regression sessions to generate external candidate preset JSONs for future factory curation, without adding them to the current build.
+- Any discovered blocker should be fixed in the smallest isolated corrective pass and followed by a complete Pass 57 rerun.
+
+---
+
 # Pass 56 — Preset Save + Session Recall
 
 - Successful SAVE FILE… now performs the intended double action: local JSON persistence + temporary in-app recall slot.

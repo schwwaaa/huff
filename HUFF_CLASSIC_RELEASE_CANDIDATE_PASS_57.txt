@@ -1,0 +1,43 @@
+HUFF CLASSIC — PASS 57
+RELEASE CANDIDATE REGRESSION FREEZE
+
+BASELINE
+- Directly based on committed Pass 56.
+- No runtime/render/effect/native-output files are changed in Pass 57.
+- Pass 57 adds release-candidate regression tooling, a manual test matrix, and release documentation only.
+
+PURPOSE
+HUFF Classic has reached the point where adding another creative feature is more likely to destabilize the instrument than improve the free release. Pass 57 therefore converts the current build into a formal release-candidate test target.
+
+PROTECTED RUNTIME
+The following files are byte-identical to Pass 56:
+- src/canvas.js
+- src/effects.js
+- src/pipeline-runtime.js
+- src/syphon-stream-worker.js
+- src/index.html
+- src-tauri/src/main.rs
+- src-tauri/src/syphon.rs
+
+AUTOMATED REGRESSION
+Run:
+
+  npm run regress:pass57
+
+This executes syntax checks, current-authoritative validators, historical behavior simulations that remain relevant, Pass 57 contract checks, and static release preflight.
+
+MANUAL RELEASE GATE
+Use RELEASE_CANDIDATE_TEST_MATRIX.md on the target machines. The automated suite cannot certify:
+- actual moving-image appearance;
+- target WebView/GPU behavior;
+- native macOS Save/Open dialogs;
+- Syphon receiver endurance;
+- Windows Spout runtime;
+- Linux runtime/package behavior;
+- sleep/wake and long-session behavior.
+
+PRESET CURATION DURING REGRESSION
+Regression testing may also be used to create candidate factory-preset JSON files. Save strong states encountered during testing and keep them outside the build. Do not promote them to built-ins during Pass 57. This lets release testing and future preset curation reinforce each other without expanding current scope.
+
+FREEZE RULE
+Any bug found during Pass 57 should receive the smallest isolated corrective pass possible. Do not reopen Flow, pipeline ownership, Syphon architecture, or effect design unless the regression evidence points directly to them.

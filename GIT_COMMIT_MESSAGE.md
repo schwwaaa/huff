@@ -1,19 +1,18 @@
-```text
-fix: add saved presets to session recall bank in HUFF Classic Pass 56
+chore: freeze HUFF Classic Pass 57 release-candidate regression baseline
 
-- keep native JSON files as the durable user-owned preset format
-- add each successfully saved preset to the current in-memory session bank
-- select the newly saved session preset immediately in the dropdown
-- allow instant recall after further slider and control changes
-- use the exact snapshot written to disk for the temporary recall slot
-- refresh an existing session entry when the same preset path is saved again
-- keep newly saved session presets temporary and clear them when HUFF quits
-- retain LOAD FILE behavior that adds local JSON presets to the session bank
-- relabel the session group to cover both saved and loaded presets
-- preserve Pass 55 keyboard focus safety and removed P shortcut
-- preserve the HUFF Classic render pipeline, effects, Flow, Luma, Solarize, and Symmetry
-- preserve Pass 51 720p60 Syphon transport and fallback behavior
-- add Pass 56 validation and documentation
+- preserve the committed Pass 56 runtime byte-for-byte
+- add a unified Pass 57 release-candidate regression validator
+- add an automated regression runner for current authoritative checks
+- protect the render pipeline, effects, preset runtime, native preset I/O, and Syphon runtime hashes
+- verify Save File continues to write locally and register the exact state for session recall
+- verify user session presets remain RAM-only and disappear on quit
+- verify the P shortcut remains removed and editable controls retain keyboard ownership
+- verify the three-source Corrupt / Scanlines / Luma Composite pipeline-awareness contract
+- verify Syphon remains limited to 720p60 primary and 720p30 safe profiles
+- check index.html for duplicate element IDs
+- add an integrated release-candidate manual test matrix
+- use regression sessions as an optional source of future factory-preset candidate JSON files without baking them into the build
+- document superseded historical validators separately from current release gates
+- make no creative, rendering, pipeline, output, or native runtime changes
 
-HUFF Classic Pass 56
-```
+HUFF Classic Pass 57

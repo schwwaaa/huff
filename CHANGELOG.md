@@ -1,3 +1,18 @@
+# Pass 57 — Release Candidate Regression Freeze
+
+### Release hardening
+- Added a unified release-candidate regression validator and runner.
+- Added exact Pass 56 runtime hash protection.
+- Added duplicate HTML ID detection.
+- Added current-contract checks for presets, keyboard focus, three-source pipeline awareness, and 720p Syphon profiles.
+- Added an integrated cross-platform manual test matrix.
+- Added a controlled workflow for capturing future factory-preset candidate JSONs during regression without baking them into the build.
+
+### Runtime
+- No rendering, effect, pipeline, preset-runtime, Syphon, Spout, or native runtime behavior changed.
+
+---
+
 ## Pass 56 — Preset Save + Session Recall
 
 - Fixed SAVE FILE… so a successful local JSON save also registers that exact preset in the current session dropdown.

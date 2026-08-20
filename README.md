@@ -1,3 +1,7 @@
+> **Pass 57 release-candidate freeze:** the committed Pass 56 runtime is frozen while HUFF Classic moves into integrated regression testing. Run `npm run regress:pass57` for the automated gate and use `RELEASE_CANDIDATE_TEST_MATRIX.md` for target-machine validation. No creative/runtime behavior changes in this pass.
+
+---
+
 ## Pass 56 preset workflow
 
 Saving a user preset now both writes the portable JSON file to disk and adds that exact state to the current session preset dropdown for immediate recall. Session entries are temporary; local JSON files remain user-owned and can be loaded again later.

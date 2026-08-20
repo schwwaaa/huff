@@ -1,23 +1,7 @@
-# Pass 54 changed files from Pass 53
+# HUFF Classic — Current Changed Files
 
-## Runtime / UI
-- `src/canvas.js` — temporary in-memory session preset bank, registration, duplicate handling, dropdown recall, legacy-bank accumulation.
-- `src/index.html` — makes the dropdown a general PRESETS menu and explains session-only lifetime.
+Current pass: **Pass 57 — Release Candidate Regression Freeze**
 
-## Validation
-- `scripts/validate-pass54.mjs` — session-bank behavior model plus accepted runtime hash protection.
-- `package.json` — adds `validate:pass54`.
+See `CHANGED_FILES_PASS57.md` for the exact scope.
 
-## Documentation
-- `HUFF_CLASSIC_PRESET_WORKFLOW_PASS_54.txt`
-- `PRESET_SESSION_BANK_AUDIT.md`
-- `CHANGED_FILES_PASS54.md`
-- `CURRENT_STATUS.md`
-- `PASS_NOTES.md`
-- `CHANGELOG.md`
-- `OPTIMIZATION_ROADMAP.md`
-- `VALIDATION_REPORT.md`
-- `TESTING_CHECKLIST.md`
-- `DOCUMENTATION_INDEX.md`
-- `README.md`
-- `GIT_COMMIT_MESSAGE.md`
+Runtime/render/native files are intentionally unchanged from committed Pass 56.

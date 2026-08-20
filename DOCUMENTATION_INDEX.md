@@ -1,3 +1,18 @@
+# Pass 57 — Release Candidate Regression Freeze
+
+Current release-candidate documentation:
+
+- `HUFF_CLASSIC_RELEASE_CANDIDATE_PASS_57.txt` — concise scope and freeze contract.
+- `RELEASE_CANDIDATE_REGRESSION_AUDIT.md` — reasoning, automated gate, protected runtime, and validator policy.
+- `RELEASE_CANDIDATE_TEST_MATRIX.md` — integrated target-machine release test.
+- `scripts/validate-pass57.mjs` — current-state release-contract validator.
+- `scripts/run-pass57-regression.mjs` — authoritative automated regression runner.
+- `baseline/pass56-pass57-runtime-protected.sha256` — exact committed Pass 56 runtime hashes.
+- `CHANGED_FILES_PASS57.md` — Pass 57 scope.
+- `GIT_COMMIT_MESSAGE.md` — ready Pass 57 commit message.
+
+---
+
 # Pass 56 Documentation
 
 - `HUFF_CLASSIC_PRESET_WORKFLOW_PASS_56.txt` — pass summary and user contract.
