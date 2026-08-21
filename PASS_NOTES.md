@@ -1,3 +1,21 @@
+# Pass 58 — Constrained Pipeline Recipe Expansion
+
+- Built directly from committed Pass 57.
+- Reuses the existing immutable/precompiled serial recipe switcher.
+- Preserves CLASSIC and CRISP FINISH.
+- Adds TEMPORAL UNDERLAY, SYMMETRY MEMORY, COLOR MEMORY, FLOW FINISH, and experimental FEEDBACK FINISH.
+- Adds a minimal live routing diagram beneath the Pipeline selector.
+- Diagram metadata is stored with each executable recipe and validated against actual stage order.
+- Keeps Corrupt / Luma / Scanlines as one ordered image-feed group.
+- Keeps Layer Priority behavior unchanged.
+- Keeps Global Mix named positions unchanged.
+- Disables the old Solarize/Global Mix fusion shortcut on reordered recipes because its original proof assumes the Classic transform order.
+- Preserves Feedback, Flow, Symmetry, Solarize, and Presentation handler implementations exactly.
+- Preserves `effects.js`, Syphon Worker, and native output code exactly.
+- Adds no parallel branch, same-frame cycle, or full-resolution buffer.
+- Preset route validation now accepts the actual runtime recipe registry; legacy/unknown routes still recover to CLASSIC.
+- Static validation passes are not creative acceptance. Target-machine review determines which new recipes survive.
+
 # Pass 57 — Release Candidate Regression Freeze
 
 - Built directly from committed Pass 56.

@@ -1,3 +1,32 @@
+# Pass 58 — Constrained Pipeline Recipe Expansion
+
+## Added
+- Five new validated serial pipeline recipes:
+  - TEMPORAL UNDERLAY
+  - SYMMETRY MEMORY
+  - COLOR MEMORY
+  - FLOW FINISH
+  - FEEDBACK FINISH · EXP
+- Dynamic mini routing diagram under the Pipeline recipe selector.
+- Recipe diagram metadata validated against executable route order.
+- Pass 58 structural/regression validator and runner.
+
+## Changed
+- Preset recipe-ID validation now reads the built-in runtime recipe registry instead of a hard-coded two-route set.
+- Global Mix/Solarize fusion is limited to CLASSIC and CRISP FINISH; reordered recipes use explicit serial Global Mix execution.
+
+## Preserved
+- Exact CLASSIC Pass 22 route.
+- Existing CRISP FINISH route.
+- Feedback, Flow, Symmetry, Solarize, Presentation implementations.
+- Corrupt / Scanlines / Luma image-feed algorithms and Layer Priority.
+- Existing three full-resolution graphics surfaces.
+- Syphon / Spout / native preset I/O.
+- HUFF Classic non-wgpu architecture.
+
+## Status
+Runtime candidate; target-machine creative acceptance pending.
+
 # Pass 57 — Release Candidate Regression Freeze
 
 ### Release hardening

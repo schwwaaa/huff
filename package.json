@@ -79,7 +79,9 @@
     "validate:pass55": "node scripts/validate-pass55.mjs",
     "validate:pass56": "node scripts/validate-pass56.mjs",
     "validate:pass57": "node scripts/validate-pass57.mjs",
-    "regress:pass57": "node scripts/run-pass57-regression.mjs"
+    "regress:pass57": "node scripts/run-pass57-regression.mjs",
+    "validate:pass58": "node scripts/validate-pass58.mjs",
+    "regress:pass58": "node scripts/run-pass58-regression.mjs"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^1.6.3"

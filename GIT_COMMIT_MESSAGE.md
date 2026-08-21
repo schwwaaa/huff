@@ -1,18 +1,18 @@
-chore: freeze HUFF Classic Pass 57 release-candidate regression baseline
+feat: expand HUFF Classic constrained pipeline recipes
 
-- preserve the committed Pass 56 runtime byte-for-byte
-- add a unified Pass 57 release-candidate regression validator
-- add an automated regression runner for current authoritative checks
-- protect the render pipeline, effects, preset runtime, native preset I/O, and Syphon runtime hashes
-- verify Save File continues to write locally and register the exact state for session recall
-- verify user session presets remain RAM-only and disappear on quit
-- verify the P shortcut remains removed and editable controls retain keyboard ownership
-- verify the three-source Corrupt / Scanlines / Luma Composite pipeline-awareness contract
-- verify Syphon remains limited to 720p60 primary and 720p30 safe profiles
-- check index.html for duplicate element IDs
-- add an integrated release-candidate manual test matrix
-- use regression sessions as an optional source of future factory-preset candidate JSON files without baking them into the build
-- document superseded historical validators separately from current release gates
-- make no creative, rendering, pipeline, output, or native runtime changes
+- preserve CLASSIC as the exact Pass 22 compatibility route
+- preserve the existing CRISP FINISH route
+- add TEMPORAL UNDERLAY, SYMMETRY MEMORY, COLOR MEMORY, FLOW FINISH, and experimental FEEDBACK FINISH
+- keep every route serial with the existing gCur/gBuf/gScratch resource topology
+- add no parallel branches, same-frame cycles, or full-resolution buffers
+- keep Feedback, Flow, Symmetry, Solarize, Corrupt, Scanlines, and Luma effect math unchanged
+- keep Global Mix BEFORE FB / AFTER FB / AFTER FLOW / FINAL semantics
+- restrict the existing Global Mix/Solarize fusion optimization to the original compatible routes
+- add a minimal live routing diagram beneath the Pipeline selector
+- generate the diagram from the same immutable recipe definitions used for execution
+- validate diagram order against executable stage order
+- accept all built-in recipe IDs in preset recall while retaining CLASSIC fallback for legacy/unknown routes
+- preserve Syphon, Spout, native preset I/O, and HUFF Classic's non-wgpu architecture
+- add Pass 58 validation, regression tooling, manual test guidance, and cumulative documentation
 
-HUFF Classic Pass 57
+HUFF Classic Pass 58

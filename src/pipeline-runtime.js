@@ -1,10 +1,13 @@
-/* pipeline-runtime.js — HUFF Classic Pass 30 constrained recipe switching
+/* pipeline-runtime.js — HUFF Classic Pass 58 constrained recipe expansion
  *
- * The runtime preserves the exact Pass 22 route as CLASSIC and adds one
- * carefully audited serial alternate: CRISP FINISH. Both recipes use the
- * existing gCur / gBuf / gScratch topology, compile once at startup, and are
- * selected atomically at the start of a rendered frame. No effect algorithm,
- * decoder path, temporal store, output path, or native code is changed here.
+ * CLASSIC remains the exact Pass 22 compatibility route. Pass 58 expands the
+ * existing immutable serial-recipe system with five additional stage orders.
+ * Every recipe uses the same gCur / gBuf / gScratch topology, compiles once at
+ * startup, and is selected atomically at the start of a rendered frame.
+ *
+ * No effect algorithm, decoder path, temporal store, output path, native code,
+ * parallel branch, same-frame cycle, or additional full-resolution buffer is
+ * introduced by this file.
  */
 (() => {
   'use strict';
@@ -14,6 +17,19 @@
 
   const CLASSIC_RECIPE_ID = 'classic';
   const CRISP_FINISH_RECIPE_ID = 'crisp-finish';
+  const TEMPORAL_UNDERLAY_RECIPE_ID = 'temporal-underlay';
+  const SYMMETRY_MEMORY_RECIPE_ID = 'symmetry-memory';
+  const COLOR_MEMORY_RECIPE_ID = 'color-memory';
+  const FLOW_FINISH_RECIPE_ID = 'flow-finish';
+  const FEEDBACK_FINISH_RECIPE_ID = 'feedback-finish';
+
+  const DIAGRAM_STAGE_LABELS = Object.freeze({
+    'image-feed': 'FEED',
+    'feedback': 'FEEDBACK',
+    'flow': 'FLOW',
+    'symmetry': 'SYMMETRY',
+    'solarize': 'SOLARIZE',
+  });
 
   const ZONE_ORDER = freezeArray([
     'source-sync',
@@ -48,17 +64,17 @@
   const STAGE_LEGAL_ZONES = Object.freeze({
     'source-sync': freezeArray(['source-sync']),
     'persistent-decay': freezeArray(['persistent-decay']),
-    'front-stage-priority': freezeArray(['front-overlays', 'final-overlays']),
+    'front-stage-priority': freezeArray(['front-overlays', 'image-feed', 'final-overlays']),
     'global-mix': freezeArray([
       'global-mix-before',
       'global-mix-after',
       'global-mix-afterflow',
       'global-mix-final',
     ]),
-    'feedback': freezeArray(['persistent-transform']),
-    'flow': freezeArray(['primary-transform']),
-    'symmetry': freezeArray(['secondary-transform']),
-    'solarize': freezeArray(['color-finish']),
+    'feedback': freezeArray(['persistent-transform', 'feedback-stage']),
+    'flow': freezeArray(['primary-transform', 'flow-stage']),
+    'symmetry': freezeArray(['secondary-transform', 'symmetry-stage']),
+    'solarize': freezeArray(['color-finish', 'solarize-stage']),
     'presentation': freezeArray(['presentation']),
   });
 
@@ -223,11 +239,96 @@
     freezeObject({ zone: 'presentation', stage: 'presentation' }),
   ]);
 
+  const frontStageStep = zone => freezeObject({
+    zone,
+    stage: 'front-stage-priority',
+    members: freezeArray(['glitch', 'pipeline-luma-key', 'scanlines']),
+    priorityContract: FRONT_STAGE_PRIORITY_CONTRACT,
+  });
+
+  const TEMPORAL_UNDERLAY_SERIAL_RECIPE = freezeArray([
+    freezeObject({ zone: 'source-sync', stage: 'source-sync' }),
+    freezeObject({ zone: 'persistent-decay', stage: 'persistent-decay' }),
+    freezeObject({ zone: 'global-mix-before', stage: 'global-mix', conditionalPosition: 'before' }),
+    freezeObject({ zone: 'feedback-stage', stage: 'feedback' }),
+    freezeObject({ zone: 'global-mix-after', stage: 'global-mix', conditionalPosition: 'after' }),
+    freezeObject({ zone: 'flow-stage', stage: 'flow' }),
+    freezeObject({ zone: 'global-mix-afterflow', stage: 'global-mix', conditionalPosition: 'afterflow' }),
+    frontStageStep('image-feed'),
+    freezeObject({ zone: 'symmetry-stage', stage: 'symmetry' }),
+    freezeObject({ zone: 'solarize-stage', stage: 'solarize' }),
+    freezeObject({ zone: 'global-mix-final', stage: 'global-mix', conditionalPosition: 'final' }),
+    freezeObject({ zone: 'presentation', stage: 'presentation' }),
+  ]);
+
+  const SYMMETRY_MEMORY_SERIAL_RECIPE = freezeArray([
+    freezeObject({ zone: 'source-sync', stage: 'source-sync' }),
+    freezeObject({ zone: 'persistent-decay', stage: 'persistent-decay' }),
+    frontStageStep('image-feed'),
+    freezeObject({ zone: 'symmetry-stage', stage: 'symmetry' }),
+    freezeObject({ zone: 'global-mix-before', stage: 'global-mix', conditionalPosition: 'before' }),
+    freezeObject({ zone: 'feedback-stage', stage: 'feedback' }),
+    freezeObject({ zone: 'global-mix-after', stage: 'global-mix', conditionalPosition: 'after' }),
+    freezeObject({ zone: 'flow-stage', stage: 'flow' }),
+    freezeObject({ zone: 'global-mix-afterflow', stage: 'global-mix', conditionalPosition: 'afterflow' }),
+    freezeObject({ zone: 'solarize-stage', stage: 'solarize' }),
+    freezeObject({ zone: 'global-mix-final', stage: 'global-mix', conditionalPosition: 'final' }),
+    freezeObject({ zone: 'presentation', stage: 'presentation' }),
+  ]);
+
+  const COLOR_MEMORY_SERIAL_RECIPE = freezeArray([
+    freezeObject({ zone: 'source-sync', stage: 'source-sync' }),
+    freezeObject({ zone: 'persistent-decay', stage: 'persistent-decay' }),
+    frontStageStep('image-feed'),
+    freezeObject({ zone: 'solarize-stage', stage: 'solarize' }),
+    freezeObject({ zone: 'global-mix-before', stage: 'global-mix', conditionalPosition: 'before' }),
+    freezeObject({ zone: 'feedback-stage', stage: 'feedback' }),
+    freezeObject({ zone: 'global-mix-after', stage: 'global-mix', conditionalPosition: 'after' }),
+    freezeObject({ zone: 'flow-stage', stage: 'flow' }),
+    freezeObject({ zone: 'global-mix-afterflow', stage: 'global-mix', conditionalPosition: 'afterflow' }),
+    freezeObject({ zone: 'symmetry-stage', stage: 'symmetry' }),
+    freezeObject({ zone: 'global-mix-final', stage: 'global-mix', conditionalPosition: 'final' }),
+    freezeObject({ zone: 'presentation', stage: 'presentation' }),
+  ]);
+
+  const FLOW_FINISH_SERIAL_RECIPE = freezeArray([
+    freezeObject({ zone: 'source-sync', stage: 'source-sync' }),
+    freezeObject({ zone: 'persistent-decay', stage: 'persistent-decay' }),
+    frontStageStep('image-feed'),
+    freezeObject({ zone: 'global-mix-before', stage: 'global-mix', conditionalPosition: 'before' }),
+    freezeObject({ zone: 'feedback-stage', stage: 'feedback' }),
+    freezeObject({ zone: 'global-mix-after', stage: 'global-mix', conditionalPosition: 'after' }),
+    freezeObject({ zone: 'symmetry-stage', stage: 'symmetry' }),
+    freezeObject({ zone: 'solarize-stage', stage: 'solarize' }),
+    freezeObject({ zone: 'flow-stage', stage: 'flow' }),
+    freezeObject({ zone: 'global-mix-afterflow', stage: 'global-mix', conditionalPosition: 'afterflow' }),
+    freezeObject({ zone: 'global-mix-final', stage: 'global-mix', conditionalPosition: 'final' }),
+    freezeObject({ zone: 'presentation', stage: 'presentation' }),
+  ]);
+
+  const FEEDBACK_FINISH_SERIAL_RECIPE = freezeArray([
+    freezeObject({ zone: 'source-sync', stage: 'source-sync' }),
+    freezeObject({ zone: 'persistent-decay', stage: 'persistent-decay' }),
+    frontStageStep('image-feed'),
+    freezeObject({ zone: 'flow-stage', stage: 'flow' }),
+    freezeObject({ zone: 'global-mix-afterflow', stage: 'global-mix', conditionalPosition: 'afterflow' }),
+    freezeObject({ zone: 'symmetry-stage', stage: 'symmetry' }),
+    freezeObject({ zone: 'solarize-stage', stage: 'solarize' }),
+    freezeObject({ zone: 'global-mix-before', stage: 'global-mix', conditionalPosition: 'before' }),
+    freezeObject({ zone: 'feedback-stage', stage: 'feedback' }),
+    freezeObject({ zone: 'global-mix-after', stage: 'global-mix', conditionalPosition: 'after' }),
+    freezeObject({ zone: 'global-mix-final', stage: 'global-mix', conditionalPosition: 'final' }),
+    freezeObject({ zone: 'presentation', stage: 'presentation' }),
+  ]);
+
+  const zoneOrderFor = recipe => freezeArray(recipe.map(step => step.zone));
+
   const PIPELINE_RECIPES = Object.freeze({
     [CLASSIC_RECIPE_ID]: Object.freeze({
       id: CLASSIC_RECIPE_ID,
       label: 'CLASSIC',
       description: 'Exact Pass 22 stage order.',
+      diagram: freezeArray(['image-feed', 'feedback', 'flow', 'symmetry', 'solarize']),
       zoneOrder: ZONE_ORDER,
       steps: PASS22_SERIAL_RECIPE,
       fullResolutionBufferCount: 3,
@@ -238,13 +339,75 @@
     [CRISP_FINISH_RECIPE_ID]: Object.freeze({
       id: CRISP_FINISH_RECIPE_ID,
       label: 'CRISP FINISH',
-      description: 'Runs Glitch, Luma Key, and Scanlines after Flow, Symmetry, and Solarize.',
+      description: 'Processes the persistent image first, then draws the image-feed group last.',
+      diagram: freezeArray(['feedback', 'flow', 'symmetry', 'solarize', 'image-feed']),
       zoneOrder: CRISP_FINISH_ZONE_ORDER,
       steps: CRISP_FINISH_SERIAL_RECIPE,
       fullResolutionBufferCount: 3,
       scratchResources: freezeArray(['gScratch']),
       declaredCycles: freezeArray([]),
       compatibilityDefault: false,
+    }),
+    [TEMPORAL_UNDERLAY_RECIPE_ID]: Object.freeze({
+      id: TEMPORAL_UNDERLAY_RECIPE_ID,
+      label: 'TEMPORAL UNDERLAY',
+      description: 'Runs Feedback and Flow before the image feed, then finishes with Symmetry and Solarize.',
+      diagram: freezeArray(['feedback', 'flow', 'image-feed', 'symmetry', 'solarize']),
+      zoneOrder: zoneOrderFor(TEMPORAL_UNDERLAY_SERIAL_RECIPE),
+      steps: TEMPORAL_UNDERLAY_SERIAL_RECIPE,
+      fullResolutionBufferCount: 3,
+      scratchResources: freezeArray(['gScratch']),
+      declaredCycles: freezeArray([]),
+      compatibilityDefault: false,
+    }),
+    [SYMMETRY_MEMORY_RECIPE_ID]: Object.freeze({
+      id: SYMMETRY_MEMORY_RECIPE_ID,
+      label: 'SYMMETRY MEMORY',
+      description: 'Creates symmetry before Feedback and Flow so recursive memory receives the transformed image.',
+      diagram: freezeArray(['image-feed', 'symmetry', 'feedback', 'flow', 'solarize']),
+      zoneOrder: zoneOrderFor(SYMMETRY_MEMORY_SERIAL_RECIPE),
+      steps: SYMMETRY_MEMORY_SERIAL_RECIPE,
+      fullResolutionBufferCount: 3,
+      scratchResources: freezeArray(['gScratch']),
+      declaredCycles: freezeArray([]),
+      compatibilityDefault: false,
+    }),
+    [COLOR_MEMORY_RECIPE_ID]: Object.freeze({
+      id: COLOR_MEMORY_RECIPE_ID,
+      label: 'COLOR MEMORY',
+      description: 'Solarizes the image feed before Feedback and Flow so color treatment enters persistent memory.',
+      diagram: freezeArray(['image-feed', 'solarize', 'feedback', 'flow', 'symmetry']),
+      zoneOrder: zoneOrderFor(COLOR_MEMORY_SERIAL_RECIPE),
+      steps: COLOR_MEMORY_SERIAL_RECIPE,
+      fullResolutionBufferCount: 3,
+      scratchResources: freezeArray(['gScratch']),
+      declaredCycles: freezeArray([]),
+      compatibilityDefault: false,
+    }),
+    [FLOW_FINISH_RECIPE_ID]: Object.freeze({
+      id: FLOW_FINISH_RECIPE_ID,
+      label: 'FLOW FINISH',
+      description: 'Runs Flow after Symmetry and Solarize so Flow becomes the final transform.',
+      diagram: freezeArray(['image-feed', 'feedback', 'symmetry', 'solarize', 'flow']),
+      zoneOrder: zoneOrderFor(FLOW_FINISH_SERIAL_RECIPE),
+      steps: FLOW_FINISH_SERIAL_RECIPE,
+      fullResolutionBufferCount: 3,
+      scratchResources: freezeArray(['gScratch']),
+      declaredCycles: freezeArray([]),
+      compatibilityDefault: false,
+    }),
+    [FEEDBACK_FINISH_RECIPE_ID]: Object.freeze({
+      id: FEEDBACK_FINISH_RECIPE_ID,
+      label: 'FEEDBACK FINISH',
+      description: 'Runs Feedback after Flow, Symmetry, and Solarize so the finished image becomes recursive material.',
+      diagram: freezeArray(['image-feed', 'flow', 'symmetry', 'solarize', 'feedback']),
+      zoneOrder: zoneOrderFor(FEEDBACK_FINISH_SERIAL_RECIPE),
+      steps: FEEDBACK_FINISH_SERIAL_RECIPE,
+      fullResolutionBufferCount: 3,
+      scratchResources: freezeArray(['gScratch']),
+      declaredCycles: freezeArray([]),
+      compatibilityDefault: false,
+      experimental: true,
     }),
   });
 
@@ -320,8 +483,14 @@
         errors.push(`${stage}: expected ${expectedCount} occurrence(s), got ${actualCount}`);
       }
     }
-    if (JSON.stringify(globalMixPositions) !== JSON.stringify(['before', 'after', 'afterflow', 'final'])) {
-      errors.push('Global Mix named positions differ from the Classic contract');
+    const expectedGlobalMixPositions = ['before', 'after', 'afterflow', 'final'];
+    for (const position of expectedGlobalMixPositions) {
+      if (globalMixPositions.filter(value => value === position).length !== 1) {
+        errors.push(`Global Mix position ${position} must occur exactly once`);
+      }
+    }
+    if (globalMixPositions.some(position => !expectedGlobalMixPositions.includes(position))) {
+      errors.push('Global Mix contains an unknown named position');
     }
 
     return Object.freeze({
@@ -347,6 +516,24 @@
     if (!Array.isArray(definition.declaredCycles) || definition.declaredCycles.length !== 0) {
       errors.push(`${definition.id || 'recipe'} may not declare a pipeline cycle`);
     }
+
+    const expectedDiagramStages = ['image-feed', 'feedback', 'flow', 'symmetry', 'solarize'];
+    if (!Array.isArray(definition.diagram) || definition.diagram.length !== expectedDiagramStages.length) {
+      errors.push(`${definition.id || 'recipe'} must declare a five-stage operator diagram`);
+    } else {
+      for (const stage of expectedDiagramStages) {
+        if (definition.diagram.filter(value => value === stage).length !== 1) {
+          errors.push(`${definition.id || 'recipe'} diagram must contain ${stage} exactly once`);
+        }
+      }
+      const routeDiagram = (definition.steps || [])
+        .map(step => step.stage === 'front-stage-priority' ? 'image-feed' : step.stage)
+        .filter(stage => expectedDiagramStages.includes(stage));
+      if (JSON.stringify(routeDiagram) !== JSON.stringify(definition.diagram)) {
+        errors.push(`${definition.id || 'recipe'} diagram does not match its executable stage order`);
+      }
+    }
+
     const routeValidation = validateRecipe(definition.steps, definition.zoneOrder);
     if (!routeValidation.valid) errors.push(...routeValidation.errors);
 
@@ -497,10 +684,16 @@
   ));
 
   window.HuffPipelineRuntime = Object.freeze({
-    version: 2,
-    recipeVersion: 1,
+    version: 3,
+    recipeVersion: 2,
     CLASSIC_RECIPE_ID,
     CRISP_FINISH_RECIPE_ID,
+    TEMPORAL_UNDERLAY_RECIPE_ID,
+    SYMMETRY_MEMORY_RECIPE_ID,
+    COLOR_MEMORY_RECIPE_ID,
+    FLOW_FINISH_RECIPE_ID,
+    FEEDBACK_FINISH_RECIPE_ID,
+    DIAGRAM_STAGE_LABELS,
     ZONE_ORDER,
     CRISP_FINISH_ZONE_ORDER,
     STAGE_LEGAL_ZONES,
@@ -508,6 +701,11 @@
     FRONT_STAGE_PRIORITY_CONTRACT,
     PASS22_SERIAL_RECIPE,
     CRISP_FINISH_SERIAL_RECIPE,
+    TEMPORAL_UNDERLAY_SERIAL_RECIPE,
+    SYMMETRY_MEMORY_SERIAL_RECIPE,
+    COLOR_MEMORY_SERIAL_RECIPE,
+    FLOW_FINISH_SERIAL_RECIPE,
+    FEEDBACK_FINISH_SERIAL_RECIPE,
     PIPELINE_RECIPES,
     frontStageValidation,
     validation,

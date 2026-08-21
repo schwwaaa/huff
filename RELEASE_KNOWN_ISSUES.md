@@ -1,3 +1,11 @@
+# Pass 58 Candidate Notes / Known Issues
+
+- The five new pipeline recipes have passed static structural validation but have **not yet been visually accepted on the target machine**.
+- `FEEDBACK FINISH` is explicitly experimental because the accepted Feedback stage owns persistent `gBuf` state and performs a snapshot/clear/redraw operation. Its implementation is unchanged, but its new late position requires creative/endurance review.
+- The existing Global Mix → Solarize fusion optimization is intentionally disabled for the five new reordered recipes. This favors serial correctness over an optimization proof that was written for the original transform order.
+- Historical Pass 57/56 whole-file freeze validators are expected to fail after the authorized Pass 58 routing/UI changes. Use `npm run regress:pass58` as the current automated gate.
+- No runtime claim is made yet about visual distinction among all five new recipes. Redundant routes should be removed after testing.
+
 ## Pass 53 preset runtime gate
 
 Native preset Save/Open dialogs require final validation in the target macOS Tauri runtime. Static validation confirms the dialog wiring, JSON format, migration paths, and protected render behavior, but this container cannot launch the target system dialogs.

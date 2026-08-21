@@ -676,7 +676,7 @@ function applyPreset(data) {
   if (!('solarizePosterLevel' in sourceData)) sourceData.solarizePosterLevel = '75';
   if (!('solarizePosterSoft' in sourceData)) sourceData.solarizePosterSoft = '0';
   if (!('solarizePosterPhase' in sourceData)) sourceData.solarizePosterPhase = '0';
-  const validRecipeIds = new Set(['classic', 'crisp-finish']);
+  const validRecipeIds = new Set(Object.keys(window.HuffPipelineRuntime?.PIPELINE_RECIPES || { classic: true }));
   if (!validRecipeIds.has(String(sourceData.pipelineRecipe || ''))) {
     sourceData.pipelineRecipe = 'classic';
   }
@@ -1628,7 +1628,7 @@ function hookUI() {
     'scanAngle','bgMode','dim',
     'cluSpeedVar','cluSpeedVarVal','cluPulse','cluPulseVal','cluBreathe','cluBreatheVal','cluBounds',
     'pipelineRecipe','layerPriority','layerPriorityState',
-    'pipelineFeedCorrupt','pipelineFeedScan','pipelineFeedLuma','pipelineFeedSummary','pipelineRouteSummary','symPipelineState','solarizePipelineState',
+    'pipelineFeedCorrupt','pipelineFeedScan','pipelineFeedLuma','pipelineFeedSummary','pipelineDiagram','pipelineRouteSummary','symPipelineState','solarizePipelineState',
     'lumaKeyOn','lumaKeyTarget','lumaKeyTargetState','lumaKeyMix','lumaKeyMixVal','lumaKeyAB','lumaKeyABVal','lumaKeyInvert',
     'lumaKeyGain','lumaKeyGainVal','lumaKeySource','lumaKeyFade','lumaKeyCleanup','lumaKeyCleanupVal','lumaKeyDensity','lumaKeyDensityVal','lumaKeyCaptureBtn','lumaKeyStencilState',
     'globalMixOn','globalMixBlend','globalMixAmt','globalMixAmtVal','globalMixCurve','globalMixPos',
@@ -2144,6 +2144,52 @@ function hookSliders() {
     el.title = `Active HUFF Classic image feed: ${feeds.join(', ')}.`;
   };
 
+  const pipelineQuickRouteLabels = Object.freeze({
+    classic: 'CLASSIC: IMAGE FEED → FEEDBACK → FLOW → SYMMETRY → SOLARIZE',
+    'crisp-finish': 'CRISP: FEEDBACK → FLOW → SYMMETRY → SOLARIZE → IMAGE FEED',
+    'temporal-underlay': 'TEMPORAL UNDERLAY: FEEDBACK → FLOW → IMAGE FEED → SYMMETRY → SOLARIZE',
+    'symmetry-memory': 'SYMMETRY MEMORY: IMAGE FEED → SYMMETRY → FEEDBACK → FLOW → SOLARIZE',
+    'color-memory': 'COLOR MEMORY: IMAGE FEED → SOLARIZE → FEEDBACK → FLOW → SYMMETRY',
+    'flow-finish': 'FLOW FINISH: IMAGE FEED → FEEDBACK → SYMMETRY → SOLARIZE → FLOW',
+    'feedback-finish': 'FEEDBACK FINISH: IMAGE FEED → FLOW → SYMMETRY → SOLARIZE → FEEDBACK',
+  });
+
+  const renderPipelineDiagram = (recipeId, feeds) => {
+    const runtime = window.HuffPipelineRuntime;
+    const definition = runtime?.PIPELINE_RECIPES?.[recipeId]
+      || runtime?.PIPELINE_RECIPES?.[runtime?.CLASSIC_RECIPE_ID || 'classic'];
+    if (!definition) return;
+
+    if (els.pipelineDiagram) {
+      const labels = runtime?.DIAGRAM_STAGE_LABELS || {};
+      const fragment = document.createDocumentFragment();
+      definition.diagram.forEach((stageId, index) => {
+        if (index > 0) {
+          const arrow = document.createElement('span');
+          arrow.className = 'pipeline-diagram-arrow';
+          arrow.setAttribute('aria-hidden', 'true');
+          arrow.textContent = '→';
+          fragment.appendChild(arrow);
+        }
+        const stage = document.createElement('span');
+        stage.className = `pipeline-diagram-stage pipeline-diagram-${stageId}`;
+        if (stageId === 'image-feed' && feeds.length) stage.classList.add('active');
+        stage.textContent = labels[stageId] || stageId.toUpperCase();
+        fragment.appendChild(stage);
+      });
+      els.pipelineDiagram.replaceChildren(fragment);
+      const spokenRoute = definition.diagram.map(stageId => labels[stageId] || stageId).join(' to ');
+      els.pipelineDiagram.setAttribute('aria-label', `${definition.label} pipeline: ${spokenRoute}`);
+      els.pipelineDiagram.title = definition.description || definition.label;
+    }
+
+    if (els.pipelineRouteSummary) {
+      els.pipelineRouteSummary.textContent = pipelineQuickRouteLabels[definition.id]
+        || `${definition.label}: ${definition.diagram.map(stageId => runtime?.DIAGRAM_STAGE_LABELS?.[stageId] || stageId.toUpperCase()).join(' → ')}`;
+      els.pipelineRouteSummary.title = definition.description || definition.label;
+    }
+  };
+
   const syncPipelineAwarenessUI = () => {
     const recipe = String(els.pipelineRecipe?.value || 'classic');
     const feeds = getPrimaryImageFeeds();
@@ -2161,15 +2207,8 @@ function hookSliders() {
         ? `Primary image feed active: ${feeds.join(', ')}.`
         : 'No primary image feed is active. Start with Corrupt, Scanlines, or Luma Key set to COMPOSITE with MIX above 0.';
     }
-    if (els.pipelineRouteSummary) {
-      els.pipelineRouteSummary.textContent = recipe === 'crisp-finish'
-        ? 'CRISP: FEEDBACK → FLOW → SYMMETRY → SOLARIZE → IMAGE FEED'
-        : 'CLASSIC: IMAGE FEED → FEEDBACK → FLOW → SYMMETRY → SOLARIZE';
-      els.pipelineRouteSummary.title = recipe === 'crisp-finish'
-        ? 'CRISP FINISH deliberately draws Corrupt, Luma/Composite, and Scanlines after the transform/color stages.'
-        : 'CLASSIC preserves the Pass 22 serial order: image feeds enter before Feedback, Flow, Symmetry, and Solarize.';
-    }
 
+    renderPipelineDiagram(recipe, feeds);
     setPipelineStageBadge(els.symPipelineState, !!els.symOn?.checked, recipe, feeds);
     setPipelineStageBadge(els.solarizePipelineState, !!els.solarizeOn?.checked, recipe, feeds);
   };
@@ -3171,6 +3210,7 @@ const _pipelineFrame = Object.seal({
   scanPriority: 1,
   lumaMix: 0,
   gmPos: 'after',
+  recipeId: 'classic',
   deferredGlobalMix: false,
 });
 
@@ -3251,6 +3291,12 @@ function _runFrontStagePriority(frame) {
 
 function _canFuseGlobalMixIntoSolarize(frame, position) {
   if (!frame.activity.solarize || !frame.activity.globalMix) return false;
+  // Pass 58: the fusion proof below was written for the two original routes,
+  // which keep Feedback -> Flow -> Symmetry -> Solarize in that relative order.
+  // New recipes intentionally reorder those stages, so they execute Global Mix
+  // as its explicit serial step rather than using the old shortcut.
+  if (frame.recipeId !== _pipelineRuntime.CLASSIC_RECIPE_ID
+      && frame.recipeId !== _pipelineRuntime.CRISP_FINISH_RECIPE_ID) return false;
   // FINAL belongs after Solarize and therefore cannot be fused into its input.
   // Other positions are safe only when no active transform remains between that
   // Global Mix position and Solarize. This preserves the serial Classic recipe.
@@ -3494,6 +3540,7 @@ function draw() {
   if (window.HUFF_ACTIVE_PIPELINE_RECIPE !== _pipelineRecipeSwitcher.activeId) {
     window.HUFF_ACTIVE_PIPELINE_RECIPE = _pipelineRecipeSwitcher.activeId;
   }
+  _pipelineFrame.recipeId = _pipelineRecipeSwitcher.activeId;
 
   if (!videoEl) {
     _paintMainBackground(bg);

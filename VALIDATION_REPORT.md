@@ -1,3 +1,42 @@
+# Pass 58 Validation Update
+
+Pass 58 is an explicitly authorized constrained-pipeline expansion built from committed Pass 57.
+
+Authoritative command:
+
+```bash
+npm run regress:pass58
+```
+
+The current runner performs:
+
+- JavaScript syntax checks for `canvas.js`, `effects.js`, `pipeline-runtime.js`, the Syphon worker, and Pass 58 validation scripts;
+- execution of all seven compiled recipe plans with mock stage handlers;
+- exact route-order checks for CLASSIC, CRISP FINISH, TEMPORAL UNDERLAY, SYMMETRY MEMORY, COLOR MEMORY, FLOW FINISH, and FEEDBACK FINISH;
+- exact diagram/execution-order agreement checks;
+- three-full-resolution-buffer / one-scratch / no-cycle contract checks;
+- exact accepted implementation hashes for Feedback, Flow, Symmetry, Solarize, and Presentation handlers;
+- exact Pass 57 hashes for `src/effects.js`, `src/syphon-stream-worker.js`, `src-tauri/src/main.rs`, and `src-tauri/src/syphon.rs`;
+- preset route-registry/fallback checks;
+- dynamic Pipeline mini-diagram wiring and duplicate-ID checks;
+- Pass 51 Syphon transport simulation;
+- Pass 40W Corrupt/Scan/Luma layer-handoff simulation;
+- Pass 41A playback/history simulation;
+- static release preflight.
+
+Historical Pass 57 / Pass 56 validators intentionally freeze whole runtime files. They are not current Pass 58 gates because this pass deliberately changes `src/pipeline-runtime.js`, `src/canvas.js`, and `src/index.html`. Pass 58 protects the unaffected algorithms and files directly instead.
+
+Current packaged-worktree result:
+
+- `npm run regress:pass58` — **PASS**
+- `validate:pass58` — **100 checks PASS**
+- Pass 51 Syphon two-credit simulation — **PASS**
+- Pass 40W Corrupt/Scan/Luma layer-handoff simulation — **PASS**
+- Pass 41A playback/history simulation — **PASS**
+- release/build preflight — **38 passed, 0 warnings, 0 blockers**
+
+Target-machine visual testing remains mandatory. Static validation cannot determine whether the five new routes are creatively useful or whether FEEDBACK FINISH should survive review.
+
 # Pass 57 Validation Update
 
 Pass 57 is a release-candidate regression/freeze pass. Runtime files are exact Pass 56 bytes.

@@ -2,37 +2,66 @@
 
 ## Current candidate
 
-**Pass 57 — Release Candidate Regression Freeze**, built directly from committed Pass 56.
+**Pass 58 — Constrained Pipeline Recipe Expansion**, built directly from the committed Pass 57 release-candidate baseline.
 
-Pass 57 makes **no runtime, rendering, effect, preset-runtime, Syphon, or native-output changes**. It freezes the current instrument as a release-candidate target and adds one authoritative automated regression runner plus an integrated manual test matrix.
+Pass 58 is an explicitly authorized creative/modularity pass. It reuses the existing validated serial-recipe infrastructure and does not add effects, parallel routing, cycles, full-resolution buffers, or native-output changes.
 
-### Current accepted product contracts
+### Pipeline recipes
 
-- Three primary image feeds: **Corrupt / Scanlines / Luma Key COMPOSITE**.
-- Symmetry and Solarize are downstream processors and the UI makes that dependency visible.
-- Flow remains protected; do not reopen casually.
-- Layer Priority is SCAN TOP / CORRUPT TOP; Neutral and Pulse are removed.
-- Global Mix remains a restrained clean-source reinjection/mix stage.
-- Luma includes the accepted key shaping and expanded fade vocabulary.
-- Solarize family includes THRESHOLD, LUMA QUANTIZE, and CHROMA POSTERIZE.
-- Syphon: **1280×720 60 fps primary / 30 fps safe fallback**.
-- User presets: portable local JSON files plus a temporary SESSION — SAVED / LOADED bank.
-- Saving a JSON immediately adds that exact saved state to the session dropdown.
-- Session presets disappear on quit; user JSON files remain local and user-owned.
-- Future factory-preset promotion is intentionally deferred.
+```text
+CLASSIC
+IMAGE FEED → FEEDBACK → FLOW → SYMMETRY → SOLARIZE
+
+CRISP FINISH
+FEEDBACK → FLOW → SYMMETRY → SOLARIZE → IMAGE FEED
+
+TEMPORAL UNDERLAY
+FEEDBACK → FLOW → IMAGE FEED → SYMMETRY → SOLARIZE
+
+SYMMETRY MEMORY
+IMAGE FEED → SYMMETRY → FEEDBACK → FLOW → SOLARIZE
+
+COLOR MEMORY
+IMAGE FEED → SOLARIZE → FEEDBACK → FLOW → SYMMETRY
+
+FLOW FINISH
+IMAGE FEED → FEEDBACK → SYMMETRY → SOLARIZE → FLOW
+
+FEEDBACK FINISH · EXP
+IMAGE FEED → FLOW → SYMMETRY → SOLARIZE → FEEDBACK
+```
+
+The Pipeline panel includes a minimal routing diagram that changes immediately with the selected recipe.
+
+### Protected product contracts
+
+- Three primary image feeds remain **Corrupt / Scanlines / Luma Key COMPOSITE**.
+- Flow's accepted implementation is unchanged.
+- Feedback's accepted implementation is unchanged.
+- Symmetry and Solarize implementations are unchanged.
+- Layer Priority remains SCAN TOP / CORRUPT TOP.
+- Global Mix retains BEFORE FB / AFTER FB / AFTER FLOW / FINAL.
+- No effect-level frame skipping is introduced.
+- Syphon remains **1280×720 60 fps primary / 30 fps fallback**.
+- User preset JSON/session workflow is unchanged.
+- HUFF Classic remains Tauri v1 + WebView + p5.js/Canvas2D/WebGL helpers; no wgpu code is introduced.
 
 ### Automated gate
 
 Run:
 
 ```bash
-npm run regress:pass57
+npm run regress:pass58
 ```
 
 ### Manual gate
 
-Use `RELEASE_CANDIDATE_TEST_MATRIX.md` on target machines. Actual visual behavior, native dialogs, long-session output, Windows Spout, Linux behavior, and sleep/wake remain runtime tests rather than static claims.
+Use the Pass 58 section at the top of `TESTING_CHECKLIST.md`.
 
-### Freeze rule
+Static validation does **not** decide which new recipes belong. The target-machine creative review should keep only routes that are stable, visually distinct, and useful.
 
-If Pass 57 testing exposes a blocker, make the smallest isolated corrective pass and rerun the complete Pass 57 regression suite. Do not mix release fixes with new creative features.
+`FEEDBACK FINISH` is explicitly experimental.
+
+### Next decision
+
+Test the new recipes before expanding any other part of HUFF Classic. Remove redundant/unstable routes rather than growing the menu automatically.

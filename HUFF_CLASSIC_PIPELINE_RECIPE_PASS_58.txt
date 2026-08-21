@@ -1,0 +1,66 @@
+HUFF CLASSIC — PASS 58
+CONSTRAINED PIPELINE RECIPE EXPANSION
+
+BASELINE
+- Built directly from the user-supplied Pass 57 baseline archive: huff-08202026.zip
+- Baseline archive SHA-256: e6cc3e6c4105e8680418ea435e15cecf10f89d6f5a52d4a8c4be757b19504abd
+- Baseline Git commit: 1049d8c (Pass 57 release-candidate regression freeze)
+
+PURPOSE
+Pass 58 expands HUFF Classic's existing constrained serial recipe system without adding effects, branches, cycles, or buffers. The same accepted effect implementations are rearranged into additional legal serial topologies.
+
+RECIPES
+Existing:
+- CLASSIC
+- CRISP FINISH
+
+New:
+- TEMPORAL UNDERLAY
+- SYMMETRY MEMORY
+- COLOR MEMORY
+- FLOW FINISH
+- FEEDBACK FINISH · EXP
+
+OPERATOR DIAGRAM
+The Pipeline group now includes a minimal live routing diagram directly under the recipe selector. The diagram is generated from the same immutable recipe definition that drives execution, so the UI order and executable order are validated together.
+
+PROTECTED BEHAVIOR
+- No effect math changes.
+- Feedback implementation unchanged.
+- Flow implementation unchanged.
+- Symmetry implementation unchanged.
+- Solarize implementation unchanged.
+- Corrupt / Scanlines / Luma front-stage priority behavior unchanged.
+- No new full-resolution buffer.
+- No parallel route or same-frame cycle.
+- No Syphon / Spout / native-output changes.
+- No preset file-I/O changes.
+- No wgpu work.
+
+GLOBAL MIX
+Global Mix keeps the existing named positions:
+- BEFORE FB
+- AFTER FB
+- AFTER FLOW
+- FINAL
+
+The prior Solarize fusion optimization remains enabled only for CLASSIC and CRISP FINISH, whose transform ordering matches the original safety proof. New recipes execute Global Mix as its explicit serial step to avoid reordering work across a newly moved stage.
+
+PRESET COMPATIBILITY
+- Pipeline recipe remains saved in presets.
+- All seven built-in recipe IDs are accepted.
+- Old presets with no recipe still load CLASSIC.
+- Unknown imported recipe IDs still recover to CLASSIC.
+
+VALIDATION
+Run:
+
+  npm run regress:pass58
+
+Static validation proves recipe compilation/order, three-buffer declarations, diagram/execution agreement, protected effect-function hashes, protected effects/native-output file hashes, preset compatibility wiring, duplicate-ID safety, historical Syphon/layer/playback simulations, and release preflight.
+
+TARGET-MACHINE GATE
+Actual visual usefulness is intentionally not claimed by static validation. Test all seven recipes with moving media and the same effect state. Reject any recipe that is visually redundant, unstable, confusing, or produces stale/frozen behavior. FEEDBACK FINISH is explicitly experimental and should be scrutinized first.
+
+STATUS
+Pass 58 runtime candidate. Creative acceptance pending target-machine review.

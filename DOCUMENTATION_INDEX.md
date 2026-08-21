@@ -1,3 +1,20 @@
+# Pass 58 Documentation
+
+Current runtime candidate: **Pass 58 — Constrained Pipeline Recipe Expansion**
+
+- `HUFF_CLASSIC_PIPELINE_RECIPE_PASS_58.txt` — concise pass scope, routes, protected boundaries, and runtime gate.
+- `PIPELINE_RECIPE_EXPANSION_AUDIT.md` — architecture reasoning, exact routes, Global Mix semantics, diagram contract, and acceptance criteria.
+- `scripts/validate-pass58.mjs` — current structural/regression validator.
+- `scripts/run-pass58-regression.mjs` — current automated regression runner.
+- `baseline/pass57-pass58-protected.sha256` — exact Pass 57 hashes for protected effect/native-output files.
+- `TESTING_CHECKLIST.md` — Pass 58 target-machine creative/runtime checklist.
+- `VALIDATION_REPORT.md` — current static validation policy and results.
+- `RELEASE_KNOWN_ISSUES.md` — current candidate risks/limitations.
+- `CHANGED_FILES_PASS58.md` — exact Pass 58 scope.
+- `GIT_COMMIT_MESSAGE.md` — ready Pass 58 Git commit message.
+
+---
+
 # Pass 57 — Release Candidate Regression Freeze
 
 Current release-candidate documentation:

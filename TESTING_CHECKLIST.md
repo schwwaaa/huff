@@ -1,3 +1,38 @@
+# Pass 58 — Constrained Pipeline Recipe Runtime Test
+
+Run `npm run regress:pass58` first.
+
+Use one moving source and one clearly visible effect state so the same material can be compared across every recipe.
+
+- [ ] Start on **CLASSIC** and confirm its look matches the accepted Pass 57 behavior.
+- [ ] Confirm the mini diagram reads `FEED → FEEDBACK → FLOW → SYMMETRY → SOLARIZE`.
+- [ ] Select **CRISP FINISH** and confirm the diagram moves FEED to the end.
+- [ ] Select **TEMPORAL UNDERLAY** and confirm the diagram reads `FEEDBACK → FLOW → FEED → SYMMETRY → SOLARIZE`.
+- [ ] Select **SYMMETRY MEMORY** and confirm the diagram reads `FEED → SYMMETRY → FEEDBACK → FLOW → SOLARIZE`.
+- [ ] Select **COLOR MEMORY** and confirm the diagram reads `FEED → SOLARIZE → FEEDBACK → FLOW → SYMMETRY`.
+- [ ] Select **FLOW FINISH** and confirm the diagram reads `FEED → FEEDBACK → SYMMETRY → SOLARIZE → FLOW`.
+- [ ] Select **FEEDBACK FINISH · EXP** and confirm the diagram reads `FEED → FLOW → SYMMETRY → SOLARIZE → FEEDBACK`.
+- [ ] Switch repeatedly among all recipes while video is moving; confirm there is no crash, stuck frame, stale black frame, or runaway latency.
+- [ ] Test Corrupt as the only image feed across every recipe.
+- [ ] Test Scanlines as the only image feed across every recipe.
+- [ ] Test Luma Key with TARGET=COMPOSITE and MIX>0 as the only image feed across every recipe.
+- [ ] Test at least one multi-feed state and confirm Layer Priority remains SCAN TOP / CORRUPT TOP.
+- [ ] Test Feedback + Flow + Symmetry + Solarize together and compare whether each route is meaningfully distinct.
+- [ ] For **COLOR MEMORY**, compare all three Solarize modes and confirm the color treatment visibly enters the temporal chain.
+- [ ] For **SYMMETRY MEMORY**, confirm recursive/Flow material is visibly derived from the symmetry result.
+- [ ] For **FLOW FINISH**, confirm Flow visibly acts on the already Symmetry/Solarize-processed image.
+- [ ] Scrutinize **FEEDBACK FINISH · EXP** for unexpected clearing, stale imagery, unstable persistence, or undesirable recursion.
+- [ ] Test Global Mix at BEFORE FB, AFTER FB, AFTER FLOW, and FINAL on at least CLASSIC plus two reordered recipes.
+- [ ] Confirm switching recipes changes the diagram immediately even when effects are disabled.
+- [ ] Confirm the FEED diagram box highlights when Corrupt, Scanlines, or Luma/Composite is active.
+- [ ] Save a JSON while a new recipe is selected; move away; recall it and confirm the same recipe returns.
+- [ ] Load an older preset with no recipe data and confirm it returns to CLASSIC.
+- [ ] Recheck Syphon 720p60 on the primary Mac after recipe switching.
+- [ ] Watch FPS while rapidly switching routes; reject any route that produces a new sustained performance collapse.
+- [ ] Decide which of the five new recipes are genuinely useful. Remove redundant routes rather than keeping them for count.
+
+**Creative gate:** Pass 58 is accepted only after the user decides the surviving recipes improve the instrument.
+
 # Pass 57 — Release Candidate Gate
 
 The authoritative integrated manual checklist is:

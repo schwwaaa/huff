@@ -307,6 +307,25 @@
         .pipeline-stage-state.ready {
             background: #fff; font-weight: bold;
         }
+        .pipeline-diagram {
+            display: flex; flex-wrap: wrap; align-items: center; gap: 2px;
+            margin-top: 4px; padding: 3px 4px;
+            background: #c5c1b9;
+            border-top: 1px solid #808080; border-left: 1px solid #808080;
+            border-right: 1px solid #fff; border-bottom: 1px solid #fff;
+            font-family: 'Share Tech Mono', monospace; font-size: 9px;
+            min-height: 18px;
+        }
+        .pipeline-diagram-stage {
+            color: rgba(0,0,0,.72); background: #d4d0c8;
+            border: 1px solid #808080; padding: 1px 4px; white-space: nowrap;
+        }
+        .pipeline-diagram-stage.active {
+            color: #000; background: #fff; font-weight: bold;
+        }
+        .pipeline-diagram-arrow {
+            color: rgba(0,0,0,.52); padding: 0 1px; white-space: nowrap;
+        }
 
         /* ═══════════════════════════════════════════════
            CTRL CHIPS — inset terminal boxes
@@ -1572,20 +1591,36 @@
                 <div class="group-row">
                     <div class="ctrl">
                         <label>RECIPE</label>
-                        <select id="pipelineRecipe" style="font-size:10px;padding:1px 2px" title="CLASSIC preserves the Pass 22 order. CRISP FINISH draws Corrupt, Luma Key, and Scanlines after the transform/color stages.">
+                        <select id="pipelineRecipe" style="font-size:10px;padding:1px 2px" title="Select a validated serial recipe. The diagram below shows the active stage order; no recipe adds effects, branches, or buffers.">
                             <option value="classic">CLASSIC</option>
                             <option value="crisp-finish">CRISP FINISH</option>
+                            <option value="temporal-underlay">TEMPORAL UNDERLAY</option>
+                            <option value="symmetry-memory">SYMMETRY MEMORY</option>
+                            <option value="color-memory">COLOR MEMORY</option>
+                            <option value="flow-finish">FLOW FINISH</option>
+                            <option value="feedback-finish">FEEDBACK FINISH · EXP</option>
                         </select>
                     </div>
                     <span style="font-size:9px;color:rgba(255,255,255,.38);font-family:'Share Tech Mono',monospace;white-space:nowrap">VALIDATED SERIAL</span>
                 </div>
-                <div class="pipeline-awareness" title="HUFF Classic has three primary ways to feed live imagery into its persistent image system: Corrupt, Scanlines, or Luma Key with TARGET set to COMPOSITE. Symmetry and Solarize are downstream processors, not independent source stages.">
+                <div id="pipelineDiagram" class="pipeline-diagram" aria-label="CLASSIC pipeline: feed to feedback to flow to symmetry to solarize" title="The active recipe stage order. Global Mix remains controlled separately by its named insertion position.">
+                    <span class="pipeline-diagram-stage pipeline-diagram-image-feed">FEED</span>
+                    <span class="pipeline-diagram-arrow" aria-hidden="true">→</span>
+                    <span class="pipeline-diagram-stage pipeline-diagram-feedback">FEEDBACK</span>
+                    <span class="pipeline-diagram-arrow" aria-hidden="true">→</span>
+                    <span class="pipeline-diagram-stage pipeline-diagram-flow">FLOW</span>
+                    <span class="pipeline-diagram-arrow" aria-hidden="true">→</span>
+                    <span class="pipeline-diagram-stage pipeline-diagram-symmetry">SYMMETRY</span>
+                    <span class="pipeline-diagram-arrow" aria-hidden="true">→</span>
+                    <span class="pipeline-diagram-stage pipeline-diagram-solarize">SOLARIZE</span>
+                </div>
+                <div class="pipeline-awareness" title="HUFF Classic has three primary ways to feed live imagery into its persistent image system: Corrupt, Scanlines, or Luma Key with TARGET set to COMPOSITE.">
                     <span class="pipeline-awareness-label">IMAGE FEED</span>
                     <span id="pipelineFeedCorrupt" class="pipeline-feed">CORRUPT</span>
                     <span id="pipelineFeedScan" class="pipeline-feed">SCANLINES</span>
                     <span id="pipelineFeedLuma" class="pipeline-feed">LUMA/COMP</span>
                     <span id="pipelineFeedSummary" class="pipeline-feed-summary warn">NONE</span>
-                    <span id="pipelineRouteSummary" class="pipeline-awareness-label">→ FEEDBACK → FLOW → SYMMETRY → SOLARIZE</span>
+                    <span id="pipelineRouteSummary" class="pipeline-awareness-label">CLASSIC: IMAGE FEED → FEEDBACK → FLOW → SYMMETRY → SOLARIZE</span>
                 </div>
                 </div>
             </div>
