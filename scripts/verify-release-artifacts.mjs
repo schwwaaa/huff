@@ -61,10 +61,16 @@ if (requested === 'macos') {
 }
 
 if (requested === 'windows') {
-  const base = path.join(target, 'x86_64-pc-windows-msvc', 'release');
+  const nativeBase = path.join(target, 'release');
+  const explicitBase = path.join(target, 'x86_64-pc-windows-msvc', 'release');
+  const base = fs.existsSync(path.join(nativeBase, 'huff.exe')) ? nativeBase : explicitBase;
   requireFile(path.join(base, 'huff.exe'), 'Windows executable');
   requireFile(path.join(base, 'spout_bridge.dll'), 'Spout bridge DLL');
-  const msi = requireMatch(targetFiles, /target\/x86_64-pc-windows-msvc\/release\/bundle\/msi\/[^/]+\.msi$/i, 'Windows MSI');
+  const msi = requireMatch(
+    targetFiles,
+    /target\/(?:x86_64-pc-windows-msvc\/)?release\/bundle\/msi\/[^/]+\.msi$/i,
+    'Windows MSI',
+  );
   const portable = requireFile(path.join(artifacts, `huff-${release.version}-windows-x64-portable.zip`), 'Windows portable ZIP');
   distributables = [msi, portable];
 }

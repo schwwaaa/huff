@@ -34,8 +34,4 @@ if (desired !== 'windows') {
   process.exit(1);
 }
 
-run(process.execPath, ['scripts/release-preflight.mjs', '--platform=windows']);
-run('rustup', ['target', 'add', 'x86_64-pc-windows-msvc']);
-run('npx.cmd', ['tauri', 'build', '--target', 'x86_64-pc-windows-msvc', '--bundles', 'msi']);
-run('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', 'scripts/package-windows.ps1']);
-run(process.execPath, ['scripts/verify-release-artifacts.mjs', '--platform=windows']);
+run('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', 'scripts/build-windows.ps1']);

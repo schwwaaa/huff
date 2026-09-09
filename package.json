@@ -27,7 +27,7 @@
     "validate:pass28": "node scripts/validate-pass28.mjs",
     "build:preflight": "node scripts/tauri-build.cjs preflight",
     "build:mac": "node scripts/tauri-build.cjs mac-universal",
-    "build:windows": "node scripts/tauri-build.cjs windows",
+    "build:windows": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/build-windows.ps1",
     "build:linux": "node scripts/tauri-build.cjs linux",
     "release:preflight": "node scripts/release-preflight.mjs --platform=all --static",
     "release:version": "node scripts/set-release-version.mjs",

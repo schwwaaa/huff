@@ -151,13 +151,8 @@ build_mac_universal() {
 
 build_windows() {
   [[ "$(detect_os)" == windows ]] || fail "Windows MSI must be built natively on Windows"
-  require_common
-  preflight windows
-  require_cmd cmake
-  require_rust_target x86_64-pc-windows-msvc
-  tauri_build --target x86_64-pc-windows-msvc --bundles msi
-  powershell.exe -NoProfile -ExecutionPolicy Bypass -File "${ROOT}/scripts/package-windows.ps1"
-  node "${ROOT}/scripts/verify-release-artifacts.mjs" --platform=windows
+  require_cmd powershell.exe
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File "${ROOT}/scripts/build-windows.ps1"
   ok "Windows MSI and portable ZIP built"
 }
 
