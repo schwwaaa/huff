@@ -1010,8 +1010,8 @@
         <div class="spout-row">
           <span class="spout-label">FPS cap</span>
           <select id="spoutFps">
-            <option value="60">60</option>
-            <option value="30" selected>30</option>
+            <option value="60" selected>60</option>
+            <option value="30">30</option>
             <option value="24">24</option>
             <option value="15">15</option>
           </select>
@@ -1024,7 +1024,7 @@
         </div>
 
         <div style="margin-top:18px;font-size:10px;color:rgba(255,255,255,.2);line-height:1.9;border-top:1px solid rgba(255,255,255,.06);padding-top:14px">
-          <strong style="color:rgba(255,255,255,.35)">Windows only.</strong> Spout uses shared GPU memory — zero latency, no network.<br>
+          <strong style="color:rgba(255,255,255,.35)">Windows only.</strong> Spout receivers use a shared GPU texture; HUFF stages frames locally for the native sender.<br>
           The canvas will appear as <strong style="color:rgba(0,200,220,.6)">"huff"</strong> in any Spout receiver.<br>
           Connect from Resolume Avenue, MadMapper, Spout for OBS, or any Spout-enabled app.
         </div>
@@ -3305,66 +3305,106 @@
     (() => {
         'use strict';
 
-        // ── Spout Engine — mirrors the Syphon engine, Windows only ───────────
+        // HUFF Classic Spout transport — Windows optimization pass 1.
         //
-        // Frame pipeline:
-        //   p5 canvas → getImageData() → raw RGBA WebSocket frame
-        //       → dedicated role + fixed dimensions declared once in hello
-        //       → Rust → SpoutDX sender → Spout receivers
+        // Preferred path:
+        //   p5 canvas → ImageBitmap → Worker/OffscreenCanvas scale + RGBA readback
+        //   → Worker-owned WebSocket → Rust → SpoutDX::SendImage
+        //   → shared D3D11 texture → OBS / any Spout receiver.
+        //
+        // Worker-direct owns a bounded two-credit native pipeline. Native ACKs
+        // are emitted only after SpoutDX::SendImage completes, so the output
+        // path drops stale opportunities instead of accumulating latency.
+        //
+        // Fallback preserves the previously validated main-socket path and is
+        // deliberately capped at 30 fps to protect the 60 fps HUFF renderer.
 
-        const invoke     = window.__TAURI__?.invoke;
-        const tauriEvent = window.__TAURI__?.event;
+        const invoke       = window.__TAURI__?.invoke;
+        const overlay      = document.getElementById('spoutOverlay');
+        const closeBtn     = document.getElementById('spoutClose');
+        const statusBox    = document.getElementById('spoutStatus');
+        const toggleBtn    = document.getElementById('spoutToggleBtn');
+        const frameCountEl = document.getElementById('spoutFrameCount');
+        const wInput       = document.getElementById('spoutW');
+        const hInput       = document.getElementById('spoutH');
+        const fpsSelect    = document.getElementById('spoutFps');
+        const spoutBtn     = document.getElementById('spoutBtn');
+        const pill         = document.getElementById('spoutPill');
 
-        const overlay       = document.getElementById('spoutOverlay');
-        const closeBtn      = document.getElementById('spoutClose');
-        const statusBox     = document.getElementById('spoutStatus');
-        const toggleBtn     = document.getElementById('spoutToggleBtn');
-        const frameCountEl  = document.getElementById('spoutFrameCount');
-        const wInput        = document.getElementById('spoutW');
-        const hInput        = document.getElementById('spoutH');
-        const fpsSelect     = document.getElementById('spoutFps');
-        const spoutBtn      = document.getElementById('spoutBtn');
-        const pill          = document.getElementById('spoutPill');
+        const LIFECYCLE = Object.freeze({
+            OFF: 'OFF',
+            STARTING: 'STARTING',
+            STREAMING: 'STREAMING',
+            RECOVERING: 'RECOVERING',
+            STOPPING: 'STOPPING',
+        });
+        const TRANSPORT = Object.freeze({ NONE: 'none', WORKER: 'worker-direct', MAIN: 'main-socket' });
 
         // ── modal ─────────────────────────────────────────────────────────────
-        const openModal  = () => overlay.classList.add('open');
-        const closeModal = () => overlay.classList.remove('open');
-        spoutBtn?.addEventListener('click', openModal);
-        pill    ?.addEventListener('click', openModal);
-        closeBtn?.addEventListener('click', closeModal);
-        overlay ?.addEventListener('click', e => { if (e.target === overlay) closeModal(); });
-        window  .addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); }, true);
+        const openModal  = () => overlay?.classList.add('open');
+        const closeModal = () => overlay?.classList.remove('open');
+        spoutBtn ?.addEventListener('click', openModal);
+        pill     ?.addEventListener('click', openModal);
+        closeBtn ?.addEventListener('click', closeModal);
+        overlay  ?.addEventListener('click', e => { if (e.target === overlay) closeModal(); });
+        window.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); }, true);
 
-        if (!invoke || !tauriEvent) {
+        if (!invoke) {
             if (statusBox) {
                 statusBox.textContent = 'Spout unavailable outside Tauri app';
-                statusBox.className   = 'error';
+                statusBox.className = 'error';
             }
             if (pill) pill.textContent = 'SPOUT: N/A';
             return;
         }
 
         // ── state ─────────────────────────────────────────────────────────────
-        let running      = false;
-        let frameCount   = 0;
-        let rafId        = null;
-        let lastTs       = 0;
-        let spoutCanvas  = null;
-        let spoutCtx     = null;
-        let sourceCanvas = null;
-        let outputW      = 1280;
-        let outputH      = 720;
-        let spoutWS      = null;
-        let statusPollTimer = null;
+        let lifecycle = LIFECYCLE.OFF;
         let lifecycleGeneration = 0;
-        let startPending = false;
-        let stopPending = false;
-        let shuttingDown = false;
+        let transportMode = TRANSPORT.NONE;
+        let transportReady = false;
+        let workerTransportAttempted = false;
+        let workerTransportFallbacks = 0;
+        let transportFallbackTimer = null;
 
-        // Pass 27 profiler telemetry. Timing is recorded only while the existing
-        // backtick profiler is visible; low-cost sent/skip counters remain useful
-        // during long-session output testing.
+        let rafId = null;
+        let nextFrameDue = 0;
+        let outputW = 1280;
+        let outputH = 720;
+        let requestedOutputFps = 60;
+        let outputFps = 60;
+        let sourceCanvas = null;
+        let nativeFrames = 0;
+        let lastAckAt = 0;
+        let statePollTimer = null;
+        let statePollBusy = false;
+
+        let adapterIndex = -1;
+        let adapterCount = 0;
+        let adapterName = '';
+        let senderFps = 0;
+
+        // Main-socket fallback remains strictly one frame in flight. Preferred
+        // Worker-direct uses a maximum of two native outstanding frames.
+        let frameInFlight = false;
+        let frameStartedAt = 0;
+        let workerCaptureInFlight = false;
+        let workerCanAccept = true;
+        let workerOutstanding = 0;
+        let nextFrameId = 1;
+
+        let mainWS = null;
+        let mainWSReady = false;
+
+        let worker = null;
+        let workerReady = false;
+        let workerDisabled = false;
+
+        let fallbackCanvas = null;
+        let fallbackCtx = null;
+
         const spoutTelemetry = window.__huffSpoutTelemetry = {
+            // Existing Pass 27 fields remain for compatibility.
             drawMs: 0,
             drawSamples: 0,
             readMs: 0,
@@ -3379,36 +3419,188 @@
             outputWidth: 0,
             outputHeight: 0,
             running: false,
+
+            // Pass 1 transport / native telemetry.
+            captureMs: 0,
+            captureSamples: 0,
+            workerDrawMs: 0,
+            workerReadMs: 0,
+            workerSendMs: 0,
+            workerSamples: 0,
+            endToEndMs: 0,
+            endToEndSamples: 0,
+            nativeUploadMs: 0,
+            nativeSamples: 0,
+            inFlightSkips: 0,
+            capacitySkips: 0,
+            workerOutstanding: 0,
+            workerPeakOutstanding: 0,
+            workerDirectFrames: 0,
+            mainSocketFrames: 0,
+            workerTransportFallbacks: 0,
+            adapterIndex: -1,
+            adapterCount: 0,
+            adapterName: '',
+            senderFps: 0,
         };
-        function spoutCount(name, amount = 1) {
+
+        function count(name, amount = 1) {
             spoutTelemetry[name] = (spoutTelemetry[name] || 0) + amount;
         }
-        function spoutProfile(name, amount) {
+        function profileAdd(name, amount = 1) {
             if (!window.__huffProfilerActive) return;
-            spoutCount(name, amount);
+            count(name, amount);
         }
 
-        // ── helpers ───────────────────────────────────────────────────────────
-        function setStatus(text, cls = '') {
-            if (statusBox) { statusBox.textContent = text; statusBox.className = cls; }
+        const DISPLAY_PERIOD_MS = 250;
+        const WORKER_TRANSPORT_TIMEOUT_MS = 1800;
+        const ACK_TIMEOUT_MS = 2500;
+        let displayDirty = true;
+        let lastDisplayAt = -Infinity;
+        let lastStatusText = '';
+        let lastFrameText = '';
+        let lastStatusClass = '';
+
+        function isRunningLifecycle() {
+            return lifecycle === LIFECYCLE.STARTING
+                || lifecycle === LIFECYCLE.STREAMING
+                || lifecycle === LIFECYCLE.RECOVERING;
+        }
+
+        function setLifecycle(next) {
+            lifecycle = next;
+            if (wInput) wInput.disabled = next !== LIFECYCLE.OFF;
+            if (hInput) hInput.disabled = next !== LIFECYCLE.OFF;
+            if (fpsSelect) fpsSelect.disabled = next !== LIFECYCLE.OFF;
+            displayDirty = true;
         }
 
         function setPillActive(on) {
             if (!pill) return;
-            const w = wInput?.value || 1280;
-            const h = hInput?.value || 720;
             if (on) {
-                pill.textContent      = `SPOUT: ${w}×${h}`;
-                pill.style.color      = 'rgba(0,200,220,.9)';
-                pill.style.borderColor= 'rgba(0,200,220,.4)';
+                pill.textContent = `SPOUT: ${outputW}×${outputH}`;
+                pill.style.color = 'rgba(0,200,220,.9)';
+                pill.style.borderColor = 'rgba(0,200,220,.4)';
             } else {
-                pill.textContent      = 'SPOUT: OFF';
-                pill.style.color      = 'rgba(0,200,220,.6)';
-                pill.style.borderColor= 'rgba(0,200,220,.2)';
+                pill.textContent = 'SPOUT: OFF';
+                pill.style.color = 'rgba(0,200,220,.6)';
+                pill.style.borderColor = 'rgba(0,200,220,.2)';
             }
         }
 
-        // ── frame sender ──────────────────────────────────────────────────────
+        function updateDisplay(force = false) {
+            if (lifecycle === LIFECYCLE.OFF) return;
+            displayDirty = true;
+            const now = performance.now();
+            if (!force && now - lastDisplayAt < DISPLAY_PERIOD_MS) return;
+
+            let statusText = '';
+            let statusClass = 'active';
+            if (lifecycle === LIFECYCLE.STARTING) {
+                statusText = 'Starting Spout…';
+            } else if (lifecycle === LIFECYCLE.RECOVERING) {
+                statusText = 'Spout active — recovering output transport…';
+            } else if (lifecycle === LIFECYCLE.STOPPING) {
+                statusText = 'Stopping Spout…';
+            } else {
+                statusText = `Spout active — streaming ${outputW}×${outputH} @ ${outputFps} fps.`;
+            }
+
+            if (adapterCount > 1 && adapterIndex >= 0) {
+                statusText += ` Multi-GPU system: keep OBS on GPU ${adapterIndex}${adapterName ? ` (${adapterName})` : ''}.`;
+            }
+
+            const transportLabel = transportMode === TRANSPORT.WORKER
+                ? 'worker-direct'
+                : transportMode === TRANSPORT.MAIN
+                    ? (workerReady ? 'worker-readback/main-socket fallback' : 'main-thread fallback')
+                    : 'transport pending';
+            const fallback = workerTransportFallbacks > 0 ? ` · ${workerTransportFallbacks} fallback` : '';
+            const fpsText = senderFps > 0.1 ? ` · Spout ${senderFps.toFixed(1)} fps` : '';
+            const gpuText = adapterIndex >= 0
+                ? ` · GPU ${adapterIndex}${adapterName ? `: ${adapterName}` : ''}`
+                : '';
+            const frameText = `${nativeFrames} frames · ${transportLabel}${fpsText}${gpuText}${fallback}`;
+
+            if (statusBox && statusText !== lastStatusText) {
+                statusBox.textContent = statusText;
+                lastStatusText = statusText;
+            }
+            if (statusBox && statusClass !== lastStatusClass) {
+                statusBox.className = statusClass;
+                lastStatusClass = statusClass;
+            }
+            if (frameCountEl && frameText !== lastFrameText) {
+                frameCountEl.textContent = frameText;
+                lastFrameText = frameText;
+            }
+            displayDirty = false;
+            lastDisplayAt = now;
+        }
+
+        function flushDisplayIfDue() {
+            if (displayDirty) updateDisplay(false);
+        }
+
+        function applyRuntimeState(state) {
+            if (!state || !isRunningLifecycle()) return;
+            nativeFrames = Number(state.frames) || nativeFrames;
+            adapterIndex = Number.isFinite(Number(state.adapterIndex)) ? Number(state.adapterIndex) : -1;
+            adapterCount = Math.max(0, Number(state.adapterCount) || 0);
+            adapterName = String(state.adapterName || '');
+            senderFps = Math.max(0, Number(state.senderFps) || 0);
+            spoutTelemetry.adapterIndex = adapterIndex;
+            spoutTelemetry.adapterCount = adapterCount;
+            spoutTelemetry.adapterName = adapterName;
+            spoutTelemetry.senderFps = senderFps;
+            updateDisplay(false);
+        }
+
+        function handleAck(message, releaseFallbackFrame = true) {
+            const now = performance.now();
+            if (releaseFallbackFrame) frameInFlight = false;
+            lastAckAt = now;
+            nativeFrames = Number(message.frames) || nativeFrames;
+            if (message.published) count('sentFrames');
+
+            const profileSamples = Math.max(0, Number(message.profileSamples) || (message.profiled ? 1 : 0));
+            if (window.__huffProfilerActive && profileSamples > 0) {
+                profileAdd('workerDrawMs', Number(message.drawMs) || 0);
+                profileAdd('workerReadMs', Number(message.readMs) || 0);
+                profileAdd('workerSendMs', Number(message.sendMs) || 0);
+                profileAdd('workerSamples', profileSamples);
+            }
+            if (window.__huffProfilerActive) {
+                const pipeSamples = Math.max(0, Number(message.endToEndSamples) || 0);
+                if (pipeSamples > 0) {
+                    profileAdd('endToEndMs', Number(message.endToEndMs) || 0);
+                    profileAdd('endToEndSamples', pipeSamples);
+                } else if (releaseFallbackFrame && frameStartedAt > 0) {
+                    profileAdd('endToEndMs', Math.max(0, now - frameStartedAt));
+                    profileAdd('endToEndSamples');
+                }
+                const nativeSamples = Math.max(0, Number(message.nativeSamples) || (message.nativeSample ? 1 : 0));
+                if (nativeSamples > 0) {
+                    profileAdd('nativeUploadMs', (Number(message.nativeUploadUs) || 0) / 1000);
+                    profileAdd('nativeSamples', nativeSamples);
+                }
+            }
+
+            if (transportMode === TRANSPORT.WORKER) {
+                profileAdd('workerDirectFrames', Math.max(1, Number(message.ackedFrames) || 1));
+            } else if (transportMode === TRANSPORT.MAIN) {
+                profileAdd('mainSocketFrames');
+            }
+            if (transportReady && lifecycle !== LIFECYCLE.STOPPING) setLifecycle(LIFECYCLE.STREAMING);
+            updateDisplay(false);
+        }
+
+        function wsURL() {
+            return (typeof __getWSURL__ === 'function')
+                ? __getWSURL__()
+                : (window.WS_MIRROR_URL || 'ws://127.0.0.1:8787');
+        }
+
         function findCanvas() {
             if (sourceCanvas?.isConnected) return sourceCanvas;
             try {
@@ -3421,212 +3613,625 @@
             return sourceCanvas;
         }
 
-        function closeSpoutWS() {
-            const socket = spoutWS;
-            spoutWS = null;
+        function closeMainSocket() {
+            mainWSReady = false;
+            const socket = mainWS;
+            mainWS = null;
             if (socket) {
                 try { socket.onopen = socket.onmessage = socket.onerror = socket.onclose = null; } catch {}
                 try { socket.close(); } catch {}
             }
         }
 
-        function ensureSpoutWS() {
-            if (!running) return;
-            if (spoutWS && (spoutWS.readyState === WebSocket.OPEN || spoutWS.readyState === WebSocket.CONNECTING)) return;
-            const wsUrl = (typeof __getWSURL__ === 'function') ? __getWSURL__() : 'ws://127.0.0.1:8787';
-            const socket = new WebSocket(wsUrl);
-            spoutWS = socket;
+        function handleMainSocketMessage(event) {
+            if (typeof event.data !== 'string') return;
+            try {
+                const message = JSON.parse(event.data);
+                if (message.type === 'spout-ack') handleAck(message, true);
+            } catch {}
+        }
+
+        function ensureMainSocket() {
+            if (!isRunningLifecycle() || transportMode !== TRANSPORT.MAIN) return;
+            if (mainWS && (mainWS.readyState === WebSocket.OPEN || mainWS.readyState === WebSocket.CONNECTING)) return;
+            const socket = new WebSocket(wsURL());
+            mainWS = socket;
             socket.binaryType = 'arraybuffer';
+            socket.onmessage = handleMainSocketMessage;
             socket.onopen = () => {
-                if (socket !== spoutWS || !running) { try { socket.close(); } catch {} return; }
+                if (socket !== mainWS || !isRunningLifecycle() || transportMode !== TRANSPORT.MAIN) {
+                    try { socket.close(); } catch {}
+                    return;
+                }
+                mainWSReady = true;
+                transportReady = true;
                 socket.send(JSON.stringify({
                     type: 'hello', role: 'spout-sender', width: outputW, height: outputH,
                 }));
+                setLifecycle(LIFECYCLE.STREAMING);
+                updateDisplay(true);
             };
-            socket.onclose = () => { if (socket === spoutWS) spoutWS = null; };
+            socket.onclose = () => {
+                if (socket === mainWS) {
+                    mainWSReady = false;
+                    mainWS = null;
+                    transportReady = false;
+                    frameInFlight = false;
+                    if (isRunningLifecycle() && transportMode === TRANSPORT.MAIN) {
+                        setLifecycle(LIFECYCLE.RECOVERING);
+                    }
+                }
+            };
+            socket.onerror = () => {
+                if (socket === mainWS) mainWSReady = false;
+            };
         }
 
-        function sendSpoutFrame(ts) {
-            if (!running) return;
+        function clearWorkerTransportTimer() {
+            if (transportFallbackTimer) {
+                clearTimeout(transportFallbackTimer);
+                transportFallbackTimer = null;
+            }
+        }
 
-            const fpsCap = parseInt(fpsSelect?.value || '30', 10);
-            const period = 1000 / fpsCap;
+        function destroyWorker() {
+            workerReady = false;
+            clearWorkerTransportTimer();
+            if (worker) {
+                try { worker.onmessage = worker.onerror = null; } catch {}
+                try { worker.postMessage({ type: 'release' }); } catch {}
+                try { worker.terminate(); } catch {}
+            }
+            worker = null;
+        }
 
-            rafId = requestAnimationFrame(sendSpoutFrame);
+        function activateMainTransport(reason = 'worker transport unavailable') {
+            if (!isRunningLifecycle()) return;
+            clearWorkerTransportTimer();
+            if (transportMode === TRANSPORT.WORKER || workerTransportAttempted) {
+                workerTransportFallbacks++;
+                spoutTelemetry.workerTransportFallbacks = workerTransportFallbacks;
+            }
+            transportMode = TRANSPORT.MAIN;
+            transportReady = false;
+            outputFps = Math.min(requestedOutputFps, 30);
+            nextFrameDue = 0;
+            frameInFlight = false;
+            workerCaptureInFlight = false;
+            workerCanAccept = false;
+            workerOutstanding = 0;
+            spoutTelemetry.workerOutstanding = 0;
+            try { worker?.postMessage({ type: 'disable-transport' }); } catch {}
+            closeMainSocket();
+            setLifecycle(LIFECYCLE.RECOVERING);
+            console.warn(`[huff spout] using bounded main-socket fallback: ${reason}`);
+            ensureMainSocket();
+            updateDisplay(true);
+        }
 
-            if (ts - lastTs < period) return;
-
-            ensureSpoutWS();
-            if (!spoutWS || spoutWS.readyState !== WebSocket.OPEN) {
-                spoutCount('socketMisses');
+        function beginWorkerTransport() {
+            if (!worker || !workerReady || workerDisabled || !isRunningLifecycle()) {
+                activateMainTransport('Worker unavailable');
                 return;
             }
-
-            // One pending raw frame is already obsolete. Skip before readback.
-            if (spoutWS.bufferedAmount > 0) {
-                spoutCount('bufferedSkips');
+            workerTransportAttempted = true;
+            transportMode = TRANSPORT.NONE;
+            transportReady = false;
+            setLifecycle(LIFECYCLE.RECOVERING);
+            try {
+                worker.postMessage({
+                    type: 'enable-transport',
+                    url: wsURL(),
+                    width: outputW,
+                    height: outputH,
+                });
+            } catch (error) {
+                activateMainTransport(`Worker WebSocket setup failed: ${error}`);
                 return;
             }
+            clearWorkerTransportTimer();
+            transportFallbackTimer = setTimeout(() => {
+                if (isRunningLifecycle() && transportMode !== TRANSPORT.WORKER) {
+                    activateMainTransport('Worker WebSocket timed out');
+                }
+            }, WORKER_TRANSPORT_TIMEOUT_MS);
+        }
 
-            lastTs = ts;
+        function ensureWorker() {
+            if (worker || workerDisabled) return !!worker;
+            const supported = typeof Worker !== 'undefined'
+                && typeof OffscreenCanvas !== 'undefined'
+                && typeof createImageBitmap === 'function';
+            if (!supported) {
+                workerDisabled = true;
+                return false;
+            }
 
-            const src = findCanvas();
-            if (!src) return;
+            try {
+                worker = new Worker('./spout-stream-worker.js');
+                worker.onmessage = (event) => {
+                    const message = event.data || {};
+                    if (message.type === 'configured') {
+                        workerReady = true;
+                        beginWorkerTransport();
+                        updateDisplay(true);
+                        return;
+                    }
+                    if (message.type === 'transport-open') {
+                        if (transportMode === TRANSPORT.MAIN) {
+                            try { worker?.postMessage({ type: 'disable-transport' }); } catch {}
+                            return;
+                        }
+                        clearWorkerTransportTimer();
+                        transportMode = TRANSPORT.WORKER;
+                        transportReady = true;
+                        outputFps = requestedOutputFps;
+                        nextFrameDue = 0;
+                        workerCaptureInFlight = false;
+                        workerCanAccept = true;
+                        workerOutstanding = 0;
+                        spoutTelemetry.workerOutstanding = 0;
+                        setLifecycle(LIFECYCLE.STREAMING);
+                        updateDisplay(true);
+                        return;
+                    }
+                    if (message.type === 'transport-ack') {
+                        if (transportMode !== TRANSPORT.WORKER) return;
+                        workerOutstanding = Math.max(0, Number(message.outstanding) || 0);
+                        spoutTelemetry.workerOutstanding = workerOutstanding;
+                        spoutTelemetry.workerPeakOutstanding = Math.max(
+                            spoutTelemetry.workerPeakOutstanding || 0,
+                            workerOutstanding,
+                        );
+                        handleAck(message, false);
+                        return;
+                    }
+                    if (message.type === 'frame-consumed') {
+                        workerCaptureInFlight = false;
+                        workerOutstanding = Math.max(0, Number(message.outstanding) || 0);
+                        workerCanAccept = message.canAccept !== false;
+                        spoutTelemetry.workerOutstanding = workerOutstanding;
+                        spoutTelemetry.workerPeakOutstanding = Math.max(
+                            spoutTelemetry.workerPeakOutstanding || 0,
+                            workerOutstanding,
+                        );
+                        return;
+                    }
+                    if (message.type === 'transport-capacity') {
+                        workerOutstanding = Math.max(0, Number(message.outstanding) || 0);
+                        workerCanAccept = true;
+                        spoutTelemetry.workerOutstanding = workerOutstanding;
+                        return;
+                    }
+                    if (message.type === 'transport-busy') {
+                        workerCaptureInFlight = false;
+                        workerCanAccept = false;
+                        workerOutstanding = Math.max(0, Number(message.outstanding) || workerOutstanding);
+                        spoutTelemetry.workerOutstanding = workerOutstanding;
+                        count('bufferedSkips');
+                        return;
+                    }
+                    if (message.type === 'transport-failed') {
+                        if (transportMode !== TRANSPORT.MAIN) {
+                            activateMainTransport(message.message || 'Worker WebSocket failed');
+                        }
+                        return;
+                    }
+                    if (message.type === 'error') {
+                        console.warn('[huff spout worker]', message.message);
+                        workerCaptureInFlight = false;
+                        frameInFlight = false;
+                        workerDisabled = true;
+                        destroyWorker();
+                        activateMainTransport(message.message || 'Worker processing failed');
+                        return;
+                    }
+                    if (message.type !== 'pixels') return;
 
-            if (!spoutCanvas || spoutCanvas.width !== outputW || spoutCanvas.height !== outputH) {
-                spoutCount('surfaceRebuilds');
-                spoutCanvas = document.createElement('canvas');
-                spoutCanvas.width  = outputW;
-                spoutCanvas.height = outputH;
-                spoutCtx = spoutCanvas.getContext('2d', {
+                    if (window.__huffProfilerActive && message.profiled) {
+                        profileAdd('workerDrawMs', Number(message.drawMs) || 0);
+                        profileAdd('workerReadMs', Number(message.readMs) || 0);
+                        profileAdd('workerSamples');
+                    }
+                    if (transportMode !== TRANSPORT.MAIN || !mainWSReady || mainWS?.readyState !== WebSocket.OPEN) {
+                        frameInFlight = false;
+                        count('socketMisses');
+                        return;
+                    }
+                    try {
+                        mainWS.send(message.buffer);
+                    } catch {
+                        frameInFlight = false;
+                        transportReady = false;
+                        closeMainSocket();
+                        setLifecycle(LIFECYCLE.RECOVERING);
+                    }
+                };
+                worker.onerror = (event) => {
+                    console.warn('[huff spout worker]', event.message || event);
+                    workerCaptureInFlight = false;
+                    frameInFlight = false;
+                    workerDisabled = true;
+                    destroyWorker();
+                    activateMainTransport(event.message || 'Worker crashed');
+                };
+                worker.postMessage({ type: 'configure', width: outputW, height: outputH });
+                return true;
+            } catch (error) {
+                console.warn('[huff spout] worker unavailable:', error);
+                workerDisabled = true;
+                destroyWorker();
+                return false;
+            }
+        }
+
+        function ensureFallbackSurface() {
+            if (!fallbackCanvas) {
+                count('surfaceRebuilds');
+                fallbackCanvas = document.createElement('canvas');
+                fallbackCtx = fallbackCanvas.getContext('2d', {
                     alpha: false,
                     desynchronized: true,
                     willReadFrequently: true,
                 });
             }
+            if (!fallbackCtx) return false;
+            if (fallbackCanvas.width !== outputW || fallbackCanvas.height !== outputH) {
+                count('surfaceRebuilds');
+                fallbackCanvas.width = outputW;
+                fallbackCanvas.height = outputH;
+            }
+            return true;
+        }
+
+        function captureFallback(source) {
+            if (transportMode !== TRANSPORT.MAIN || !mainWSReady) {
+                frameInFlight = false;
+                count('socketMisses');
+                return;
+            }
+            if (!ensureFallbackSurface()) {
+                frameInFlight = false;
+                return;
+            }
 
             const profiled = !!window.__huffProfilerActive;
             let phaseStarted = profiled ? performance.now() : 0;
-            spoutCtx.globalAlpha = 1;
-            spoutCtx.globalCompositeOperation = 'copy';
-            spoutCtx.drawImage(src, 0, 0, outputW, outputH);
-            spoutCtx.globalCompositeOperation = 'source-over';
-            if (profiled) {
-                spoutProfile('drawMs', performance.now() - phaseStarted);
-                spoutProfile('drawSamples', 1);
-                phaseStarted = performance.now();
-            }
-
-            let imageData;
-            try { imageData = spoutCtx.getImageData(0, 0, outputW, outputH); }
-            catch { return; }
-            if (profiled) {
-                spoutProfile('readMs', performance.now() - phaseStarted);
-                spoutProfile('readSamples', 1);
-                phaseStarted = performance.now();
-            }
-
-            // Send the ImageData view directly. This removes the old second
-            // frame-sized Uint8Array and .set() copy from every Spout frame.
-            spoutWS.send(imageData.data);
-            if (profiled) {
-                spoutProfile('sendMs', performance.now() - phaseStarted);
-                spoutProfile('sendSamples', 1);
-            }
-            spoutCount('sentFrames');
-            frameCount++;
-            if (frameCountEl && (frameCount % 15 === 0)) {
-                frameCountEl.textContent = `${frameCount} frames`;
+            try {
+                fallbackCtx.globalAlpha = 1;
+                fallbackCtx.globalCompositeOperation = 'copy';
+                fallbackCtx.drawImage(source, 0, 0, outputW, outputH);
+                fallbackCtx.globalCompositeOperation = 'source-over';
+                if (profiled) {
+                    profileAdd('drawMs', performance.now() - phaseStarted);
+                    profileAdd('drawSamples');
+                    phaseStarted = performance.now();
+                }
+                const imageData = fallbackCtx.getImageData(0, 0, outputW, outputH);
+                if (profiled) {
+                    profileAdd('readMs', performance.now() - phaseStarted);
+                    profileAdd('readSamples');
+                    phaseStarted = performance.now();
+                }
+                mainWS.send(imageData.data.buffer);
+                if (profiled) {
+                    profileAdd('sendMs', performance.now() - phaseStarted);
+                    profileAdd('sendSamples');
+                }
+            } catch (error) {
+                console.warn('[huff spout] fallback capture failed:', error);
+                frameInFlight = false;
             }
         }
 
-        // ── start / stop ──────────────────────────────────────────────────────
+        async function captureWorker(source, id) {
+            let bitmap = null;
+            const profiled = !!window.__huffProfilerActive;
+            const started = profiled ? performance.now() : 0;
+            try {
+                const needsScale = source.width !== outputW || source.height !== outputH;
+                if (needsScale) {
+                    try {
+                        bitmap = await createImageBitmap(source, 0, 0, source.width, source.height, {
+                            resizeWidth: outputW,
+                            resizeHeight: outputH,
+                            resizeQuality: 'low',
+                        });
+                    } catch {}
+                }
+                if (!bitmap) bitmap = await createImageBitmap(source);
+
+                if (profiled) {
+                    profileAdd('captureMs', performance.now() - started);
+                    profileAdd('captureSamples');
+                }
+                if (!isRunningLifecycle() || !worker || !transportReady) {
+                    try { bitmap.close?.(); } catch {}
+                    workerCaptureInFlight = false;
+                    if (transportMode === TRANSPORT.MAIN) frameInFlight = false;
+                    return;
+                }
+                worker.postMessage({
+                    type: 'frame',
+                    id,
+                    width: outputW,
+                    height: outputH,
+                    profile: profiled,
+                    returnPixels: transportMode === TRANSPORT.MAIN,
+                    bitmap,
+                }, [bitmap]);
+            } catch (error) {
+                try { bitmap?.close?.(); } catch {}
+                console.warn('[huff spout] ImageBitmap capture failed:', error);
+                workerCaptureInFlight = false;
+                frameInFlight = false;
+                workerDisabled = true;
+                destroyWorker();
+                if (transportMode !== TRANSPORT.MAIN) activateMainTransport('ImageBitmap/Worker capture failed');
+            }
+        }
+
+        function recoverTransport(reason) {
+            frameInFlight = false;
+            workerCaptureInFlight = false;
+            workerCanAccept = false;
+            transportReady = false;
+            setLifecycle(LIFECYCLE.RECOVERING);
+            if (transportMode === TRANSPORT.WORKER) {
+                activateMainTransport(reason);
+            } else if (transportMode === TRANSPORT.MAIN) {
+                closeMainSocket();
+                ensureMainSocket();
+            }
+        }
+
+        // Deadline-based output cadence. Unlike `ts - lastTs < period`, this
+        // preserves an ideal phase and tolerates small 60 Hz rAF jitter without
+        // accidentally turning a near-16.67 ms frame into a 33 ms gap. It also
+        // remains capped correctly on 120/144/165 Hz displays.
+        function outputFrameDue(ts) {
+            const fps = Math.max(1, Number(outputFps) || 60);
+            const period = 1000 / fps;
+            const tolerance = Math.min(1.25, period * 0.08);
+            if (!Number.isFinite(nextFrameDue) || nextFrameDue <= 0 || ts - nextFrameDue > period * 4) {
+                nextFrameDue = ts + period;
+                return true;
+            }
+            if (ts + tolerance < nextFrameDue) return false;
+            while (nextFrameDue <= ts + tolerance) nextFrameDue += period;
+            return true;
+        }
+
+        function sendFrame(ts) {
+            if (!isRunningLifecycle()) return;
+            rafId = requestAnimationFrame(sendFrame);
+            flushDisplayIfDue();
+
+            if (!transportReady) {
+                if (transportMode === TRANSPORT.MAIN) ensureMainSocket();
+                return;
+            }
+
+            if (transportMode === TRANSPORT.MAIN && frameInFlight) {
+                count('inFlightSkips');
+                if (ts - frameStartedAt > ACK_TIMEOUT_MS) recoverTransport('Spout ACK timeout');
+                return;
+            }
+            if (transportMode === TRANSPORT.WORKER) {
+                if (workerCaptureInFlight) {
+                    count('inFlightSkips');
+                    return;
+                }
+                if (!workerCanAccept) {
+                    count('capacitySkips');
+                    return;
+                }
+            }
+
+            if (transportMode === TRANSPORT.MAIN && mainWS?.bufferedAmount > 0) {
+                count('bufferedSkips');
+                return;
+            }
+
+            if (!outputFrameDue(ts)) return;
+
+            const source = findCanvas();
+            if (!source || !source.width || !source.height) return;
+
+            frameStartedAt = ts;
+            const id = nextFrameId++;
+            if (workerReady && worker) {
+                if (transportMode === TRANSPORT.WORKER) workerCaptureInFlight = true;
+                else frameInFlight = true;
+                captureWorker(source, id);
+            } else {
+                frameInFlight = true;
+                captureFallback(source);
+            }
+        }
+
+        async function pollRuntimeState(force = false) {
+            if (!isRunningLifecycle() || statePollBusy) return;
+            const now = performance.now();
+            if (!force && lastAckAt > 0 && now - lastAckAt < 750) {
+                // ACKs carry the frame counter. Adapter/FPS diagnostics still get
+                // refreshed by the 2 s timer after this short hot-path quieting.
+            }
+            statePollBusy = true;
+            count('statusPolls');
+            try {
+                const state = await invoke('spout_runtime_state');
+                applyRuntimeState(state);
+            } catch {}
+            finally { statePollBusy = false; }
+        }
+
         function releaseSpoutTransport({ stopNative = false, clearPollTimer = false } = {}) {
-            running = false;
-            spoutTelemetry.running = false;
+            frameInFlight = false;
+            workerCaptureInFlight = false;
+            workerCanAccept = true;
+            workerOutstanding = 0;
+            spoutTelemetry.workerOutstanding = 0;
+            statePollBusy = false;
+            transportReady = false;
+            transportMode = TRANSPORT.NONE;
+            workerTransportAttempted = false;
+            clearWorkerTransportTimer();
             if (rafId) {
                 cancelAnimationFrame(rafId);
                 rafId = null;
             }
-            if (clearPollTimer && statusPollTimer) {
-                clearInterval(statusPollTimer);
-                statusPollTimer = null;
+            if (clearPollTimer && statePollTimer) {
+                clearInterval(statePollTimer);
+                statePollTimer = null;
             }
-            closeSpoutWS();
-            if (spoutCanvas) {
-                spoutCanvas.width = 1;
-                spoutCanvas.height = 1;
+            closeMainSocket();
+            destroyWorker();
+            if (fallbackCanvas) {
+                fallbackCanvas.width = 1;
+                fallbackCanvas.height = 1;
             }
-            spoutCanvas = null;
-            spoutCtx = null;
+            fallbackCanvas = null;
+            fallbackCtx = null;
             sourceCanvas = null;
             if (stopNative) {
                 try { invoke('stop_spout').catch(() => {}); } catch {}
             }
         }
 
-        async function startSpout() {
-            if (running || startPending || stopPending || shuttingDown) return;
-            const generation = ++lifecycleGeneration;
-            startPending = true;
-            const w = parseInt(wInput?.value || '1280', 10);
-            const h = parseInt(hInput?.value || '720',  10);
+        function resetSessionCounters() {
+            nativeFrames = 0;
+            lastAckAt = 0;
+            nextFrameDue = 0;
+            frameInFlight = false;
+            frameStartedAt = 0;
+            workerCaptureInFlight = false;
+            workerCanAccept = true;
+            workerOutstanding = 0;
+            spoutTelemetry.workerOutstanding = 0;
+            spoutTelemetry.workerPeakOutstanding = 0;
+            nextFrameId = 1;
+            workerDisabled = false;
+            workerTransportAttempted = false;
+            workerTransportFallbacks = 0;
+            spoutTelemetry.workerTransportFallbacks = 0;
+            adapterIndex = -1;
+            adapterCount = 0;
+            adapterName = '';
+            senderFps = 0;
+            spoutTelemetry.adapterIndex = -1;
+            spoutTelemetry.adapterCount = 0;
+            spoutTelemetry.adapterName = '';
+            spoutTelemetry.senderFps = 0;
+            displayDirty = true;
+            lastDisplayAt = -Infinity;
+            lastStatusText = '';
+            lastFrameText = '';
+            lastStatusClass = '';
+        }
 
-            setStatus(`Starting Spout sender at ${w}×${h}…`);
+        async function startSpout() {
+            if (lifecycle !== LIFECYCLE.OFF) return;
+            const generation = ++lifecycleGeneration;
+            outputW = Math.max(64, parseInt(wInput?.value || '1280', 10));
+            outputH = Math.max(64, parseInt(hInput?.value || '720', 10));
+            requestedOutputFps = Math.max(1, parseInt(fpsSelect?.value || '60', 10));
+            outputFps = requestedOutputFps;
+            resetSessionCounters();
+            spoutTelemetry.running = true;
+            spoutTelemetry.outputWidth = outputW;
+            spoutTelemetry.outputHeight = outputH;
+            setLifecycle(LIFECYCLE.STARTING);
+            updateDisplay(true);
+
             try {
-                const msg = await invoke('start_spout', { width: w, height: h });
-                if (shuttingDown || generation !== lifecycleGeneration) {
+                const message = await invoke('start_spout', { width: outputW, height: outputH });
+                if (generation !== lifecycleGeneration || lifecycle !== LIFECYCLE.STARTING) {
                     try { invoke('stop_spout').catch(() => {}); } catch {}
                     return;
                 }
-                setStatus(`${msg}\nSending ${w}×${h} pixels → Spout → look for "huff" in your VJ software.`, 'active');
-                outputW    = Math.max(64, w);
-                outputH    = Math.max(64, h);
-                running    = true;
-                spoutTelemetry.running = true;
-                spoutTelemetry.outputWidth = outputW;
-                spoutTelemetry.outputHeight = outputH;
-                frameCount = 0;
-                lastTs     = 0;
-                ensureSpoutWS();
-                toggleBtn.textContent = '■ Stop';
-                toggleBtn.classList.add('active');
+
+                setLifecycle(LIFECYCLE.RECOVERING);
                 setPillActive(true);
-                rafId = requestAnimationFrame(sendSpoutFrame);
-            } catch(e) {
-                if (!shuttingDown && generation === lifecycleGeneration) setStatus(`⚠ ${e}`, 'error');
-            } finally {
-                if (generation === lifecycleGeneration) startPending = false;
+                if (toggleBtn) {
+                    toggleBtn.textContent = '■ Stop';
+                    toggleBtn.classList.add('active');
+                }
+                if (statusBox) {
+                    statusBox.textContent = `${message}\nEstablishing bounded 60 fps output transport…`;
+                    statusBox.className = 'active';
+                }
+
+                if (!ensureWorker()) activateMainTransport('Worker/OffscreenCanvas unavailable');
+                await pollRuntimeState(true);
+                if (generation !== lifecycleGeneration || !isRunningLifecycle()) return;
+
+                if (!rafId) rafId = requestAnimationFrame(sendFrame);
+                updateDisplay(true);
+            } catch (error) {
+                if (generation === lifecycleGeneration) {
+                    setLifecycle(LIFECYCLE.OFF);
+                    spoutTelemetry.running = false;
+                    if (statusBox) {
+                        statusBox.textContent = `⚠ ${error}`;
+                        statusBox.className = 'error';
+                    }
+                    setPillActive(false);
+                    if (toggleBtn) {
+                        toggleBtn.textContent = '▶ Start';
+                        toggleBtn.classList.remove('active');
+                    }
+                    releaseSpoutTransport();
+                }
             }
         }
 
         async function stopSpout() {
-            if (stopPending) return;
-            stopPending = true;
+            if (lifecycle === LIFECYCLE.OFF || lifecycle === LIFECYCLE.STOPPING) return;
             ++lifecycleGeneration;
-            startPending = false;
+            setLifecycle(LIFECYCLE.STOPPING);
+            updateDisplay(true);
             releaseSpoutTransport();
-            toggleBtn.textContent = '▶ Start';
-            toggleBtn.classList.remove('active');
-            setPillActive(false);
-            if (frameCountEl) frameCountEl.textContent = '';
+            spoutTelemetry.running = false;
+
             try {
-                const msg = await invoke('stop_spout');
-                setStatus(msg);
-            } catch(e) {
-                setStatus(`⚠ stop failed: ${e}`, 'error');
-            } finally {
-                stopPending = false;
+                const message = await invoke('stop_spout');
+                if (statusBox) statusBox.textContent = message;
+            } catch (error) {
+                if (statusBox) {
+                    statusBox.textContent = `⚠ stop failed: ${error}`;
+                    statusBox.className = 'error';
+                }
             }
+
+            setLifecycle(LIFECYCLE.OFF);
+            if (statusBox) statusBox.className = '';
+            setPillActive(false);
+            if (toggleBtn) {
+                toggleBtn.textContent = '▶ Start';
+                toggleBtn.classList.remove('active');
+            }
+            if (frameCountEl) frameCountEl.textContent = '';
         }
 
         toggleBtn?.addEventListener('click', () => {
-            running ? stopSpout() : startSpout();
+            lifecycle === LIFECYCLE.OFF ? startSpout() : stopSpout();
         });
 
-        // ── status poll ───────────────────────────────────────────────────────
-        statusPollTimer = setInterval(async () => {
-            if (!running || shuttingDown) return;
-            spoutCount('statusPolls');
-            try {
-                const s = await invoke('spout_status');
-                if (running && !shuttingDown) setStatus(s, 'active');
-            } catch {}
-        }, 2000);
+        statePollTimer = setInterval(() => pollRuntimeState(false), 2000);
 
         function shutdownSpout() {
-            if (shuttingDown) return;
-            shuttingDown = true;
+            if (lifecycle === LIFECYCLE.STOPPING) return;
             ++lifecycleGeneration;
-            startPending = false;
-            stopPending = false;
+            setLifecycle(LIFECYCLE.STOPPING);
+            spoutTelemetry.running = false;
             releaseSpoutTransport({ stopNative: true, clearPollTimer: true });
         }
         window.addEventListener('pagehide', shutdownSpout, { once: true });
         window.addEventListener('beforeunload', shutdownSpout, { once: true });
-
     })();
     </script>
+
 
     <!-- ═══ OSC Engine ═══════════════════════════════════════════════════ -->
     <script>

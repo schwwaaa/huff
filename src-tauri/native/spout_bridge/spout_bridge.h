@@ -18,6 +18,12 @@ SPOUT_BRIDGE_API int  spoutdx_init_sender(const char* name, int width, int heigh
 // Returns 1 on success, 0 on failure.
 SPOUT_BRIDGE_API int  spoutdx_send_image(const uint8_t* pixels, int width, int height);
 
+// Diagnostics only. These calls do not change the selected adapter.
+SPOUT_BRIDGE_API int    spoutdx_get_adapter_index();
+SPOUT_BRIDGE_API int    spoutdx_get_adapter_count();
+SPOUT_BRIDGE_API int    spoutdx_get_adapter_name(char* buffer, int maxchars);
+SPOUT_BRIDGE_API double spoutdx_get_sender_fps();
+
 // Release sender and D3D11 device.
 SPOUT_BRIDGE_API void spoutdx_shutdown();
 

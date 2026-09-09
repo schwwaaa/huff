@@ -70,6 +70,41 @@ int spoutdx_send_image(const uint8_t* pixels, int width, int height) {
     } catch (...) { return 0; }
 }
 
+int spoutdx_get_adapter_index() {
+    try {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        if (!g_sender) return -1;
+        return g_sender->GetAdapter();
+    } catch (...) { return -1; }
+}
+
+int spoutdx_get_adapter_count() {
+    try {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        if (!g_sender) return 0;
+        return g_sender->GetNumAdapters();
+    } catch (...) { return 0; }
+}
+
+int spoutdx_get_adapter_name(char* buffer, int maxchars) {
+    try {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        if (!g_sender || !buffer || maxchars <= 0) return 0;
+        const int index = g_sender->GetAdapter();
+        if (index < 0) return 0;
+        buffer[0] = '\0';
+        return g_sender->GetAdapterName(index, buffer, maxchars) ? 1 : 0;
+    } catch (...) { return 0; }
+}
+
+double spoutdx_get_sender_fps() {
+    try {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        if (!g_sender) return 0.0;
+        return g_sender->GetSenderFps();
+    } catch (...) { return 0.0; }
+}
+
 void spoutdx_shutdown() {
     try {
         std::lock_guard<std::mutex> lock(g_mutex);

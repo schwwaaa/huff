@@ -602,7 +602,35 @@ async fn handle_ws(
             if (sender_role == "spout-sender" || sender_role == "spout")
               && sender_width > 0 && sender_height > 0
             {
-              spout::push_pixels(sender_width, sender_height, &bin);
+              // Spout optimization pass 1: acknowledge only after the native
+              // SpoutDX::SendImage call has completed. The Worker uses these
+              // acknowledgements as bounded native credits, so stale frames can
+              // never grow into a latency queue behind the D3D11 upload.
+              let frame_before = spout::FRAME_COUNT.load(std::sync::atomic::Ordering::Relaxed);
+              let measure_native = frame_before % 30 == 0;
+              let result = spout::push_pixels_profiled(
+                sender_width,
+                sender_height,
+                &bin,
+                measure_native,
+              );
+              let frames = spout::FRAME_COUNT.load(std::sync::atomic::Ordering::Relaxed);
+              let ack = if result.native_sample {
+                serde_json::json!({
+                  "type": "spout-ack",
+                  "published": result.published,
+                  "frames": frames,
+                  "nativeSample": true,
+                  "nativeUploadUs": result.upload_micros,
+                })
+              } else {
+                serde_json::json!({
+                  "type": "spout-ack",
+                  "published": result.published,
+                  "frames": frames,
+                })
+              };
+              let _ = control_tx.send(Message::Text(ack.to_string())).await;
             } else if bin.starts_with(b"HUFFSPOUT") {
               // Legacy packet support for older HUFF Classic frontends.
               spout::push_frame(&bin);
@@ -728,6 +756,34 @@ fn spout_status() -> String {
     { "unavailable (Windows only)".into() }
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SpoutRuntimeState {
+    active: bool,
+    width: u32,
+    height: u32,
+    frames: u64,
+    adapter_index: i32,
+    adapter_count: i32,
+    adapter_name: String,
+    sender_fps: f64,
+}
+
+#[command]
+fn spout_runtime_state() -> SpoutRuntimeState {
+    let state = spout::runtime_snapshot();
+    SpoutRuntimeState {
+        active: state.active,
+        width: state.width,
+        height: state.height,
+        frames: state.frames,
+        adapter_index: state.adapter_index,
+        adapter_count: state.adapter_count,
+        adapter_name: state.adapter_name,
+        sender_fps: state.sender_fps,
+    }
+}
+
 fn shutdown_native_runtime() {
     if RUNTIME_SHUTDOWN_STARTED.swap(true, Ordering::SeqCst) {
         return;
@@ -779,6 +835,7 @@ tauri::Builder::default()
       start_spout,
       stop_spout,
       spout_status,
+      spout_runtime_state,
   ])
   .setup(|app| {
       const PORT: u16 = 8787;
