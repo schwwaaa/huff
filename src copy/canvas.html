@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Canvas Viewer</title>
+  <style>
+    html,body{ margin:0; width:100vw; height:100vh; background:#000; overflow:hidden; }
+    #mirror{ position:fixed; inset:0; width:100vw; height:100vh; display:block; }
+    * { user-select:none; }
+
+    .custom-titlebar {
+      width: 100%;
+      height: 32px;
+      background: #333;
+      -webkit-app-region: no-drag;
+    }
+  </style>
+</head>
+<body>
+  <div data-tauri-drag-region class="custom-titlebar">
+    <span>huff · canvas mirror</span>
+  </div>
+  <canvas id="mirror"></canvas>
+  <script>
+    function qs(name) {
+      const q = new URLSearchParams(location.search);
+      return q.get(name);
+    }
+
+    // If ?ws= is present, use it; otherwise talk to our fixed relay port.
+    const wsURL  = qs('ws') || 'ws://127.0.0.1:8787';
+    const autofs = qs('autofs') === '1';
+
+    const cvs = document.getElementById('mirror');
+    // Keep the backing store at the encoded frame's native dimensions and let
+    // CSS/GPU composition scale it to the output window. The old viewer resized
+    // its backing canvas to the full display (and up to 2× DPR), forcing every
+    // 1280px mirror frame to be redrawn into a multi-megapixel surface.
+    const bitmapCtx = cvs.getContext('bitmaprenderer');
+    const ctx = bitmapCtx ? null : cvs.getContext('2d', { alpha:false, desynchronized:true });
+    cvs.width = 1;
+    cvs.height = 1;
+
+    function isFullscreen(){ return !!(document.fullscreenElement || document.webkitFullscreenElement); }
+    async function goFullscreen(){
+      try{
+        const el = document.documentElement;
+        if (el.requestFullscreen) await el.requestFullscreen();
+        else if (el.webkitRequestFullscreen) await el.webkitRequestFullscreen();
+      }catch(e){}
+    }
+    function toggleFS(){
+      if (isFullscreen()) {
+        const ex = document.exitFullscreen || document.webkitExitFullscreen;
+        if (ex) ex.call(document);
+      } else {
+        goFullscreen();
+      }
+    }
+    document.addEventListener('dblclick', toggleFS);
+    document.addEventListener('keydown', e => { if (e.key==='f' || e.key==='F') toggleFS(); });
+    let autofsTimer = 0;
+    if (autofs) autofsTimer = setTimeout(()=>{ autofsTimer = 0; goFullscreen(); }, 120);
+
+// ── WebSocket with owned reconnect + decode lifecycle ─────────────────────
+let ws = null;
+let reconnectTimer = 0;
+let _wsDelay = 1000; // start at 1 s, doubles up to 16 s
+const WS_DELAY_MAX = 16000;
+let viewerShutdown = false;
+let socketGeneration = 0;
+let pendingFrame = null; // newest received frame bytes not yet rendered
+let decodeBusy = false;  // one decode/draw at a time
+
+function clearReconnectTimer() {
+  if (!reconnectTimer) return;
+  clearTimeout(reconnectTimer);
+  reconnectTimer = 0;
+}
+
+function scheduleReconnect() {
+  if (viewerShutdown || reconnectTimer) return;
+  const delay = _wsDelay;
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = 0;
+    connectWS();
+  }, delay);
+  _wsDelay = Math.min(_wsDelay * 2, WS_DELAY_MAX);
+}
+
+function drainPending(generation) {
+  if (viewerShutdown || decodeBusy || pendingFrame == null) return;
+  decodeBusy = true;
+  const data = pendingFrame;
+  pendingFrame = null;
+  let blob;
+  try { blob = new Blob([data]); }
+  catch { decodeBusy = false; return; }
+
+  createImageBitmap(blob, { imageOrientation:'none', premultiplyAlpha:'premultiply' })
+    .then(bmp => {
+      if (viewerShutdown || generation !== socketGeneration) {
+        bmp.close?.();
+        return;
+      }
+      if (cvs.width !== bmp.width || cvs.height !== bmp.height) {
+        cvs.width = bmp.width;
+        cvs.height = bmp.height;
+      }
+      if (bitmapCtx) {
+        bitmapCtx.transferFromImageBitmap(bmp);
+        bmp.close?.();
+      } else {
+        ctx.globalAlpha = 1;
+        ctx.globalCompositeOperation = 'copy';
+        ctx.drawImage(bmp, 0, 0);
+        ctx.globalCompositeOperation = 'source-over';
+        bmp.close?.();
+      }
+    })
+    .catch(e => { if (!viewerShutdown) console.warn('[canvas ws] bad frame', e); })
+    .finally(() => {
+      decodeBusy = false;
+      if (!viewerShutdown && generation === socketGeneration && pendingFrame != null) {
+        drainPending(generation);
+      }
+    });
+}
+
+function connectWS() {
+  if (viewerShutdown) return;
+  if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
+  clearReconnectTimer();
+  const generation = ++socketGeneration;
+  const socket = new WebSocket(wsURL);
+  ws = socket;
+  socket.binaryType = 'arraybuffer';
+
+  socket.onopen = () => {
+    if (viewerShutdown || socket !== ws || generation !== socketGeneration) {
+      try { socket.close(); } catch {}
+      return;
+    }
+    clearReconnectTimer();
+    console.log('[canvas ws] connected to', wsURL);
+    _wsDelay = 1000;
+    try { socket.send(JSON.stringify({ type:'hello', role:'canvas' })); } catch(e) { console.error(e); }
+  };
+
+  socket.onerror = (ev) => {
+    if (!viewerShutdown) console.error('[canvas ws] error', ev);
+  };
+
+  socket.onclose = (ev) => {
+    if (socket !== ws) return;
+    ws = null;
+    pendingFrame = null;
+    if (!viewerShutdown) {
+      console.warn('[canvas ws] closed', ev.code, ev.reason, `— reconnecting in ${_wsDelay}ms`);
+      scheduleReconnect();
+    }
+  };
+
+  // Latest-frame-wins: frames arriving during decode replace the pending frame.
+  socket.onmessage = (ev) => {
+    if (viewerShutdown || socket !== ws || generation !== socketGeneration) return;
+    if (typeof ev.data === 'string') return;
+    pendingFrame = ev.data;
+    if (!decodeBusy) drainPending(generation);
+  };
+}
+
+function shutdownViewer() {
+  if (viewerShutdown) return;
+  viewerShutdown = true;
+  socketGeneration++;
+  pendingFrame = null;
+  clearReconnectTimer();
+  if (autofsTimer) {
+    clearTimeout(autofsTimer);
+    autofsTimer = 0;
+  }
+  const socket = ws;
+  ws = null;
+  if (socket) {
+    try { socket.onopen = socket.onmessage = socket.onerror = socket.onclose = null; } catch {}
+    try { socket.close(); } catch {}
+  }
+}
+
+window.addEventListener('pagehide', shutdownViewer, { once:true });
+window.addEventListener('beforeunload', shutdownViewer, { once:true });
+connectWS();
+  </script>
+</body>
+</html>
