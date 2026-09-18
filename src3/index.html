@@ -1969,91 +1969,6 @@
         }
     </style>
 
-
-    <style id="huff-symmetry-expansion-v1">
-        #symmetryGroup .group-body { padding: 6px 8px 7px; }
-        #symmetryGroup .symmetry-box-row { gap: 6px; row-gap: 7px; align-items: center; }
-        #symmetryGroup .symmetry-box { min-height: 30px; box-sizing: border-box; gap: 6px; padding: 3px 7px; }
-        #symmetryGroup .symmetry-box > label {
-            font-family: 'VT323', 'Courier New', monospace !important;
-            font-size: 12px !important; line-height: 1 !important; color: var(--ui-text) !important;
-            opacity: 1 !important; letter-spacing: .06em; text-transform: uppercase;
-        }
-        #symmetryGroup select {
-            height: 26px !important; min-height: 26px !important; box-sizing: border-box !important;
-            font-family: 'VT323', 'Courier New', monospace !important; font-size: 12px !important; line-height: 20px !important;
-        }
-        #symmetryGroup input[type="range"]:not(#symPos) { width: 150px !important; flex: 0 0 150px !important; }
-        #symmetryGroup input[type="checkbox"] { width: 16px; height: 16px; }
-    </style>
-
-
-    <style id="huff-global-mix-cleanup-v1">
-        /*
-         * GLOBAL MIX cleanup only.
-         * Same boxed control language established in Source / Presets / Symmetry.
-         */
-
-        #globalMixGroup .group-body {
-            padding: 6px 8px 7px;
-        }
-
-        #globalMixGroup .global-mix-box-row {
-            gap: 6px;
-            row-gap: 7px;
-            align-items: center;
-        }
-
-        #globalMixGroup .global-mix-box {
-            min-height: 30px;
-            box-sizing: border-box;
-            gap: 6px;
-            padding: 3px 7px;
-        }
-
-        #globalMixGroup .global-mix-box > label {
-            font-family: 'VT323', 'Courier New', monospace !important;
-            font-size: 12px !important;
-            line-height: 1 !important;
-            color: var(--ui-text) !important;
-            opacity: 1 !important;
-            letter-spacing: .06em;
-            text-transform: uppercase;
-        }
-
-        #globalMixGroup input[type="checkbox"] {
-            width: 16px;
-            height: 16px;
-        }
-
-        #globalMixGroup #globalMixAmt {
-            width: 150px !important;
-            flex: 0 0 150px !important;
-        }
-
-        #globalMixGroup select {
-            height: 26px !important;
-            min-height: 26px !important;
-            box-sizing: border-box !important;
-            font-family: 'VT323', 'Courier New', monospace !important;
-            font-size: 12px !important;
-            line-height: 20px !important;
-            padding: 1px 24px 1px 6px !important;
-        }
-
-        #globalMixGroup #globalMixBlend {
-            min-width: 140px;
-        }
-
-        #globalMixGroup #globalMixCurve {
-            min-width: 100px;
-        }
-
-        #globalMixGroup #globalMixPos {
-            min-width: 120px;
-        }
-    </style>
-
 </head>
 
 <body>
@@ -2465,6 +2380,7 @@
                                     <option value="">— choose preset —</option>
                                 </select>
                                 <button id="presetBuiltinLoadBtn" type="button" class="btn-dim">RECALL</button>
+                                <button id="resetBtn" title="Reset all parameters to defaults">↺ RESET</button>
                             </div>
 
                             <div class="ctrl preset-box preset-file-box">
@@ -2477,9 +2393,9 @@
                                     title="Choose a local HUFF preset JSON file. It is loaded immediately and added to the preset menu for this HUFF session only.">LOAD FILE…</button>
                             </div>
 
-                            <div class="ctrl preset-box preset-reset-box">
+                            <!-- <div class="ctrl preset-box preset-reset-box">
                                 <button id="resetBtn" title="Reset all parameters to defaults">↺ RESET</button>
-                            </div>
+                            </div> -->
 
                             <!-- <span id="presetFileState" style="font-size:9px;color:rgba(255,255,255,.34);padding:0 4px;font-family:'Share Tech Mono',monospace">loaded files stay for this session · Ctrl+Z undo</span> -->
                         </div>
@@ -2560,91 +2476,41 @@
             </div> -->
 
                 <!-- SYMMETRY -->
-                <div class="group" id="symmetryGroup">
+                <div class="group">
                     <div class="group-label">Symmetry</div>
                     <div class="group-body">
-                        <div class="group-row symmetry-box-row">
-                            <div class="ctrl symmetry-box">
-                                <label>MIRROR</label>
-                                <input id="symOn" type="checkbox"
-                                    title="Enable the mirror processor. Horizontal/Vertical Flip remain independent so they can be used without mirror symmetry.">
+                        <div class="group-row">
+                            <div class="ctrl"><label>ON</label><input id="symOn" type="checkbox"
+                                    title="Downstream processor. In the CLASSIC recipe, start imagery with Corrupt, Scanlines, or Luma Key set to COMPOSITE so Symmetry has a live image stream to transform.">
                             </div>
                             <!-- <span class="pipeline-role">DOWNSTREAM</span> -->
                             <!-- <span id="symPipelineState" class="pipeline-stage-state">WAITING FOR FEED</span> -->
-                            <div class="ctrl symmetry-box">
+                            <div class="ctrl">
                                 <label>MODE</label>
-                                <select id="symMode"
-                                    title="VERTICAL mirrors across AXIS X. HORIZONTAL mirrors across AXIS Y. BOTH applies both mirror passes. QUAD creates a true four-way reflection from the selected source quadrant.">
-                                    <option value="v">VERTICAL</option>
-                                    <option value="h">HORIZONTAL</option>
-                                    <option value="hv">BOTH</option>
-                                    <option value="quad">QUAD</option>
+                                <select id="symMode">
+                                    <option value="v">vertical</option>
+                                    <option value="h">horizontal</option>
+                                    <option value="hv">both</option>
                                 </select>
                             </div>
-                            <div class="ctrl symmetry-box">
-                                <label>MIX</label>
-                                <input id="symMix" type="range" min="0" max="1" step="0.01" value="1"
-                                    title="Wet/dry amount for the mirror operation. 1.00 preserves the established HUFF symmetry behavior.">
-                                <span class="val" id="symMixVal">1.00</span>
+                            <div class="ctrl">
+                                <label>SYM POS</label>
+                                <input id="symPos" type="range" min="0" max="1" step="0.001" value="0.5">
+                                <span class="val" id="symPosVal">0.50</span>
                             </div>
-                            <div class="ctrl symmetry-box">
-                                <label>H FLIP</label>
-                                <input id="symFlipH" type="checkbox" title="Flip the incoming image left-to-right. Independent of MIRROR.">
-                            </div>
-                            <div class="ctrl symmetry-box">
-                                <label>V FLIP</label>
-                                <input id="symFlipV" type="checkbox" title="Flip the incoming image top-to-bottom. Independent of MIRROR.">
-                            </div>
-                        </div>
-
-                        <div class="group-row symmetry-box-row">
-                            <div class="ctrl symmetry-box">
-                                <label>AXIS X</label>
-                                <input id="symPosX" type="range" min="0" max="1" step="0.001" value="0.5"
-                                    title="Vertical mirror axis position from left (0) to right (1).">
-                                <span class="val" id="symPosXVal">0.50</span>
-                            </div>
-                            <div class="ctrl symmetry-box">
-                                <label>AXIS Y</label>
-                                <input id="symPosY" type="range" min="0" max="1" step="0.001" value="0.5"
-                                    title="Horizontal mirror axis position from top (0) to bottom (1).">
-                                <span class="val" id="symPosYVal">0.50</span>
-                            </div>
-                            <div class="ctrl symmetry-box">
-                                <label>VERT SOURCE</label>
-                                <select id="symVDir" title="Choose which side supplies the vertical mirror.">
-                                    <option value="left">LEFT → RIGHT</option>
-                                    <option value="right">RIGHT → LEFT</option>
-                                </select>
-                            </div>
-                            <div class="ctrl symmetry-box">
-                                <label>HORZ SOURCE</label>
-                                <select id="symHDir" title="Choose which side supplies the horizontal mirror.">
-                                    <option value="top">TOP → BOTTOM</option>
-                                    <option value="bottom">BOTTOM → TOP</option>
-                                </select>
-                            </div>
-
-                            <!-- Legacy compatibility alias. Old presets/MIDI/OSC maps targeting symPos drive both axes. -->
-                            <input id="symPos" type="range" min="0" max="1" step="0.001" value="0.5"
-                                style="display:none" aria-hidden="true" tabindex="-1">
-                            <span id="symPosVal" style="display:none" aria-hidden="true">0.50</span>
                         </div>
                     </div>
                 </div>
 
                 <!-- GLOBAL MIX -->
-                <div class="group" id="globalMixGroup">
+                <div class="group">
                     <div class="group-label">Global Mix</div>
                     <div class="group-body">
-                        <div class="group-row global-mix-box-row">
-                            <div class="ctrl global-mix-box">
-                                <label>ON</label>
-                                <input id="globalMixOn" type="checkbox">
-                            </div>
-                            <div class="ctrl global-mix-box">
+                        <div class="group-row">
+                            <div class="ctrl"><label>ON</label><input id="globalMixOn" type="checkbox"></div>
+                            <div class="ctrl">
                                 <label>BLEND</label>
-                                <select id="globalMixBlend">
+                                <select id="globalMixBlend" style="font-size:10px;padding:1px 2px">
                                     <option value="screen">SCREEN</option>
                                     <option value="lighter">ADD</option>
                                     <option value="lighten">LIGHTEN</option>
@@ -2664,12 +2530,12 @@
                                     <option value="source-over">NORMAL</option>
                                 </select>
                             </div>
-                            <div class="ctrl global-mix-box global-mix-amount-box">
+                            <div class="ctrl">
                                 <label>MIX</label>
                                 <input id="globalMixAmt" type="range" min="0" max="1" step="0.01" value="0">
                                 <span class="val" id="globalMixAmtVal">0.00</span>
                             </div>
-                            <div class="ctrl global-mix-box">
+                            <div class="ctrl">
                                 <label>CURVE</label>
                                 <select id="globalMixCurve"
                                     title="HUFF fader response only; does not add a render pass. LINEAR preserves the established mix. SMOOTH eases both ends. PUNCH brings the clean mix in earlier.">
@@ -2678,9 +2544,9 @@
                                     <option value="punch">PUNCH</option>
                                 </select>
                             </div>
-                            <div class="ctrl global-mix-box">
+                            <div class="ctrl">
                                 <label>POSITION</label>
-                                <select id="globalMixPos">
+                                <select id="globalMixPos" style="font-size:10px;padding:1px 2px">
                                     <option value="before">BEFORE FB</option>
                                     <option value="after" selected>AFTER FB</option>
                                     <option value="afterflow">AFTER FLOW</option>

@@ -2881,111 +2881,39 @@ function applySolarize(buf, thresh = 0.5, amount = 1.0, solR = 1.0, solG = 1.0, 
 }
 
 // ─── Symmetry ─────────────────────────────────────────────────────────────────
-// Expanded spatial mirror instrument with independent axes, source direction,
-// wet/dry mix, true four-way QUAD mode, and independent whole-image flips.
-// The legacy applySymmetry(src, dst, mode, pos) signature remains accepted.
 
-let _symBaseCanvas = null, _symBaseCtx = null;
-let _symQuadACanvas = null, _symQuadACtx = null;
-let _symQuadBCanvas = null, _symQuadBCtx = null;
-
-function _ensureSymmetrySurface(kind, w, h) {
-  let canvas = null, ctx = null;
-  if (kind === 'base') { canvas = _symBaseCanvas; ctx = _symBaseCtx; }
-  else if (kind === 'quadA') { canvas = _symQuadACanvas; ctx = _symQuadACtx; }
-  else { canvas = _symQuadBCanvas; ctx = _symQuadBCtx; }
-  if (!canvas) {
-    canvas = document.createElement('canvas');
-    ctx = canvas.getContext('2d', { alpha:true, desynchronized:true });
-    if (kind === 'base') { _symBaseCanvas = canvas; _symBaseCtx = ctx; }
-    else if (kind === 'quadA') { _symQuadACanvas = canvas; _symQuadACtx = ctx; }
-    else { _symQuadBCanvas = canvas; _symQuadBCtx = ctx; }
-  }
-  if (!ctx) return [null, null];
-  if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
-  return [canvas, ctx];
-}
-
-function _drawSymmetryBase(ctx, srcCanvas, w, h, flipH, flipV) {
-  if (!ctx || !srcCanvas) return;
-  const prevAlpha = ctx.globalAlpha, prevOp = ctx.globalCompositeOperation;
-  try {
-    ctx.setTransform(1,0,0,1,0,0);
-    ctx.globalAlpha = 1;
-    ctx.globalCompositeOperation = 'copy';
-    ctx.clearRect(0,0,w,h);
-    ctx.translate(flipH ? w : 0, flipV ? h : 0);
-    ctx.scale(flipH ? -1 : 1, flipV ? -1 : 1);
-    ctx.drawImage(srcCanvas, 0, 0, w, h);
-  } finally {
-    ctx.setTransform(1,0,0,1,0,0);
-    ctx.globalCompositeOperation = prevOp || 'source-over';
-    ctx.globalAlpha = prevAlpha;
-  }
-}
-
-function _mirrorSymmetryVertical(ctx, srcCanvas, w, h, x0, sourceSide, alpha = 1) {
-  if (!ctx || !srcCanvas || x0 <= 0 || x0 >= w || alpha <= 0) return;
-  ctx.save(); ctx.globalAlpha = alpha; ctx.beginPath();
-  if (sourceSide === 'right') ctx.rect(0,0,x0,h); else ctx.rect(x0,0,w-x0,h);
-  ctx.clip(); ctx.translate(2*x0,0); ctx.scale(-1,1); ctx.drawImage(srcCanvas,0,0,w,h); ctx.restore();
-}
-
-function _mirrorSymmetryHorizontal(ctx, srcCanvas, w, h, y0, sourceSide, alpha = 1) {
-  if (!ctx || !srcCanvas || y0 <= 0 || y0 >= h || alpha <= 0) return;
-  ctx.save(); ctx.globalAlpha = alpha; ctx.beginPath();
-  if (sourceSide === 'bottom') ctx.rect(0,0,w,y0); else ctx.rect(0,y0,w,h-y0);
-  ctx.clip(); ctx.translate(0,2*y0); ctx.scale(1,-1); ctx.drawImage(srcCanvas,0,0,w,h); ctx.restore();
-}
-
-function applySymmetry(src, dst, modeOrOptions = 'v', legacyPos = 0.5) {
-  const w = dst.width, h = dst.height;
+function applySymmetry(src, dst, mode = 'v', pos = 0.5) {
+  const w  = dst.width, h = dst.height;
+  const x0 = Math.max(0, Math.min(w, Math.round(w * pos)));
+  const y0 = Math.max(0, Math.min(h, Math.round(h * pos)));
   const srcCanvas = src?.elt ?? src?.drawingContext?.canvas ?? null;
   const ctx = dst.drawingContext;
-  if (!ctx || !srcCanvas || w <= 0 || h <= 0) return;
+  if (!ctx || !srcCanvas) return;
 
-  const options = (modeOrOptions && typeof modeOrOptions === 'object') ? modeOrOptions : {
-    mirrorEnabled:true, mode:modeOrOptions, posX:legacyPos, posY:legacyPos,
-    vDir:'left', hDir:'top', mix:1, flipH:false, flipV:false,
-  };
+  // Replace the destination in one native Canvas2D copy, then perform the same
+  // clipped mirror draws without p5 push/pop/image wrapper overhead.
+  copyCanvasFrame(ctx, srcCanvas, w, h);
 
-  const mirrorEnabled = options.mirrorEnabled !== false;
-  const mode = String(options.mode || 'v');
-  const posX = Math.max(0, Math.min(1, Number(options.posX ?? 0.5)));
-  const posY = Math.max(0, Math.min(1, Number(options.posY ?? posX)));
-  const x0 = Math.max(0, Math.min(w, Math.round(w * posX)));
-  const y0 = Math.max(0, Math.min(h, Math.round(h * posY)));
-  const vDir = options.vDir === 'right' ? 'right' : 'left';
-  const hDir = options.hDir === 'bottom' ? 'bottom' : 'top';
-  const mix = Math.max(0, Math.min(1, Number(options.mix ?? 1)));
-  const flipH = !!options.flipH, flipV = !!options.flipV;
-
-  let baseCanvas = srcCanvas;
-  if (flipH || flipV) {
-    const [flipCanvas, flipCtx] = _ensureSymmetrySurface('base', w, h);
-    if (!flipCanvas || !flipCtx) return;
-    _drawSymmetryBase(flipCtx, srcCanvas, w, h, flipH, flipV);
-    baseCanvas = flipCanvas;
+  if (mode === 'v' || mode === 'hv') {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x0, 0, w - x0, h);
+    ctx.clip();
+    ctx.translate(2 * x0, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(srcCanvas, 0, 0, w, h);
+    ctx.restore();
   }
-
-  if (!mirrorEnabled || mix <= 0) { copyCanvasFrame(ctx, baseCanvas, w, h); return; }
-
-  if (mode === 'quad') {
-    const [quadA, quadACtx] = _ensureSymmetrySurface('quadA', w, h);
-    const [quadB, quadBCtx] = _ensureSymmetrySurface('quadB', w, h);
-    if (!quadA || !quadACtx || !quadB || !quadBCtx) { copyCanvasFrame(ctx, baseCanvas, w, h); return; }
-    copyCanvasFrame(quadACtx, baseCanvas, w, h);
-    _mirrorSymmetryVertical(quadACtx, baseCanvas, w, h, x0, vDir, 1);
-    copyCanvasFrame(quadBCtx, quadA, w, h);
-    _mirrorSymmetryHorizontal(quadBCtx, quadA, w, h, y0, hDir, 1);
-    copyCanvasFrame(ctx, baseCanvas, w, h);
-    ctx.save(); ctx.globalAlpha = mix; ctx.drawImage(quadB,0,0,w,h); ctx.restore();
-    return;
+  if (mode === 'h' || mode === 'hv') {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, y0, w, h - y0);
+    ctx.clip();
+    ctx.translate(0, 2 * y0);
+    ctx.scale(1, -1);
+    ctx.drawImage(srcCanvas, 0, 0, w, h);
+    ctx.restore();
   }
-
-  copyCanvasFrame(ctx, baseCanvas, w, h);
-  if (mode === 'v' || mode === 'hv') _mirrorSymmetryVertical(ctx, baseCanvas, w, h, x0, vDir, mix);
-  if (mode === 'h' || mode === 'hv') _mirrorSymmetryHorizontal(ctx, baseCanvas, w, h, y0, hDir, mix);
 }
 
 // ─── Pipeline Luma Key ────────────────────────────────────────────────────────
@@ -3876,14 +3804,29 @@ function _ensureLivePipelineLumaGpuPatch(
 }
 
 const _PIPELINE_LUMA_FADE_OPS = Object.freeze({
+  // Legacy aliases retained so old presets remain behaviorally compatible.
   xfade: 'source-over',
   add: 'screen',
-  lighten: 'lighten',
-  darken: 'darken',
-  multiply: 'multiply',
-  overlay: 'overlay',
   hardlight: 'hard-light',
+
+  // Canonical blend family — mirrors GLOBAL MIX.
+  screen: 'screen',
+  lighter: 'lighter',
+  lighten: 'lighten',
+  'color-dodge': 'color-dodge',
+  multiply: 'multiply',
+  darken: 'darken',
+  'color-burn': 'color-burn',
+  overlay: 'overlay',
+  'soft-light': 'soft-light',
+  'hard-light': 'hard-light',
   difference: 'difference',
+  exclusion: 'exclusion',
+  hue: 'hue',
+  saturation: 'saturation',
+  color: 'color',
+  luminosity: 'luminosity',
+  'source-over': 'source-over',
 });
 
 function _resolvePipelineLumaFadeMode(fadeMode) {

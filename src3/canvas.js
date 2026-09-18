@@ -605,7 +605,7 @@ const PRESET_IDS = [
   'cluCenters','cluSpread','cluMinSpread','cluDepth','cluBias','cluDrift','cluSpeed','cluInertia','clusterMasterSpeed','cluMoveX','cluMoveY','cluMoveZ',
   'flowOn','flowStrength','flowScale','flowPulse','flowImpl','flowSpeed','flowTurb','flowSwirl','flowSpread',
   'baseOn','baseMix','seedOnLoad',
-  'symOn','symMode','symPos','symPosX','symPosY','symMix','symVDir','symHDir','symFlipH','symFlipV',
+  'symOn','symMode','symPos',
   'solarizeOn','solarizeMode','solarizeThresh','solarizeLevel','solarizeSoft','solarizeInvert','solarizePosterLevel','solarizePosterSoft','solarizePosterPhase','solarizeAmt','solarizeFluidity','solarizeR','solarizeG','solarizeB',
   'scanAlpha','scanShift','scanDrift','scanSpeed','scanGap','scanSkew',
   'scanAngle','scanFocus','scanRoll',
@@ -717,19 +717,6 @@ function applyPreset(data) {
   if (!('corruptMaskMode' in sourceData)) sourceData.corruptMaskMode = 'full';
   if (!('corruptMaskThreshold' in sourceData)) sourceData.corruptMaskThreshold = '128';
   if (!('corruptMaskSide' in sourceData)) sourceData.corruptMaskSide = 'bright';
-
-  // Symmetry expansion is additive. Legacy presets used one `symPos` axis for both directions.
-  const legacySymPos = String(sourceData.symPos ?? '0.5');
-  if (!('symPos' in sourceData)) sourceData.symPos = legacySymPos;
-  if (!('symPosX' in sourceData)) sourceData.symPosX = legacySymPos;
-  if (!('symPosY' in sourceData)) sourceData.symPosY = legacySymPos;
-  if (!('symMix' in sourceData)) sourceData.symMix = '1';
-  if (!('symVDir' in sourceData)) sourceData.symVDir = 'left';
-  if (!('symHDir' in sourceData)) sourceData.symHDir = 'top';
-  if (!('symFlipH' in sourceData)) sourceData.symFlipH = false;
-  if (!('symFlipV' in sourceData)) sourceData.symFlipV = false;
-  if (!new Set(['v','h','hv','quad']).has(String(sourceData.symMode || ''))) sourceData.symMode = 'v';
-
   // Pass 40S is spatially additive. Legacy presets keep exact Scanlines behavior.
   if (!('scanPlaceX' in sourceData)) sourceData.scanPlaceX = '0';
   if (!('scanPlaceY' in sourceData)) sourceData.scanPlaceY = '0';
@@ -755,9 +742,18 @@ function applyPreset(data) {
   if (!('lumaKeySource' in sourceData) || sourceData.lumaKeySource === 'glitch') {
     sourceData.lumaKeySource = 'clean';
   }
-  if (!('lumaKeyFade' in sourceData)) sourceData.lumaKeyFade = 'xfade';
-  const validLumaFades = new Set(['xfade','add','lighten','darken','multiply','overlay','hardlight','difference']);
-  if (!validLumaFades.has(String(sourceData.lumaKeyFade || ''))) sourceData.lumaKeyFade = 'xfade';
+  if (!('lumaKeyFade' in sourceData)) sourceData.lumaKeyFade = 'source-over';
+  // Migrate legacy Luma fade names to the canonical GLOBAL MIX blend family
+  // without changing their established visual result.
+  if (sourceData.lumaKeyFade === 'xfade') sourceData.lumaKeyFade = 'source-over';
+  if (sourceData.lumaKeyFade === 'add') sourceData.lumaKeyFade = 'screen';
+  if (sourceData.lumaKeyFade === 'hardlight') sourceData.lumaKeyFade = 'hard-light';
+  const validLumaFades = new Set([
+    'screen','lighter','lighten','color-dodge','multiply','darken','color-burn',
+    'overlay','soft-light','hard-light','difference','exclusion','hue',
+    'saturation','color','luminosity','source-over'
+  ]);
+  if (!validLumaFades.has(String(sourceData.lumaKeyFade || ''))) sourceData.lumaKeyFade = 'source-over';
   if (!('lumaKeyCleanup' in sourceData)) sourceData.lumaKeyCleanup = '0';
   if (!('lumaKeyDensity' in sourceData)) sourceData.lumaKeyDensity = '0';
   // Pass 48 removes render-time Layer Priority oscillators. Imported NEUTRAL,
@@ -1626,7 +1622,7 @@ function hookUI() {
     'flowPulse','flowPulseVal','flowImpl','flowImplVal',
     'flowSpeed','flowSpeedVal','flowTurb','flowTurbVal','flowSwirl','flowSwirlVal','flowSpread','flowSpreadVal',
     'baseOn','baseMix','baseMixVal','seedOnLoad',
-    'symOn','symMode','symPos','symPosVal','symPosX','symPosXVal','symPosY','symPosYVal','symMix','symMixVal','symVDir','symHDir','symFlipH','symFlipV',
+    'symOn','symMode','symPos','symPosVal',
     'solarizeOn','solarizeMode','solarizeThresh','solarizeThreshVal','solarizeLevel','solarizeLevelVal','solarizeSoft','solarizeSoftVal','solarizeInvert','solarizePosterLevel','solarizePosterLevelVal','solarizePosterSoft','solarizePosterSoftVal','solarizePosterPhase','solarizePosterPhaseVal','solarizeAmt','solarizeAmtVal','solarizeFluidity','solarizeFluidityVal',
     'solarizeR','solarizeRVal','solarizeG','solarizeGVal','solarizeB','solarizeBVal',
     'scanAlpha','scanAlphaVal','scanShift','scanShiftVal','scanDrift','scanDriftVal',
@@ -1966,7 +1962,7 @@ function hookSliders() {
     'scanAlpha','scanShift','scanDrift','scanSpeed','scanGap','scanSkew','scanFocus','scanRoll','scanPlaceX','scanPlaceY','scanZoom','scanMoveX','scanMoveY','scanMoveZ',
     'scanFieldSpreadX','scanFieldSpreadY','scanFieldSpreadZ','scanFieldSizeVar','scanFieldDrift','scanFieldDepthDrift',
     'glitchAlpha','glitchJitter','glitchSmearAngle',
-    'flowStrength','flowScale','flowPulse','flowImpl','flowSpeed','flowTurb','flowSwirl','flowSpread','baseMix','symPos','symPosX','symPosY','symMix',
+    'flowStrength','flowScale','flowPulse','flowImpl','flowSpeed','flowTurb','flowSwirl','flowSpread','baseMix','symPos',
     'depthScatter','corruptDrift',
     'solarizeThresh','solarizeLevel','solarizeSoft','solarizePosterLevel','solarizePosterSoft','solarizePosterPhase','solarizeAmt','solarizeFluidity','solarizeR','solarizeG','solarizeB',
     'cluSpeedVar','cluPulse','cluBreathe',
@@ -2234,7 +2230,7 @@ function hookSliders() {
 
   // Checkboxes and selects also get snapshotted for undo
   ['corruptOn','corruptUpdateMode','corruptDistribution','clusterTiles','corruptMaskMode','corruptMaskSide','clusters','feedbackEnabled','feedbackMotionRange','feedbackStrobe','flowOn','baseOn','symOn','solarizeOn','solarizeMode','solarizeInvert',
-   'cluBounds','pipelineRecipe','layerPriority','seedOnLoad','bgMode','symMode','symVDir','symHDir','symFlipH','symFlipV',
+   'cluBounds','pipelineRecipe','layerPriority','seedOnLoad','bgMode','symMode',
    'lumaKeyOn','lumaKeyTarget','lumaKeyInvert','lumaKeySource','lumaKeyFade','globalMixOn','globalMixBlend','globalMixCurve','globalMixPos','scanSpinLeft','scanSpinRight','scanPanelLayout'].forEach(id => {
     _$(id)?.addEventListener('change', snapshotForUndo);
   });
@@ -2263,41 +2259,6 @@ function hookSliders() {
     if (els.baseMix) els.baseMix.disabled = !els.baseOn.checked;
     updateLabels();
   });
-
-  // Symmetry compatibility + contextual control state.
-  let _syncingLegacySymmetry = false;
-  const syncLegacySymmetryToAxes = () => {
-    if (_syncingLegacySymmetry || !els.symPos) return;
-    _syncingLegacySymmetry = true;
-    const value = els.symPos.value;
-    if (els.symPosX) { els.symPosX.value = value; els.symPosX.dispatchEvent(new Event('input', { bubbles:true })); }
-    if (els.symPosY) { els.symPosY.value = value; els.symPosY.dispatchEvent(new Event('input', { bubbles:true })); }
-    _syncingLegacySymmetry = false;
-  };
-  const syncAxisXToLegacy = () => {
-    if (_syncingLegacySymmetry || !els.symPos || !els.symPosX) return;
-    _syncingLegacySymmetry = true;
-    els.symPos.value = els.symPosX.value;
-    _syncRenderControl('symPos');
-    _syncingLegacySymmetry = false;
-  };
-  els.symPos?.addEventListener('input', syncLegacySymmetryToAxes);
-  els.symPosX?.addEventListener('input', syncAxisXToLegacy);
-
-  const syncSymmetryUI = () => {
-    const mirrorOn = !!els.symOn?.checked;
-    const mode = String(els.symMode?.value || 'v');
-    const usesX = mode === 'v' || mode === 'hv' || mode === 'quad';
-    const usesY = mode === 'h' || mode === 'hv' || mode === 'quad';
-    if (els.symMix) els.symMix.disabled = !mirrorOn;
-    if (els.symPosX) els.symPosX.disabled = !mirrorOn || !usesX;
-    if (els.symVDir) els.symVDir.disabled = !mirrorOn || !usesX;
-    if (els.symPosY) els.symPosY.disabled = !mirrorOn || !usesY;
-    if (els.symHDir) els.symHDir.disabled = !mirrorOn || !usesY;
-  };
-  els.symOn?.addEventListener('change', syncSymmetryUI);
-  els.symMode?.addEventListener('change', syncSymmetryUI);
-  syncSymmetryUI();
 
   let _syncingLegacyCorruptControls = false;
   const syncLegacyUpdateAlias = () => {
@@ -2646,9 +2607,6 @@ function updateLabels() {
   set(els.depthScatter,     els.depthScatterVal,     pct);
   set(els.corruptDrift,     els.corruptDriftVal,     pct);
   set(els.symPos,           els.symPosVal,           f2);
-  set(els.symPosX,          els.symPosXVal,          f2);
-  set(els.symPosY,          els.symPosYVal,          f2);
-  set(els.symMix,           els.symMixVal,           f2);
   set(els.solarizeThresh,   els.solarizeThreshVal,   f2);
   set(els.solarizeLevel,    els.solarizeLevelVal,    v => `${Math.round(+v || 0)}%`);
   set(els.solarizeSoft,     els.solarizeSoftVal,     v => `${Math.round(+v || 0)}%`);
@@ -3114,17 +3072,14 @@ function _feedbackHasVisibleEffect(state) {
 }
 
 function _symmetryHasVisibleEffect(state) {
-  if (state.symFlipH || state.symFlipV) return true;
   if (!state.symOn) return false;
-  const mix = Math.max(0, Math.min(1, Number(state.symMix ?? 1)));
-  if (!(mix > 0)) return false;
-  const mode = String(state.symMode || 'v');
-  const posX = Number.isFinite(Number(state.symPosX)) ? Number(state.symPosX) : Number(state.symPos ?? 0.5);
-  const posY = Number.isFinite(Number(state.symPosY)) ? Number(state.symPosY) : Number(state.symPos ?? 0.5);
-  const x0 = Math.max(0, Math.min(width, Math.round(width * posX)));
-  const y0 = Math.max(0, Math.min(height, Math.round(height * posY)));
-  const verticalChanges = (mode === 'v' || mode === 'hv' || mode === 'quad') && x0 > 0 && x0 < width;
-  const horizontalChanges = (mode === 'h' || mode === 'hv' || mode === 'quad') && y0 > 0 && y0 < height;
+  const mode = state.symMode || 'v';
+  const pos = state.symPos;
+  const x0 = Math.max(0, Math.min(width, Math.round(width * pos)));
+  const y0 = Math.max(0, Math.min(height, Math.round(height * pos)));
+
+  const verticalChanges = (mode === 'v' || mode === 'hv') && x0 < width;
+  const horizontalChanges = (mode === 'h' || mode === 'hv') && y0 < height;
   return verticalChanges || horizontalChanges;
 }
 
@@ -3476,17 +3431,7 @@ function _runSymmetryStage(frame) {
     const startedAt = _pipelineStageProfileStart();
     const s = frame.state;
     const symmetrySource = _symmetryShouldReadCleanLiveSource(frame) ? gCur : gBuf;
-    applySymmetry(symmetrySource, gScratch, {
-      mirrorEnabled: !!s.symOn,
-      mode: s.symMode || 'v',
-      posX: Number.isFinite(Number(s.symPosX)) ? Number(s.symPosX) : Number(s.symPos ?? 0.5),
-      posY: Number.isFinite(Number(s.symPosY)) ? Number(s.symPosY) : Number(s.symPos ?? 0.5),
-      vDir: s.symVDir || 'left',
-      hDir: s.symHDir || 'top',
-      mix: Number.isFinite(Number(s.symMix)) ? Number(s.symMix) : 1,
-      flipH: !!s.symFlipH,
-      flipV: !!s.symFlipV,
-    });
+    applySymmetry(symmetrySource, gScratch, s.symMode || 'v', s.symPos);
     [gBuf, gScratch] = [gScratch, gBuf];
     _pipelineStageProfileEnd('symmetry', startedAt);
   }

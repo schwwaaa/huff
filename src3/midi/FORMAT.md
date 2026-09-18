@@ -201,4 +201,4 @@ Select controls remain addressable through the existing mapping/state path. Curr
 |----|--------|
 | `layerPriority` | `scan`, `glitch` |
 | `globalMixCurve` | `linear`, `smooth`, `punch` |
-| `lumaKeyFade` | `xfade`, `add`, `lighten`, `darken`, `multiply`, `overlay`, `hardlight`, `difference` |
+| `lumaKeyFade` | `screen`, `lighter`, `lighten`, `color-dodge`, `multiply`, `darken`, `color-burn`, `overlay`, `soft-light`, `hard-light`, `difference`, `exclusion`, `hue`, `saturation`, `color`, `luminosity`, `source-over` |
