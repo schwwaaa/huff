@@ -3804,29 +3804,14 @@ function _ensureLivePipelineLumaGpuPatch(
 }
 
 const _PIPELINE_LUMA_FADE_OPS = Object.freeze({
-  // Legacy aliases retained so old presets remain behaviorally compatible.
   xfade: 'source-over',
   add: 'screen',
-  hardlight: 'hard-light',
-
-  // Canonical blend family — mirrors GLOBAL MIX.
-  screen: 'screen',
-  lighter: 'lighter',
   lighten: 'lighten',
-  'color-dodge': 'color-dodge',
-  multiply: 'multiply',
   darken: 'darken',
-  'color-burn': 'color-burn',
+  multiply: 'multiply',
   overlay: 'overlay',
-  'soft-light': 'soft-light',
-  'hard-light': 'hard-light',
+  hardlight: 'hard-light',
   difference: 'difference',
-  exclusion: 'exclusion',
-  hue: 'hue',
-  saturation: 'saturation',
-  color: 'color',
-  luminosity: 'luminosity',
-  'source-over': 'source-over',
 });
 
 function _resolvePipelineLumaFadeMode(fadeMode) {

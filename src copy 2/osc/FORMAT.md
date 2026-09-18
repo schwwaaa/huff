@@ -154,7 +154,7 @@ Use for huff's action buttons: `refreshBtn` (reseed) and `resetMotionBtn` (reset
 | `solarizeMode` | `threshold`, `luma-quantize` |
 | `layerPriority` | `scan`, `glitch` |
 | `globalMixCurve` | `linear`, `smooth`, `punch` |
-| `lumaKeyFade` | `screen`, `lighter`, `lighten`, `color-dodge`, `multiply`, `darken`, `color-burn`, `overlay`, `soft-light`, `hard-light`, `difference`, `exclusion`, `hue`, `saturation`, `color`, `luminosity`, `source-over` |
+| `lumaKeyFade` | `xfade`, `add`, `lighten`, `darken`, `multiply`, `overlay`, `hardlight`, `difference` |
 
 ### Toggles (checked = ON)
 

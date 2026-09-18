@@ -742,18 +742,9 @@ function applyPreset(data) {
   if (!('lumaKeySource' in sourceData) || sourceData.lumaKeySource === 'glitch') {
     sourceData.lumaKeySource = 'clean';
   }
-  if (!('lumaKeyFade' in sourceData)) sourceData.lumaKeyFade = 'source-over';
-  // Migrate legacy Luma fade names to the canonical GLOBAL MIX blend family
-  // without changing their established visual result.
-  if (sourceData.lumaKeyFade === 'xfade') sourceData.lumaKeyFade = 'source-over';
-  if (sourceData.lumaKeyFade === 'add') sourceData.lumaKeyFade = 'screen';
-  if (sourceData.lumaKeyFade === 'hardlight') sourceData.lumaKeyFade = 'hard-light';
-  const validLumaFades = new Set([
-    'screen','lighter','lighten','color-dodge','multiply','darken','color-burn',
-    'overlay','soft-light','hard-light','difference','exclusion','hue',
-    'saturation','color','luminosity','source-over'
-  ]);
-  if (!validLumaFades.has(String(sourceData.lumaKeyFade || ''))) sourceData.lumaKeyFade = 'source-over';
+  if (!('lumaKeyFade' in sourceData)) sourceData.lumaKeyFade = 'xfade';
+  const validLumaFades = new Set(['xfade','add','lighten','darken','multiply','overlay','hardlight','difference']);
+  if (!validLumaFades.has(String(sourceData.lumaKeyFade || ''))) sourceData.lumaKeyFade = 'xfade';
   if (!('lumaKeyCleanup' in sourceData)) sourceData.lumaKeyCleanup = '0';
   if (!('lumaKeyDensity' in sourceData)) sourceData.lumaKeyDensity = '0';
   // Pass 48 removes render-time Layer Priority oscillators. Imported NEUTRAL,

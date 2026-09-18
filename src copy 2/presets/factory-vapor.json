@@ -1,0 +1,27 @@
+{
+  "name": "factory:vapor",
+  "version": 1,
+  "factory": true,
+  "params": {
+    "baseMix": "0.55", "baseOn": true, "bgMode": "black", "quality": "1.00",
+    "seedOnLoad": false, "seed": "77",
+    "feedback": "0.80", "persistence": "0.95",
+    "fbX": "0", "fbY": "1", "fbZ": "1.005", "fbTheta": "0",
+    "depth": "0.90", "depthScatter": "0.60", "corrupt": "0.15",
+    "corruptDrift": "0.10", "block": "32",
+    "glitchSpeed": "0.30", "glitchSpeedFine": "0.80", "glitchSpeedMul": "1.00",
+    "glitchSize": "28", "glitchSmear": "6", "glitchSmearAngle": "90",
+    "glitchAlpha": "0.70", "glitchJitter": "0.50",
+    "glitchBaseX": "0", "glitchBaseY": "0",
+    "trailLayers": "4", "trailDepth": "0.70", "trailLumaKey": "0.15",
+    "symOn": false, "symMode": "vertical", "symPos": "0.50",
+    "clusters": false, "clusterCount": "3", "clusterRadius": "10",
+    "scanShift": "0.08", "scanDrift": "0.50", "scanAlpha": "0.60",
+    "clusterTiles": false, "cluCenters": "3", "cluSpread": "80", "spatialGap": "0",
+    "solarizeOn": false, "solarizeThresh": "0.50", "solarizeAmt": "1.00",
+    "solarizeR": "1.00", "solarizeG": "1.00", "solarizeB": "1.00",
+    "flowOn": true, "flowStrength": "5", "flowScale": "100",
+    "flowPulse": "0", "flowImpl": "0.20",
+    "corruptOn": true
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "name": "TouchOSC — Mix",
+  "description": "Primary mix and feedback controls. Designed for the TouchOSC built-in 'Mix2' or 'Simple Mixer' template. All faders send 0.0–1.0 floats. Load this first to validate OSC is working.",
+  "version": 1,
+  "mappings": [
+    {
+      "_section": "── FADERS — primary mix (send 0.0–1.0) ─────────────────────────────────"
+    },
+    { "param": "feedback",     "addr": "/1/fader1", "type": "range", "inputMin": 0, "inputMax": 1, "enabled": true, "note": "Feedback amount" },
+    { "param": "depth",        "addr": "/1/fader2", "type": "range", "inputMin": 0, "inputMax": 1, "enabled": true, "note": "Scanline depth" },
+    { "param": "corrupt",      "addr": "/1/fader3", "type": "range", "inputMin": 0, "inputMax": 1, "enabled": true, "note": "Corrupt %" },
+    { "param": "baseMix",      "addr": "/1/fader4", "type": "range", "inputMin": 0, "inputMax": 1, "enabled": true, "note": "Base video mix" },
+    { "param": "glitchSpeed",  "addr": "/1/fader5", "type": "range", "inputMin": 0, "inputMax": 1, "enabled": true, "note": "Glitch speed" },
+    { "param": "flowStrength", "addr": "/1/fader6", "type": "range", "inputMin": 0, "inputMax": 1, "enabled": true, "note": "Flow warp strength" },
+    { "param": "fbZ",          "addr": "/1/fader7", "type": "range", "inputMin": 0, "inputMax": 1, "enabled": true, "note": "Feedback zoom" },
+    { "param": "persistence",  "addr": "/1/fader8", "type": "range", "inputMin": 0, "inputMax": 1, "enabled": true, "note": "Trail persistence" },
+
+    {
+      "_section": "── TOGGLES — fx on/off (buttons send 1.0 press / 0.0 release) ──────────"
+    },
+    { "param": "corruptOn",  "addr": "/1/toggle1", "type": "toggle", "inputMin": 0, "inputMax": 1, "enabled": true, "note": "Glitch system on/off" },
+    { "param": "flowOn",     "addr": "/1/toggle2", "type": "toggle", "inputMin": 0, "inputMax": 1, "enabled": true, "note": "Flow warp on/off" },
+    { "param": "symOn",      "addr": "/1/toggle3", "type": "toggle", "inputMin": 0, "inputMax": 1, "enabled": true, "note": "Symmetry on/off" },
+    { "param": "solarizeOn", "addr": "/1/toggle4", "type": "toggle", "inputMin": 0, "inputMax": 1, "enabled": true, "note": "Solarize on/off" },
+    { "param": "trailOn",    "addr": "/1/toggle5", "type": "toggle", "inputMin": 0, "inputMax": 1, "enabled": true, "note": "Trails on/off" },
+    { "param": "baseOn",     "addr": "/1/toggle6", "type": "toggle", "inputMin": 0, "inputMax": 1, "enabled": true, "note": "Base video on/off" },
+
+    {
+      "_section": "── TRIGGERS (any value > 0.5 fires the button) ──────────────────────────"
+    },
+    { "param": "refreshBtn",     "addr": "/1/push1", "type": "trigger", "inputMin": 0, "inputMax": 1, "enabled": true, "note": "Re-seed glitch" },
+    { "param": "resetMotionBtn", "addr": "/1/push2", "type": "trigger", "inputMin": 0, "inputMax": 1, "enabled": true, "note": "Reset FB motion" }
+  ]
+}

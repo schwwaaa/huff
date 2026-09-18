@@ -183,7 +183,7 @@
         }
 
         /* Title bar strip at very top */
-        /* header::before {
+        header::before {
             content: '[MAIN CONTROL]';
             display: block;
             background: linear-gradient(90deg, var(--title-bg) 0%, #ff4647 100%);
@@ -195,7 +195,7 @@
             white-space: nowrap;
             overflow: hidden;
             border-bottom: 1px solid var(--win-dark);
-        } */
+        }
 
         .topbar-title {
             font-family: 'VT323', monospace;
@@ -563,7 +563,6 @@
             font-family: 'Share Tech Mono', monospace;
             font-size: 11px;
             color: var(--term-yel);
-            /* color: var(--term-yel); */
             min-width: 24px;
             text-align: right;
         }
@@ -593,7 +592,7 @@
         input[type=range] {
             -webkit-appearance: none;
             appearance: none;
-            width: 120px;
+            width: 68px;
             height: 4px;
             background: var(--win-mid);
             border-top: 1px solid var(--win-dark);
@@ -1603,181 +1602,6 @@
         }
     </style>
 
-
-    <style id="huff-source-cleanup-v1">
-        /*
-         * SOURCE cleanup only, plus globally uniform dropdown geometry.
-         * No element order, parameter semantics, or runtime behavior changes.
-         */
-
-        /* ── SOURCE: give controls breathing room ───────────────── */
-        #sourceGroup .group-body {
-            padding: 6px 8px 7px;
-        }
-
-        #sourceGroup .transport-row {
-            gap: 8px;
-            padding: 5px 7px;
-        }
-
-        #sourceGroup .group-row {
-            gap: 6px;
-            row-gap: 7px;
-        }
-
-        #sourceGroup .ctrl {
-            gap: 6px;
-            min-height: 30px;
-            box-sizing: border-box;
-            padding: 3px 7px;
-        }
-
-        #sourceGroup .ctrl label,
-        #sourceGroup .transport-row > label {
-            font-family: 'VT323', 'Courier New', monospace !important;
-            font-size: 12px !important;
-            line-height: 1 !important;
-        }
-
-        /* ── SOURCE: action buttons are one exact geometry ─────── */
-        #sourceGroup button {
-            height: 30px !important;
-            min-height: 30px !important;
-            box-sizing: border-box !important;
-            padding: 2px 9px !important;
-            font-family: 'VT323', 'Courier New', monospace !important;
-            font-size: 13px !important;
-            font-weight: normal !important;
-            line-height: 20px !important;
-        }
-
-        /* Native file chooser participates in the same 30px control row. */
-        #sourceGroup input[type="file"] {
-            height: 30px;
-            min-height: 30px;
-            box-sizing: border-box;
-            font-family: 'VT323', 'Courier New', monospace !important;
-            font-size: 12px !important;
-            line-height: 24px;
-        }
-
-        #sourceGroup input[type="file"]::file-selector-button,
-        #sourceGroup input[type="file"]::-webkit-file-upload-button {
-            height: 30px;
-            box-sizing: border-box;
-            margin: 0 7px 0 0;
-            padding: 2px 9px;
-            font-family: 'VT323', 'Courier New', monospace;
-            font-size: 13px;
-            line-height: 20px;
-        }
-
-        /* ── SOURCE: one slider visual system ──────────────────── */
-        #sourceGroup input[type="range"] {
-            -webkit-appearance: none !important;
-            appearance: none !important;
-            height: 6px !important;
-            box-sizing: border-box !important;
-            background: var(--win-mid) !important;
-            border-top: 1px solid var(--win-dark) !important;
-            border-left: 1px solid var(--win-dark) !important;
-            border-bottom: 1px solid var(--win-light) !important;
-            border-right: 1px solid var(--win-light) !important;
-            border-radius: 0 !important;
-            outline: none !important;
-            margin: 0 !important;
-        }
-
-        #sourceGroup input[type="range"]::-webkit-slider-runnable-track {
-            height: 4px !important;
-            background: var(--win-mid) !important;
-            border: 0 !important;
-            border-radius: 0 !important;
-        }
-
-        #sourceGroup input[type="range"]::-webkit-slider-thumb {
-            -webkit-appearance: none !important;
-            appearance: none !important;
-            width: 12px !important;
-            height: 16px !important;
-            margin-top: -6px;
-            box-sizing: border-box !important;
-            background: var(--win-bg) !important;
-            border-top: 2px solid var(--win-light) !important;
-            border-left: 2px solid var(--win-light) !important;
-            border-bottom: 2px solid var(--win-dark) !important;
-            border-right: 2px solid var(--win-dark) !important;
-            border-radius: 0 !important;
-        }
-
-        #sourceGroup input[type="range"]::-moz-range-track {
-            height: 4px !important;
-            background: var(--win-mid) !important;
-            border: 0 !important;
-            border-radius: 0 !important;
-        }
-
-        #sourceGroup input[type="range"]::-moz-range-thumb {
-            width: 12px !important;
-            height: 16px !important;
-            box-sizing: border-box !important;
-            background: var(--win-bg) !important;
-            border-top: 2px solid var(--win-light) !important;
-            border-left: 2px solid var(--win-light) !important;
-            border-bottom: 2px solid var(--win-dark) !important;
-            border-right: 2px solid var(--win-dark) !important;
-            border-radius: 0 !important;
-        }
-
-        /* Seek keeps its responsive width; Base Mix and Volume use same fixed throw. */
-        #sourceGroup #seekBar {
-            flex: 1 1 auto !important;
-            width: auto !important;
-            min-width: 180px !important;
-        }
-
-        #sourceGroup #baseMix,
-        #sourceGroup #volumeSlider {
-            width: 150px !important;
-            flex: 0 0 150px !important;
-        }
-
-        /* Hidden compatibility slider stays hidden. */
-        #sourceGroup #quality {
-            display: none !important;
-        }
-
-        /* ── SOURCE: SRC / WS are readouts, not panels inside a panel ─ */
-        #sourceGroup .ctrl:has(> #sourceInfo) {
-            min-height: 0;
-            padding: 0;
-            gap: 6px;
-            background: transparent;
-            border: 0;
-        }
-
-        #sourceGroup #sourceInfo,
-        #sourceGroup #status {
-            min-height: 30px;
-            box-sizing: border-box;
-            display: inline-flex;
-            align-items: center;
-            padding: 3px 8px;
-        }
-
-        /* ── ALL DROPDOWNS: consistent fit inside their outlines ── */
-        select {
-            height: 26px !important;
-            min-height: 26px !important;
-            box-sizing: border-box !important;
-            padding: 1px 24px 1px 6px !important;
-            font-family: 'VT323', 'Courier New', monospace !important;
-            font-size: 12px !important;
-            line-height: 20px !important;
-            vertical-align: middle !important;
-        }
-    </style>
-
 </head>
 
 <body>
@@ -2008,7 +1832,7 @@
 
         <!-- transport row -->
         <div class="topbar">
-            <span class="topbar-title"><img src="icon-name.jpg" alt="HUFF" style="display:block;width:24px;height:24px;object-fit:cover"></span>
+            <span class="topbar-title">huff</span>
             <div class="topbar-sep"></div>
             <button id="midiBtn" class="btn-dim">MIDI</button>
             <button id="oscBtn" class="btn-dim">OSC</button>
@@ -2068,7 +1892,7 @@
             <div class="groups">
 
                 <!-- SOURCE -->
-                <div class="group" id="sourceGroup">
+                <div class="group">
                     <div class="group-label">Source</div>
                     <div class="group-body">
                         <div class="transport-row">
@@ -2095,7 +1919,7 @@
                         <!-- seek / time row -->
                         <div class="transport-row">
                             <span
-                                style="font-family:'VT323',monospace;font-size:11px;color:var(--ui-text);opacity:.7;flex-shrink:0;letter-spacing:.06em"></span>
+                                style="font-family:'VT323',monospace;font-size:11px;color:var(--ui-text);opacity:.7;flex-shrink:0;letter-spacing:.06em">POS</span>
                             <label style="font-size:9px;opacity:.5">RATE</label>
                             <select id="playbackRate" style="font-size:10px;padding:1px 2px">
                                 <option value="0.25">0.25×</option>
@@ -2157,8 +1981,11 @@
                             <input id="quality" type="range" min="0" max="3.00" step="0.05" value="1.00"
                                 style="display:none" aria-hidden="true" tabindex="-1">
                             <button id="refreshBtn" disabled>↻ Refresh</button>
-                            
-
+                            <div class="ctrl" style="border:none;background:none;padding:0 2px">
+                                <label style="font-size:9px;opacity:.5">VOL</label>
+                                <input id="volumeSlider" type="range" min="0" max="1" step="0.01" value="1"
+                                    style="width:60px">
+                            </div>
                             <div class="ctrl" style="border:none;background:none;padding:0 2px">
                             </div>
 
@@ -2225,7 +2052,7 @@
                                 </select>
                             </div>
                             <div class="ctrl">
-                                <label>LAYER PRIORITY</label>
+                                <label>PRIORITY</label>
                                 <select id="layerPriority" style="font-size:10px;padding:1px 2px"
                                     title="Stable paint order only. SCAN TOP draws Scanlines last; CORRUPT TOP draws Corrupt/Luma last.">
                                     <option value="scan">SCAN TOP</option>

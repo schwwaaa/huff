@@ -1,0 +1,46 @@
+{
+  "name": "TouchOSC — Effects",
+  "description": "Deep texture and effects sculpting. Designed for the TouchOSC 'Beatmachine' or custom 4x4 grid template. Covers glitch geometry, cluster physics, scanlines, and symmetry.",
+  "version": 1,
+  "mappings": [
+    {
+      "_section": "── GLITCH GEOMETRY (row 1 knobs) ────────────────────────────────────────"
+    },
+    { "param": "block",       "addr": "/2/rotary1",  "type": "range", "inputMin": 0, "inputMax": 1, "enabled": true, "note": "Pixel block size" },
+    { "param": "glitchSize",  "addr": "/2/rotary2",  "type": "range", "inputMin": 0, "inputMax": 1, "enabled": true, "note": "Glitch tile size" },
+    { "param": "glitchSmear", "addr": "/2/rotary3",  "type": "range", "inputMin": 0, "inputMax": 1, "enabled": true, "note": "Glitch smear" },
+    { "param": "glitchAlpha", "addr": "/2/rotary4",  "type": "range", "inputMin": 0, "inputMax": 1, "enabled": true, "note": "Glitch tile opacity" },
+
+    {
+      "_section": "── GLITCH MOTION (row 2 knobs) ──────────────────────────────────────────"
+    },
+    { "param": "glitchJitter",   "addr": "/2/rotary5",  "type": "range", "inputMin": 0, "inputMax": 1, "enabled": true, "note": "Positional jitter" },
+    { "param": "glitchSpeedMul", "addr": "/2/rotary6",  "type": "range", "inputMin": 0, "inputMax": 1, "enabled": true, "note": "Speed multiplier" },
+    { "param": "corruptDrift",   "addr": "/2/rotary7",  "type": "range", "inputMin": 0, "inputMax": 1, "enabled": true, "note": "Corrupt drift" },
+    { "param": "depthScatter",   "addr": "/2/rotary8",  "type": "range", "inputMin": 0, "inputMax": 1, "enabled": true, "note": "Depth scatter" },
+
+    {
+      "_section": "── CLUSTER PHYSICS (row 3 knobs) ────────────────────────────────────────"
+    },
+    { "param": "cluSpread",  "addr": "/2/rotary9",  "type": "range", "inputMin": 0, "inputMax": 1, "enabled": true, "note": "Cluster spread radius" },
+    { "param": "cluSpeed",   "addr": "/2/rotary10", "type": "range", "inputMin": 0, "inputMax": 1, "enabled": true, "note": "Physics velocity" },
+    { "param": "cluInertia", "addr": "/2/rotary11", "type": "range", "inputMin": 0, "inputMax": 1, "enabled": true, "note": "Physics inertia" },
+    { "param": "cluBias",    "addr": "/2/rotary12", "type": "range", "inputMin": 0, "inputMax": 1, "enabled": true, "note": "Cluster bias" },
+
+    {
+      "_section": "── SCANLINES (row 4 knobs) ──────────────────────────────────────────────"
+    },
+    { "param": "scanShift", "addr": "/2/rotary13", "type": "range", "inputMin": 0, "inputMax": 1, "enabled": true, "note": "Horizontal shift" },
+    { "param": "scanDrift", "addr": "/2/rotary14", "type": "range", "inputMin": 0, "inputMax": 1, "enabled": true, "note": "Drift speed" },
+    { "param": "scanAlpha", "addr": "/2/rotary15", "type": "range", "inputMin": 0, "inputMax": 1, "enabled": true, "note": "Band opacity" },
+    { "param": "scanSpeed", "addr": "/2/rotary16", "type": "range", "inputMin": 0, "inputMax": 1, "enabled": true, "note": "Global speed" },
+
+    {
+      "_section": "── SYMMETRY & SOLARIZE (faders) ─────────────────────────────────────────"
+    },
+    { "param": "symPos",         "addr": "/2/fader1", "type": "range", "inputMin": 0, "inputMax": 1, "enabled": true, "note": "Symmetry axis position" },
+    { "param": "solarizeThresh", "addr": "/2/fader2", "type": "range", "inputMin": 0, "inputMax": 1, "enabled": true, "note": "Solarize threshold" },
+    { "param": "trailDepth",     "addr": "/2/fader3", "type": "range", "inputMin": 0, "inputMax": 1, "enabled": true, "note": "Trail depth" },
+    { "param": "quality",        "addr": "/2/fader4", "type": "range", "inputMin": 0, "inputMax": 1, "enabled": true, "note": "Render quality" }
+  ]
+}
