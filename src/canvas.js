@@ -159,8 +159,7 @@ function _retireCurrentSource({ revokeBlob = true } = {}) {
   try { wrapper?.remove?.(); } catch {}
   videoEl = null;
   playing = false;
-  _wasPlaying = false;
-  _seekPending = false;
+  _resetSeekGestureState({ resetDisplay: true });
   _rvfcOwnsGCur = false;
   _resetPlaybackFrameTelemetry();
   _playbackTelemetry.sourceName = '';
@@ -1726,7 +1725,19 @@ function hookTransport() {
   // so the readout is live even though the actual decode is throttled.
   function _tickTransport() {
     const v = videoEl?.elt;
-    if (v && !isNaN(v.duration) && v.duration > 0) {
+
+    if (v?.srcObject) {
+      if (seekBar) {
+        seekBar.disabled = true;
+        if (!seekBar._dragging) seekBar.value = 0;
+      }
+      if (timeDisp) timeDisp.textContent = 'LIVE';
+      requestAnimationFrame(_tickTransport);
+      return;
+    }
+
+    if (_mediaCanSeek(v)) {
+      if (seekBar) seekBar.disabled = false;
       if (seekBar && !seekBar._dragging) {
         seekBar.value = (v.currentTime / v.duration) * 1000;
       }
@@ -1751,9 +1762,9 @@ function hookTransport() {
     let _seekFrame   = null;
 
     seekBar.addEventListener('mousedown', () => {
-      seekBar._dragging = true;
       const v = videoEl?.elt;
-      if (!v) return;
+      if (!_mediaCanSeek(v)) return;
+      seekBar._dragging = true;
       _wasPlaying = !v.paused;
       // Pause while scrubbing so the browser isn't fighting between
       // decode-for-seek and decode-for-playback simultaneously.
@@ -1761,16 +1772,16 @@ function hookTransport() {
     });
 
     seekBar.addEventListener('touchstart', () => {
-      seekBar._dragging = true;
       const v = videoEl?.elt;
-      if (!v) return;
+      if (!_mediaCanSeek(v)) return;
+      seekBar._dragging = true;
       _wasPlaying = !v.paused;
       if (_wasPlaying) v.pause();
     }, { passive:true });
 
     seekBar.addEventListener('input', () => {
       const v = videoEl?.elt;
-      if (!v || isNaN(v.duration)) return;
+      if (!_mediaCanSeek(v)) return;
       const target = (seekBar.value / 1000) * v.duration;
       seekBar._seekPending = target;
       _seekPending = true;
@@ -1778,7 +1789,7 @@ function hookTransport() {
       _seekFrame = requestAnimationFrame(() => {
         _seekFrame = null;
         const vv = videoEl?.elt;
-        if (!vv || isNaN(vv.duration)) return;
+        if (!_mediaCanSeek(vv)) return;
         const t = seekBar._seekPending ?? (seekBar.value / 1000) * vv.duration;
         if (typeof vv.fastSeek === 'function') vv.fastSeek(t);
         else vv.currentTime = t;
@@ -1787,9 +1798,17 @@ function hookTransport() {
 
     const endDrag = () => {
       const v = videoEl?.elt;
-      const exactTarget = (v && !isNaN(v.duration))
-        ? Math.max(0, Math.min(v.duration, seekBar._seekPending ?? (seekBar.value / 1000) * v.duration))
-        : null;
+      if (!_mediaCanSeek(v)) {
+        seekBar._dragging = false;
+        seekBar._seekPending = null;
+        _seekPending = false;
+        _wasPlaying = false;
+        return;
+      }
+      const exactTarget = Math.max(
+        0,
+        Math.min(v.duration, seekBar._seekPending ?? (seekBar.value / 1000) * v.duration)
+      );
       seekBar._dragging = false;
       if (_seekFrame) {
         cancelAnimationFrame(_seekFrame);
@@ -2825,10 +2844,39 @@ function onFile(ev) {
   v.load();
 }
 
-function enableTransport(en) {
+function _mediaCanSeek(v) {
+  // Camera capture is a live MediaStream-backed <video>. Live streams have no
+  // finite file timeline and must never enter the file-seek path.
+  if (!v || v.srcObject) return false;
+  return Number.isFinite(Number(v.duration)) && Number(v.duration) > 0;
+}
+
+function _resetSeekGestureState({ resetDisplay = false } = {}) {
+  const seek = _$('seekBar');
+  if (seek) {
+    seek._dragging = false;
+    seek._seekPending = null;
+    if (resetDisplay) seek.value = '0';
+  }
+  _seekPending = false;
+  _wasPlaying = false;
+}
+
+function enableTransport(en, { seekable = en, live = false } = {}) {
   ['playBtn','pauseBtn','refreshBtn'].forEach(id => {
     const b = _$(id); if (b) b.disabled = !en;
   });
+
+  const seek = _$('seekBar');
+  if (seek) seek.disabled = !(en && seekable);
+
+  const time = _$('timeDisplay');
+  if (time) {
+    if (live) time.textContent = 'LIVE';
+    else if (!en) time.textContent = '0:00 / 0:00';
+  }
+
+  if (!seekable) _resetSeekGestureState({ resetDisplay: true });
 }
 
 // ─── Pass 37 CORRUPT update-policy gate ──────────────────────────────────────
@@ -3193,10 +3241,14 @@ function _resolveFrameActivity(state) {
     (lumaTarget === 'scan' && scanlines)
   );
   const globalMix = !!state.globalMixOn && state.globalMixAmt > 0;
-  // FEEDBACK ENABLE bypasses only the transform/Restore layer. Keep the original
-  // Feedback activity decision intact so PERSISTENCE remains on the established
-  // persistent-buffer path rather than being accidentally tied to the new switch.
-  const feedback = _feedbackHasVisibleEffect(state) || (state.feedbackEnabled !== false && (Number(state.feedbackRestore) || 0) > 0);
+  // Feedback activity must represent an image-producing owner of gBuf.
+  // PERSISTENCE remains an independent pipeline stage whenever any effect keeps
+  // the active pipeline running, but a disabled Feedback transform must not keep
+  // stale gBuf pixels alive by itself. This is what allows a stateless stage such
+  // as Symmetry to release immediately back to the current clean source.
+  const feedback = state.feedbackEnabled !== false && (
+    _feedbackHasVisibleEffect(state) || (Number(state.feedbackRestore) || 0) > 0
+  );
   const flow = !!state.flowOn && Math.trunc(state.flowStrength) > 0;
   const symmetry = _symmetryHasVisibleEffect(state);
   const solarize = _solarizeHasVisibleEffect(state);
@@ -3843,12 +3895,23 @@ function startCamera(deviceId) {
         try { capture?.remove?.(); } catch {}
         return;
       }
-      try { enableTransport(true); } catch {}
+      try { enableTransport(true, { seekable:false, live:true }); } catch {}
       listCameras();
       try { v.setAttribute('playsinline', ''); v.muted = true; } catch {}
+      let primed = false;
       const kick = () => {
-        if (generation !== _sourceGeneration || videoEl !== capture) return;
+        if (primed || generation !== _sourceGeneration || videoEl !== capture) return;
+        // Match the proven file-source ready gate: do not seed from metadata-only
+        // state. Wait until the camera element has a drawable current frame.
+        if (v.readyState < 2 || v.videoWidth === 0 || v.videoHeight === 0) return;
+        primed = true;
         try {
+          clearAll();
+          updateDim();
+          if (_copySourceFrame(gCur.drawingContext, v, gCur.width, gCur.height, renderState.sourceFit || 'stretch')) {
+            _vfc++;
+          }
+
           _capabilityInstrumentation?.count('sourceReady');
           _capabilityInstrumentation?.setSource('camera', v.videoWidth, v.videoHeight);
           _playbackTelemetry.sourceWidth = Math.max(0, Number(v.videoWidth) || 0);
@@ -3863,8 +3926,13 @@ function startCamera(deviceId) {
           pumpVideoFrames();
         } catch {}
       };
-      if (v.readyState >= 1) kick();
-      else v.addEventListener('loadedmetadata', kick, { once:true });
+
+      if (v.readyState >= 2 && v.videoWidth > 0 && v.videoHeight > 0) {
+        kick();
+      } else {
+        v.addEventListener('loadeddata', kick, { once:true });
+        v.addEventListener('canplay', kick, { once:true });
+      }
     });
     videoEl = capture;
     try { cloakVideo(videoEl); } catch {}

@@ -1633,7 +1633,7 @@
         }
 
         #sourceGroup .ctrl label,
-        #sourceGroup .transport-row>label {
+        #sourceGroup .transport-row > label {
             font-family: 'VT323', 'Courier New', monospace !important;
             font-size: 12px !important;
             line-height: 1 !important;
@@ -1821,7 +1821,7 @@
         }
 
         /* The old trailing flex spacer competed with the seek bar for width. */
-        #sourceGroup .transport-row:has(#seekBar)>div[style*="flex:1"] {
+        #sourceGroup .transport-row:has(#seekBar) > div[style*="flex:1"] {
             display: none !important;
         }
     </style>
@@ -1852,7 +1852,7 @@
             gap: 6px;
         }
 
-        #sourceGroup .source-box>label {
+        #sourceGroup .source-box > label {
             font-family: 'VT323', 'Courier New', monospace !important;
             font-size: 12px !important;
             color: var(--ui-text) !important;
@@ -1906,7 +1906,7 @@
             padding: 3px 7px;
         }
 
-        #presetsGroup .preset-box>label {
+        #presetsGroup .preset-box > label {
             font-family: 'VT323', 'Courier New', monospace !important;
             font-size: 12px !important;
             line-height: 1 !important;
@@ -1971,51 +1971,20 @@
 
 
     <style id="huff-symmetry-expansion-v1">
-        #symmetryGroup .group-body {
-            padding: 6px 8px 7px;
-        }
-
-        #symmetryGroup .symmetry-box-row {
-            gap: 6px;
-            row-gap: 7px;
-            align-items: center;
-        }
-
-        #symmetryGroup .symmetry-box {
-            min-height: 30px;
-            box-sizing: border-box;
-            gap: 6px;
-            padding: 3px 7px;
-        }
-
-        #symmetryGroup .symmetry-box>label {
+        #symmetryGroup .group-body { padding: 6px 8px 7px; }
+        #symmetryGroup .symmetry-box-row { gap: 6px; row-gap: 7px; align-items: center; }
+        #symmetryGroup .symmetry-box { min-height: 30px; box-sizing: border-box; gap: 6px; padding: 3px 7px; }
+        #symmetryGroup .symmetry-box > label {
             font-family: 'VT323', 'Courier New', monospace !important;
-            font-size: 12px !important;
-            line-height: 1 !important;
-            color: var(--ui-text) !important;
-            opacity: 1 !important;
-            letter-spacing: .06em;
-            text-transform: uppercase;
+            font-size: 12px !important; line-height: 1 !important; color: var(--ui-text) !important;
+            opacity: 1 !important; letter-spacing: .06em; text-transform: uppercase;
         }
-
         #symmetryGroup select {
-            height: 26px !important;
-            min-height: 26px !important;
-            box-sizing: border-box !important;
-            font-family: 'VT323', 'Courier New', monospace !important;
-            font-size: 12px !important;
-            line-height: 20px !important;
+            height: 26px !important; min-height: 26px !important; box-sizing: border-box !important;
+            font-family: 'VT323', 'Courier New', monospace !important; font-size: 12px !important; line-height: 20px !important;
         }
-
-        #symmetryGroup input[type="range"]:not(#symPos) {
-            width: 150px !important;
-            flex: 0 0 150px !important;
-        }
-
-        #symmetryGroup input[type="checkbox"] {
-            width: 16px;
-            height: 16px;
-        }
+        #symmetryGroup input[type="range"]:not(#symPos) { width: 150px !important; flex: 0 0 150px !important; }
+        #symmetryGroup input[type="checkbox"] { width: 16px; height: 16px; }
     </style>
 
 
@@ -2042,7 +2011,7 @@
             padding: 3px 7px;
         }
 
-        #globalMixGroup .global-mix-box>label {
+        #globalMixGroup .global-mix-box > label {
             font-family: 'VT323', 'Courier New', monospace !important;
             font-size: 12px !important;
             line-height: 1 !important;
@@ -2082,900 +2051,6 @@
 
         #globalMixGroup #globalMixPos {
             min-width: 120px;
-        }
-    </style>
-
-
-    <style id="huff-feedback-cleanup-v1">
-        /*
-         * FEEDBACK cleanup only.
-         * Same boxed visual language established in Source / Presets / Symmetry / Global Mix.
-         * No runtime or parameter behavior changes.
-         */
-
-        #feedbackGroup .group-body {
-            padding: 6px 8px 7px;
-        }
-
-        #feedbackGroup .corrupt-section {
-            gap: 6px;
-            row-gap: 7px;
-            padding-top: 6px;
-            margin-top: 6px;
-            border-top: 1px solid var(--win-mid);
-        }
-
-        #feedbackGroup .corrupt-section:first-child {
-            border-top: 0;
-            margin-top: 0;
-            padding-top: 0;
-        }
-
-        #feedbackGroup .ctrl {
-            min-height: 30px;
-            box-sizing: border-box;
-            gap: 6px;
-            padding: 3px 7px;
-        }
-
-        #feedbackGroup .ctrl>label {
-            font-family: 'VT323', 'Courier New', monospace !important;
-            font-size: 12px !important;
-            line-height: 1 !important;
-            color: var(--ui-text) !important;
-            opacity: 1 !important;
-            letter-spacing: .06em;
-            text-transform: uppercase;
-        }
-
-        #feedbackGroup input[type="checkbox"] {
-            width: 16px;
-            height: 16px;
-        }
-
-        #feedbackGroup input[type="range"] {
-            width: 150px !important;
-            flex: 0 0 150px !important;
-        }
-
-        #feedbackGroup select {
-            height: 26px !important;
-            min-height: 26px !important;
-            box-sizing: border-box !important;
-            font-family: 'VT323', 'Courier New', monospace !important;
-            font-size: 12px !important;
-            line-height: 20px !important;
-            padding: 1px 24px 1px 6px !important;
-        }
-
-        #feedbackGroup #feedbackMotionRange {
-            min-width: 105px;
-        }
-
-        #feedbackGroup button {
-            height: 30px !important;
-            min-height: 30px !important;
-            box-sizing: border-box !important;
-            padding: 2px 9px !important;
-            font-family: 'VT323', 'Courier New', monospace !important;
-            font-size: 13px !important;
-            font-weight: normal !important;
-            line-height: 20px !important;
-        }
-
-        #feedbackGroup .val {
-            min-width: 38px;
-        }
-    </style>
-
-
-    <style id="huff-corrupt-cleanup-v1">
-        /* CORRUPT cleanup only: same boxed language as prior cleaned sections. */
-
-        #corruptGroup .group-body {
-            padding: 6px 8px 7px;
-        }
-
-        #corruptGroup .corrupt-section {
-            gap: 6px;
-            row-gap: 7px;
-            padding-top: 7px;
-            margin-top: 7px;
-            border-top: 1px solid var(--win-mid);
-        }
-
-        #corruptGroup .corrupt-section:first-child {
-            border-top: 0;
-            margin-top: 0;
-            padding-top: 0;
-        }
-
-        #corruptGroup .corrupt-section-title {
-            min-width: 76px;
-            box-sizing: border-box;
-            padding: 2px 6px;
-            font-family: 'VT323', 'Courier New', monospace !important;
-            font-size: 12px !important;
-            line-height: 18px;
-            letter-spacing: .08em;
-            color: var(--ui-text);
-            text-transform: uppercase;
-            white-space: nowrap;
-        }
-
-        #corruptGroup .ctrl {
-            min-height: 30px;
-            box-sizing: border-box;
-            gap: 6px;
-            padding: 3px 7px;
-        }
-
-        #corruptGroup .ctrl>label {
-            font-family: 'VT323', 'Courier New', monospace !important;
-            font-size: 12px !important;
-            line-height: 1 !important;
-            color: var(--ui-text) !important;
-            opacity: 1 !important;
-            letter-spacing: .06em;
-            text-transform: uppercase;
-        }
-
-        #corruptGroup input[type="checkbox"] {
-            width: 16px;
-            height: 16px;
-        }
-
-        #corruptGroup input[type="range"] {
-            width: 150px !important;
-            flex: 0 0 150px !important;
-        }
-
-        #corruptGroup select {
-            height: 26px !important;
-            min-height: 26px !important;
-            box-sizing: border-box !important;
-            font-family: 'VT323', 'Courier New', monospace !important;
-            font-size: 12px !important;
-            line-height: 20px !important;
-            padding: 1px 24px 1px 6px !important;
-        }
-
-        #corruptGroup button {
-            height: 30px !important;
-            min-height: 30px !important;
-            box-sizing: border-box !important;
-            padding: 2px 9px !important;
-            font-family: 'VT323', 'Courier New', monospace !important;
-            font-size: 13px !important;
-            font-weight: normal !important;
-            line-height: 20px !important;
-        }
-
-        #corruptGroup .val {
-            min-width: 42px;
-        }
-
-        #corruptGroup #corruptUpdateMode {
-            min-width: 122px;
-        }
-
-        #corruptGroup #corruptMaskMode,
-        #corruptGroup #corruptMaskSide,
-        #corruptGroup #cluBounds {
-            min-width: 92px;
-        }
-
-        #corruptGroup .corrupt-hidden {
-            display: none !important;
-        }
-    </style>
-
-
-    <style id="huff-luma-cleanup-v1">
-        /* LUMA KEY cleanup only. No runtime or parameter changes. */
-
-        #lumaKeyGroup .group-body {
-            padding: 6px 8px 7px;
-        }
-
-        #lumaKeyGroup .group-row {
-            gap: 6px;
-            row-gap: 7px;
-            align-items: center;
-        }
-
-        #lumaKeyGroup .ctrl {
-            min-height: 30px;
-            box-sizing: border-box;
-            gap: 6px;
-            padding: 3px 7px;
-            flex: 0 0 auto;
-            min-width: 0;
-            max-width: 100%;
-        }
-
-        #lumaKeyGroup .ctrl>label {
-            font-family: 'VT323', 'Courier New', monospace !important;
-            font-size: 12px !important;
-            line-height: 1 !important;
-            color: var(--ui-text) !important;
-            opacity: 1 !important;
-            letter-spacing: .06em;
-            text-transform: uppercase;
-        }
-
-        #lumaKeyGroup input[type="checkbox"] {
-            width: 16px;
-            height: 16px;
-        }
-
-        #lumaKeyGroup input[type="range"] {
-            width: 150px !important;
-            max-width: 150px !important;
-            min-width: 0 !important;
-            flex: 0 0 150px !important;
-        }
-
-        #lumaKeyGroup select {
-            height: 26px !important;
-            min-height: 26px !important;
-            box-sizing: border-box !important;
-            font-family: 'VT323', 'Courier New', monospace !important;
-            font-size: 12px !important;
-            line-height: 20px !important;
-            padding: 1px 24px 1px 6px !important;
-        }
-
-        #lumaKeyGroup button {
-            height: 30px !important;
-            min-height: 30px !important;
-            box-sizing: border-box !important;
-            padding: 2px 9px !important;
-            font-family: 'VT323', 'Courier New', monospace !important;
-            font-size: 13px !important;
-            font-weight: normal !important;
-            line-height: 20px !important;
-        }
-
-        #lumaKeyGroup .val {
-            min-width: 38px;
-        }
-
-        #lumaKeyGroup #lumaKeyTarget {
-            min-width: 112px;
-        }
-
-        #lumaKeyGroup #lumaKeySource {
-            min-width: 88px;
-        }
-
-        #lumaKeyGroup #lumaKeyFade {
-            min-width: 112px;
-        }
-
-        /* Bound Clip / Cleanup / Density instead of flex-growing to 100%. */
-        #lumaKeyGroup .luma-key-ab-box,
-        #lumaKeyGroup .luma-key-shape-box {
-            flex: 0 1 auto !important;
-            width: auto !important;
-            min-width: 0 !important;
-            max-width: 100% !important;
-        }
-
-        #lumaKeyGroup .luma-key-ab-box input[type="range"],
-        #lumaKeyGroup .luma-key-shape-box input[type="range"] {
-            width: 150px !important;
-            max-width: 150px !important;
-            flex: 0 0 150px !important;
-        }
-
-        #lumaKeyGroup .group-row>span:not(.val) {
-            font-family: 'VT323', 'Courier New', monospace !important;
-            font-size: 11px !important;
-            line-height: 1 !important;
-            color: var(--ui-text) !important;
-            opacity: .7 !important;
-            letter-spacing: .05em;
-        }
-
-        #lumaKeyGroup #lumaKeyStencilState {
-            font-family: 'Share Tech Mono', monospace !important;
-            font-size: 10px !important;
-            color: var(--ui-text) !important;
-            opacity: .65;
-            white-space: nowrap;
-        }
-    </style>
-
-
-    <style id="huff-scanline-scale-v1">
-        /*
-         * HUFF compact scale V1
-         *
-         * Use the existing Scanlines section as the size/spacing reference.
-         * This only reduces the cleaned sections that had been enlarged:
-         * Source, Presets, Symmetry, Global Mix, Feedback, Corrupt, Luma Key.
-         *
-         * Pipeline, Scanlines, Solarize and Flow already use the compact
-         * baseline and are intentionally not resized here.
-         */
-
-        /* ── Shared compact geometry ───────────────────────────── */
-        #sourceGroup .group-body,
-        #presetsGroup .group-body,
-        #symmetryGroup .group-body,
-        #globalMixGroup .group-body,
-        #feedbackGroup .group-body,
-        #corruptGroup .group-body,
-        #lumaKeyGroup .group-body {
-            padding: 3px 5px 4px !important;
-        }
-
-        #sourceGroup .group-row,
-        #presetsGroup .group-row,
-        #symmetryGroup .group-row,
-        #globalMixGroup .group-row,
-        #lumaKeyGroup .group-row {
-            gap: 3px !important;
-            row-gap: 3px !important;
-        }
-
-        #sourceGroup .ctrl,
-        #presetsGroup .ctrl,
-        #symmetryGroup .ctrl,
-        #globalMixGroup .ctrl,
-        #feedbackGroup .ctrl,
-        #corruptGroup .ctrl,
-        #lumaKeyGroup .ctrl {
-            min-height: 0 !important;
-            gap: 4px !important;
-            padding: 1px 5px !important;
-        }
-
-        #sourceGroup .ctrl>label,
-        #presetsGroup .ctrl>label,
-        #symmetryGroup .ctrl>label,
-        #globalMixGroup .ctrl>label,
-        #feedbackGroup .ctrl>label,
-        #corruptGroup .ctrl>label,
-        #lumaKeyGroup .ctrl>label {
-            font-size: 11px !important;
-            line-height: 1 !important;
-            letter-spacing: .06em !important;
-        }
-
-        #sourceGroup input[type="checkbox"],
-        #symmetryGroup input[type="checkbox"],
-        #globalMixGroup input[type="checkbox"],
-        #feedbackGroup input[type="checkbox"],
-        #corruptGroup input[type="checkbox"],
-        #lumaKeyGroup input[type="checkbox"] {
-            width: 12px !important;
-            height: 12px !important;
-        }
-
-        /* Match the existing Scanlines slider throw. */
-        #sourceGroup #baseMix,
-        #sourceGroup #volumeSlider,
-        #symmetryGroup input[type="range"]:not(#symPos),
-        #globalMixGroup #globalMixAmt,
-        #feedbackGroup input[type="range"],
-        #corruptGroup input[type="range"],
-        #lumaKeyGroup input[type="range"],
-        #lumaKeyGroup .luma-key-ab-box input[type="range"],
-        #lumaKeyGroup .luma-key-shape-box input[type="range"] {
-            width: 120px !important;
-            max-width: 120px !important;
-            flex: 0 0 120px !important;
-        }
-
-        /* Keep the transport position slider responsive. */
-        #sourceGroup #seekBar {
-            width: auto !important;
-            max-width: none !important;
-            min-width: 240px !important;
-            flex: 1 1 320px !important;
-        }
-
-        /* Compact menu height/padding to the existing Scanlines scale. */
-        #sourceGroup select,
-        #presetsGroup select,
-        #symmetryGroup select,
-        #globalMixGroup select,
-        #feedbackGroup select,
-        #corruptGroup select,
-        #lumaKeyGroup select {
-            height: 20px !important;
-            min-height: 20px !important;
-            padding: 0 18px 0 4px !important;
-            font-size: 12px !important;
-            line-height: 18px !important;
-        }
-
-        /* Compact action buttons without changing their established font. */
-        #sourceGroup button,
-        #presetsGroup button,
-        #feedbackGroup button,
-        #corruptGroup button,
-        #lumaKeyGroup button {
-            height: 23px !important;
-            min-height: 23px !important;
-            padding: 1px 7px !important;
-            font-size: 13px !important;
-            line-height: 17px !important;
-        }
-
-        /* ── Source-specific compacting ───────────────────────── */
-        #sourceGroup .transport-row {
-            gap: 4px !important;
-            padding: 2px 0 3px !important;
-        }
-
-        #sourceGroup .source-box-row {
-            gap: 3px !important;
-            row-gap: 3px !important;
-        }
-
-        #sourceGroup .source-box {
-            min-height: 0 !important;
-            padding: 1px 5px !important;
-            gap: 4px !important;
-        }
-
-        #sourceGroup .source-box>label,
-        #sourceGroup .source-emphasis-label {
-            font-size: 11px !important;
-            letter-spacing: .06em !important;
-        }
-
-        #sourceGroup input[type="file"] {
-            height: 23px !important;
-            min-height: 23px !important;
-            font-size: 11px !important;
-            line-height: 19px !important;
-        }
-
-        #sourceGroup input[type="file"]::file-selector-button,
-        #sourceGroup input[type="file"]::-webkit-file-upload-button {
-            height: 23px !important;
-            margin-right: 5px !important;
-            padding: 1px 7px !important;
-            font-size: 12px !important;
-            line-height: 17px !important;
-        }
-
-        #sourceGroup #sourceInfo,
-        #sourceGroup #status {
-            min-height: 20px !important;
-            padding: 1px 5px !important;
-        }
-
-        #sourceGroup .ctrl:has(> #sourceInfo) {
-            gap: 3px !important;
-            padding: 0 !important;
-        }
-
-        /* ── Presets compacting ───────────────────────────────── */
-        #presetsGroup .preset-box-row {
-            gap: 3px !important;
-            row-gap: 3px !important;
-        }
-
-        #presetsGroup .preset-box {
-            min-height: 0 !important;
-            gap: 4px !important;
-            padding: 1px 5px !important;
-        }
-
-        #presetsGroup select,
-        #presetsGroup input[type="text"] {
-            height: 20px !important;
-            min-height: 20px !important;
-            font-size: 11px !important;
-            line-height: 18px !important;
-        }
-
-        #presetsGroup #presetName {
-            padding: 1px 4px !important;
-        }
-
-        /* ── Symmetry / Global Mix compacting ─────────────────── */
-        #symmetryGroup .symmetry-box-row,
-        #globalMixGroup .global-mix-box-row {
-            gap: 3px !important;
-            row-gap: 3px !important;
-        }
-
-        #symmetryGroup .symmetry-box,
-        #globalMixGroup .global-mix-box {
-            min-height: 0 !important;
-            gap: 4px !important;
-            padding: 1px 5px !important;
-        }
-
-        /* ── Feedback / Corrupt compact subsections ───────────── */
-        #feedbackGroup .corrupt-section,
-        #corruptGroup .corrupt-section {
-            gap: 3px !important;
-            row-gap: 3px !important;
-            padding-top: 3px !important;
-            margin-top: 3px !important;
-        }
-
-        #feedbackGroup .corrupt-section:first-child,
-        #corruptGroup .corrupt-section:first-child {
-            margin-top: 0 !important;
-            padding-top: 0 !important;
-        }
-
-        #corruptGroup .corrupt-section-title {
-            min-width: 58px !important;
-            padding: 1px 3px !important;
-            font-size: 10px !important;
-            line-height: 1 !important;
-            letter-spacing: .1em !important;
-        }
-
-        #feedbackGroup .val,
-        #corruptGroup .val,
-        #lumaKeyGroup .val {
-            min-width: 24px !important;
-        }
-
-        /* ── Luma compacting while retaining overflow fix ─────── */
-        #lumaKeyGroup .luma-key-ab-box,
-        #lumaKeyGroup .luma-key-shape-box {
-            flex: 0 1 auto !important;
-            width: auto !important;
-            min-width: 0 !important;
-            max-width: 100% !important;
-        }
-
-        #lumaKeyGroup .group-row>span:not(.val) {
-            font-size: 10px !important;
-        }
-
-        #lumaKeyGroup #lumaKeyStencilState {
-            font-size: 9px !important;
-        }
-    </style>
-
-
-    <style id="huff-index7-source-feedback-alignment-v1">
-        /*
-         * Exact scope on the user's index(7).html:
-         * 1) Base Mix + Volume get a larger throw related to the transport slider.
-         * 2) Feedback CLEAR + RESET MOTION use the compact Scanlines action-button scale.
-         */
-
-        /*
-         * Transport remains the flexible/responsive slider.
-         * Base Mix and Volume use the transport slider's 240px minimum as their
-         * fixed visual reference so they no longer look undersized beside it.
-         * All other effect sliders remain at the compact 120px scale.
-         */
-        #sourceGroup #baseMix,
-        #sourceGroup #volumeSlider {
-            width: 240px !important;
-            max-width: 240px !important;
-            min-width: 240px !important;
-            flex: 0 0 240px !important;
-        }
-
-        /*
-         * Match the compact Scanlines reset-button treatment while keeping both
-         * Feedback actions on one exact height so they align in the Core row.
-         */
-        #feedbackGroup #clearBufBtn,
-        #feedbackGroup #resetMotionBtn {
-            height: 23px !important;
-            min-height: 23px !important;
-            box-sizing: border-box !important;
-            padding: 2px 7px !important;
-            font-family: 'VT323', 'Courier New', monospace !important;
-            font-size: 9px !important;
-            font-weight: normal !important;
-            line-height: 13px !important;
-            align-self: center;
-        }
-    </style>
-
-
-    <style id="huff-control-geometry-contract-v1">
-        /*
-         * HUFF CONTROL GEOMETRY CONTRACT V1
-         *
-         * Scanlines remains the compact visual reference.
-         *
-         * MAIN UI CONTRACT:
-         * - every boxed control chip is exactly 24px high
-         * - every normal field inside a chip is 20px high
-         * - every normal slider uses the same 120px throw
-         * - every slider uses the same 4px track / 11x14 thumb geometry
-         * - direct action buttons align to the same 24px control-chip height
-         *
-         * SOURCE hierarchy exceptions:
-         * - BASE MIX and VOL remain larger at 240px
-         * - transport SEEK remains flexible/responsive
-         *
-         * This block is intentionally scoped to #controlsForm so MIDI / OSC /
-         * Syphon / Spout modal layouts are not altered.
-         */
-
-        :root {
-            --huff-ctrl-h: 24px;
-            --huff-field-h: 20px;
-            --huff-slider-w: 120px;
-            --huff-source-slider-w: 240px;
-            --huff-range-track-h: 4px;
-            --huff-range-thumb-w: 11px;
-            --huff-range-thumb-h: 14px;
-        }
-
-        /* ── One exact outer box height across the main instrument ── */
-        #controlsForm .ctrl {
-            height: var(--huff-ctrl-h) !important;
-            min-height: var(--huff-ctrl-h) !important;
-            max-height: var(--huff-ctrl-h) !important;
-            box-sizing: border-box !important;
-            padding: 1px 5px !important;
-            gap: 4px !important;
-            align-items: center !important;
-        }
-
-        /*
-         * Box subclasses inherited from earlier cleanup passes.
-         * Explicitly lock them to the same contract rather than allowing their
-         * old 30px/min-height rules to win.
-         */
-        #controlsForm .source-box,
-        #controlsForm .preset-box,
-        #controlsForm .symmetry-box,
-        #controlsForm .global-mix-box,
-        #controlsForm .luma-key-ab-box,
-        #controlsForm .luma-key-shape-box {
-            height: var(--huff-ctrl-h) !important;
-            min-height: var(--huff-ctrl-h) !important;
-            max-height: var(--huff-ctrl-h) !important;
-            box-sizing: border-box !important;
-            padding-top: 1px !important;
-            padding-bottom: 1px !important;
-        }
-
-        /* ── Labels / values stay compact and vertically centered ── */
-        #controlsForm .ctrl > label,
-        #controlsForm .source-box > label,
-        #controlsForm .preset-box > label,
-        #controlsForm .symmetry-box > label,
-        #controlsForm .global-mix-box > label {
-            font-family: 'VT323', 'Courier New', monospace !important;
-            font-size: 11px !important;
-            line-height: 1 !important;
-            letter-spacing: .06em !important;
-        }
-
-        #controlsForm .val {
-            line-height: 1 !important;
-            min-width: 24px !important;
-        }
-
-        /* ── One exact range visual geometry everywhere in main UI ── */
-        #controlsForm input[type="range"] {
-            -webkit-appearance: none !important;
-            appearance: none !important;
-            width: var(--huff-slider-w) !important;
-            min-width: var(--huff-slider-w) !important;
-            max-width: var(--huff-slider-w) !important;
-            flex: 0 0 var(--huff-slider-w) !important;
-            height: var(--huff-range-track-h) !important;
-            box-sizing: border-box !important;
-            margin: 0 !important;
-            background: var(--win-mid) !important;
-            border-top: 1px solid var(--win-dark) !important;
-            border-left: 1px solid var(--win-dark) !important;
-            border-bottom: 0 !important;
-            border-right: 0 !important;
-            border-radius: 0 !important;
-            outline: none !important;
-        }
-
-        #controlsForm input[type="range"]::-webkit-slider-runnable-track {
-            height: var(--huff-range-track-h) !important;
-            background: var(--win-mid) !important;
-            border: 0 !important;
-            border-radius: 0 !important;
-        }
-
-        #controlsForm input[type="range"]::-webkit-slider-thumb {
-            -webkit-appearance: none !important;
-            appearance: none !important;
-            width: var(--huff-range-thumb-w) !important;
-            height: var(--huff-range-thumb-h) !important;
-            margin-top: -5px !important;
-            box-sizing: border-box !important;
-            background: var(--win-bg) !important;
-            border-top: 2px solid var(--win-light) !important;
-            border-left: 2px solid var(--win-light) !important;
-            border-bottom: 2px solid var(--win-dark) !important;
-            border-right: 2px solid var(--win-dark) !important;
-            border-radius: 0 !important;
-        }
-
-        #controlsForm input[type="range"]::-moz-range-track {
-            height: var(--huff-range-track-h) !important;
-            background: var(--win-mid) !important;
-            border: 0 !important;
-            border-radius: 0 !important;
-        }
-
-        #controlsForm input[type="range"]::-moz-range-thumb {
-            width: var(--huff-range-thumb-w) !important;
-            height: var(--huff-range-thumb-h) !important;
-            box-sizing: border-box !important;
-            background: var(--win-bg) !important;
-            border-top: 2px solid var(--win-light) !important;
-            border-left: 2px solid var(--win-light) !important;
-            border-bottom: 2px solid var(--win-dark) !important;
-            border-right: 2px solid var(--win-dark) !important;
-            border-radius: 0 !important;
-        }
-
-        /* ── One field height for selects / numbers / text ── */
-        #controlsForm select,
-        #controlsForm input[type="number"],
-        #controlsForm input[type="text"] {
-            height: var(--huff-field-h) !important;
-            min-height: var(--huff-field-h) !important;
-            max-height: var(--huff-field-h) !important;
-            box-sizing: border-box !important;
-            line-height: 18px !important;
-        }
-
-        #controlsForm select {
-            padding-top: 0 !important;
-            padding-bottom: 0 !important;
-        }
-
-        #controlsForm input[type="checkbox"] {
-            width: 12px !important;
-            height: 12px !important;
-            flex: 0 0 12px !important;
-        }
-
-        /*
-         * Buttons INSIDE a boxed chip must fit inside the 24px chip.
-         * This covers Source transport controls, Presets, Luma CAPTURE,
-         * Scanline angle buttons, etc.
-         */
-        #controlsForm .ctrl > button {
-            height: var(--huff-field-h) !important;
-            min-height: var(--huff-field-h) !important;
-            max-height: var(--huff-field-h) !important;
-            box-sizing: border-box !important;
-            padding: 1px 6px !important;
-            line-height: 14px !important;
-        }
-
-        /*
-         * Standalone row actions (CLEAR, RESET MOTION, RESET XYZ, etc.) align
-         * to the complete 24px chip height.
-         */
-        #controlsForm .group-row > button,
-        #controlsForm .corrupt-section > button {
-            height: var(--huff-ctrl-h) !important;
-            min-height: var(--huff-ctrl-h) !important;
-            max-height: var(--huff-ctrl-h) !important;
-            box-sizing: border-box !important;
-            padding: 2px 7px !important;
-            line-height: 14px !important;
-            align-self: center !important;
-        }
-
-        /* ── SOURCE: all three rows obey the same 24px box height ── */
-        #sourceGroup .source-box {
-            height: var(--huff-ctrl-h) !important;
-            min-height: var(--huff-ctrl-h) !important;
-            max-height: var(--huff-ctrl-h) !important;
-        }
-
-        #sourceGroup input[type="file"] {
-            height: var(--huff-field-h) !important;
-            min-height: var(--huff-field-h) !important;
-            max-height: var(--huff-field-h) !important;
-            box-sizing: border-box !important;
-            line-height: 16px !important;
-        }
-
-        #sourceGroup input[type="file"]::file-selector-button,
-        #sourceGroup input[type="file"]::-webkit-file-upload-button {
-            height: var(--huff-field-h) !important;
-            min-height: var(--huff-field-h) !important;
-            max-height: var(--huff-field-h) !important;
-            box-sizing: border-box !important;
-            margin-right: 5px !important;
-            padding: 1px 6px !important;
-            line-height: 14px !important;
-        }
-
-        #sourceGroup #timeDisplay {
-            height: var(--huff-field-h) !important;
-            min-height: var(--huff-field-h) !important;
-            box-sizing: border-box !important;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        /*
-         * Large Source sliders remain a deliberate hierarchy, but BASE MIX and
-         * VOL now share the exact same range geometry as every other slider.
-         */
-        #sourceGroup #baseMix,
-        #sourceGroup #volumeSlider {
-            width: var(--huff-source-slider-w) !important;
-            min-width: var(--huff-source-slider-w) !important;
-            max-width: var(--huff-source-slider-w) !important;
-            flex: 0 0 var(--huff-source-slider-w) !important;
-        }
-
-        /*
-         * Transport is the one flexible range control.
-         * Track/thumb height remains identical to every other slider.
-         */
-        #sourceGroup #seekBar {
-            width: auto !important;
-            min-width: var(--huff-source-slider-w) !important;
-            max-width: none !important;
-            flex: 1 1 320px !important;
-        }
-
-        /*
-         * Source readouts intentionally remain readouts rather than another
-         * nested chip, but their visible pills use the same 20px inner height.
-         */
-        #sourceGroup #sourceInfo,
-        #sourceGroup #status {
-            height: var(--huff-field-h) !important;
-            min-height: var(--huff-field-h) !important;
-            max-height: var(--huff-field-h) !important;
-            box-sizing: border-box !important;
-            padding-top: 1px !important;
-            padding-bottom: 1px !important;
-        }
-
-        /* Preserve hidden compatibility sliders. */
-        #controlsForm input[type="range"][aria-hidden="true"] {
-            display: none !important;
-        }
-    </style>
-
-
-    <style id="huff-scan-angle-long-throw-v2">
-        /*
-         * Proven HUFF long-throw ANGLE treatment.
-         * ANGLE has 721 reachable values (-180..180 in 0.5° increments),
-         * so it intentionally receives more physical travel than normal sliders.
-         */
-        #controlsForm #scanAngle {
-            width: 720px !important;
-            min-width: 360px !important;
-            max-width: calc(100vw - 360px) !important;
-            flex: 1 1 720px !important;
-        }
-    </style>
-
-    <style id="huff-live-camera-transport-v1">
-        /*
-         * A live MediaStream is not seekable transport.
-         * Keep the transport box visible for layout consistency but visibly disable it.
-         */
-        #sourceGroup #seekBar:disabled {
-            opacity: .35 !important;
-            cursor: not-allowed !important;
-        }
-
-        #sourceGroup .source-seek-box:has(#seekBar:disabled) {
-            opacity: .62;
         }
     </style>
 
@@ -3209,8 +2284,7 @@
 
         <!-- transport row -->
         <div class="topbar">
-            <span class="topbar-title"><img src="icon-name.jpg" alt="HUFF"
-                    style="display:block;width:24px;height:24px;object-fit:cover"></span>
+            <span class="topbar-title"><img src="icon-name.jpg" alt="HUFF" style="display:block;width:24px;height:24px;object-fit:cover"></span>
             <div class="topbar-sep"></div>
             <button id="midiBtn" class="btn-dim">MIDI</button>
             <button id="oscBtn" class="btn-dim">OSC</button>
@@ -3289,15 +2363,12 @@
                                     title="HUFF Classic recommends H.264/AAC MP4. MOV/WebM and other codecs depend on the operating-system WebView decoder.">
                                 <button id="playBtn" disabled>▶ Play</button>
                                 <button id="pauseBtn" disabled>⏸ Pause</button>
-                                <button id="refreshBtn" disabled>↻ Refresh</button>
+                            </div>
+
+                            <div class="ctrl source-box">
                                 <label>LOOP</label>
                                 <input id="loopToggle" type="checkbox" checked>
                             </div>
-
-                            <!-- <div class="ctrl source-box">
-                                <label>LOOP</label>
-                                <input id="loopToggle" type="checkbox" checked>
-                            </div> -->
 
                             <!-- <button id="aboutBtn" class="btn-red">ABOUT</button> -->
                         </div>
@@ -3326,15 +2397,6 @@
                                 <label>BASE MIX</label>
                                 <input id="baseMix" type="range" min="0" max="1" step="0.05" value="1.00">
                                 <span class="val" id="baseMixVal">1.00</span>
-                            </div>
-
-
-                            <div class="ctrl">
-                                <label style="font-size:9px;opacity:.5">VOL</label>
-                                <input id="volumeSlider" type="range" min="0" max="1" step="0.01" value="1"
-                                    style="width:60px">
-                            </div>
-                            <div class="ctrl" style="border:none;background:none;padding:0 2px">
                             </div>
                             <div class="ctrl">
                                 <label>BASE BG</label>
@@ -3377,7 +2439,15 @@
                             <!-- Legacy compatibility alias. Old presets/MIDI/OSC maps may still target `quality`; it now mirrors HISTORY only and no longer changes preview encoding. -->
                             <input id="quality" type="range" min="0" max="3.00" step="0.05" value="1.00"
                                 style="display:none" aria-hidden="true" tabindex="-1">
-
+                            <button id="refreshBtn" disabled>↻ Refresh</button>
+                            
+                          <div class="ctrl">
+                                <label style="font-size:9px;opacity:.5">VOL</label>
+                                <input id="volumeSlider" type="range" min="0" max="1" step="0.01" value="1"
+                                    style="width:60px">
+                            </div>
+                            <div class="ctrl" style="border:none;background:none;padding:0 2px">
+                            </div>
 
                         </div>
                     </div>
@@ -3395,7 +2465,6 @@
                                     <option value="">— choose preset —</option>
                                 </select>
                                 <button id="presetBuiltinLoadBtn" type="button" class="btn-dim">RECALL</button>
-                                <button id="resetBtn" title="Reset all parameters to defaults">↺ RESET</button>
                             </div>
 
                             <div class="ctrl preset-box preset-file-box">
@@ -3403,16 +2472,14 @@
                                 <input id="presetName" type="text" placeholder="preset name…"
                                     title="Used as the suggested filename when saving a preset.">
                                 <button id="presetSaveBtn" type="button" class="btn-dim"
-                                    title="Save the current HUFF state to a local JSON preset file using the native Save dialog.">SAVE
-                                    FILE…</button>
+                                    title="Save the current HUFF state to a local JSON preset file using the native Save dialog.">SAVE FILE…</button>
                                 <button id="presetLoadBtn" type="button" class="btn-dim"
-                                    title="Choose a local HUFF preset JSON file. It is loaded immediately and added to the preset menu for this HUFF session only.">LOAD
-                                    FILE…</button>
+                                    title="Choose a local HUFF preset JSON file. It is loaded immediately and added to the preset menu for this HUFF session only.">LOAD FILE…</button>
                             </div>
 
-                            <!-- <div class="ctrl preset-box preset-reset-box">
+                            <div class="ctrl preset-box preset-reset-box">
                                 <button id="resetBtn" title="Reset all parameters to defaults">↺ RESET</button>
-                            </div> -->
+                            </div>
 
                             <!-- <span id="presetFileState" style="font-size:9px;color:rgba(255,255,255,.34);padding:0 4px;font-family:'Share Tech Mono',monospace">loaded files stay for this session · Ctrl+Z undo</span> -->
                         </div>
@@ -3448,32 +2515,30 @@
                                     <option value="glitch">CORRUPT TOP</option>
                                 </select>
                             </div>
-                            <div id="pipelineDiagram" class="pipeline-diagram"
-                                aria-label="CLASSIC pipeline: feed to feedback to flow to symmetry to solarize"
-                                title="The active recipe stage order. Global Mix remains controlled separately by its named insertion position.">
-                                <span class="pipeline-diagram-stage pipeline-diagram-image-feed">FEED</span>
-                                <span class="pipeline-diagram-arrow" aria-hidden="true">→</span>
-                                <span class="pipeline-diagram-stage pipeline-diagram-feedback">FEEDBACK</span>
-                                <span class="pipeline-diagram-arrow" aria-hidden="true">→</span>
-                                <span class="pipeline-diagram-stage pipeline-diagram-flow">FLOW</span>
-                                <span class="pipeline-diagram-arrow" aria-hidden="true">→</span>
-                                <span class="pipeline-diagram-stage pipeline-diagram-symmetry">SYMMETRY</span>
-                                <span class="pipeline-diagram-arrow" aria-hidden="true">→</span>
-                                <span class="pipeline-diagram-stage pipeline-diagram-solarize">SOLARIZE</span>
-                            </div>
-
                             <!-- <span style="font-size:9px;color:rgba(255,255,255,.38);font-family:'Share Tech Mono',monospace;white-space:nowrap">VALIDATED SERIAL</span> -->
                         </div>
-
-                        <!-- <div class="pipeline-awareness"
+                        <div id="pipelineDiagram" class="pipeline-diagram"
+                            aria-label="CLASSIC pipeline: feed to feedback to flow to symmetry to solarize"
+                            title="The active recipe stage order. Global Mix remains controlled separately by its named insertion position.">
+                            <span class="pipeline-diagram-stage pipeline-diagram-image-feed">FEED</span>
+                            <span class="pipeline-diagram-arrow" aria-hidden="true">→</span>
+                            <span class="pipeline-diagram-stage pipeline-diagram-feedback">FEEDBACK</span>
+                            <span class="pipeline-diagram-arrow" aria-hidden="true">→</span>
+                            <span class="pipeline-diagram-stage pipeline-diagram-flow">FLOW</span>
+                            <span class="pipeline-diagram-arrow" aria-hidden="true">→</span>
+                            <span class="pipeline-diagram-stage pipeline-diagram-symmetry">SYMMETRY</span>
+                            <span class="pipeline-diagram-arrow" aria-hidden="true">→</span>
+                            <span class="pipeline-diagram-stage pipeline-diagram-solarize">SOLARIZE</span>
+                        </div>
+                        <div class="pipeline-awareness"
                             title="HUFF Classic has three primary ways to feed live imagery into its persistent image system: Corrupt, Scanlines, or Luma Key with TARGET set to COMPOSITE.">
                             <span class="pipeline-awareness-label">IMAGE FEED</span>
                             <span id="pipelineFeedCorrupt" class="pipeline-feed">CORRUPT</span>
                             <span id="pipelineFeedScan" class="pipeline-feed">SCANLINES</span>
                             <span id="pipelineFeedLuma" class="pipeline-feed">LUMA/COMP</span>
                             <span id="pipelineFeedSummary" class="pipeline-feed-summary warn">NONE</span>
-                            <span id="pipelineRouteSummary" class="pipeline-awareness-label">CLASSIC: IMAGE FEED → FEEDBACK → FLOW → SYMMETRY → SOLARIZE</span>
-                        </div> -->
+                            <!-- <span id="pipelineRouteSummary" class="pipeline-awareness-label">CLASSIC: IMAGE FEED → FEEDBACK → FLOW → SYMMETRY → SOLARIZE</span> -->
+                        </div>
                     </div>
                 </div>
 
@@ -3524,14 +2589,15 @@
                             </div>
                             <div class="ctrl symmetry-box">
                                 <label>H FLIP</label>
-                                <input id="symFlipH" type="checkbox"
-                                    title="Flip the incoming image left-to-right. Independent of MIRROR.">
+                                <input id="symFlipH" type="checkbox" title="Flip the incoming image left-to-right. Independent of MIRROR.">
                             </div>
                             <div class="ctrl symmetry-box">
                                 <label>V FLIP</label>
-                                <input id="symFlipV" type="checkbox"
-                                    title="Flip the incoming image top-to-bottom. Independent of MIRROR.">
+                                <input id="symFlipV" type="checkbox" title="Flip the incoming image top-to-bottom. Independent of MIRROR.">
                             </div>
+                        </div>
+
+                        <div class="group-row symmetry-box-row">
                             <div class="ctrl symmetry-box">
                                 <label>AXIS X</label>
                                 <input id="symPosX" type="range" min="0" max="1" step="0.001" value="0.5"
@@ -3655,6 +2721,9 @@
                                 <span class="val" id="historyFramesVal">—</span>
                             </div>
                             <button id="clearBufBtn" title="Wipe frame ring and buffers instantly">⬛ Clear</button>
+                                                        <button id="resetMotionBtn" class="btn-dim" style="font-size:9px;padding:2px 7px"
+                                title="Reset original Feedback motion defaults: X 1, Y 1, Z 1.000, θ 0.01">↺ Reset
+                                Motion</button>
                         </div>
 
                         <div class="corrupt-section">
@@ -3691,9 +2760,6 @@
                                     title="Original FB θ. Rotation in degrees per Feedback update.">
                                 <span class="val" id="fbThetaVal">0.01</span>
                             </div>
-                            <button id="resetMotionBtn" class="btn-dim" style="font-size:9px;padding:2px 7px"
-                                title="Reset original Feedback motion defaults: X 1, Y 1, Z 1.000, θ 0.01">↺ Reset
-                                Motion</button>                            
                         </div>
 
                         <div class="corrupt-section">
@@ -4067,7 +3133,7 @@
                 </div>
 
                 <!-- LUMA KEY — Fairlight stored stencil + INDIGO key shaping -->
-                <div class="group" id="lumaKeyGroup">
+                <div class="group">
                     <div class="group-label">Luma Key</div>
                     <div class="group-body">
                         <div class="group-row">
@@ -4085,8 +3151,9 @@
                             <span
                                 style="font-size:9px;color:rgba(255,255,255,.4);font-family:'Share Tech Mono',monospace;white-space:nowrap">DARK
                                 ←</span>
-                            <div class="ctrl luma-key-ab-box">
+                            <div class="ctrl" style="flex:1">
                                 <input id="lumaKeyAB" type="range" min="0" max="1" step="0.01" value="0.5"
+                                    style="width:100%"
                                     title="Clip / threshold. Determines where the luminance key changes ownership between clean and processed image.">
                             </div>
                             <span
@@ -4142,15 +3209,17 @@
                             </div>
                         </div>
                         <div class="group-row">
-                            <div class="ctrl luma-key-shape-box">
+                            <div class="ctrl" style="flex:1">
                                 <label>CLEANUP</label>
                                 <input id="lumaKeyCleanup" type="range" min="0" max="1" step="0.01" value="0"
+                                    style="width:100%"
                                     title="INDIGO-inspired key cleanup. Pushes low-level key leakage and slight shadows toward black while keeping the opposite end fixed.">
                                 <span class="val" id="lumaKeyCleanupVal">0.00</span>
                             </div>
-                            <div class="ctrl luma-key-shape-box">
+                            <div class="ctrl" style="flex:1">
                                 <label>DENSITY</label>
                                 <input id="lumaKeyDensity" type="range" min="0" max="1" step="0.01" value="0"
+                                    style="width:100%"
                                     title="INDIGO-inspired key density. Pushes strong keyed foreground toward full opacity while keeping black fixed.">
                                 <span class="val" id="lumaKeyDensityVal">0.00</span>
                             </div>
