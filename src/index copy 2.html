@@ -4171,7 +4171,7 @@
                             <div class="ctrl">
                                 <label>SPEED</label>
                                 <input id="scanSpeed" type="range" min="0" max="5" step="0.005" value="1.0"
-                                    title="BANDS: steady travel speed of the ordered blind plane along its band axis. SPEED no longer creates wobble or scales MOVE X/Y/Z. FIELD retains its established motion-rate behavior.">
+                                    title="Overall Scanlines motion speed. 0 freezes automatic slice motion, roll, spin, and XYZ movement while live video continues playing inside the held geometry. 1 preserves the Pass 39N cadence.">
                                 <span class="val" id="scanSpeedVal">1.00×</span>
                             </div>
                             <div class="ctrl">
@@ -4189,22 +4189,16 @@
                             <div class="ctrl">
                                 <label>ZOOM</label>
                                 <input id="scanZoom" type="range" min="0.25" max="4" step="0.01" value="1"
-                                    title="General Scanlines depth scale. In BANDS this scales each ordered blind without unfolding it into a FIELD panel. In FIELD it preserves the existing panel-aware collage zoom.">
+                                    title="Panel-aware ZOOM. 1× is the exact flat 2D Scanlines geometry. Moving away from 1× lets each live-video band open into a free rectangular panel and scale around its own center, so buffers/Feedback/Flow can build multi-layer collages.">
                                 <span class="val" id="scanZoomVal">1.00×</span>
                             </div>
                             <div class="ctrl">
                                 <label>PANEL LAYOUT</label>
                                 <select id="scanPanelLayout"
-                                    title="BANDS is an ordered window-blind structure with relational spacing, per-blind expansion, and Magnet deformation. FIELD preserves the free deterministic X/Y/Z collage layout.">
+                                    title="BANDS preserves the existing Scanlines panel lanes. FIELD releases those same live-video panels into a deterministic X/Y/Z collage field. No new source, buffer, or temporal effect is introduced.">
                                     <option value="bands" selected>BANDS</option>
                                     <option value="field">FIELD</option>
                                 </select>
-                            </div>
-                            <div class="ctrl scan-band-control">
-                                <label>SPREAD</label>
-                                <input id="scanBandSpread" type="range" min="0" max="1" step="0.01" value="1"
-                                    title="Ordered BANDS spacing. 0% scrunches the blind stack toward FOCUS; 100% distributes the ordered blind lanes across the full rotated frame. GAP adds extra distance between neighbouring blinds.">
-                                <span class="val" id="scanBandSpreadVal">100%</span>
                             </div>
                             <div class="ctrl scan-field-control" style="display:none">
                                 <label>SPREAD X</label>
@@ -4231,15 +4225,15 @@
                                 <span class="val" id="scanFieldSizeVarVal">20%</span>
                             </div>
                             <div class="ctrl scan-field-control" style="display:none">
-                                <label>XY MOTION</label>
+                                <label>DRIFT</label>
                                 <input id="scanFieldDrift" type="range" min="0" max="1" step="0.01" value="0.15"
-                                    title="FIELD only: autonomous X/Y panel motion amount. Scanlines SPEED owns the rate; SPEED 0 freezes this motion. This is separate from BANDS STAGGER, which is static geometry.">
+                                    title="Slowly move individual FIELD panels around their distributed X/Y positions. The single Scanlines SPEED control owns the rate; SPEED 0 freezes this motion.">
                                 <span class="val" id="scanFieldDriftVal">15%</span>
                             </div>
                             <div class="ctrl scan-field-control" style="display:none">
-                                <label>Z MOTION</label>
+                                <label>DEPTH DRIFT</label>
                                 <input id="scanFieldDepthDrift" type="range" min="0" max="1" step="0.01" value="0.10"
-                                    title="FIELD only: autonomous forward/back panel motion amount. Scanlines SPEED owns the rate; SPEED 0 freezes this motion.">
+                                    title="Slowly move individual FIELD panels forward/back in apparent Z. The single Scanlines SPEED control owns the rate; SPEED 0 freezes this motion.">
                                 <span class="val" id="scanFieldDepthDriftVal">10%</span>
                             </div>
                             <button id="scanFieldResetBtn" class="btn-dim scan-field-control"
@@ -4249,19 +4243,19 @@
                             <div class="ctrl">
                                 <label>MOVE X</label>
                                 <input id="scanMoveX" type="range" min="-1000" max="1000" step="1" value="0"
-                                    title="Direct continuous horizontal motion in pixels per second. Independent from main SPEED.">
+                                    title="Continuous horizontal motion in pixels per second. The main SPEED control scales this motion.">
                                 <span class="val" id="scanMoveXVal">0 px/s</span>
                             </div>
                             <div class="ctrl">
                                 <label>MOVE Y</label>
                                 <input id="scanMoveY" type="range" min="-1000" max="1000" step="1" value="0"
-                                    title="Direct continuous vertical motion in pixels per second. Independent from main SPEED.">
+                                    title="Continuous vertical motion in pixels per second. The main SPEED control scales this motion.">
                                 <span class="val" id="scanMoveYVal">0 px/s</span>
                             </div>
                             <div class="ctrl">
                                 <label>MOVE Z</label>
                                 <input id="scanMoveZ" type="range" min="-2" max="2" step="0.01" value="0"
-                                    title="Direct continuous depth motion through the ZOOM control. Independent from main SPEED; motion reflects at 0.25× / 4×.">
+                                    title="Continuous panel-depth motion through the ZOOM control. As Z moves away from 1×, flat bands open into free video panels; crossing 1× returns them to the original 2D band geometry. Motion reflects at 0.25× / 4× and is scaled by SPEED.">
                                 <span class="val" id="scanMoveZVal">0.00×/s</span>
                             </div>
                             <button id="scanResetXYZBtn" class="btn-dim" style="font-size:9px;padding:2px 7px"
@@ -4281,7 +4275,13 @@
                                     style="font-size:9px;padding:1px 5px;margin-left:2px"
                                     title="Set to 90°">90°</button>
                             </div>
-
+                            <div class="ctrl"><label>SPIN L</label><input id="scanSpinLeft" type="checkbox"></div>
+                            <div class="ctrl"><label>SPIN R</label><input id="scanSpinRight" type="checkbox"></div>
+                            <div class="ctrl">
+                                <label>SPIN SPD</label>
+                                <input id="scanSpinSpeed" type="range" min="0.1" max="10" step="0.1" value="1">
+                                <span class="val" id="scanSpinSpeedVal">1.0</span>
+                            </div>
                             <div class="ctrl">
                                 <label>BANDS</label>
                                 <input id="clusterCount" type="range" min="1" max="50" step="1" value="3">
@@ -4289,126 +4289,37 @@
                             </div>
                             <div class="ctrl">
                                 <label>SIZE</label>
-                                <input id="clusterRadius" type="range" min="1" max="120" step="1" value="10"
-                                    title="Blind thickness only. SIZE enlarges or thins every line around its existing lane center so adjacent blinds may overlap or separate; it no longer bunches/re-spaces the stack.">
+                                <input id="clusterRadius" type="range" min="1" max="120" step="1" value="10">
                                 <span class="val" id="clusterRadiusVal">10</span>
                             </div>
                             <div class="ctrl">
                                 <label>FOCUS</label>
-                                <input id="scanFocus" type="range" min="0" max="1" step="0.01" value="0.5"
-                                    title="BANDS stack center. 50% centers the ordered blind plane in the frame; lower/higher values move the complete ordered stack toward the first/last side without changing SIZE. FIELD keeps its established focus bias.">
+                                <input id="scanFocus" type="range" min="0" max="1" step="0.01" value="0.5">
                                 <span class="val" id="scanFocusVal">0.50</span>
-                            </div>
-                            <div class="ctrl scan-band-control">
-                                <label>EXPAND X</label>
-                                <input id="scanExpandX" type="range" min="0" max="4" step="0.01" value="0"
-                                    title="Expand every ordered blind horizontally around its own center. Extended to 400% for deliberately extreme overlap/overscan without releasing the blind from the BANDS stack.">
-                                <span class="val" id="scanExpandXVal">0%</span>
-                            </div>
-                            <div class="ctrl scan-band-control">
-                                <label>EXPAND Y</label>
-                                <input id="scanExpandY" type="range" min="0" max="3" step="0.01" value="0"
-                                    title="Unfurl each blind downward by opening its source crop. The first part of the range reaches the complete available image below the slice; the extended range then overscales that reconstructed region for stronger overlap and depth.">
-                                <span class="val" id="scanExpandYVal">0%</span>
-                            </div>
-                            <div class="ctrl scan-band-control">
-                                <label>EXPAND Z</label>
-                                <input id="scanExpandZ" type="range" min="-3" max="3" step="0.01" value="0"
-                                    title="Depth-fan the ordered blinds around FOCUS with a wider ±300% range. One side recedes while the other advances; depth remains separate from EXPAND Y. Magnet adds local depth on top.">
-                                <span class="val" id="scanExpandZVal">0%</span>
-                            </div>
-                            <div class="ctrl scan-band-control">
-                                <label>LFO AMT</label>
-                                <input id="scanLfoAmount" type="range" min="0" max="2" step="0.01" value="0"
-                                    title="Dedicated sine-wave wobble of the complete BANDS plane across its cross-axis. Independent from SPEED, DRIFT, ROLL, and MOVE X/Y/Z.">
-                                <span class="val" id="scanLfoAmountVal">0%</span>
-                            </div>
-                            <div class="ctrl scan-band-control">
-                                <label>LFO RATE</label>
-                                <input id="scanLfoRate" type="range" min="0" max="4" step="0.01" value="0.5"
-                                    title="Sine-wave wobble rate in cycles per second. LFO AMT 0 disables the wobble without stopping BANDS travel.">
-                                <span class="val" id="scanLfoRateVal">0.50 Hz</span>
-                            </div>
-                            <div class="ctrl scan-band-control"><label>MAGNET</label><input id="scanMagnetOn" type="checkbox"
-                                title="Deform the ordered blind stack like a flexible sheet over a moving magnet. Magnet adds local Z/perspective deformation without replacing EXPAND, STAGGER, ROLL, or MOVE."></div>
-                            <div class="ctrl scan-band-control">
-                                <label>MAG MODE</label>
-                                <select id="scanMagnetMode" title="LOCAL makes a smooth bubble around one blind. FOLD creates a moving split: one blind / rest below, then two / rest below, then three, with a rounded crest at the boundary.">
-                                    <option value="local" selected>LOCAL</option>
-                                    <option value="fold">FOLD</option>
-                                </select>
-                            </div>
-                            <div class="ctrl scan-band-control">
-                                <label>MAG POS</label>
-                                <input id="scanMagnetPosition" type="range" min="0" max="1" step="0.01" value="0.5"
-                                    title="Magnet position through ordered blind index space. 0 is the first blind; 100% is the last blind.">
-                                <span class="val" id="scanMagnetPositionVal">50%</span>
-                            </div>
-                            <div class="ctrl scan-band-control">
-                                <label>MAG STR</label>
-                                <input id="scanMagnetStrength" type="range" min="-6" max="6" step="0.01" value="0.65"
-                                    title="Magnet depth strength. Extended to ±600% for deliberately extreme pull/push through the blind stack; final perspective scale is bounded for render safety.">
-                                <span class="val" id="scanMagnetStrengthVal">65%</span>
-                            </div>
-                            <div class="ctrl scan-band-control">
-                                <label>MAG PERSP</label>
-                                <input id="scanMagnetPerspective" type="range" min="-3" max="3" step="0.01" value="0"
-                                    title="Magnet perspective / vanishing bias. Negative and positive values tilt the local bubble toward opposite sides with asymmetric scaling and cross-axis displacement around MAG POS.">
-                                <span class="val" id="scanMagnetPerspectiveVal">0.00</span>
-                            </div>
-                            <div class="ctrl scan-band-control">
-                                <label>MAG RAD</label>
-                                <input id="scanMagnetRadius" type="range" min="0.02" max="1" step="0.01" value="0.28"
-                                    title="How much of the ordered blind stack is influenced around the magnet boundary.">
-                                <span class="val" id="scanMagnetRadiusVal">28%</span>
-                            </div>
-                            <div class="ctrl scan-band-control">
-                                <label>MAG FALL</label>
-                                <input id="scanMagnetFalloff" type="range" min="0.25" max="4" step="0.05" value="1"
-                                    title="Magnet falloff curve. Lower values create a broad soft sheet; higher values tighten the deformation around the magnet.">
-                                <span class="val" id="scanMagnetFalloffVal">1.00</span>
-                            </div>
-                            <div class="ctrl scan-band-control">
-                                <label>MAG SPEED</label>
-                                <input id="scanMagnetSpeed" type="range" min="-1" max="1" step="0.01" value="0"
-                                    title="Automatically move the magnet through the blind stack on its own clock. 0 holds MAG POS exactly; Scanlines SPEED does not change magnet motion.">
-                                <span class="val" id="scanMagnetSpeedVal">0.00×</span>
-                            </div>
-                            <div class="ctrl scan-band-control">
-                                <label>MAG EDGE</label>
-                                <select id="scanMagnetEdge" title="Automatic magnet behavior at the first/last blind.">
-                                    <option value="bounce" selected>BOUNCE</option>
-                                    <option value="wrap">WRAP</option>
-                                </select>
                             </div>
                             <div class="ctrl">
                                 <label>SHIFT</label>
-                                <input id="scanShift" type="range" min="0" max="2.5" step="0.01" value="0.12"
-                                    title="Per-blind cross-axis source/destination displacement. The response accelerates into near-full-frame offsets at the upper range while retaining a drawable source strip.">
+                                <input id="scanShift" type="range" min="0" max="0.5" step="0.01" value="0.12">
                                 <span class="val" id="scanShiftVal">0.12</span>
                             </div>
                             <div class="ctrl">
                                 <label>SKEW</label>
-                                <input id="scanSkew" type="range" min="-2" max="2" step="0.01" value="0"
-                                    title="Focus-relative shear/fan of the ordered blinds. The wider range opens the structure around FOCUS instead of only pushing the whole stack in one direction.">
+                                <input id="scanSkew" type="range" min="-1" max="1" step="0.01" value="0">
                                 <span class="val" id="scanSkewVal">0.00</span>
                             </div>
-                            <div class="ctrl scan-band-control">
-                                <label>STAGGER</label>
-                                <input id="scanDrift" type="range" min="0" max="6" step="0.01" value="1.0"
-                                    title="BANDS only: static per-blind irregularity around the ordered lanes. It does not animate by itself. SPEED moves the plane; LFO creates periodic wobble; FIELD has separate XY/Z MOTION controls.">
+                            <div class="ctrl">
+                                <label>DRIFT</label>
+                                <input id="scanDrift" type="range" min="0" max="3" step="0.01" value="1.0">
                                 <span class="val" id="scanDriftVal">1.00</span>
                             </div>
                             <div class="ctrl">
                                 <label>ROLL</label>
-                                <input id="scanRoll" type="range" min="-3" max="3" step="0.01" value="0"
-                                    title="BANDS: static 3D curl through the ordered blind stack. It bends lane position, apparent depth, and cross-axis perspective together; negative/positive values curl in opposite directions. It does not create its own motion.">
+                                <input id="scanRoll" type="range" min="-2" max="2" step="0.01" value="0">
                                 <span class="val" id="scanRollVal">0.00</span>
                             </div>
                             <div class="ctrl">
                                 <label>GAP</label>
-                                <input id="scanGap" type="range" min="0" max="200" step="1" value="0"
-                                    title="BANDS: true extra spacing between neighbouring ordered blinds. FIELD: preserves the established panel-position quantization behavior.">
+                                <input id="scanGap" type="range" min="0" max="200" step="1" value="0">
                                 <span class="val" id="scanGapVal">0</span>
                             </div>
                             <div class="ctrl">

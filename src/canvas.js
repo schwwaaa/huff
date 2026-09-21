@@ -367,14 +367,22 @@ function _resetCorruptAxisMotion() {
   _corruptMotion.clusterSpeed = 1;
   _corruptMotion.clusterTimeSec = 0;
 }
-let nPhaseScanX = 0, nPhaseScanY = 2000; // independent scanline phase
-let _scanSpinAngle = 0;                   // continuous spin accumulator (degrees)
+let nPhaseScanX = 0, nPhaseScanY = 2000; // FIELD motion phase only; BANDS autonomous motion has explicit clocks
 const _scanSpatialMotion = { x:0, y:0, zoomOffset:0, zDir:1 };
+const _scanBandMotion = { travel:0, lfoPhase:0 };
+const _scanMagnetMotion = { position:0.5, dir:1, lastControl:0.5 };
 function _resetScanSpatialMotion() {
   _scanSpatialMotion.x = 0;
   _scanSpatialMotion.y = 0;
   _scanSpatialMotion.zoomOffset = 0;
   _scanSpatialMotion.zDir = 1;
+  _scanBandMotion.travel = 0;
+  _scanBandMotion.lfoPhase = 0;
+  const rawMagnetPosition = Number(renderState.scanMagnetPosition ?? 0.5);
+  const p = Math.max(0, Math.min(1, Number.isFinite(rawMagnetPosition) ? rawMagnetPosition : 0.5));
+  _scanMagnetMotion.position = p;
+  _scanMagnetMotion.lastControl = p;
+  _scanMagnetMotion.dir = 1;
 }
 
 // ─── FrameRing ────────────────────────────────────────────────────────────────
@@ -608,9 +616,10 @@ const PRESET_IDS = [
   'solarizeOn','solarizeMode','solarizeThresh','solarizeLevel','solarizeSoft','solarizeInvert','solarizePosterLevel','solarizePosterSoft','solarizePosterPhase','solarizeAmt','solarizeFluidity','solarizeR','solarizeG','solarizeB',
   'scanAlpha','scanShift','scanDrift','scanSpeed','scanGap','scanSkew',
   'scanAngle','scanFocus','scanRoll',
-  'scanSpinLeft','scanSpinRight','scanSpinSpeed',
   'scanPlaceX','scanPlaceY','scanZoom','scanMoveX','scanMoveY','scanMoveZ',
-  'scanPanelLayout','scanFieldSpreadX','scanFieldSpreadY','scanFieldSpreadZ','scanFieldSizeVar','scanFieldDrift','scanFieldDepthDrift',
+  'scanPanelLayout','scanBandSpread','scanExpandX','scanExpandY','scanExpandZ','scanLfoAmount','scanLfoRate',
+  'scanMagnetOn','scanMagnetMode','scanMagnetPosition','scanMagnetStrength','scanMagnetPerspective','scanMagnetRadius','scanMagnetFalloff','scanMagnetSpeed','scanMagnetEdge',
+  'scanFieldSpreadX','scanFieldSpreadY','scanFieldSpreadZ','scanFieldSizeVar','scanFieldDrift','scanFieldDepthDrift',
   'bgMode',
   'cluSpeedVar','cluPulse',
   'cluSteer','cluBreathe','cluBounds','cluCohere',
@@ -740,6 +749,23 @@ function applyPreset(data) {
   // Existing presets remain BANDS; FIELD parameters are preloaded with useful
   // values so deliberately switching layout immediately reveals the collage mode.
   if (!('scanPanelLayout' in sourceData)) sourceData.scanPanelLayout = 'bands';
+  // Ordered BANDS additions are neutral/additive for existing presets. SPREAD 1
+  // means full-frame ordered lanes; EXPAND and MAGNET remain off until used.
+  if (!('scanBandSpread' in sourceData)) sourceData.scanBandSpread = '1';
+  if (!('scanExpandX' in sourceData)) sourceData.scanExpandX = '0';
+  if (!('scanExpandY' in sourceData)) sourceData.scanExpandY = '0';
+  if (!('scanExpandZ' in sourceData)) sourceData.scanExpandZ = '0';
+  if (!('scanLfoAmount' in sourceData)) sourceData.scanLfoAmount = '0';
+  if (!('scanLfoRate' in sourceData)) sourceData.scanLfoRate = '0.5';
+  if (!('scanMagnetOn' in sourceData)) sourceData.scanMagnetOn = false;
+  if (!('scanMagnetMode' in sourceData)) sourceData.scanMagnetMode = 'local';
+  if (!('scanMagnetPosition' in sourceData)) sourceData.scanMagnetPosition = '0.5';
+  if (!('scanMagnetStrength' in sourceData)) sourceData.scanMagnetStrength = '0.65';
+  if (!('scanMagnetPerspective' in sourceData)) sourceData.scanMagnetPerspective = '0';
+  if (!('scanMagnetRadius' in sourceData)) sourceData.scanMagnetRadius = '0.28';
+  if (!('scanMagnetFalloff' in sourceData)) sourceData.scanMagnetFalloff = '1';
+  if (!('scanMagnetSpeed' in sourceData)) sourceData.scanMagnetSpeed = '0';
+  if (!('scanMagnetEdge' in sourceData)) sourceData.scanMagnetEdge = 'bounce';
   if (!('scanFieldSpreadX' in sourceData)) sourceData.scanFieldSpreadX = '0.55';
   if (!('scanFieldSpreadY' in sourceData)) sourceData.scanFieldSpreadY = '0.45';
   if (!('scanFieldSpreadZ' in sourceData)) sourceData.scanFieldSpreadZ = '0.50';
@@ -1631,10 +1657,11 @@ function hookUI() {
     'scanAlpha','scanAlphaVal','scanShift','scanShiftVal','scanDrift','scanDriftVal',
     'scanSpeed','scanSpeedVal','scanGap','scanGapVal','scanSkew','scanSkewVal',
     'scanAngle','scanAngleVal','scanFocus','scanFocusVal','scanRoll','scanRollVal',
-    'scanSpinLeft','scanSpinRight','scanSpinSpeed','scanSpinSpeedVal',
     'scanPlaceX','scanPlaceXVal','scanPlaceY','scanPlaceYVal','scanZoom','scanZoomVal',
     'scanMoveX','scanMoveXVal','scanMoveY','scanMoveYVal','scanMoveZ','scanMoveZVal','scanResetXYZBtn',
-    'scanPanelLayout','scanFieldSpreadX','scanFieldSpreadXVal','scanFieldSpreadY','scanFieldSpreadYVal','scanFieldSpreadZ','scanFieldSpreadZVal',
+    'scanPanelLayout','scanBandSpread','scanBandSpreadVal','scanExpandX','scanExpandXVal','scanExpandY','scanExpandYVal','scanExpandZ','scanExpandZVal','scanLfoAmount','scanLfoAmountVal','scanLfoRate','scanLfoRateVal',
+    'scanMagnetOn','scanMagnetMode','scanMagnetPosition','scanMagnetPositionVal','scanMagnetStrength','scanMagnetStrengthVal','scanMagnetPerspective','scanMagnetPerspectiveVal','scanMagnetRadius','scanMagnetRadiusVal','scanMagnetFalloff','scanMagnetFalloffVal','scanMagnetSpeed','scanMagnetSpeedVal','scanMagnetEdge',
+    'scanFieldSpreadX','scanFieldSpreadXVal','scanFieldSpreadY','scanFieldSpreadYVal','scanFieldSpreadZ','scanFieldSpreadZVal',
     'scanFieldSizeVar','scanFieldSizeVarVal','scanFieldDrift','scanFieldDriftVal','scanFieldDepthDrift','scanFieldDepthDriftVal','scanFieldResetBtn',
     'depthScatter','depthScatterVal','corruptDrift','corruptDriftVal',
     'scanAngle','bgMode','dim',
@@ -1983,13 +2010,14 @@ function hookSliders() {
     'spatialGap','clusterCount','clusterRadius','cluCenters','cluSpread','cluDepth','clusterMasterSpeed','cluMoveX','cluMoveY','cluMoveZ',
     'cluMinSpread','cluBias','cluDrift','cluSpeed','cluSteer','cluInertia','cluCohere',
     'scanAlpha','scanShift','scanDrift','scanSpeed','scanGap','scanSkew','scanFocus','scanRoll','scanPlaceX','scanPlaceY','scanZoom','scanMoveX','scanMoveY','scanMoveZ',
+    'scanBandSpread','scanExpandX','scanExpandY','scanExpandZ','scanLfoAmount','scanLfoRate','scanMagnetPosition','scanMagnetStrength','scanMagnetPerspective','scanMagnetRadius','scanMagnetFalloff','scanMagnetSpeed',
     'scanFieldSpreadX','scanFieldSpreadY','scanFieldSpreadZ','scanFieldSizeVar','scanFieldDrift','scanFieldDepthDrift',
     'glitchAlpha','glitchJitter','glitchSmearAngle',
     'flowStrength','flowScale','flowPulse','flowImpl','flowSpeed','flowTurb','flowSwirl','flowSpread','baseMix','symPos','symPosX','symPosY','symMix',
     'depthScatter','corruptDrift',
     'solarizeThresh','solarizeLevel','solarizeSoft','solarizePosterLevel','solarizePosterSoft','solarizePosterPhase','solarizeAmt','solarizeFluidity','solarizeR','solarizeG','solarizeB',
     'cluSpeedVar','cluPulse','cluBreathe',
-    'lumaKeyMix','lumaKeyAB','lumaKeyGain','lumaKeyCleanup','lumaKeyDensity','globalMixAmt','scanAngle','scanSpinSpeed',
+    'lumaKeyMix','lumaKeyAB','lumaKeyGain','lumaKeyCleanup','lumaKeyDensity','globalMixAmt','scanAngle',
   ];
 
   sliderIds.forEach(id => {
@@ -2078,6 +2106,9 @@ function hookSliders() {
     document.querySelectorAll('.scan-field-control').forEach(node => {
       node.style.display = active ? '' : 'none';
     });
+    document.querySelectorAll('.scan-band-control').forEach(node => {
+      node.style.display = active ? 'none' : '';
+    });
   };
   els.scanPanelLayout?.addEventListener('change', () => {
     syncScanFieldUI();
@@ -2148,7 +2179,16 @@ function hookSliders() {
   const getPrimaryImageFeeds = () => {
     const feeds = [];
     if (els.corruptOn?.checked) feeds.push('CORRUPT');
-    if (els.clusters?.checked) feeds.push('SCANLINES');
+
+    // Keep Pipeline awareness in lockstep with _resolveFrameActivity().
+    // Scanlines is only an effective image feed when it is enabled AND has
+    // at least one band AND non-zero opacity.
+    const scanlinesActive =
+      !!els.clusters?.checked &&
+      Math.trunc(Number(els.clusterCount?.value || 0)) > 0 &&
+      Number(els.scanAlpha?.value || 0) > 0;
+    if (scanlinesActive) feeds.push('SCANLINES');
+
     const lumaComposite = !!els.lumaKeyOn?.checked
       && String(els.lumaKeyTarget?.value || 'composite') === 'composite'
       && Number(els.lumaKeyMix?.value || 0) > 0.0001;
@@ -2248,13 +2288,16 @@ function hookSliders() {
   ['corruptOn','clusters','lumaKeyOn','lumaKeyTarget','pipelineRecipe','symOn','solarizeOn'].forEach(id => {
     els[id]?.addEventListener('change', syncPipelineAwarenessUI);
   });
-  els.lumaKeyMix?.addEventListener('input', syncPipelineAwarenessUI);
+  ['lumaKeyMix','clusterCount','scanAlpha'].forEach(id => {
+    els[id]?.addEventListener('input', syncPipelineAwarenessUI);
+  });
   syncPipelineAwarenessUI();
 
   // Checkboxes and selects also get snapshotted for undo
   ['corruptOn','corruptUpdateMode','corruptDistribution','clusterTiles','corruptMaskMode','corruptMaskSide','clusters','feedbackEnabled','feedbackMotionRange','feedbackStrobe','flowOn','baseOn','symOn','solarizeOn','solarizeMode','solarizeInvert',
    'cluBounds','pipelineRecipe','layerPriority','seedOnLoad','bgMode','symMode','symVDir','symHDir','symFlipH','symFlipV',
-   'lumaKeyOn','lumaKeyTarget','lumaKeyInvert','lumaKeySource','lumaKeyFade','globalMixOn','globalMixBlend','globalMixCurve','globalMixPos','scanSpinLeft','scanSpinRight','scanPanelLayout'].forEach(id => {
+   'lumaKeyOn','lumaKeyTarget','lumaKeyInvert','lumaKeySource','lumaKeyFade','globalMixOn','globalMixBlend','globalMixCurve','globalMixPos','scanPanelLayout',
+   'scanMagnetOn','scanMagnetMode','scanMagnetEdge'].forEach(id => {
     _$(id)?.addEventListener('change', snapshotForUndo);
   });
 
@@ -2650,6 +2693,18 @@ function updateLabels() {
   set(els.scanMoveX,        els.scanMoveXVal,        v => `${Math.trunc(+v || 0)} px/s`);
   set(els.scanMoveY,        els.scanMoveYVal,        v => `${Math.trunc(+v || 0)} px/s`);
   set(els.scanMoveZ,        els.scanMoveZVal,        v => `${(+v).toFixed(2)}×/s`);
+  set(els.scanBandSpread,   els.scanBandSpreadVal,   pct);
+  set(els.scanExpandX,      els.scanExpandXVal,      pct);
+  set(els.scanExpandY,      els.scanExpandYVal,      pct);
+  set(els.scanExpandZ,      els.scanExpandZVal,      v => `${Math.round((+v || 0) * 100)}%`);
+  set(els.scanLfoAmount,     els.scanLfoAmountVal,     v => `${Math.round((+v || 0) * 100)}%`);
+  set(els.scanLfoRate,       els.scanLfoRateVal,       v => `${(+v || 0).toFixed(2)} Hz`);
+  set(els.scanMagnetPosition, els.scanMagnetPositionVal, pct);
+  set(els.scanMagnetStrength, els.scanMagnetStrengthVal, v => `${Math.round((+v || 0) * 100)}%`);
+  set(els.scanMagnetPerspective, els.scanMagnetPerspectiveVal, f2);
+  set(els.scanMagnetRadius, els.scanMagnetRadiusVal, pct);
+  set(els.scanMagnetFalloff, els.scanMagnetFalloffVal, f2);
+  set(els.scanMagnetSpeed, els.scanMagnetSpeedVal, v => `${(+v).toFixed(2)}×`);
   set(els.scanFieldSpreadX, els.scanFieldSpreadXVal, pct);
   set(els.scanFieldSpreadY, els.scanFieldSpreadYVal, pct);
   set(els.scanFieldSpreadZ, els.scanFieldSpreadZVal, pct);
@@ -2661,7 +2716,6 @@ function updateLabels() {
   set(els.scanAngle,        els.scanAngleVal,        v => Math.round(v)+'°');
   set(els.scanFocus,        els.scanFocusVal,        f2);
   set(els.scanRoll,         els.scanRollVal,         f2);
-  set(els.scanSpinSpeed,    els.scanSpinSpeedVal,    f2);
   set(els.depthScatter,     els.depthScatterVal,     pct);
   set(els.corruptDrift,     els.corruptDriftVal,     pct);
   set(els.symPos,           els.symPosVal,           f2);
@@ -3500,11 +3554,9 @@ function _runFlowStage(frame) {
 }
 
 function _feedbackActuallyOwnsBuffer(frame) {
-  // `activity.feedback` deliberately remains true when the historical Feedback
-  // amount is non-neutral so PERSISTENCE keeps its established Classic pipeline
-  // semantics. That activity bit therefore cannot be used by itself to decide
-  // whether the Feedback transform actually produced an image this frame.
-  // Ownership requires the explicit ENABLE control as well.
+  // _resolveFrameActivity() already requires Feedback ENABLE before setting
+  // activity.feedback. Keep the explicit ENABLE check here as a defensive
+  // ownership guard for callers that reason about gBuf provenance.
   return frame.state.feedbackEnabled !== false && !!frame.activity.feedback;
 }
 
@@ -3548,9 +3600,8 @@ function _solarizeShouldReadCleanLiveSource(frame) {
   const activity = frame.activity;
   // Solarize is a terminal colour operation. When it has no enabled upstream
   // image owner, read gCur directly instead of repeatedly transforming stale
-  // persistent gBuf state. A disabled Feedback transform is intentionally not an
-  // ownership barrier even though `activity.feedback` may remain true to preserve
-  // the independent PERSISTENCE contract.
+  // persistent gBuf state. Disabled Feedback is not an ownership barrier because
+  // _resolveFrameActivity() no longer marks it active.
   return !!activity.solarize && !(
     activity.glitch || activity.scanlines || activity.luma ||
     activity.globalMix || _feedbackActuallyOwnsBuffer(frame) ||
@@ -3732,29 +3783,43 @@ function draw() {
     }
   }
 
-  // Pass 40S: one SPEED control owns Scanlines motion. It preserves the
-  // established Pass 39N band generator at 1x, but 0x now means actual motion
-  // stability: noise phases, roll, spin and added XYZ movement all stop while
-  // applyScanlines() still writes live gCur pixels through the held geometry.
+  // BANDS and FIELD keep distinct motion semantics. In BANDS, SPEED is now
+  // a steady translation of the ordered blind plane along its own band axis.
+  // It no longer drives the wobble/noise phases. A dedicated LFO provides the
+  // optional sine-wave plane wobble. FIELD keeps its established phase-driven
+  // collage motion so this pass does not redesign FIELD.
   const scanSpeed = Math.max(0, Number(s.scanSpeed) || 0);
-  nPhaseScanX += scanSpeed * 0.008;
-  nPhaseScanY += scanSpeed * 0.009;
-
   const scanDt = Math.max(0, Math.min(0.05, (Number(deltaTime) || 16.6667) / 1000));
+  const scanFieldMode = String(s.scanPanelLayout || 'bands') === 'field';
+  if (scanFieldMode) {
+    nPhaseScanX += scanSpeed * 0.008;
+    nPhaseScanY += scanSpeed * 0.009;
+  } else {
+    // BANDS has no hidden noise clock. SPEED is steady plane transport only;
+    // LFO and automatic MAGNET motion are the explicit autonomous modulators.
+    const travelSpan = Math.max(1, Math.hypot(width || 1, height || 1));
+    _scanBandMotion.travel = ((_scanBandMotion.travel + scanSpeed * scanDt * 150) % travelSpan + travelSpan) % travelSpan;
+    const lfoRate = Math.max(0, Number(s.scanLfoRate) || 0);
+    _scanBandMotion.lfoPhase = (_scanBandMotion.lfoPhase + Math.PI * 2 * lfoRate * scanDt) % (Math.PI * 2);
+  }
+
+  // MOVE X/Y/Z are direct physical controls. They no longer depend on SPEED,
+  // which fixes the prior coupling where setting SPEED low/zero also disabled
+  // explicit XYZ motion.
   const scanMoveX = Number(s.scanMoveX) || 0;
   const scanMoveY = Number(s.scanMoveY) || 0;
   const scanMoveZ = Number(s.scanMoveZ) || 0;
   if (width > 0) {
     const spanX = width * 2;
-    _scanSpatialMotion.x = (((_scanSpatialMotion.x + scanMoveX * scanSpeed * scanDt + width) % spanX) + spanX) % spanX - width;
+    _scanSpatialMotion.x = (((_scanSpatialMotion.x + scanMoveX * scanDt + width) % spanX) + spanX) % spanX - width;
   }
   if (height > 0) {
     const spanY = height * 2;
-    _scanSpatialMotion.y = (((_scanSpatialMotion.y + scanMoveY * scanSpeed * scanDt + height) % spanY) + spanY) % spanY - height;
+    _scanSpatialMotion.y = (((_scanSpatialMotion.y + scanMoveY * scanDt + height) % spanY) + spanY) % spanY - height;
   }
-  if (scanMoveZ !== 0 && scanSpeed > 0) {
+  if (scanMoveZ !== 0) {
     const baseZoom = Math.max(0.25, Math.min(4, Number.isFinite(Number(s.scanZoom)) ? Number(s.scanZoom) : 1));
-    let nz = baseZoom + _scanSpatialMotion.zoomOffset + scanMoveZ * scanSpeed * scanDt * _scanSpatialMotion.zDir;
+    let nz = baseZoom + _scanSpatialMotion.zoomOffset + scanMoveZ * scanDt * _scanSpatialMotion.zDir;
     while (nz > 4 || nz < 0.25) {
       if (nz > 4) { nz = 8 - nz; _scanSpatialMotion.zDir *= -1; }
       if (nz < 0.25) { nz = 0.5 - nz; _scanSpatialMotion.zDir *= -1; }
@@ -3764,22 +3829,38 @@ function draw() {
   s.__scanMotionX = _scanSpatialMotion.x;
   s.__scanMotionY = _scanSpatialMotion.y;
   s.__scanMotionZoomOffset = _scanSpatialMotion.zoomOffset;
+  s.__scanBandTravel = _scanBandMotion.travel;
+  s.__scanBandLfo = Math.sin(_scanBandMotion.lfoPhase) * Math.max(0, Number(s.scanLfoAmount) || 0);
 
-  // Left and right remain the established toggles. SPEED now scales their
-  // automatic motion too, so SPEED=0 is a true stable spatial state.
-  const spinSpeed = s.scanSpinSpeed;
-  const spinLeft  = !!s.scanSpinLeft;
-  const spinRight = !!s.scanSpinRight;
-  let scanAngleArg = null;
-  if (spinRight) {
-    _scanSpinAngle = (_scanSpinAngle + spinSpeed * scanSpeed * 0.5) % 360;
-    scanAngleArg   = _scanSpinAngle;
-  } else if (spinLeft) {
-    _scanSpinAngle = ((_scanSpinAngle - spinSpeed * scanSpeed * 0.5) % 360 + 360) % 360;
-    scanAngleArg   = _scanSpinAngle;
-  } else {
-    _scanSpinAngle = s.scanAngle;
+  // BANDS MAGNET has its own ordered-index clock. It is intentionally
+  // independent from main SPEED so the magnet remains a separate creative tool.
+  const rawMagnetControl = Number(s.scanMagnetPosition ?? 0.5);
+  const magnetControl = Math.max(0, Math.min(1, Number.isFinite(rawMagnetControl) ? rawMagnetControl : 0.5));
+  if (Math.abs(magnetControl - _scanMagnetMotion.lastControl) > 1e-9) {
+    _scanMagnetMotion.position = magnetControl;
+    _scanMagnetMotion.lastControl = magnetControl;
+    _scanMagnetMotion.dir = 1;
   }
+  const magnetSpeed = Number(s.scanMagnetSpeed) || 0;
+  if (!s.scanMagnetOn || Math.abs(magnetSpeed) < 1e-9) {
+    if (Math.abs(magnetSpeed) < 1e-9) _scanMagnetMotion.position = magnetControl;
+  } else {
+    let p = _scanMagnetMotion.position + magnetSpeed * scanDt * 0.35 * _scanMagnetMotion.dir;
+    if (String(s.scanMagnetEdge || 'bounce') === 'wrap') {
+      p = ((p % 1) + 1) % 1;
+    } else {
+      while (p > 1 || p < 0) {
+        if (p > 1) { p = 2 - p; _scanMagnetMotion.dir *= -1; }
+        if (p < 0) { p = -p; _scanMagnetMotion.dir *= -1; }
+      }
+    }
+    _scanMagnetMotion.position = p;
+  }
+  s.__scanMagnetPosition = _scanMagnetMotion.position;
+
+  // BANDS/FIELD use the explicit ANGLE control only. The legacy left/right
+  // continuous spin controls were removed from Scanlines.
+  const scanAngleArg = null;
 
   const activity = _resolveFrameActivity(s);
 

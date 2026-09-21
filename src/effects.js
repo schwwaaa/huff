@@ -1118,6 +1118,10 @@ class ScanlineBandWorkspace {
     this.shiftSeed = new Float64Array(0);
     this.start = new Int32Array(0);
     this.length = new Float64Array(0);
+    // BANDS keeps source-image slice identity separate from destination lane
+    // placement. FIELD continues to use the established start/length arrays.
+    this.sourceStart = new Int32Array(0);
+    this.sourceLength = new Float64Array(0);
     this.srcOff = new Int32Array(0);
     this.dstOff = new Int32Array(0);
     this.crossLength = new Float64Array(0);
@@ -1141,12 +1145,15 @@ class ScanlineBandWorkspace {
     this.bandsRebuilt = false;
 
     this.cacheValid = false;
+    this.cacheMode = '';
     this.cacheBands = -1;
     this.cacheBandSize = -1;
     this.cacheGap = -1;
+    this.cacheSpread = Number.NaN;
     this.cacheSkew = Number.NaN;
     this.cacheFocus = Number.NaN;
     this.cacheRoll = Number.NaN;
+    this.cacheTravel = Number.NaN;
     this.cacheShiftScale = Number.NaN;
     this.cacheDrift = Number.NaN;
     this.cachePhaseX = Number.NaN;
@@ -1166,6 +1173,8 @@ class ScanlineBandWorkspace {
     const shiftSeed = new Float64Array(capacity);
     const start = new Int32Array(capacity);
     const length = new Float64Array(capacity);
+    const sourceStart = new Int32Array(capacity);
+    const sourceLength = new Float64Array(capacity);
     const srcOff = new Int32Array(capacity);
     const dstOff = new Int32Array(capacity);
     const crossLength = new Float64Array(capacity);
@@ -1175,6 +1184,8 @@ class ScanlineBandWorkspace {
     shiftSeed.set(this.shiftSeed);
     start.set(this.start);
     length.set(this.length);
+    sourceStart.set(this.sourceStart);
+    sourceLength.set(this.sourceLength);
     srcOff.set(this.srcOff);
     dstOff.set(this.dstOff);
     crossLength.set(this.crossLength);
@@ -1190,6 +1201,8 @@ class ScanlineBandWorkspace {
     this.shiftSeed = shiftSeed;
     this.start = start;
     this.length = length;
+    this.sourceStart = sourceStart;
+    this.sourceLength = sourceLength;
     this.srcOff = srcOff;
     this.dstOff = dstOff;
     this.crossLength = crossLength;
@@ -1232,6 +1245,7 @@ class ScanlineBandWorkspace {
 
   _matches(scanBands, bandSize, scanGap, scanSkew, focus, roll, shiftScale, driftAmt, phX, phY) {
     return this.cacheValid &&
+      this.cacheMode === 'field' &&
       this.cacheBands === scanBands &&
       this.cacheBandSize === bandSize &&
       this.cacheGap === scanGap &&
@@ -1240,8 +1254,6 @@ class ScanlineBandWorkspace {
       this.cacheRoll === roll &&
       this.cacheShiftScale === shiftScale &&
       this.cacheDrift === driftAmt &&
-      this.cachePhaseX === phX &&
-      this.cachePhaseY === phY &&
       this.cacheDim === this.dim &&
       this.cacheCross === this.cross;
   }
@@ -1390,6 +1402,7 @@ class ScanlineBandWorkspace {
 
     this.count = count;
     this.cacheValid = true;
+    this.cacheMode = 'field';
     this.bandsRebuilt = true;
     this.cacheBands = scanBands;
     this.cacheBandSize = bandSize;
@@ -1405,6 +1418,146 @@ class ScanlineBandWorkspace {
     this.cacheCross = cross;
     return count;
   }
+
+  _matchesBlinds(scanBands, bandSize, scanGap, scanSpread, scanSkew, focus, roll, travel, shiftScale, driftAmt, phX, phY) {
+    return this.cacheValid &&
+      this.cacheMode === 'bands' &&
+      this.cacheBands === scanBands &&
+      this.cacheBandSize === bandSize &&
+      this.cacheGap === scanGap &&
+      this.cacheSpread === scanSpread &&
+      this.cacheSkew === scanSkew &&
+      this.cacheFocus === focus &&
+      this.cacheRoll === roll &&
+      this.cacheTravel === travel &&
+      this.cacheShiftScale === shiftScale &&
+      this.cacheDrift === driftAmt &&
+      this.cachePhaseX === phX &&
+      this.cachePhaseY === phY &&
+      this.cacheDim === this.dim &&
+      this.cacheCross === this.cross;
+  }
+
+  // Ordered window-blind generator. Every blind owns a stable source slice.
+  // SIZE changes slice thickness only; it never changes the ordered lane centers.
+  // SPREAD controls how much of the frame the lane centers occupy, FOCUS moves
+  // that ordered stack as a whole, GAP adds true neighbour separation, DRIFT is
+  // a bounded local departure, and ROLL is a travelling wave through the stack.
+  prepareBlinds(scanBands, bandSize, scanGap, scanSpread, scanSkew, focus, roll, travel, shiftScale, driftAmt, phX, phY) {
+    this._ensureCapacity(scanBands);
+    if (this._matchesBlinds(scanBands, bandSize, scanGap, scanSpread, scanSkew, focus, roll, travel, shiftScale, driftAmt, phX, phY)) {
+      this.bandsRebuilt = false;
+      return this.count;
+    }
+
+    const dim = this.dim;
+    const cross = this.cross;
+    const sourceHeight = Math.max(1, this.geometryHeight);
+    const sourceBandSize = Math.max(1, Math.min(sourceHeight, bandSize));
+    const spread = Math.max(0, Math.min(1, Number(scanSpread) || 0));
+    const focusClamped = Math.max(0, Math.min(1, Number(focus) || 0));
+    const focusCenter = focusClamped * dim;
+    const midIndex = (scanBands - 1) * 0.5;
+    // SHIFT is spatial, not autonomous motion. Its response accelerates into
+    // near-full-frame displacement without ever reducing the drawable span to 0.
+    const shiftControl = Math.max(0, Number(shiftScale) || 0);
+    const shiftRange = cross * Math.min(0.995, 1 - Math.exp(-1.35 * shiftControl));
+    const shiftSpan = shiftRange - (-shiftRange);
+    // BANDS STAGGER is static seeded geometry. It deliberately has no phase;
+    // SPEED, LFO, and MAGNET are the explicit motion systems.
+    const rollAmount = Math.max(-3, Math.min(3, Number(roll) || 0));
+
+    const slowSeed = this.slowSeed;
+    const fastSeed = this.fastSeed;
+    const shiftSeed = this.shiftSeed;
+    const starts = this.start;
+    const lengths = this.length;
+    const sourceStarts = this.sourceStart;
+    const sourceLengths = this.sourceLength;
+    const sourceOffsets = this.srcOff;
+    const destinationOffsets = this.dstOff;
+    const crossLengths = this.crossLength;
+    let count = 0;
+
+    for (let n = 0; n < scanBands; n++) {
+      // Source identity is defined by stable slice CENTERS, not by SIZE.
+      // Changing SIZE therefore thickens/thins a blind around the same source
+      // location instead of bunching/re-spacing the stack.
+      const sourceCenter = ((n + 0.5) / scanBands) * sourceHeight;
+      const srcStart = Math.max(0, Math.min(
+        sourceHeight - sourceBandSize,
+        Math.floor(sourceCenter - sourceBandSize * 0.5)
+      ));
+      const srcLen = Math.max(1, Math.min(sourceBandSize, sourceHeight - srcStart));
+
+      // Neutral lane centers occupy equal cells across the whole rotated frame.
+      // SPREAD scales that ordered structure around FOCUS; GAP is extra spacing
+      // between neighbours and is deliberately independent from SIZE.
+      const neutralCenter = ((n + 0.5) / scanBands) * dim;
+      const relativeCenter = neutralCenter - dim * 0.5;
+      const gapOffset = (n - midIndex) * Math.max(0, scanGap);
+
+      // STAGGER stays local and static so it adds irregular structure without
+      // creating another hidden animation source.
+      const wander = (noise(slowSeed[n]) - 0.5) * bandSize * driftAmt * 2.35
+                   + (noise(fastSeed[n]) - 0.5) * Math.min(dim * 0.18, bandSize * 8) * driftAmt * 0.85;
+
+      // ROLL is a static curl through the ordered stack. It bends the lane axis
+      // here; the render stage adds matching depth/perspective so this reads as
+      // a dimensional fold instead of a small travelling wiggle.
+      const rollT = scanBands > 1 ? n / (scanBands - 1) : 0.5;
+      const rollArc = Math.sin((rollT - 0.5) * Math.PI);
+      const rollWave = rollAmount * rollArc * bandSize * 4.5;
+
+      const unwrappedCenter = focusCenter + relativeCenter * spread + gapOffset + wander + rollWave + travel;
+      const destinationCenter = ((unwrappedCenter % dim) + dim) % dim;
+      const bandStart = Math.floor(destinationCenter - bandSize * 0.5);
+      const bandLength = bandSize;
+
+      // BANDS skew is a focus-relative shear rather than a one-sided absolute
+      // offset. Extending the range therefore opens/fans the stack around its
+      // focus point instead of merely pushing every line in one direction.
+      const skewOffset = Math.floor(scanSkew * (destinationCenter - focusCenter) * 1.35);
+      const shiftNoise = noise(shiftSeed[n]);
+      const rawShift = Math.floor(shiftNoise * shiftSpan + (-shiftRange)) + skewOffset;
+      const maxDrawableShift = Math.max(0, cross - 1);
+      const shift = Math.max(-maxDrawableShift, Math.min(maxDrawableShift, rawShift));
+      const sourceOffset = Math.max(0, shift < 0 ? -shift : 0);
+      const destinationOffset = Math.max(0, shift > 0 ? shift : 0);
+      const bandCross = cross - Math.abs(shift);
+      if (bandCross <= 0) continue;
+
+      starts[count] = bandStart;
+      lengths[count] = bandLength;
+      sourceStarts[count] = srcStart;
+      sourceLengths[count] = srcLen;
+      sourceOffsets[count] = sourceOffset;
+      destinationOffsets[count] = destinationOffset;
+      crossLengths[count] = bandCross;
+      count++;
+    }
+
+    this.count = count;
+    this.cacheValid = true;
+    this.cacheMode = 'bands';
+    this.bandsRebuilt = true;
+    this.cacheBands = scanBands;
+    this.cacheBandSize = bandSize;
+    this.cacheGap = scanGap;
+    this.cacheSpread = spread;
+    this.cacheSkew = scanSkew;
+    this.cacheFocus = focus;
+    this.cacheRoll = roll;
+    this.cacheTravel = travel;
+    this.cacheShiftScale = shiftScale;
+    this.cacheDrift = driftAmt;
+    this.cachePhaseX = phX;
+    this.cachePhaseY = phY;
+    this.cacheDim = dim;
+    this.cacheCross = cross;
+    return count;
+  }
+
 }
 
 const _scanlineBands = new ScanlineBandWorkspace();
@@ -1491,6 +1644,28 @@ class ScanPanelFieldSeedWorkspace {
 
 const _scanPanelFieldSeeds = new ScanPanelFieldSeedWorkspace();
 
+function _scanMagnetLocalInfluence(t, position, radius, falloff) {
+  const r = Math.max(0.001, radius);
+  const u = Math.abs(t - position) / r;
+  if (u >= 1) return 0;
+  const cosine = 0.5 + 0.5 * Math.cos(Math.PI * u);
+  return Math.pow(Math.max(0, cosine), Math.max(0.1, falloff));
+}
+
+function _scanMagnetInfluence(index, count, position, radius, falloff, mode) {
+  const t = count > 1 ? index / (count - 1) : 0.5;
+  const local = _scanMagnetLocalInfluence(t, position, radius, falloff);
+  if (mode !== 'fold') return local;
+
+  // FOLD turns the magnet into a moving split through the ordered stack:
+  // first one blind is lifted, then two, then three, while a local crest keeps
+  // the boundary rounded rather than becoming a hard staircase.
+  const r = Math.max(0.001, radius);
+  const edge = Math.max(0, Math.min(1, ((position - t) / r + 1) * 0.5));
+  const smooth = edge * edge * (3 - 2 * edge);
+  return Math.max(0, Math.min(1, smooth * 0.72 + local * 0.28));
+}
+
 function applyScanlines(density, angleOverride = null, scanPriority = 1.0, state = window.HUFF_RENDER_STATE) {
   const rs = state || window.HUFF_RENDER_STATE || {};
   if (!rs.clusters) return;
@@ -1505,13 +1680,6 @@ function applyScanlines(density, angleOverride = null, scanPriority = 1.0, state
     String(rs.lumaKeyTarget || 'composite') === 'scan' &&
     Number(rs.lumaKeyMix) > 0;
 
-  // Pass 40T keeps the established Pass 39N slice generator intact and changes
-  // only the optional spatial wrapper. ZOOM is now panel-aware: exactly 1x is
-  // the original flat 2D band compositor. Moving away from 1x lets each band
-  // unfold into a video panel and scale independently in the existing scan
-  // coordinate system. This allows the persistent buffer / Flow / Feedback
-  // stages to accumulate multi-scale collage layers instead of scaling one
-  // constrained strip field as a single canvas object.
   const angleDeg = angleOverride !== null ? angleOverride : rs.scanAngle;
   const shiftScale = rs.scanShift;
   const driftAmt = rs.scanDrift;
@@ -1532,28 +1700,181 @@ function applyScanlines(density, angleOverride = null, scanPriority = 1.0, state
   const placeX = baseX + motionX;
   const placeY = baseY + motionY;
   const zoom = Math.max(0.25, Math.min(4, baseZoom + motionZoomOffset));
-  const neutralZoom = Math.abs(zoom - 1) < 1e-9;
   const panelLayout = String(rs.scanPanelLayout || 'bands');
   const fieldMode = panelLayout === 'field';
+
+  const workspace = _scanlineBands.resolveGeometry(width, height, angleDeg);
+  const dim = workspace.dim;
+  const cross = workspace.cross;
+  if (!(dim > 0) || !(cross > 0)) return;
+
+  const ctx = gBuf.drawingContext;
+  const sourceCanvas = gCur.drawingContext.canvas;
+
+  // ── BANDS: ordered window-blind structure ────────────────────────────────
+  // BANDS deliberately no longer shares FIELD's noise-positioned panel field.
+  // Every blind owns one stable source slice, while destination spacing and
+  // deformation remain independently playable.
+  if (!fieldMode) {
+    const spread = Math.max(0, Math.min(1, Number(rs.scanBandSpread ?? 1)));
+    const expandX = Math.max(0, Math.min(4, Number(rs.scanExpandX) || 0));
+    const expandY = Math.max(0, Math.min(3, Number(rs.scanExpandY) || 0));
+    const expandZ = Math.max(-3, Math.min(3, Number(rs.scanExpandZ) || 0));
+    const magnetOn = !!rs.scanMagnetOn;
+    const magnetMode = String(rs.scanMagnetMode || 'local');
+    const magnetPosition = Math.max(0, Math.min(1,
+      Number.isFinite(Number(rs.__scanMagnetPosition))
+        ? Number(rs.__scanMagnetPosition)
+        : Number(rs.scanMagnetPosition ?? 0.5)
+    ));
+    const magnetStrength = Math.max(-6, Math.min(6, Number(rs.scanMagnetStrength) || 0));
+    const magnetPerspective = Math.max(-3, Math.min(3, Number(rs.scanMagnetPerspective) || 0));
+    const magnetRadius = Math.max(0.02, Math.min(1, Number(rs.scanMagnetRadius ?? 0.28)));
+    const rollAmount = Math.max(-3, Math.min(3, Number(rs.scanRoll) || 0));
+    const magnetFalloff = Math.max(0.25, Math.min(4, Number(rs.scanMagnetFalloff ?? 1)));
+
+    const bandCount = workspace.prepareBlinds(
+      scanBands,
+      bandSize,
+      scanGap,
+      spread,
+      scanSkew,
+      focus,
+      roll,
+      Number(rs.__scanBandTravel) || 0,
+      shiftScale,
+      driftAmt,
+      phX,
+      phY,
+    );
+    if (bandCount <= 0) return;
+
+    const starts = workspace.start;
+    const lengths = workspace.length;
+    const sourceStarts = workspace.sourceStart;
+    const sourceLengths = workspace.sourceLength;
+    const sourceOffsets = workspace.srcOff;
+    const destinationOffsets = workspace.dstOff;
+    const crossLengths = workspace.crossLength;
+
+    ctx.save();
+    if (placeX !== 0 || placeY !== 0) ctx.translate(placeX, placeY);
+
+    if (!workspace.directHorizontal) {
+      ctx.translate(workspace.halfWidth, workspace.halfHeight);
+      if (workspace.rotatePattern) ctx.rotate(workspace.angleRad);
+      ctx.translate(workspace.negativeHalfWidth, workspace.negativeHalfDim);
+    }
+
+    // Dedicated BANDS LFO: a global sine wobble across the plane's cross-axis.
+    // It is independent from SPEED, DRIFT, ROLL, and explicit XYZ movement.
+    const lfoAmount = Math.max(-2, Math.min(2, Number(rs.__scanBandLfo) || 0));
+    if (lfoAmount !== 0) ctx.translate(lfoAmount * cross * 0.35, 0);
+
+    ctx.globalAlpha = bandAlpha;
+
+    for (let i = 0; i < bandCount; i++) {
+      const bandStart = starts[i];
+      const bandLength = lengths[i];
+      const sourceStart = sourceStarts[i];
+      const sourceLength = sourceLengths[i];
+      const sourceOffset = sourceOffsets[i];
+      const destinationOffset = destinationOffsets[i];
+      const bandCross = crossLengths[i];
+
+      const influence = magnetOn
+        ? _scanMagnetInfluence(i, bandCount, magnetPosition, magnetRadius, magnetFalloff, magnetMode)
+        : 0;
+
+      // EXPAND Z, ROLL, and MAGNET are separate dimensional layers. EXPAND Z
+      // fans the whole ordered stack; ROLL curls it; MAGNET creates a local bulge.
+      // MAG PERSP changes the local vanishing direction without altering
+      // EXPAND Y's source-window reveal semantics.
+      const blindT = bandCount > 1 ? i / (bandCount - 1) : 0.5;
+      const zFan = expandZ * (blindT - focus) * 2.8;
+      const rollArc = Math.sin((blindT - 0.5) * Math.PI);
+      const rollDepth = rollAmount * rollArc * 1.8;
+      const magnetDepth = magnetStrength * influence * 1.35;
+      const localZ = Math.max(-8, Math.min(8, zFan + rollDepth + magnetDepth));
+      const depthScale = Math.max(0.05, Math.min(12, Math.pow(2, localZ * 0.60)));
+
+      const magnetDelta = blindT - magnetPosition;
+      const perspectiveScale = Math.max(0.20, Math.min(5,
+        Math.pow(2, -magnetPerspective * influence * magnetDelta * 1.65)
+      ));
+      const xScale = Math.max(0.05, Math.min(24,
+        (1 + expandX * 1.5) * zoom * depthScale * perspectiveScale
+      ));
+
+      // EXPAND Y unfurls source content downward from the blind's source anchor.
+      // It enlarges the SOURCE WINDOW first, then maps that additional source
+      // height into the rotated band axis. It never stretches the original strip.
+      const sourceBottom = sourceCanvas.height;
+      const maxSourceHeight = Math.max(sourceLength, sourceBottom - sourceStart);
+      // 0..~0.67 already reaches a full downward source reveal so EXPAND Y is
+      // immediately legible. The remaining range overscales that reconstructed
+      // source window for intentionally extreme blind-unfurl behavior.
+      const revealT = Math.max(0, Math.min(1, expandY * 1.5));
+      const revealOverscan = Math.max(0, expandY - (2 / 3));
+      const sampledHeight = Math.max(1,
+        sourceLength + (maxSourceHeight - sourceLength) * revealT
+      );
+      const sourceToBandScale = dim / Math.max(1, sourceCanvas.height);
+      const revealedHeight = Math.max(
+        bandLength,
+        bandLength + (sampledHeight - sourceLength) * sourceToBandScale
+      );
+      const revealScale = 1 + revealOverscan * 1.35;
+
+      const safeSourceOffset = Math.max(0, Math.min(sourceCanvas.width - 1, sourceOffset));
+      const sampledWidth = Math.max(1, Math.min(bandCross, sourceCanvas.width - safeSourceOffset));
+      const destinationWidth = bandCross * xScale;
+      const destinationHeight = revealedHeight * zoom * revealScale;
+      const rollCross = rollAmount * rollArc * cross * 0.16;
+      const magnetPerspectiveOffset = magnetPerspective * influence * magnetDelta * cross * 0.90;
+      const destinationCenterX = destinationOffset + bandCross * 0.5 + rollCross + magnetPerspectiveOffset;
+      const destinationX = destinationCenterX - destinationWidth * 0.5;
+      // Downward reveal stays anchored to the individual blind. Z never changes
+      // this height, so EXPAND Y and EXPAND Z cannot collapse into the same look.
+      const destinationY = bandStart;
+
+      if (lumaTargetsScan) {
+        const keyAlpha = _pipelineLumaObjectRegionAlpha(
+          safeSourceOffset, sourceStart, sampledWidth, sampledHeight,
+          width, height,
+          rs.lumaKeyAB, !!rs.lumaKeyInvert, rs.lumaKeyGain,
+          rs.lumaKeySource, rs.lumaKeyCleanup, rs.lumaKeyDensity,
+          rs.lumaKeyMix, typeof _vfc === 'number' ? _vfc : -1
+        );
+        if (keyAlpha <= 0.001) continue;
+        ctx.globalAlpha = bandAlpha * keyAlpha;
+      } else {
+        ctx.globalAlpha = bandAlpha;
+      }
+
+      ctx.drawImage(
+        sourceCanvas,
+        safeSourceOffset, sourceStart, sampledWidth, sampledHeight,
+        destinationX, destinationY, destinationWidth, destinationHeight,
+      );
+    }
+
+    _scanlineProfileFrame(bandCount);
+    ctx.restore();
+    return;
+  }
+
+  // ── FIELD: preserve the accepted Pass 40U collage behavior ───────────────
   const fieldSpreadX = Math.max(0, Math.min(1, Number(rs.scanFieldSpreadX) || 0));
   const fieldSpreadY = Math.max(0, Math.min(1, Number(rs.scanFieldSpreadY) || 0));
   const fieldSpreadZ = Math.max(0, Math.min(1, Number(rs.scanFieldSpreadZ) || 0));
   const fieldSizeVar = Math.max(0, Math.min(1, Number(rs.scanFieldSizeVar) || 0));
   const fieldDrift = Math.max(0, Math.min(1, Number(rs.scanFieldDrift) || 0));
   const fieldDepthDrift = Math.max(0, Math.min(1, Number(rs.scanFieldDepthDrift) || 0));
-  const neutralField = !fieldMode || (fieldSpreadX === 0 && fieldSpreadY === 0 && fieldSpreadZ === 0 && fieldSizeVar === 0 && fieldDrift === 0 && fieldDepthDrift === 0);
+  const neutralZoom = Math.abs(zoom - 1) < 1e-9;
+  const neutralField = fieldSpreadX === 0 && fieldSpreadY === 0 && fieldSpreadZ === 0 && fieldSizeVar === 0 && fieldDrift === 0 && fieldDepthDrift === 0;
   const neutralSpatial = placeX === 0 && placeY === 0 && neutralZoom && neutralField;
-
-  // General ZOOM still owns the whole Scan instrument. FIELD only adds a
-  // per-panel organization layer after the existing band generator: deterministic
-  // X/Y placement, apparent Z, size variation, and phase-driven drift.
-  // BANDS remains exact 40T behavior, and a zeroed FIELD collapses back to BANDS.
   const sourceAspect = Math.max(0.0001, width / Math.max(1, height));
-
-  const workspace = _scanlineBands.resolveGeometry(width, height, angleDeg);
-  const dim = workspace.dim;
-  const cross = workspace.cross;
-  if (!(dim > 0) || !(cross > 0)) return;
 
   const bandCount = workspace.prepare(
     scanBands,
@@ -1563,15 +1884,13 @@ function applyScanlines(density, angleOverride = null, scanPriority = 1.0, state
     focus,
     roll,
     shiftScale,
-    driftAmt,
+    0, // BANDS STAGGER is intentionally not a second FIELD drift system.
     phX,
     phY,
   );
   if (bandCount <= 0) return;
-  if (fieldMode) _scanPanelFieldSeeds.ensure(bandCount);
+  _scanPanelFieldSeeds.ensure(bandCount);
 
-  const ctx = gBuf.drawingContext;
-  const sourceCanvas = gCur.drawingContext.canvas;
   const starts = workspace.start;
   const lengths = workspace.length;
   const sourceOffsets = workspace.srcOff;
@@ -1579,7 +1898,6 @@ function applyScanlines(density, angleOverride = null, scanPriority = 1.0, state
   const crossLengths = workspace.crossLength;
 
   if (workspace.directHorizontal && neutralSpatial) {
-    // Exact Pass 39N fast path at neutral X/Y/Zoom and BANDS/zeroed FIELD.
     const previousAlpha = ctx.globalAlpha;
     try {
       ctx.globalAlpha = bandAlpha;
@@ -1612,18 +1930,9 @@ function applyScanlines(density, angleOverride = null, scanPriority = 1.0, state
   }
 
   ctx.save();
-
-  // X/Y remain a general placement wrapper. ZOOM is intentionally *not* a
-  // ctx.scale() here: doing that constrained all bands into one scaled field.
-  // Panel-aware ZOOM is applied per band below so each live-video slice can
-  // become an independent collage panel while still returning to exact 2D at 1x.
   if (placeX !== 0 || placeY !== 0) ctx.translate(placeX, placeY);
 
-  if (workspace.directHorizontal) {
-    // Direct horizontal panel geometry already uses screen-space scan coordinates.
-  } else {
-    // Preserve the established Pass 39N angle/spin geometry. Panel rectangles
-    // live inside that same coordinate system rather than replacing it.
+  if (!workspace.directHorizontal) {
     ctx.translate(workspace.halfWidth, workspace.halfHeight);
     if (workspace.rotatePattern) ctx.rotate(workspace.angleRad);
     ctx.translate(workspace.negativeHalfWidth, workspace.negativeHalfDim);
@@ -1643,42 +1952,31 @@ function applyScanlines(density, angleOverride = null, scanPriority = 1.0, state
     let fieldOffsetY = 0;
     let sizeScale = 1;
 
-    if (fieldMode) {
-      const seedX = _scanPanelFieldSeeds.x[i];
-      const seedY = _scanPanelFieldSeeds.y[i];
-      const seedZ = _scanPanelFieldSeeds.z[i];
-      const seedSize = _scanPanelFieldSeeds.size[i];
-      const phaseA = _scanPanelFieldSeeds.phaseA[i];
-      const phaseB = _scanPanelFieldSeeds.phaseB[i];
+    const seedX = _scanPanelFieldSeeds.x[i];
+    const seedY = _scanPanelFieldSeeds.y[i];
+    const seedZ = _scanPanelFieldSeeds.z[i];
+    const seedSize = _scanPanelFieldSeeds.size[i];
+    const phaseA = _scanPanelFieldSeeds.phaseA[i];
+    const phaseB = _scanPanelFieldSeeds.phaseB[i];
 
-      // SPREAD X/Y releases panels from their original lanes without replacing
-      // the band generator. DRIFT moves around those anchors using the existing
-      // Scan phases, so the single Scanlines SPEED still owns all motion.
-      fieldOffsetX = seedX * cross * 0.46 * fieldSpreadX;
-      fieldOffsetY = seedY * dim * 0.46 * fieldSpreadY;
-      if (fieldDrift > 0) {
-        fieldOffsetX += Math.sin(phX * 0.85 + phaseA) * cross * 0.16 * fieldDrift;
-        fieldOffsetY += Math.cos(phY * 0.72 + phaseB) * dim * 0.16 * fieldDrift;
-      }
-
-      // Z spread and depth drift are per-panel local zoom multipliers. This is
-      // deliberately Canvas2D apparent depth: no extra framebuffer or fake 3D
-      // surface. General ZOOM remains the master scale around which panels vary.
-      let zPosition = seedZ * fieldSpreadZ;
-      if (fieldDepthDrift > 0) zPosition += Math.sin(phY * 0.58 + phaseA + phaseB) * fieldDepthDrift * 0.70;
-      const depthScale = Math.pow(2, Math.max(-1.35, Math.min(1.35, zPosition * 1.35)));
-      localZoom = Math.max(0.25, Math.min(4, zoom * depthScale));
-      sizeScale = Math.max(0.35, 1 + seedSize * 0.72 * fieldSizeVar);
+    fieldOffsetX = seedX * cross * 0.46 * fieldSpreadX;
+    fieldOffsetY = seedY * dim * 0.46 * fieldSpreadY;
+    if (fieldDrift > 0) {
+      fieldOffsetX += Math.sin(phX * 0.85 + phaseA) * cross * 0.16 * fieldDrift;
+      fieldOffsetY += Math.cos(phY * 0.72 + phaseB) * dim * 0.16 * fieldDrift;
     }
+
+    let zPosition = seedZ * fieldSpreadZ;
+    if (fieldDepthDrift > 0) zPosition += Math.sin(phY * 0.58 + phaseA + phaseB) * fieldDepthDrift * 0.70;
+    const depthScale = Math.pow(2, Math.max(-1.35, Math.min(1.35, zPosition * 1.35)));
+    localZoom = Math.max(0.25, Math.min(4, zoom * depthScale));
+    sizeScale = Math.max(0.35, 1 + seedSize * 0.72 * fieldSizeVar);
 
     const localNeutralZoom = Math.abs(localZoom - 1) < 1e-9;
     const localZoomDepth = localNeutralZoom ? 0 : Math.min(1, Math.abs(Math.log2(localZoom)));
     const panelMix = localZoomDepth * localZoomDepth * (3 - 2 * localZoomDepth);
 
     if (localNeutralZoom && fieldOffsetX === 0 && fieldOffsetY === 0 && sizeScale === 1) {
-      // 1x BANDS (or a zeroed FIELD) remains the exact old flat-band draw even
-      // when X/Y or angle require the transformed path. Targeted Luma scales
-      // only this Scan panel; it does not key Corrupt or the persistent buffer.
       if (lumaTargetsScan) {
         const keyAlpha = _pipelineLumaObjectRegionAlpha(
           sourceOffset, bandStart, bandCross, bandLength,
@@ -1700,9 +1998,6 @@ function applyScanlines(density, angleOverride = null, scanPriority = 1.0, state
       continue;
     }
 
-    // Expand the source window vertically toward source aspect as local panel Z
-    // leaves 1x. Individual FIELD panels therefore become actual live-video
-    // rectangles rather than stretched strips, just like 40T general ZOOM.
     const desiredPanelHeight = Math.max(bandLength, bandCross / sourceAspect);
     const sampledHeight = Math.min(sourceCanvas.height, bandLength + (desiredPanelHeight - bandLength) * panelMix);
     const sourceCenterY = bandStart + bandLength * 0.5;
